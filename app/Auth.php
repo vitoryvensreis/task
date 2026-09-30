@@ -33,5 +33,20 @@ final class Auth {
  public static function demandFilter(string $alias='d'): array {if(self::isPreview())return ["$alias.client_id=? AND $alias.deleted_at IS NULL",[self::$previewClientId]];if(self::$user['role']==='admin')return ["$alias.deleted_at IS NULL",[]];if(self::$user['role']==='staff')return ["$alias.assigned_to=? AND $alias.deleted_at IS NULL",[self::$user['id']]];return ["$alias.client_id IN (SELECT client_id FROM user_clients WHERE user_id=?) AND $alias.deleted_at IS NULL",[self::$user['id']]];}
  public static function clientFilter(string $column='client_id',bool $finance=false): array {if(self::isPreview())return ["$column=?",[self::$previewClientId]];if(self::$user['role']==='admin')return ['1=1',[]];if(self::$user['role']==='staff')return ["$column IN (SELECT client_id FROM demands WHERE assigned_to=? AND deleted_at IS NULL)",[self::$user['id']]];return ["$column IN (SELECT client_id FROM user_clients WHERE user_id=?".($finance?' AND can_finance=1':'').')',[self::$user['id']]];}
  public static function login(array $p): array {self::rate('login',15);$u=DB::one('SELECT * FROM users WHERE email=? AND active=1',[strtolower(trim($p['email']??''))]);if(!$u||!password_verify($p['password']??'',$u['password_hash']))fail('E-mail ou senha incorretos.',401);session_regenerate_id(true);$_SESSION['user_id']=$u['id'];unset($_SESSION['preview_client_id']);$_SESSION['csrf']=bin2hex(random_bytes(24));unset($u['password_hash']);self::$actor=$u;self::$user=$u;self::$user['is_preview']=0;return ['user'=>self::$user,'csrf'=>csrf()];}
+ public static function profile(): array {
+  self::load();$u=DB::one('SELECT id,name,email,role,email_notifications FROM users WHERE id=? AND active=1',[self::$user['id']]);if(!$u)fail('Usuário não encontrado.',404);return $u;
+ }
+ public static function profileSave(array $p): array {
+  self::load();$u=DB::one('SELECT * FROM users WHERE id=? AND active=1',[self::$user['id']]);if(!$u)fail('Usuário não encontrado.',404);
+  $name=required($p,'name',150);$email=strtolower(required($p,'email',190));if(!filter_var($email,FILTER_VALIDATE_EMAIL))fail('E-mail inválido.');
+  if($email!==strtolower((string)$u['email'])){$current=(string)($p['current_password']??'');if($current===''||!password_verify($current,(string)$u['password_hash']))fail('Informe sua senha atual para alterar o e-mail.',422);if(DB::one('SELECT id FROM users WHERE email=? AND id<>?',[$email,$u['id']]))fail('Este e-mail já está em uso.',409);}
+  $row=['name'=>$name,'email'=>$email,'email_notifications'=>(int)(bool)($p['email_notifications']??0)];DB::update('users',(int)$u['id'],$row);audit('user',(int)$u['id'],'profile.update',['name'=>$u['name'],'email'=>$u['email'],'email_notifications'=>$u['email_notifications']],$row);self::$user=array_merge(self::$user,$row);return ['saved'=>true,'user'=>self::$user];
+ }
+ public static function passwordChange(array $p): array {
+  self::load();$u=DB::one('SELECT * FROM users WHERE id=? AND active=1',[self::$user['id']]);if(!$u)fail('Usuário não encontrado.',404);
+  $current=(string)($p['current_password']??'');if($current===''||!password_verify($current,(string)$u['password_hash']))fail('Senha atual incorreta.',422);
+  $new=(string)($p['new_password']??'');$confirm=(string)($p['confirm_password']??'');if($new!==$confirm)fail('A confirmação da nova senha não confere.',422);if(password_verify($new,(string)$u['password_hash']))fail('Escolha uma senha diferente da atual.',422);
+  $hash=self::password($new);DB::update('users',(int)$u['id'],['password_hash'=>$hash]);audit('user',(int)$u['id'],'password.change');if(session_status()===PHP_SESSION_ACTIVE)session_regenerate_id(true);return ['saved'=>true];
+ }
  public static function password(string $p): string {if(strlen($p)<10||strlen($p)>200)fail('A senha deve ter entre 10 e 200 caracteres.');return password_hash($p,PASSWORD_DEFAULT);}
 }

@@ -15,7 +15,7 @@ final class Files {
    $row+=['original_name'=>mb_substr($name,0,255),'disk_name'=>null,'storage_provider'=>'drive','drive_file_id'=>$drive['id'],'drive_account_id'=>$folder['account_id'],'drive_web_view_url'=>$drive['webViewLink']??null,'mime'=>$drive['mimeType']??$mime,'size_bytes'=>(int)($drive['size']??$f['size'])];
   }else fail('Envie um arquivo ou um link.');
   if(in_array($kind,['review','final'])){$row['version_no']=(int)DB::one('SELECT COALESCE(MAX(version_no),0) AS n FROM files WHERE demand_id=?',[$d['id']])['n']+1;if(!$row['shared'])fail('Uma versão para aprovação precisa estar compartilhada.');}
-  $id=DB::insert('files',$row);audit('demand',$d['id'],'file.added',null,['file_id'=>$id,'version'=>$row['version_no']??null,'storage'=>$row['storage_provider']??'local']);Notify::demand($d,$kind==='review'?'Versão para aprovação':'Novo arquivo',$row['label'],!$row['shared']);return ['id'=>$id,'version_no'=>$row['version_no']??null,'storage'=>$row['storage_provider']??'local'];
+  $id=DB::insert('files',$row);audit('demand',$d['id'],'file.added',null,['file_id'=>$id,'version'=>$row['version_no']??null,'storage'=>$row['storage_provider']??'local']);Notify::demand($d,$kind==='review'?'Versão para aprovação':'Novo arquivo',$row['label'],!$row['shared']);return ['id'=>$id,'version_no'=>$row['version_no']??null,'storage'=>$row['storage_provider']??'local','final_delivery_link'=>$kind==='final'?($folder['share_url']??null):null];
  }
 
  private static function uploadExtension(string $name): string {
@@ -32,7 +32,7 @@ final class Files {
   $mime=trim((string)($p['mime']??'application/octet-stream'));if($mime===''||strlen($mime)>120||preg_match('/[\r\n]/',$mime))$mime='application/octet-stream';
   $folder=Google::ensureDemandFileFolder($d,$kind);$location=Google::startDriveUpload($folder['account_id'],$name,$mime,$size,$folder['folder_id']);
   foreach($_SESSION['drive_uploads']??[] as $key=>$state)if((int)($state['expires']??0)<time())unset($_SESSION['drive_uploads'][$key]);foreach($_SESSION['drive_uploads_done']??[] as $key=>$state)if((int)($state['expires']??0)<time())unset($_SESSION['drive_uploads_done'][$key]);
-  $token=bin2hex(random_bytes(24));$_SESSION['drive_uploads'][$token]=['user_id'=>(int)Auth::$user['id'],'demand_id'=>(int)$d['id'],'account_id'=>(int)$folder['account_id'],'location'=>$location,'label'=>$label,'name'=>$name,'mime'=>$mime,'size'=>$size,'offset'=>0,'kind'=>$kind,'shared'=>$shared,'expires'=>time()+518400];
+  $token=bin2hex(random_bytes(24));$_SESSION['drive_uploads'][$token]=['user_id'=>(int)Auth::$user['id'],'demand_id'=>(int)$d['id'],'account_id'=>(int)$folder['account_id'],'location'=>$location,'label'=>$label,'name'=>$name,'mime'=>$mime,'size'=>$size,'offset'=>0,'kind'=>$kind,'shared'=>$shared,'final_delivery_link'=>$kind==='final'?($folder['share_url']??null):null,'expires'=>time()+518400];
   return ['upload_token'=>$token,'chunk_size'=>1048576,'size'=>$size,'unlimited'=>$limitMb===0];
  }
 
@@ -46,7 +46,7 @@ final class Files {
   $drive=$result['file'];$d=Auth::demand((int)$state['demand_id'],true);$row=['demand_id'=>$d['id'],'author_id'=>Auth::$user['id'],'label'=>$state['label'],'shared'=>(int)$state['shared'],'kind'=>$state['kind'],'created_at'=>now(),'original_name'=>mb_substr((string)$state['name'],0,255),'disk_name'=>null,'storage_provider'=>'drive','drive_file_id'=>$drive['id'],'drive_account_id'=>(int)$state['account_id'],'drive_web_view_url'=>$drive['webViewLink']??null,'mime'=>$drive['mimeType']??$state['mime'],'size_bytes'=>(int)($drive['size']??$state['size'])];
   if(in_array($state['kind'],['review','final'],true))$row['version_no']=(int)DB::one('SELECT COALESCE(MAX(version_no),0) AS n FROM files WHERE demand_id=?',[$d['id']])['n']+1;
   $id=DB::insert('files',$row);unset($_SESSION['drive_uploads'][$token]);audit('demand',$d['id'],'file.added',null,['file_id'=>$id,'version'=>$row['version_no']??null,'storage'=>'drive']);Notify::demand($d,$state['kind']==='review'?'Versão para aprovação':'Novo arquivo',$row['label'],!$row['shared']);
-  $response=['complete'=>true,'id'=>$id,'version_no'=>$row['version_no']??null,'storage'=>'drive','next_offset'=>(int)$state['size']];$_SESSION['drive_uploads_done'][$token]=$response+['user_id'=>(int)Auth::$user['id'],'expires'=>time()+900];return $response;
+  $response=['complete'=>true,'id'=>$id,'version_no'=>$row['version_no']??null,'storage'=>'drive','next_offset'=>(int)$state['size'],'final_delivery_link'=>$state['final_delivery_link']??null];$_SESSION['drive_uploads_done'][$token]=$response+['user_id'=>(int)Auth::$user['id'],'expires'=>time()+900];return $response;
  }
 
  public static function delete(array $p): array {

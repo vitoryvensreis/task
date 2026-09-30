@@ -11,7 +11,7 @@ final class Files {
    $allowed=['jpg','jpeg','png','webp','gif','pdf','mp4','mov','m4v','webm','mp3','wav','m4a','aac','zip','7z','rar','psd','ai','eps','prproj','aep','aepx','txt','doc','docx','xls','xlsx','ppt','pptx','srt','vtt','ttf','otf','csv'];
    if(!in_array($ext,$allowed,true))fail('Formato de arquivo não permitido. Use um ZIP para arquivos de projeto não suportados.');
    $mime=(new finfo(FILEINFO_MIME_TYPE))->file($f['tmp_name'])?:'application/octet-stream';
-   $folder=Google::ensureDemandFolder($d);$drive=Google::uploadToDrive($folder['account_id'],$f['tmp_name'],$name,$mime,$folder['folder_id']);
+   $folder=Google::ensureDemandFileFolder($d,$kind);$drive=Google::uploadToDrive($folder['account_id'],$f['tmp_name'],$name,$mime,$folder['folder_id']);
    $row+=['original_name'=>mb_substr($name,0,255),'disk_name'=>null,'storage_provider'=>'drive','drive_file_id'=>$drive['id'],'drive_account_id'=>$folder['account_id'],'drive_web_view_url'=>$drive['webViewLink']??null,'mime'=>$drive['mimeType']??$mime,'size_bytes'=>(int)($drive['size']??$f['size'])];
   }else fail('Envie um arquivo ou um link.');
   if(in_array($kind,['review','final'])){$row['version_no']=(int)DB::one('SELECT COALESCE(MAX(version_no),0) AS n FROM files WHERE demand_id=?',[$d['id']])['n']+1;if(!$row['shared'])fail('Uma versão para aprovação precisa estar compartilhada.');}
@@ -30,7 +30,7 @@ final class Files {
   $label=required($p,'label',255);$name=basename(str_replace('\\','/',required($p,'name',255)));self::uploadExtension($name);
   $rawSize=$p['size']??0;if(filter_var($rawSize,FILTER_VALIDATE_INT)===false||(int)$rawSize<1)fail('Tamanho de arquivo inválido.');$size=(int)$rawSize;$limitMb=(int)setting('upload_mb','0');$max=$limitMb>0?$limitMb*1024*1024:0;if($max>0&&$size>$max)fail('Arquivo acima do limite configurado de '.$limitMb.' MB.');
   $mime=trim((string)($p['mime']??'application/octet-stream'));if($mime===''||strlen($mime)>120||preg_match('/[\r\n]/',$mime))$mime='application/octet-stream';
-  $folder=Google::ensureDemandFolder($d);$location=Google::startDriveUpload($folder['account_id'],$name,$mime,$size,$folder['folder_id']);
+  $folder=Google::ensureDemandFileFolder($d,$kind);$location=Google::startDriveUpload($folder['account_id'],$name,$mime,$size,$folder['folder_id']);
   foreach($_SESSION['drive_uploads']??[] as $key=>$state)if((int)($state['expires']??0)<time())unset($_SESSION['drive_uploads'][$key]);foreach($_SESSION['drive_uploads_done']??[] as $key=>$state)if((int)($state['expires']??0)<time())unset($_SESSION['drive_uploads_done'][$key]);
   $token=bin2hex(random_bytes(24));$_SESSION['drive_uploads'][$token]=['user_id'=>(int)Auth::$user['id'],'demand_id'=>(int)$d['id'],'account_id'=>(int)$folder['account_id'],'location'=>$location,'label'=>$label,'name'=>$name,'mime'=>$mime,'size'=>$size,'offset'=>0,'kind'=>$kind,'shared'=>$shared,'expires'=>time()+518400];
   return ['upload_token'=>$token,'chunk_size'=>1048576,'size'=>$size,'unlimited'=>$limitMb===0];

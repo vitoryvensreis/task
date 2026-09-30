@@ -22,9 +22,10 @@
   const money=v=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format((Number(v)||0)/100);
   const priorityLabel=v=>({low:'Baixa',normal:'Normal',high:'Alta',urgent:'Urgente'}[String(v||'').toLowerCase()]||String(v||'Normal'));
   const googleStatusLabel=v=>({connected:'Conectado',reconnect:'Reconectar',disconnected:'Desconectado'}[String(v||'').toLowerCase()]||String(v||''));
-  const date=v=>v?new Intl.DateTimeFormat('pt-BR',{dateStyle:'short'}).format(new Date(String(v).replace(' ','T')+'Z')):'—';
-  const time=v=>v?new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short'}).format(new Date(String(v).replace(' ','T')+'Z')):'—';
-  const dateTimeInput=v=>{if(!v)return '';const d=new Date(String(v).replace(' ','T')+'Z'),tz=S.meta?.timezone||'America/Fortaleza',parts=Object.fromEntries(new Intl.DateTimeFormat('sv-SE',{timeZone:tz,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(d).filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`};
+  const parseDateValue=v=>{if(v instanceof Date)return Number.isFinite(v.getTime())?v:null;const s=String(v??'').trim();if(!s)return null;let normalized=s;if(/^\d{4}-\d{2}-\d{2}$/.test(s))normalized=s+'T12:00:00';else if(/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2})?$/.test(s))normalized=s.replace(' ','T')+'Z';const d=new Date(normalized);return Number.isFinite(d.getTime())?d:null};
+  const date=v=>{const d=parseDateValue(v);return d?new Intl.DateTimeFormat('pt-BR',{dateStyle:'short'}).format(d):'—'};
+  const time=v=>{const d=parseDateValue(v);return d?new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short'}).format(d):'—'};
+  const dateTimeInput=v=>{const d=parseDateValue(v);if(!d)return '';const tz=S.meta?.timezone||'America/Fortaleza',parts=Object.fromEntries(new Intl.DateTimeFormat('sv-SE',{timeZone:tz,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(d).filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`};
   function moneyInput(el,cents=0){if(!el)return;const paint=v=>{const n=Math.max(0,Number(v)||0);el.dataset.cents=String(Math.round(n));el.value=money(n)};paint(cents);el.oninput=()=>{const digits=el.value.replace(/\D/g,'');paint(digits?Number(digits):0)};el.onfocus=()=>requestAnimationFrame(()=>el.select())}
   const currencyCents=el=>Math.max(0,Number(el?.dataset.cents||String(el?.value||'').replace(/\D/g,''))||0);
   const clientDriveInfo=id=>S.meta?.clients?.find(c=>Number(c.id)===Number(id))||null;

@@ -3,7 +3,6 @@ const SHELL=[
   '/offline.html',
   '/assets/app.css?v=2.12.0',
   '/assets/app.js?v=2.12.0',
-  '/assets/taskesc-logo.svg',
   '/assets/taskesc-logo.svg'
 ];
 

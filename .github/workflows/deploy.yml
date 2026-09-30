@@ -35,6 +35,7 @@ jobs:
         run: |
           set -e
           node --check public/assets/app.js
+          node --check public/service-worker.js
 
   deploy:
     name: Deploy na VPS

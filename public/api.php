@@ -17,6 +17,9 @@ try {
  if($action==='preview.stop'){checkCsrf();out(Auth::previewStop());}
  if(($_SERVER['REQUEST_METHOD']??'GET')!=='GET'&&Auth::$origin!=='api'){checkCsrf();Auth::guardPreviewWrite();}
  $result=match($action){
+  'account.get'=>Auth::profile(),
+  'account.save'=>Auth::profileSave($p),
+  'account.password'=>Auth::passwordChange($p),
   'dashboard'=>Reports::dashboard($p),
   'report'=>Reports::report($p),
   'report.csv'=>null,

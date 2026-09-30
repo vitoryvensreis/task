@@ -1,6 +1,9 @@
 Options -Indexes
 DirectoryIndex index.php
 RewriteEngine On
+<IfModule mod_mime.c>
+  AddType application/manifest+json .webmanifest
+</IfModule>
 RewriteRule ^\.well-known/oauth-protected-resource$ .well-known/oauth-protected-resource.php [L]
 RewriteRule ^\. - [F,L]
 RewriteRule ^api/v1(?:/.*)?$ api-v1.php [L,QSA]
@@ -14,4 +17,7 @@ RewriteRule ^(?:dashboard|kanban|tasks|agenda|clientes|financeiro|relatorios|con
 </FilesMatch>
 <IfModule mod_headers.c>
   Header always set X-Content-Type-Options "nosniff"
+  <Files "service-worker.js">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+  </Files>
 </IfModule>

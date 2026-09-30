@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">TaskEsc</title>
+  <desc id="desc">Logo padrão do TaskEsc</desc>
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#d6d6d6"/>
+    </linearGradient>
+  </defs>
+  <rect x="6" y="6" width="116" height="116" rx="28" fill="#0b0b0b" stroke="#ffffff" stroke-opacity="0.14"/>
+  <path d="M38 35h52v14H71v44H57V49H38z" fill="url(#g)"/>
+  <path d="M41 101h48" stroke="#8f8f8f" stroke-width="8" stroke-linecap="round" opacity="0.9"/>
+  <path d="M83 63H49" stroke="#ffffff" stroke-width="10" stroke-linecap="round" opacity="0.92"/>
+</svg>

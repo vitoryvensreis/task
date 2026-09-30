@@ -1250,3 +1250,157 @@ body{background:radial-gradient(900px 480px at 72% -12%,rgba(128,87,227,.11),tra
     font-size:12px;
   }
 }
+
+
+/* TaskEsc v2.12 — identidade preto/branco + navy e raios 30% menores */
+:root{
+  --bg:#050607;
+  --bg-soft:#080a0c;
+  --surface:#0c0f12;
+  --surface-2:#11151a;
+  --surface-3:#151a20;
+  --surface-4:#1a2027;
+  --line:#232a31;
+  --line-strong:#343e48;
+  --text:#f5f7f9;
+  --muted:#8a949e;
+  --muted-2:#616b74;
+  --success:#87a1b8;
+  --warning:#9da8b2;
+  --danger:#c38d92;
+  --accent:#263a4d;
+  --accent-2:#39536a;
+  --radius-xs:4px;
+  --radius-sm:6px;
+  --radius:8px;
+  --radius-lg:10px;
+}
+html,body{background:#050607}
+body{background:radial-gradient(900px 500px at 78% -10%,rgba(31,54,74,.12),transparent 62%),#050607}
+.sidebar{background:linear-gradient(180deg,#090b0e 0,#060708 100%);border-right-color:#1d242b}
+.main{background:radial-gradient(800px 420px at 100% 0,rgba(30,49,66,.06),transparent 64%),#050607}
+.topbar{background:rgba(6,8,10,.92);border-bottom-color:#1e252c}
+.kicker,.eyebrow{color:#667b8d}
+.nav-btn{color:#8b949d}
+.nav-btn:hover{background:#10151a;color:#e8edf1}
+.nav-btn.active{background:#111820;border-color:#293b4c;color:#fff;box-shadow:inset 2px 0 0 #4b667f}
+.nav-btn.active .nav-icon{color:#8da4b8}
+.primary{background:#263a4d;border-color:#39536a;color:#f8fafc;box-shadow:none}
+.primary:hover{background:#30485d;border-color:#4b657d}
+.secondary{background:#12171c;border-color:#2a333c;color:#e5e9ed}
+.secondary:hover{background:#171d23;border-color:#3a4651}
+.ghost{border-color:#28313a;color:#9aa4ad}
+.ghost:hover{background:#101419;border-color:#3a4651;color:#fff}
+.input,.textarea,.select{background:#0b0e11;border-color:#29313a}
+.input:hover,.textarea:hover,.select:hover{background:#0e1216;border-color:#37424d}
+.input:focus,.textarea:focus,.select:focus{border-color:#49657e;box-shadow:0 0 0 3px rgba(57,83,106,.13)}
+.check input,.calendar-source input{accent-color:#49657e}
+.stat-card,.panel,.empty{background:linear-gradient(180deg,#0f1216 0,#0b0e11 100%);border-color:#252d35}
+.stat-card:before{background:#33404c!important}
+.stat-card.accent-purple:before,.stat-card.accent-green:before,.stat-card.accent-yellow:before{background:linear-gradient(90deg,#31485c,#536b80)!important}
+.stat-card.accent-purple .stat-value,.stat-card.accent-green .stat-value,.stat-card.accent-yellow .stat-value{color:#f3f6f8!important}
+.comparison-card{background:linear-gradient(145deg,#11161b,#0c0f12);border-color:#28313a}
+.comparison-card:after{background:radial-gradient(circle,rgba(49,72,92,.16),transparent 68%)}
+.comparison-card .positive,.comparison-card .negative,.comparison-card .neutral{color:#91a5b6!important}
+.finance-summary-card{background:linear-gradient(145deg,#11161b,#0c0f12);border-color:#2a343d}
+.finance-summary-card:after{background:radial-gradient(circle,rgba(55,78,98,.13),transparent 68%)}
+.finance-summary-card>b{color:#d9e1e7}
+.legend-dot.purple,.metric-bar.purple{background:#536f88!important}
+.legend-dot.green,.metric-bar.green{background:#8b9ba9!important}
+.legend-dot.yellow,.metric-bar.yellow{background:#6f8292!important}
+.metric-bar.purple,.metric-bar.green,.metric-bar.yellow{box-shadow:none!important}
+.stage-progress-track i{background:linear-gradient(90deg,#31485c,#587087);box-shadow:none}
+.task-card{background:linear-gradient(180deg,#12161a,#0e1114);border-color:#283039}
+.task-card:hover{background:#151a1f;border-color:#3a4651}
+.kanban-col{background:linear-gradient(180deg,#0d1013,#090b0d);border-color:#252d35!important}
+.kanban-list.drag-over{box-shadow:inset 0 0 0 1px #48637a;background:rgba(57,83,106,.06)}
+.account-avatar{background:linear-gradient(145deg,#273d50,#172532);border-color:#3c566c;box-shadow:none}
+.security-badge{border-color:#34414d;background:#11171c;color:#aab5bf}
+.pwa-icon-preview{background:#080a0c;border-color:#2a333c}
+.loader-ring{border-color:#26313a;border-top-color:#6d879d}
+#preview-exit{border-color:#31485d;background:#101922;color:#b6c6d3}
+.blue{color:#9db0c0!important}
+.green,.status-ok{color:#9fb1bf!important}
+.orange,.status-warn{color:#a5afb8!important}
+
+/* Redução consistente de ~30% nos cantos arredondados */
+.brand-logo{border-radius:7px}
+.brand-logo-login{border-radius:11px}
+.nav-btn{border-radius:6px}
+.primary,.secondary,.danger,.ghost,.icon-btn,.mini-btn{border-radius:6px}
+.input,.textarea,.select{border-radius:6px}
+.login-card{border-radius:10px}
+.stat-card,.panel,.empty{border-radius:8px}
+.badge,.tag{border-radius:5px}
+.task-card{border-radius:6px}
+.kanban-col{border-radius:7px}
+.modal,.modal.wide,.modal.compact{border-radius:10px}
+.close{border-radius:5px}
+.markdown-editor,.upload-drop,.detail-section,.task-summary>div,.drive-note,.notice,.danger-box,.code{border-radius:6px}
+.file-card,.file-icon{border-radius:5px}
+.logo-preview-card{border-radius:8px}
+.integration-row{border-radius:0}
+.comparison-card{border-radius:10px}
+.metric-bar{border-radius:3px 3px 1px 1px}
+.stage-progress-track,.progress{border-radius:7px}
+.account-avatar{border-radius:10px}
+.security-badge{border-radius:20px}
+.account-check{border-radius:7px}
+.pwa-settings-card{border-radius:8px}
+.pwa-icon-preview{border-radius:15px}
+.pwa-icon-preview img{border-radius:12px}
+.toast{border-radius:6px}
+.calendar,.day,.week-day,.day-schedule-grid,.week-schedule-grid,.all-day-strip{border-radius:6px}
+
+/* Dashboard normal precisa rolar verticalmente no mobile */
+@media(max-width:760px){
+  body:not(.kanban-page){
+    min-height:100dvh;
+    height:auto!important;
+    overflow-x:hidden!important;
+    overflow-y:auto!important;
+    overscroll-behavior-y:auto;
+    -webkit-overflow-scrolling:touch;
+  }
+  body:not(.kanban-page) .app{
+    height:auto!important;
+    min-height:100dvh!important;
+    overflow:visible!important;
+  }
+  body:not(.kanban-page) .main{
+    height:auto!important;
+    min-height:100dvh!important;
+    overflow:visible!important;
+  }
+  body:not(.kanban-page) .content{
+    height:auto!important;
+    min-height:0!important;
+    overflow:visible!important;
+    display:block!important;
+  }
+
+  .sidebar{border-radius:0 15px 15px 0}
+  .nav-btn{border-radius:9px}
+  .sidebar .brand-logo{border-radius:8px}
+  .sidebar-bottom .ghost{border-radius:8px}
+  #menu{border-radius:9px;background:#10151a;border-color:#29343e}
+  #new-demand{border-radius:9px;box-shadow:none}
+  .panel{border-radius:12px}
+  .primary,.secondary,.danger,.ghost,.icon-btn{border-radius:8px}
+  .mini-btn{border-radius:7px}
+  .input,.select,.textarea{border-radius:8px}
+  .stat-card{border-radius:11px}
+  .comparison-card{border-radius:11px}
+  .table-wrap{border-radius:8px}
+  .kanban-col{border-radius:12px}
+  .task-card{border-radius:9px}
+  .modal,.modal.wide,.modal.compact{border-radius:15px 15px 0 0}
+  .close{border-radius:8px}
+  .pwa-settings-card{border-radius:12px}
+  .pwa-icon-preview{border-radius:13px}
+  .pwa-icon-preview img{border-radius:10px}
+  .login-card{border-radius:15px}
+  .login-card form input,.login-input{border-radius:8px!important}
+  .login-card form button{border-radius:8px}
+  .toast{border-radius:9px}
+}

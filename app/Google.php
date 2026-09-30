@@ -106,6 +106,19 @@ final class Google {
   $name='Job #'.$d['id'].' - '.($d['title']??'Sem título');$folder=self::createDriveFolder($account,$name,$clientRoot);DB::update('demands',(int)$d['id'],['drive_folder_id'=>$folder['id']]);return ['account_id'=>$account,'folder_id'=>$folder['id']];
  }
 
+ public static function ensureDemandFileFolder(array $d,string $kind='input'): array {
+  $root=self::ensureDemandFolder($d);
+  if($kind!=='final')return $root;
+  $account=(int)$root['account_id'];$parent=(string)$root['folder_id'];$name='Entrega final';
+  $q="'".str_replace(["\\","'"],["\\\\","\\'"],$parent)."' in parents and name='".str_replace(["\\","'"],["\\\\","\\'"],$name)."' and mimeType='application/vnd.google-apps.folder' and trashed=false";
+  try{
+   $found=self::driveApi($account,'files?'.http_build_query(['q'=>$q,'fields'=>'files(id,name,webViewLink)','pageSize'=>10,'spaces'=>'drive','supportsAllDrives'=>'true','includeItemsFromAllDrives'=>'true']));
+   foreach($found['files']??[] as $f)if(!empty($f['id'])&&self::driveFolderValid($account,(string)$f['id']))return ['account_id'=>$account,'folder_id'=>$f['id']];
+  }catch(Throwable $e){error_log('TaskEsc final folder lookup: '.$e->getMessage());}
+  $folder=self::createDriveFolder($account,$name,$parent);
+  return ['account_id'=>$account,'folder_id'=>$folder['id']];
+ }
+
  public static function startDriveUpload(int $account,string $name,string $mime,int $size,string $folderId): string {
   if($size<1)fail('O arquivo está vazio.');
   $metadata=['name'=>mb_substr($name,0,240),'parents'=>[$folderId]];$location='';

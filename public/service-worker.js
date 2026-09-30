@@ -1,12 +1,10 @@
-const CACHE='taskesc-shell-v2.11.0';
+const CACHE='taskesc-shell-v2.12.0';
 const SHELL=[
   '/offline.html',
-  '/assets/app.css?v=2.11.0',
-  '/assets/app.js?v=2.11.0',
+  '/assets/app.css?v=2.12.0',
+  '/assets/app.js?v=2.12.0',
   '/assets/taskesc-logo.svg',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png',
-  '/icons/icon-maskable-512.png'
+  '/assets/taskesc-logo.svg'
 ];
 
 self.addEventListener('install',event=>{

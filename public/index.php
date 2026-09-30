@@ -4,6 +4,9 @@ require dirname(__DIR__).'/app/bootstrap.php';
 $basePath=(string)(parse_url((string)config('base_url',''),PHP_URL_PATH)??'');$basePath='/'.trim($basePath,'/');if($basePath==='/')$basePath='';
 $brandName='TaskEsc';$brandLogo=($basePath?:'').'/assets/taskesc-logo.svg';
 if(config()&&is_file(ROOT.'/storage/installed.lock')){try{$savedName=trim(setting('brand_name','TaskEsc'));if($savedName!=='')$brandName=$savedName;$savedLogo=trim(setting('logo_url',''));if($savedLogo!=='')$brandLogo=$savedLogo;}catch(Throwable){}}
+$pwa180=ROOT.'/public/uploads/branding/pwa-180.png';$pwa192=ROOT.'/public/uploads/branding/pwa-192.png';
+$pwa180Url=is_file($pwa180)?(($basePath?:'').'/uploads/branding/pwa-180.png?v='.filemtime($pwa180)):(($basePath?:'').'/icons/apple-touch-icon.png');
+$pwa192Url=is_file($pwa192)?(($basePath?:'').'/uploads/branding/pwa-192.png?v='.filemtime($pwa192)):(($basePath?:'').'/icons/icon-192.png');
 ?>
 <!doctype html>
 <html lang="pt-BR">
@@ -14,10 +17,10 @@ if(config()&&is_file(ROOT.'/storage/installed.lock')){try{$savedName=trim(settin
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="TaskEsc">
-  <link rel="manifest" href="<?=e($basePath)?>/manifest.webmanifest">
-  <link rel="icon" type="image/png" sizes="192x192" href="<?=e($basePath)?>/icons/icon-192.png">
-  <link rel="apple-touch-icon" sizes="180x180" href="<?=e($basePath)?>/icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="<?=e($basePath)?>/assets/app.css?v=2.10.0">
+  <link rel="manifest" href="<?=e($basePath)?>/manifest.php?v=<?=e((string)(is_file($pwa192)?filemtime($pwa192):1))?>">
+  <link rel="icon" type="image/png" sizes="192x192" href="<?=e($pwa192Url)?>">
+  <link rel="apple-touch-icon" sizes="180x180" href="<?=e($pwa180Url)?>">
+  <link rel="stylesheet" href="<?=e($basePath)?>/assets/app.css?v=2.11.0">
 </head>
 <body data-base-path="<?=e($basePath)?>">
   <div id="toast" class="toast"></div><div id="page-loader" class="page-loader hidden" aria-live="polite"><div class="page-loader-card"><span class="loader-ring"></span><b>Carregando</b></div></div>
@@ -28,9 +31,9 @@ if(config()&&is_file(ROOT.'/storage/installed.lock')){try{$savedName=trim(settin
   </section>
   <div id="app" class="app hidden">
     <aside class="sidebar"><div class="brand"><img class="brand-logo" id="sidebar-logo" src="<?=e($brandLogo)?>" alt="Logo do sistema"><span id="brand-name"><?=e($brandName)?></span></div><nav id="nav"></nav><div class="sidebar-bottom"><div id="sync-indicator" class="sync-indicator"><i></i> Dados atualizados</div><button id="logout" class="ghost full">Sair</button></div></aside>
-    <main class="main"><header class="topbar"><button id="menu" class="icon-btn mobile-only">☰</button><div><div id="page-kicker" class="kicker">VISÃO GERAL</div><h2 id="page-title">Dashboard</h2></div><div class="top-actions"><button id="preview-exit" class="secondary hidden">Sair da visão do cliente</button><button id="new-demand" class="primary">+ Nova task</button><div id="user-chip" class="user-chip"></div></div></header><div id="content" class="content"></div></main>
+    <div id="nav-backdrop" class="nav-backdrop"></div><main class="main"><header class="topbar"><button id="menu" class="icon-btn mobile-only">☰</button><div><div id="page-kicker" class="kicker">VISÃO GERAL</div><h2 id="page-title">Dashboard</h2></div><div class="top-actions"><button id="preview-exit" class="secondary hidden">Sair da visão do cliente</button><button id="new-demand" class="primary">+ Nova task</button><div id="user-chip" class="user-chip"></div></div></header><div id="content" class="content"></div></main>
   </div>
   <div id="modal-root"></div>
-  <script src="<?=e($basePath)?>/assets/app.js?v=2.10.0" defer></script>
+  <script src="<?=e($basePath)?>/assets/app.js?v=2.11.0" defer></script>
 </body>
 </html>

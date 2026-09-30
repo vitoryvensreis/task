@@ -39,6 +39,7 @@ try {
   'users.save'=>Catalog::userSave($p),
   'settings.get'=>Catalog::settingsGet(),
   'settings.save'=>Catalog::settingsSave($p),
+  'settings.logo_upload'=>Catalog::settingsLogoUpload(),
   'settings.integrations'=>Catalog::integrationSave($p),
   'tokens.create'=>Tokens::create($p),
   'tokens.revoke'=>Tokens::revoke($p),

@@ -1,0 +1,10 @@
+Options -Indexes
+RewriteEngine On
+
+# Permite usar a pasta do projeto como DocumentRoot quando a hospedagem não
+# permite apontar o domínio diretamente para public/.
+RewriteRule ^(?:app|config|database|storage|bin)(?:/|$) - [F,L]
+RewriteRule ^(?:README\.md|\.gitignore|\.env)(?:/|$) - [F,L]
+RewriteRule ^public(?:/|$) - [L]
+RewriteRule ^$ public/ [L]
+RewriteRule ^(.+)$ public/$1 [L]

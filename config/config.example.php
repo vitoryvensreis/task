@@ -1,0 +1,13 @@
+<?php
+// Gerado automaticamente pelo instalador. Use um banco exclusivo para o sistema.
+return [
+ 'base_url' => 'https://seu-dominio.com',
+ 'timezone' => 'America/Fortaleza',
+ 'db' => ['host'=>'localhost','port'=>3306,'name'=>'taskesc','user'=>'','password'=>''],
+ 'app_key' => '', // 64 caracteres hexadecimais aleatórios, gerados pelo instalador.
+ 'cron_key' => '',
+ 'google_client_id' => '',
+ 'google_client_secret' => '',
+ 'smtp' => ['host'=>'','port'=>587,'encryption'=>'tls','username'=>'','password'=>'','from'=>'','from_name'=>'TaskEsc'],
+ 'trusted_origins' => ['https://chatgpt.com','https://chat.openai.com'],
+];

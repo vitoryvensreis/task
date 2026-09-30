@@ -1,0 +1,17 @@
+Options -Indexes
+DirectoryIndex index.php
+RewriteEngine On
+RewriteRule ^\.well-known/oauth-protected-resource$ .well-known/oauth-protected-resource.php [L]
+RewriteRule ^\. - [F,L]
+RewriteRule ^api/v1(?:/.*)?$ api-v1.php [L,QSA]
+
+# Rotas amigáveis do painel. Arquivos e endpoints físicos continuam sendo servidos normalmente.
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(?:dashboard|kanban|tasks|agenda|clientes|financeiro|relatorios|configuracoes)(?:/.*)?$ index.php [L,QSA]
+<FilesMatch "^(config|schema|README|\.env)">
+  Require all denied
+</FilesMatch>
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+</IfModule>

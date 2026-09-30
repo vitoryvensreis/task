@@ -1,0 +1,23 @@
+/config/config.php
+/storage/installed.lock
+/storage/uploads/*
+/storage/logs/*
+/storage/cache/*
+/storage/sessions/*
+
+# Ambiente e credenciais
+.env
+.env.*
+!.env.example
+
+# Credenciais externas
+credentials.json
+client_secret*.json
+*.pem
+*.key
+
+# Arquivos locais
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

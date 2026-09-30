@@ -1,0 +1,6 @@
+<?php
+final class Tokens {
+ public static function create(array $p): array {Auth::admin();$name=required($p,'name',190);$days=integer($p['days']??90,1,3650);$scopes=[];foreach(preg_split('/\s+/',trim((string)($p['scopes']??'api.read api.write tools.read tools.write'))) as $scope)if(in_array($scope,['tools.read','tools.write','api.read','api.write'],true))$scopes[]=$scope;if(!$scopes)fail('Informe pelo menos api.read ou tools.read.');$token='sf_'.bin2hex(random_bytes(32));$id=DB::insert('api_tokens',['user_id'=>Auth::$user['id'],'name'=>$name,'token_hash'=>hash('sha256',$token),'scopes'=>implode(' ',$scopes),'expires_at'=>gmdate('Y-m-d H:i:s',time()+$days*86400),'created_at'=>now()]);audit('api_token',$id,'created',null,['name'=>$name,'scopes'=>$scopes]);return ['id'=>$id,'token'=>$token,'expires_at'=>gmdate('c',time()+$days*86400)];}
+ public static function revoke(array $p): array {Auth::admin();$id=integer($p['id']??0,1);$t=DB::one('SELECT * FROM api_tokens WHERE id=? AND user_id=?',[$id,Auth::$user['id']]);if(!$t)fail('Token não encontrado.',404);DB::update('api_tokens',$id,['revoked'=>1]);audit('api_token',$id,'revoked');return ['saved'=>true];}
+ public static function getByToken(string $raw): ?array {return DB::one('SELECT * FROM api_tokens WHERE token_hash=? AND revoked=0 AND expires_at>?',[hash('sha256',$raw),now()]);}
+}

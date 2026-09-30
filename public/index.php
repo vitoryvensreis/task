@@ -1,0 +1,27 @@
+<?php
+declare(strict_types=1);
+require dirname(__DIR__).'/app/bootstrap.php';
+$basePath=(string)(parse_url((string)config('base_url',''),PHP_URL_PATH)??'');$basePath='/'.trim($basePath,'/');if($basePath==='/')$basePath='';
+?>
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#050505"><title>TaskEsc</title>
+  <link rel="stylesheet" href="<?=e($basePath)?>/assets/app.css?v=2.8.0">
+</head>
+<body data-base-path="<?=e($basePath)?>">
+  <div id="toast" class="toast"></div><div id="page-loader" class="page-loader hidden" aria-live="polite"><div class="page-loader-card"><span class="loader-ring"></span><b>Carregando</b></div></div>
+  <section id="login" class="login-screen hidden">
+    <div class="login-card"><div class="logo-mark">TE</div><h1>TaskEsc</h1><p>Jobs, tarefas, arquivos e agendas em um só fluxo.</p>
+      <form id="login-form"><label>E-mail<input class="input login-input" type="email" name="email" autocomplete="username" required></label><label>Senha<input class="input login-input" type="password" name="password" autocomplete="current-password" required></label><button class="primary full">Entrar</button><div id="login-error" class="form-error"></div></form>
+    </div>
+  </section>
+  <div id="app" class="app hidden">
+    <aside class="sidebar"><div class="brand"><div class="logo-mark">TE</div><span id="brand-name">TaskEsc</span></div><nav id="nav"></nav><div class="sidebar-bottom"><div id="sync-indicator" class="sync-indicator"><i></i> Dados atualizados</div><button id="logout" class="ghost full">Sair</button></div></aside>
+    <main class="main"><header class="topbar"><button id="menu" class="icon-btn mobile-only">☰</button><div><div id="page-kicker" class="kicker">VISÃO GERAL</div><h2 id="page-title">Dashboard</h2></div><div class="top-actions"><button id="preview-exit" class="secondary hidden">Sair da visão do cliente</button><button id="new-demand" class="primary">+ Nova task</button><div id="user-chip" class="user-chip"></div></div></header><div id="content" class="content"></div></main>
+  </div>
+  <div id="modal-root"></div>
+  <script src="<?=e($basePath)?>/assets/app.js?v=2.8.0" defer></script>
+</body>
+</html>

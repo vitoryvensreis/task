@@ -103,7 +103,7 @@ final class Demands {
  }
 
  public static function reorder(array $p): array {
-  Auth::staff();
+  Auth::load();
   return DB::tx(function() use($p): array {
    $d=Auth::demand(integer($p['id']??0,1),true);if((int)$d['version']!==integer($p['version']??0,1))fail('O cartão mudou. Atualize e tente novamente.',409);
    $stage=DB::one('SELECT * FROM stages WHERE id=? AND active=1',[integer($p['stage_id']??0,1)]);if(!$stage)fail('Etapa inválida.');if($d['draft'])fail('Publique a task antes de reorganizar o Kanban.');

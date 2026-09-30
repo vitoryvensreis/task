@@ -1,6 +1,7 @@
 /config/config.php
 /storage/installed.lock
 /storage/uploads/*
+/public/uploads/*
 /storage/logs/*
 /storage/cache/*
 /storage/sessions/*

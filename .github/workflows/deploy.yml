@@ -31,6 +31,11 @@ jobs:
           set -e
           find app bin public -type f -name '*.php' -print0 | xargs -0 -n1 php -l
 
+      - name: Validar JavaScript
+        run: |
+          set -e
+          node --check public/assets/app.js
+
   deploy:
     name: Deploy na VPS
     runs-on: ubuntu-latest

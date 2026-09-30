@@ -109,14 +109,40 @@ final class Google {
  public static function ensureDemandFileFolder(array $d,string $kind='input'): array {
   $root=self::ensureDemandFolder($d);
   if($kind!=='final')return $root;
-  $account=(int)$root['account_id'];$parent=(string)$root['folder_id'];$name='Entrega final';
-  $q="'".str_replace(["\\","'"],["\\\\","\\'"],$parent)."' in parents and name='".str_replace(["\\","'"],["\\\\","\\'"],$name)."' and mimeType='application/vnd.google-apps.folder' and trashed=false";
+  $account=(int)$root['account_id'];$parent=(string)$root['folder_id'];$folder=self::findDemandFinalFolder($account,$parent);
+  if(!$folder){$folder=self::createDriveFolder($account,'Entrega final',$parent);}
+  $share=self::ensurePublicFolderShare($account,(string)$folder['id']);
+  return ['account_id'=>$account,'folder_id'=>$folder['id'],'share_url'=>$share];
+ }
+
+ private static function findDemandFinalFolder(int $account,string $parent): ?array {
+  $name='Entrega final';$q="'".str_replace(["\\","'"],["\\\\","\\'"],$parent)."' in parents and name='".str_replace(["\\","'"],["\\\\","\\'"],$name)."' and mimeType='application/vnd.google-apps.folder' and trashed=false";
   try{
    $found=self::driveApi($account,'files?'.http_build_query(['q'=>$q,'fields'=>'files(id,name,webViewLink)','pageSize'=>10,'spaces'=>'drive','supportsAllDrives'=>'true','includeItemsFromAllDrives'=>'true']));
-   foreach($found['files']??[] as $f)if(!empty($f['id'])&&self::driveFolderValid($account,(string)$f['id']))return ['account_id'=>$account,'folder_id'=>$f['id']];
+   foreach($found['files']??[] as $f)if(!empty($f['id'])&&self::driveFolderValid($account,(string)$f['id']))return $f;
   }catch(Throwable $e){error_log('TaskEsc final folder lookup: '.$e->getMessage());}
-  $folder=self::createDriveFolder($account,$name,$parent);
-  return ['account_id'=>$account,'folder_id'=>$folder['id']];
+  return null;
+ }
+
+ private static function ensurePublicFolderShare(int $account,string $folderId): string {
+  try{
+   $path='files/'.rawurlencode($folderId).'/permissions?'.http_build_query(['fields'=>'permissions(id,type,role,allowFileDiscovery)','supportsAllDrives'=>'true']);
+   $permissions=self::driveApi($account,$path);
+   $public=false;foreach($permissions['permissions']??[] as $p)if(($p['type']??'')==='anyone'&&in_array(($p['role']??''),['reader','commenter','writer'],true)){$public=true;break;}
+   if(!$public){
+    self::driveApi($account,'files/'.rawurlencode($folderId).'/permissions?'.http_build_query(['fields'=>'id','supportsAllDrives'=>'true','sendNotificationEmail'=>'false']),'POST',['type'=>'anyone','role'=>'reader','allowFileDiscovery'=>false]);
+   }
+  }catch(Throwable $e){
+   error_log('TaskEsc public final folder: '.$e->getMessage());
+   throw new AppError('Não foi possível liberar a pasta de entrega final para acesso por link no Google Drive. Verifique se esta conta permite compartilhamento público.',409);
+  }
+  return 'https://drive.google.com/drive/folders/'.rawurlencode($folderId);
+ }
+
+ public static function finalDeliveryShareLink(array $d): ?string {
+  $root=self::ensureDemandFolder($d);$folder=self::findDemandFinalFolder((int)$root['account_id'],(string)$root['folder_id']);if(!$folder||empty($folder['id']))return null;
+  try{return self::ensurePublicFolderShare((int)$root['account_id'],(string)$folder['id']);}
+  catch(Throwable $e){error_log('TaskEsc final share link: '.$e->getMessage());return null;}
  }
 
  public static function startDriveUpload(int $account,string $name,string $mime,int $size,string $folderId): string {

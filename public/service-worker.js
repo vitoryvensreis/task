@@ -1,9 +1,11 @@
-const CACHE='taskesc-shell-v2.15.2';
+const CACHE='taskesc-shell-v3.0.0';
+const scopeUrl=new URL('./',self.registration.scope);
+const assetUrl=path=>new URL(path,scopeUrl).toString();
 const SHELL=[
-  '/offline.html',
-  '/assets/app.css?v=2.15.2',
-  '/assets/app.js?v=2.15.2',
-  '/assets/taskesc-logo.svg'
+  assetUrl('offline.html'),
+  assetUrl('assets/app.css?v=3.0.0'),
+  assetUrl('assets/app.js?v=3.0.0'),
+  assetUrl('assets/taskesc-logo.svg')
 ];
 
 self.addEventListener('install',event=>{
@@ -24,11 +26,11 @@ self.addEventListener('fetch',event=>{
   if(sensitive)return;
 
   if(request.mode==='navigate'){
-    event.respondWith(fetch(request).catch(()=>caches.match('/offline.html')));
+    event.respondWith(fetch(request).catch(()=>caches.match(assetUrl('offline.html'))));
     return;
   }
 
-  if(/^\/(assets|icons)\//.test(url.pathname)){
+  if(/\/(assets|icons)\//.test(url.pathname)){
     event.respondWith(caches.match(request).then(cached=>{
       const network=fetch(request).then(response=>{
         if(response&&response.ok){const copy=response.clone();caches.open(CACHE).then(cache=>cache.put(request,copy));}
@@ -37,4 +39,27 @@ self.addEventListener('fetch',event=>{
       return cached||network;
     }));
   }
+});
+
+self.addEventListener('push',event=>{
+  event.waitUntil((async()=>{
+    let title='TaskEsc',body='Você tem uma nova atualização no TaskEsc.',target=assetUrl('dashboard'),tag='taskesc-update';
+    try{
+      const response=await fetch(assetUrl('api.php?action=notifications'),{credentials:'include',cache:'no-store',headers:{Accept:'application/json'}});
+      if(response.ok){
+        const data=await response.json(),item=Array.isArray(data)?data[0]:null;
+        if(item){title=item.title||title;body=item.body||body;tag='taskesc-'+String(item.id||'update');if(item.demand_id)target=assetUrl('kanban/task/'+Number(item.demand_id));}
+      }
+    }catch{}
+    await self.registration.showNotification(title,{body,tag,icon:assetUrl('assets/taskesc-logo.svg'),badge:assetUrl('assets/taskesc-logo.svg'),data:{url:target}});
+  })());
+});
+
+self.addEventListener('notificationclick',event=>{
+  event.notification.close();
+  event.waitUntil((async()=>{
+    const target=event.notification.data?.url||assetUrl('dashboard'),all=await clients.matchAll({type:'window',includeUncontrolled:true});
+    for(const client of all){if('focus' in client){try{await client.navigate(target)}catch{}return client.focus();}}
+    return clients.openWindow?clients.openWindow(target):undefined;
+  })());
 });

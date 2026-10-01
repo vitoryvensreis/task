@@ -39,6 +39,7 @@ try {
   'demands.save'=>Demands::save($p),
   'demands.stage'=>Demands::stage($p),
   'demands.reorder'=>Demands::reorder($p),
+  'demands.bulk'=>Demands::bulk($p),
   'demands.delete'=>Demands::delete($p),
   'demands.comment'=>Demands::comment($p),
   'demands.checklist'=>Demands::checklist($p),

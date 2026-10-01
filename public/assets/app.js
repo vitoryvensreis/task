@@ -380,7 +380,7 @@
     const expenseType=e=>({monthly:'Mensal',yearly:'Anual',one_off:'Avulso'}[e.source_type]||'Avulso');
     const resultClass=Number(analysis.projected_result_cents||0)>=0?'green':'red';
     const categories=(analysis.categories||[]).slice(0,6);
-    $('#content').innerHTML=`<div class="section-title"><div><h3>Financeiro</h3><div class="panel-sub">Receitas, cobranças, custos e resultado líquido em uma visão única.</div></div><div class="top-actions"><button class="secondary" id="new-expense">${icon('wallet-cards','+')} Novo custo</button><button class="primary" id="new-invoice">${icon('receipt','+')} Nova cobrança</button></div></div>
+    $('#content').innerHTML=`<div class="section-title"><div><h3>Financeiro</h3><div class="panel-sub">Receitas, cobranças, custos e resultado líquido em uma visão única.</div></div><div class="top-actions"><button class="secondary" id="new-expense">${icon('wallet','+')} Novo custo</button><button class="primary" id="new-invoice">${icon('receipt','+')} Nova cobrança</button></div></div>
       <div class="grid stats finance-stats finance-stats-wide">
         <button class="stat-card dashboard-stat" data-finance-stat=""><div class="stat-label">Cobrado</div><div class="stat-value">${money(total)}</div><div class="stat-note">no filtro de cobranças</div></button>
         <button class="stat-card dashboard-stat" data-finance-stat="paid"><div class="stat-label">Recebido</div><div class="stat-value green">${money(paid)}</div></button>

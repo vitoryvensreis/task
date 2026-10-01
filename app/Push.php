@@ -28,9 +28,10 @@ final class Push {
  }
  public static function subscribe(array $p): array {
   Auth::load();$endpoint=trim((string)($p['endpoint']??''));if(!filter_var($endpoint,FILTER_VALIDATE_URL)||parse_url($endpoint,PHP_URL_SCHEME)!=='https')fail('Assinatura de notificação inválida.');
-  $hash=hash('sha256',$endpoint);$row=['user_id'=>Auth::$user['id'],'endpoint'=>$endpoint,'endpoint_hash'=>$hash,'p256dh'=>mb_substr((string)($p['p256dh']??''),0,500),'auth_key'=>mb_substr((string)($p['auth']??''),0,500),'user_agent'=>mb_substr((string)($_SERVER['HTTP_USER_AGENT']??''),0,255),'active'=>1,'last_error'=>null,'updated_at'=>now()];
-  $old=DB::one('SELECT id FROM push_subscriptions WHERE endpoint_hash=?',[$hash]);if($old)DB::update('push_subscriptions',(int)$old['id'],$row);else DB::insert('push_subscriptions',$row+['created_at'=>now()]);
-  audit('push_subscription',(int)($old['id']??0),'subscribed',null,['user_id'=>Auth::$user['id']]);return ['saved'=>true];
+  $p256dh=trim((string)($p['p256dh']??''));$auth=trim((string)($p['auth']??''));if($p256dh===''||$auth==='')fail('Chaves da assinatura push ausentes.');
+  $hash=hash('sha256',$endpoint);$row=['user_id'=>Auth::$user['id'],'endpoint'=>$endpoint,'endpoint_hash'=>$hash,'p256dh'=>mb_substr($p256dh,0,500),'auth_key'=>mb_substr($auth,0,500),'user_agent'=>mb_substr((string)($_SERVER['HTTP_USER_AGENT']??''),0,255),'active'=>1,'last_error'=>null,'updated_at'=>now()];
+  $old=DB::one('SELECT id FROM push_subscriptions WHERE endpoint_hash=?',[$hash]);if($old){$id=(int)$old['id'];DB::update('push_subscriptions',$id,$row);}else{$id=DB::insert('push_subscriptions',$row+['created_at'=>now()]);}
+  audit('push_subscription',$id,'subscribed',null,['user_id'=>Auth::$user['id']]);return ['saved'=>true,'id'=>$id];
  }
  public static function unsubscribe(array $p): array {
   Auth::load();$endpoint=trim((string)($p['endpoint']??''));if($endpoint!=='')DB::run('UPDATE push_subscriptions SET active=0,updated_at=? WHERE user_id=? AND endpoint_hash=?',[now(),Auth::$user['id'],hash('sha256',$endpoint)]);else DB::run('UPDATE push_subscriptions SET active=0,updated_at=? WHERE user_id=?',[now(),Auth::$user['id']]);
@@ -50,6 +51,7 @@ final class Push {
  }
  public static function notifyUser(int $userId): void {
   if(setting('browser_notifications','1')!=='1')return;$rows=DB::all('SELECT * FROM push_subscriptions WHERE user_id=? AND active=1',[$userId]);if(!$rows)return;
-  try{$keys=self::keys();foreach($rows as $sub)self::send($sub,$keys);}catch(Throwable $e){error_log('TaskEsc push: '.$e->getMessage());}
+  try{$keys=self::keys();}catch(Throwable $e){error_log('TaskEsc push keys: '.$e->getMessage());return;}
+  foreach($rows as $sub){try{self::send($sub,$keys);}catch(Throwable $e){$msg=mb_substr($e->getMessage(),0,1000);try{DB::update('push_subscriptions',(int)$sub['id'],['last_error'=>$msg,'updated_at'=>now()]);}catch(Throwable){}error_log('TaskEsc push: '.$msg);}}
  }
 }

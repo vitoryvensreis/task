@@ -60,7 +60,27 @@
   function showApp(){S.user=S.meta.user;$('#login').classList.add('hidden');$('#app').classList.remove('hidden');applyBranding();const preview=!!S.user.is_preview;$('#user-chip').textContent=preview?`Visualizando: ${S.user.preview_client_name}`:S.user.name+' · '+({admin:'Administrador',staff:'Equipe',client:'Cliente'}[S.user.role]||S.user.role);$('#preview-exit')?.classList.toggle('hidden',!preview);$('#new-demand')?.classList.toggle('hidden',preview);buildNav();startAutoRefresh();{const cleanPath=location.pathname.replace(/\/+$/,'');const baseClean=(BASE||'').replace(/\/+$/,'');if(location.hash||/\/index\.php$/i.test(location.pathname)||cleanPath===baseClean||cleanPath===baseClean+'/public')history.replaceState({},'',S.pendingTaskId?appPath(`kanban/task/${S.pendingTaskId}`):routeUrl(S.page||'dashboard'));}go(S.page||'dashboard',false);const flash=sessionStorage.getItem('taskesc-flash');if(flash){sessionStorage.removeItem('taskesc-flash');setTimeout(()=>toast(flash),350)}}
   function startAutoRefresh(){if(S.timer)clearInterval(S.timer);S.timer=setInterval(()=>{if(!S.user||document.visibilityState==='hidden'||$('#modal-root').innerHTML.trim())return;if(['dashboard','kanban','demands','agenda','finance','reports'].includes(S.page)){refresh();const i=$('#sync-indicator');if(i)i.innerHTML='<i></i> Atualizado às '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:S.meta.timezone||'America/Fortaleza'})}},30000)}
   function closeMobileNav(){document.querySelector('.sidebar')?.classList.remove('open');document.body.classList.remove('nav-open')}
-  function buildNav(){const admin=S.user.role==='admin', staff=S.user.role!=='client';const items=[['dashboard','⌂','Dashboard'],['kanban','▦','Kanban'],['demands','✓','Tasks'],...(staff?[['agenda','◷','Agenda']]:[]),...(admin?[['clients','♙','Clientes'],['services','✦','Serviços'],['finance','R,...(staff&&!admin?[['reports','▤','Relatórios']]:[]),['settings','⚙',admin?'Configurações':'Minha conta']];$('#nav').innerHTML=items.map(i=>`<button class="nav-btn" data-page="${i[0]}"><span class="nav-icon">${i[1]}</span>${i[2]}</button>`).join('');$$('.nav-btn').forEach(b=>b.onclick=()=>go(b.dataset.page,true,true));$('#new-demand').textContent=S.user.role==='client'?'+ Nova solicitação':'+ Nova task';$('#new-demand').classList.toggle('hidden',!!S.user.is_preview)}
+  function buildNav(){
+    const admin=S.user.role==='admin',staff=S.user.role!=='client';
+    const items=[
+      ['dashboard','⌂','Dashboard'],
+      ['kanban','▦','Kanban'],
+      ['demands','✓','Tasks'],
+      ...(staff?[['agenda','◷','Agenda']]:[]),
+      ...(admin?[
+        ['clients','♙','Clientes'],
+        ['services','✦','Serviços'],
+        ['finance','R$','Financeiro'],
+        ['reports','▤','Relatórios']
+      ]:[]),
+      ...(staff&&!admin?[['reports','▤','Relatórios']]:[]),
+      ['settings','⚙',admin?'Configurações':'Minha conta']
+    ];
+    $('#nav').innerHTML=items.map(i=>`<button class="nav-btn" data-page="${i[0]}"><span class="nav-icon">${i[1]}</span>${i[2]}</button>`).join('');
+    $$('.nav-btn').forEach(b=>b.onclick=()=>go(b.dataset.page,true,true));
+    $('#new-demand').textContent=S.user.role==='client'?'+ Nova solicitação':'+ Nova task';
+    $('#new-demand').classList.toggle('hidden',!!S.user.is_preview);
+  }
   async function init(){try{const m=await api('auth.me',{},'GET',false);S.user=m.user;S.csrf=m.csrf;S.meta=await api('meta');showApp()}catch(e){showLogin()}}
   $('#login-form').onsubmit=async e=>{e.preventDefault();$('#login-error').textContent='Entrando…';const data=Object.fromEntries(new FormData(e.target));try{const r=await api('auth.login',data,'POST',false);S.user=r.user;S.csrf=r.csrf;S.meta=await api('meta');showApp()}catch(x){$('#login-error').textContent=x.message}};
   $('#logout').onclick=async()=>{try{await api('auth.logout',{},'POST',false)}finally{showLogin()}};$('#preview-exit').onclick=async()=>{try{showPageLoader();await api('preview.stop',{},'POST');location.href=routeUrl('dashboard')}catch(x){hidePageLoader();toast(x.message,true)}};$('#menu').onclick=()=>{const open=!$('.sidebar').classList.contains('open');$('.sidebar').classList.toggle('open',open);document.body.classList.toggle('nav-open',open)};$('#nav-backdrop')?.addEventListener('click',closeMobileNav);$('#new-demand').onclick=()=>openDemand();

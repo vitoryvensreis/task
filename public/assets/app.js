@@ -53,7 +53,10 @@
   }
   function startIconObserver(){
     if(!document.body)return;paintIcons();
-    const observer=new MutationObserver(()=>paintIcons());observer.observe(document.body,{childList:true,subtree:true});
+    const observer=new MutationObserver(mutations=>{
+      for(const mutation of mutations)for(const node of mutation.addedNodes)if(node.nodeType===1&&(node.matches?.('i[data-lucide]')||node.querySelector?.('i[data-lucide]'))){paintIcons();return}
+    });
+    observer.observe(document.body,{childList:true,subtree:true});
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',startIconObserver,{once:true});else startIconObserver();
   const priorityLabel=v=>({low:'Baixa',normal:'Normal',high:'Alta',urgent:'Urgente'}[String(v||'').toLowerCase()]||String(v||'Normal'));
@@ -129,10 +132,10 @@
         ['clients','users','Clientes','♙'],
         ['services','briefcase','Serviços','✦'],
         ['finance','wallet','Financeiro','R$'],
-        ['reports','bar-chart-3','Relatórios','▤'],
+        ['reports','chart-bar','Relatórios','▤'],
         ['logs','activity','Saúde & Logs','◉']
       ]:[]),
-      ...(staff&&!admin?[['reports','bar-chart-3','Relatórios','▤']]:[]),
+      ...(staff&&!admin?[['reports','chart-bar','Relatórios','▤']]:[]),
       ['settings','settings','Configurações','⚙']
     ];
     $('#nav').innerHTML=items.map(i=>`<button class="nav-btn" data-page="${i[0]}"><span class="nav-icon">${icon(i[1],i[3])}</span><span>${i[0]==='settings'&&S.user.role!=='admin'?'Minha conta':i[2]}</span></button>`).join('');

@@ -66,6 +66,13 @@ final class Migrations {
    try{DB::run('ALTER TABLE mail_queue ADD INDEX idx_mail_queue_status_next (status,next_attempt)');}catch(Throwable){}
    DB::run("INSERT INTO settings (`key`,value) VALUES ('schema_version','8') ON DUPLICATE KEY UPDATE value='8'");$version=8;
   }
+  if($version<9){
+   self::column('invoices','deleted_at',"ALTER TABLE invoices ADD COLUMN deleted_at DATETIME NULL AFTER source_key");
+   self::column('invoices','deleted_by',"ALTER TABLE invoices ADD COLUMN deleted_by INT NULL AFTER deleted_at");
+   self::column('invoices','delete_reason',"ALTER TABLE invoices ADD COLUMN delete_reason VARCHAR(500) NULL AFTER deleted_by");
+   try{DB::run('ALTER TABLE invoices ADD INDEX idx_invoices_deleted_at (deleted_at)');}catch(Throwable){}
+   DB::run("INSERT INTO settings (`key`,value) VALUES ('schema_version','9') ON DUPLICATE KEY UPDATE value='9'");$version=9;
+  }
  }
  private static function hasColumn(string $table,string $column): bool {return (bool)DB::one('SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?',[$table,$column]);}
  private static function column(string $table,string $column,string $sql): void {if(!self::hasColumn($table,$column))DB::run($sql);}

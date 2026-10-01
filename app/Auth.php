@@ -8,7 +8,7 @@ final class Auth {
    $t=DB::one('SELECT * FROM api_tokens WHERE token_hash=? AND revoked=0 AND expires_at>?',[hash('sha256',$m[1]),now()]);
    if(!$t)fail('Token inválido ou expirado.',401);self::$scopes=(string)$t['scopes'];self::$origin='api';$id=$t['user_id'];
   }else{$id=$_SESSION['user_id']??null;}
-  $actor=$id?DB::one('SELECT id,name,email,role,active,email_notifications,weekly_report FROM users WHERE id=? AND active=1',[$id]):null;self::$actor=$actor;
+  $actor=$id?DB::one('SELECT id,name,email,role,active,email_notifications,weekly_report,twofa_enabled,last_login_at FROM users WHERE id=? AND active=1',[$id]):null;self::$actor=$actor;
   if($actor&&self::$origin==='web'&&$actor['role']==='admin'&&!empty($_SESSION['preview_client_id'])){
    $cid=(int)$_SESSION['preview_client_id'];$client=DB::one('SELECT id,name FROM clients WHERE id=? AND active=1',[$cid]);
    if($client){self::$previewClientId=$cid;self::$user=$actor;self::$user['actor_role']='admin';self::$user['role']='client';self::$user['is_preview']=1;self::$user['preview_client_id']=$cid;self::$user['preview_client_name']=$client['name'];}
@@ -32,9 +32,71 @@ final class Auth {
  public static function demand(int $id,bool $lock=false): array {$d=DB::one('SELECT d.*,s.kind AS stage_kind FROM demands d JOIN stages s ON s.id=d.stage_id WHERE d.id=? AND d.deleted_at IS NULL'.($lock?' FOR UPDATE':''),[$id]);if(!$d)fail('Demanda não encontrada.',404);self::client((int)$d['client_id']);if(self::$user['role']==='staff'&&(int)$d['assigned_to']!==(int)self::$user['id'])fail('Demanda não atribuída a você.',403);return $d;}
  public static function demandFilter(string $alias='d'): array {if(self::isPreview())return ["$alias.client_id=? AND $alias.deleted_at IS NULL",[self::$previewClientId]];if(self::$user['role']==='admin')return ["$alias.deleted_at IS NULL",[]];if(self::$user['role']==='staff')return ["$alias.assigned_to=? AND $alias.deleted_at IS NULL",[self::$user['id']]];return ["$alias.client_id IN (SELECT client_id FROM user_clients WHERE user_id=?) AND $alias.deleted_at IS NULL",[self::$user['id']]];}
  public static function clientFilter(string $column='client_id',bool $finance=false): array {if(self::isPreview())return ["$column=?",[self::$previewClientId]];if(self::$user['role']==='admin')return ['1=1',[]];if(self::$user['role']==='staff')return ["$column IN (SELECT client_id FROM demands WHERE assigned_to=? AND deleted_at IS NULL)",[self::$user['id']]];return ["$column IN (SELECT client_id FROM user_clients WHERE user_id=?".($finance?' AND can_finance=1':'').')',[self::$user['id']]];}
- public static function login(array $p): array {self::rate('login',15);$u=DB::one('SELECT * FROM users WHERE email=? AND active=1',[strtolower(trim($p['email']??''))]);if(!$u||!password_verify($p['password']??'',$u['password_hash']))fail('E-mail ou senha incorretos.',401);session_regenerate_id(true);$_SESSION['user_id']=$u['id'];unset($_SESSION['preview_client_id']);$_SESSION['csrf']=bin2hex(random_bytes(24));unset($u['password_hash']);self::$actor=$u;self::$user=$u;self::$user['is_preview']=0;return ['user'=>self::$user,'csrf'=>csrf()];}
+ public static function abilities(): array {
+  self::load();$role=(string)self::$user['role'];
+  $map=[
+   'admin'=>['dashboard.view','tasks.read','tasks.create','tasks.edit','tasks.move','tasks.delete','tasks.comment','tasks.files','agenda.read','agenda.write','clients.manage','services.manage','finance.read','finance.manage','reports.read','settings.manage','logs.read','users.manage'],
+   'staff'=>['dashboard.view','tasks.read','tasks.move','tasks.comment','tasks.files','agenda.read','agenda.write','reports.read'],
+   'client'=>['dashboard.view','tasks.read','tasks.create','tasks.edit','tasks.move','tasks.comment','tasks.files','agenda.read']
+  ];
+  return $map[$role]??[];
+ }
+ public static function can(string $ability): bool {return in_array($ability,self::abilities(),true);}
+ public static function requireAbility(string $ability): void {if(!self::can($ability))fail('Você não possui permissão para esta ação.',403);}
+
+ private static function finalizeLogin(array $u): array {
+  session_regenerate_id(true);$_SESSION['user_id']=$u['id'];unset($_SESSION['preview_client_id'],$_SESSION['pending_2fa_user_id'],$_SESSION['pending_2fa_until']);$_SESSION['csrf']=bin2hex(random_bytes(24));
+  DB::update('users',(int)$u['id'],['last_login_at'=>now(),'last_login_ip'=>mb_substr((string)($_SERVER['REMOTE_ADDR']??''),0,45)]);
+  unset($u['password_hash'],$u['twofa_secret'],$u['twofa_recovery_json']);self::$actor=$u;self::$user=$u;self::$user['is_preview']=0;audit('user',(int)$u['id'],'login',null,['ip'=>$_SERVER['REMOTE_ADDR']??'']);
+  return ['user'=>self::$user,'csrf'=>csrf()];
+ }
+ public static function login(array $p): array {
+  self::rate('login',15);$u=DB::one('SELECT * FROM users WHERE email=? AND active=1',[strtolower(trim($p['email']??''))]);if(!$u||!password_verify($p['password']??'',$u['password_hash']))fail('E-mail ou senha incorretos.',401);
+  if($u['role']==='admin'&&!empty($u['twofa_enabled'])){
+   session_regenerate_id(true);$_SESSION['pending_2fa_user_id']=(int)$u['id'];$_SESSION['pending_2fa_until']=time()+300;unset($_SESSION['user_id'],$_SESSION['preview_client_id']);return ['twofa_required'=>true,'email'=>$u['email']];
+  }
+  return self::finalizeLogin($u);
+ }
+ public static function twoFactorVerify(array $p): array {
+  self::rate('twofa',12,600);$id=(int)($_SESSION['pending_2fa_user_id']??0);$until=(int)($_SESSION['pending_2fa_until']??0);if(!$id||$until<time())fail('A verificação em duas etapas expirou. Entre novamente.',401);
+  $u=DB::one('SELECT * FROM users WHERE id=? AND active=1',[$id]);if(!$u||empty($u['twofa_enabled']))fail('Verificação em duas etapas indisponível.',401);
+  $code=trim((string)($p['code']??''));if(!self::twoFactorAccept($u,$code))fail('Código de verificação inválido.',401);
+  return self::finalizeLogin($u);
+ }
+ private static function base32Encode(string $data): string {
+  $alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';$bits='';foreach(str_split($data) as $ch)$bits.=str_pad(decbin(ord($ch)),8,'0',STR_PAD_LEFT);$out='';foreach(str_split($bits,5) as $chunk){$chunk=str_pad($chunk,5,'0',STR_PAD_RIGHT);$out.=$alphabet[bindec($chunk)];}return $out;
+ }
+ private static function base32Decode(string $data): string {
+  $alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';$data=strtoupper(preg_replace('/[^A-Z2-7]/i','',$data)??'');$bits='';foreach(str_split($data) as $ch){$p=strpos($alphabet,$ch);if($p===false)continue;$bits.=str_pad(decbin($p),5,'0',STR_PAD_LEFT);}$out='';foreach(str_split($bits,8) as $chunk)if(strlen($chunk)===8)$out.=chr(bindec($chunk));return $out;
+ }
+ private static function totp(string $secret,int $counter): string {
+  $key=self::base32Decode($secret);$bin=pack('N*',0).pack('N*',$counter);$hash=hash_hmac('sha1',$bin,$key,true);$offset=ord($hash[19])&0xf;$num=((ord($hash[$offset])&0x7f)<<24)|((ord($hash[$offset+1])&0xff)<<16)|((ord($hash[$offset+2])&0xff)<<8)|(ord($hash[$offset+3])&0xff);return str_pad((string)($num%1000000),6,'0',STR_PAD_LEFT);
+ }
+ private static function verifyTotp(string $secret,string $code): bool {
+  if(!preg_match('/^\d{6}$/',$code))return false;$counter=intdiv(time(),30);for($i=-1;$i<=1;$i++)if(hash_equals(self::totp($secret,$counter+$i),$code))return true;return false;
+ }
+ private static function twoFactorSecret(array $u): string {try{return !empty($u['twofa_secret'])?secretDecrypt((string)$u['twofa_secret']):'';}catch(Throwable){return '';}}
+ private static function twoFactorAccept(array $u,string $code): bool {
+  $secret=self::twoFactorSecret($u);if($secret!==''&&self::verifyTotp($secret,$code))return true;
+  $normalized=strtoupper(preg_replace('/[^A-Z0-9]/','',$code)??'');if(strlen($normalized)<8)return false;$codes=decode($u['twofa_recovery_json']??'',[]);
+  foreach($codes as $i=>$hash)if(hash_equals((string)$hash,hash('sha256',$normalized))){unset($codes[$i]);DB::update('users',(int)$u['id'],['twofa_recovery_json'=>json(array_values($codes))]);return true;}return false;
+ }
+ public static function twoFactorStatus(): array {self::load();return ['enabled'=>(bool)(self::$user['twofa_enabled']??0),'admin'=>self::$user['role']==='admin'];}
+ public static function twoFactorSetup(): array {
+  self::admin();$secret=self::base32Encode(random_bytes(20));DB::update('users',(int)self::$user['id'],['twofa_secret'=>secretEncrypt($secret),'twofa_enabled'=>0,'twofa_recovery_json'=>null]);$issuer=rawurlencode(trim(setting('brand_name','TaskEsc'))?:'TaskEsc');$label=rawurlencode((string)self::$user['email']);$uri='otpauth://totp/'.$issuer.':'.$label.'?secret='.$secret.'&issuer='.$issuer.'&digits=6&period=30';return ['secret'=>$secret,'otpauth_uri'=>$uri];
+ }
+ public static function twoFactorEnable(array $p): array {
+  self::admin();$u=DB::one('SELECT * FROM users WHERE id=?',[self::$user['id']]);$secret=self::twoFactorSecret($u);if($secret===''||!self::verifyTotp($secret,trim((string)($p['code']??''))))fail('Código do autenticador inválido.');
+  $plain=[];$hashed=[];for($i=0;$i<8;$i++){$raw=strtoupper(bin2hex(random_bytes(4)));$code=substr($raw,0,4).'-'.substr($raw,4,4);$plain[]=$code;$hashed[]=hash('sha256',str_replace('-','',$code));}
+  DB::update('users',(int)$u['id'],['twofa_enabled'=>1,'twofa_recovery_json'=>json($hashed)]);self::$user['twofa_enabled']=1;audit('user',(int)$u['id'],'2fa.enabled');return ['saved'=>true,'recovery_codes'=>$plain];
+ }
+ public static function twoFactorDisable(array $p): array {
+  self::admin();$u=DB::one('SELECT * FROM users WHERE id=?',[self::$user['id']]);$password=(string)($p['current_password']??'');if($password===''||!password_verify($password,(string)$u['password_hash']))fail('Senha atual incorreta.');
+  $code=trim((string)($p['code']??''));if(!self::twoFactorAccept($u,$code))fail('Código de verificação inválido.');
+  DB::update('users',(int)$u['id'],['twofa_enabled'=>0,'twofa_secret'=>null,'twofa_recovery_json'=>null]);self::$user['twofa_enabled']=0;audit('user',(int)$u['id'],'2fa.disabled');return ['saved'=>true];
+ }
  public static function profile(): array {
-  self::load();$u=DB::one('SELECT id,name,email,role,email_notifications FROM users WHERE id=? AND active=1',[self::$user['id']]);if(!$u)fail('Usuário não encontrado.',404);return $u;
+  self::load();$u=DB::one('SELECT id,name,email,role,email_notifications,twofa_enabled,last_login_at FROM users WHERE id=? AND active=1',[self::$user['id']]);if(!$u)fail('Usuário não encontrado.',404);return $u;
  }
  public static function profileSave(array $p): array {
   self::load();$u=DB::one('SELECT * FROM users WHERE id=? AND active=1',[self::$user['id']]);if(!$u)fail('Usuário não encontrado.',404);

@@ -8,6 +8,7 @@ try {
  if(str_contains(strtolower($_SERVER['CONTENT_TYPE']??''),'application/json')&&$raw!==''){$body=json_decode($raw,true,512,JSON_THROW_ON_ERROR);if(!is_array($body))fail('JSON inválido.');}
  $p=[...$_GET,...$_POST,...$body];unset($p['action']);
  if($action==='auth.login'){installed();out(Auth::login($p));}
+ if($action==='auth.2fa'){installed();out(Auth::twoFactorVerify($p));}
  if($action==='auth.logout'){session_start();$_SESSION=[];if(ini_get('session.use_cookies')){$params=session_get_cookie_params();setcookie(session_name(),'',['expires'=>time()-42000,'path'=>$params['path'],'domain'=>$params['domain'],'secure'=>$params['secure'],'httponly'=>$params['httponly'],'samesite'=>$params['samesite']??'Lax']);}session_destroy();out(['logged_out'=>true]);}
  installed();
  if($action==='auth.me'){Auth::load();out(['user'=>Auth::$user,'csrf'=>csrf()]);}
@@ -20,6 +21,16 @@ try {
   'account.get'=>Auth::profile(),
   'account.save'=>Auth::profileSave($p),
   'account.password'=>Auth::passwordChange($p),
+  'account.2fa_status'=>Auth::twoFactorStatus(),
+  'account.2fa_setup'=>Auth::twoFactorSetup(),
+  'account.2fa_enable'=>Auth::twoFactorEnable($p),
+  'account.2fa_disable'=>Auth::twoFactorDisable($p),
+  'push.status'=>Push::status(),
+  'push.subscribe'=>Push::subscribe($p),
+  'push.unsubscribe'=>Push::unsubscribe($p),
+  'system.health'=>SystemHealth::health(),
+  'system.logs'=>SystemHealth::logs($p),
+  'system.error_resolve'=>SystemHealth::resolve($p),
   'dashboard'=>Reports::dashboard($p),
   'report'=>Reports::report($p),
   'report.csv'=>null,
@@ -28,6 +39,7 @@ try {
   'demands.save'=>Demands::save($p),
   'demands.stage'=>Demands::stage($p),
   'demands.reorder'=>Demands::reorder($p),
+  'demands.bulk'=>Demands::bulk($p),
   'demands.delete'=>Demands::delete($p),
   'demands.comment'=>Demands::comment($p),
   'demands.checklist'=>Demands::checklist($p),
@@ -35,6 +47,7 @@ try {
   'demands.change'=>Demands::change($p),
   'demands.quote'=>Demands::quote($p),
   'clients.list'=>Catalog::clients($p),
+  'clients.detail'=>Catalog::clientDetail($p),
   'clients.log'=>Catalog::clientLog($p),
   'clients.save'=>Catalog::clientSave($p),
   'clients.delete'=>Catalog::clientDelete($p),
@@ -87,4 +100,4 @@ try {
  };
  if($action==='report.csv'){$csv=Reports::csv($p);header('Content-Type: text/csv; charset=utf-8');header('Content-Disposition: attachment; filename="taskesc-'.$p['type'].'-'.gmdate('Ymd-His').'.csv"');echo "\xEF\xBB\xBF".$csv;exit;}
  out($result??['saved'=>true]);
-}catch(AppError $e){out(['error'=>$e->getMessage(),'details'=>$e->details],$e->status);}catch(PDOException $e){error_log((string)$e);out(['error'=>'Não foi possível concluir a operação no banco de dados.'],500);}catch(Throwable $e){error_log((string)$e);out(['error'=>'Ocorreu um erro interno. Consulte o log se o problema persistir.'],500);}
+}catch(AppError $e){out(['error'=>$e->getMessage(),'details'=>$e->details],$e->status);}catch(PDOException $e){SystemHealth::capture($e,'api.database');error_log((string)$e);out(['error'=>'Não foi possível concluir a operação no banco de dados.'],500);}catch(Throwable $e){SystemHealth::capture($e,'api');error_log((string)$e);out(['error'=>'Ocorreu um erro interno. Consulte o log se o problema persistir.'],500);}

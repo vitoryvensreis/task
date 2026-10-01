@@ -60,6 +60,7 @@ try {
   'invoices.from_demand'=>Finance::invoiceDemand($p),
   'invoices.payment'=>Finance::payment($p),
   'invoices.cancel'=>Finance::cancel($p),
+  'invoices.delete'=>Finance::deleteInvoice($p),
   'costs.add'=>Finance::cost($p),
   'files.add'=>Files::add($p),
   'files.upload_start'=>Files::uploadStart($p),

@@ -46,6 +46,7 @@ try {
   'demands.change'=>Demands::change($p),
   'demands.quote'=>Demands::quote($p),
   'clients.list'=>Catalog::clients($p),
+  'clients.detail'=>Catalog::clientDetail($p),
   'clients.log'=>Catalog::clientLog($p),
   'clients.save'=>Catalog::clientSave($p),
   'clients.delete'=>Catalog::clientDelete($p),

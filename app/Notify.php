@@ -15,6 +15,7 @@ final class Notify {
   if(!$u)return null;
   if($key&&DB::one('SELECT id FROM notifications WHERE dedupe_key=?',[$key]))return null;
   DB::insert('notifications',['user_id'=>$id,'title'=>mb_substr($title,0,190),'body'=>$body,'demand_id'=>$demand,'dedupe_key'=>$key,'created_at'=>now()]);
+  Push::notifyUser($id);
   if(!$u['email_notifications'])return null;
   $email=strtolower(trim((string)$u['email']));
   self::mail($email,$title,$body."\n\n".base($demand?'kanban/task/'.$demand:'dashboard'));

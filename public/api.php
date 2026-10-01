@@ -56,6 +56,7 @@ try {
   'contracts.save'=>Finance::contractSave($p),
   'contracts.cycles'=>Finance::cycles(integer($p['id']??0,1)),
   'invoices.list'=>Finance::invoices($p),
+  'finance.log'=>Finance::log($p),
   'invoices.create'=>Finance::invoiceCreate($p),
   'invoices.from_demand'=>Finance::invoiceDemand($p),
   'invoices.payment'=>Finance::payment($p),

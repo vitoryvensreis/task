@@ -1465,3 +1465,30 @@ body{background:radial-gradient(900px 500px at 78% -10%,rgba(31,54,74,.12),trans
   .comment-submit-row{align-items:stretch;flex-direction:column}
   .comment-submit-row .primary{width:100%}
 }
+
+
+/* TaskEsc v2.13.1 — logs compactos com rolagem vertical */
+.email-log-panel .table-wrap,
+.finance-log-wrap{
+  max-height:390px;
+  overflow:auto;
+  overscroll-behavior:contain;
+  scrollbar-width:thin;
+  scrollbar-color:#3a4651 transparent;
+}
+.email-log-panel .table-wrap::-webkit-scrollbar,
+.finance-log-wrap::-webkit-scrollbar{width:7px;height:7px}
+.email-log-panel .table-wrap::-webkit-scrollbar-thumb,
+.finance-log-wrap::-webkit-scrollbar-thumb{background:#3a4651;border-radius:6px}
+.email-log-panel .table thead th,
+.finance-log-table thead th{
+  position:sticky;
+  top:0;
+  z-index:2;
+  background:#0c0f12;
+}
+.finance-log-table{min-width:980px}
+.finance-log-panel{margin-top:17px}
+@media(max-width:760px){
+  .email-log-panel .table-wrap,.finance-log-wrap{max-height:320px}
+}

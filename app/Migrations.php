@@ -73,9 +73,72 @@ final class Migrations {
    try{DB::run('ALTER TABLE invoices ADD INDEX idx_invoices_deleted_at (deleted_at)');}catch(Throwable){}
    DB::run("INSERT INTO settings (`key`,value) VALUES ('schema_version','9') ON DUPLICATE KEY UPDATE value='9'");$version=9;
   }
+  if($version<10){
+   self::column('users','twofa_secret',"ALTER TABLE users ADD COLUMN twofa_secret VARCHAR(190) NULL AFTER weekly_report");
+   self::column('users','twofa_enabled',"ALTER TABLE users ADD COLUMN twofa_enabled TINYINT NOT NULL DEFAULT 0 AFTER twofa_secret");
+   self::column('users','twofa_recovery_json',"ALTER TABLE users ADD COLUMN twofa_recovery_json TEXT NULL AFTER twofa_enabled");
+   self::column('users','last_login_at',"ALTER TABLE users ADD COLUMN last_login_at DATETIME NULL AFTER twofa_recovery_json");
+   self::column('users','last_login_ip',"ALTER TABLE users ADD COLUMN last_login_ip VARCHAR(45) NULL AFTER last_login_at");
+
+   self::column('categories','default_amount_cents',"ALTER TABLE categories ADD COLUMN default_amount_cents BIGINT NOT NULL DEFAULT 0 AFTER fields_json");
+   self::column('categories','default_due_hours',"ALTER TABLE categories ADD COLUMN default_due_hours INT NOT NULL DEFAULT 24 AFTER default_amount_cents");
+   self::column('categories','default_revisions',"ALTER TABLE categories ADD COLUMN default_revisions INT NOT NULL DEFAULT 2 AFTER default_due_hours");
+   self::column('categories','default_priority',"ALTER TABLE categories ADD COLUMN default_priority VARCHAR(20) NOT NULL DEFAULT 'normal' AFTER default_revisions");
+   self::column('categories','default_assigned_to',"ALTER TABLE categories ADD COLUMN default_assigned_to INT NULL AFTER default_priority");
+   self::column('categories','checklist_json',"ALTER TABLE categories ADD COLUMN checklist_json TEXT NULL AFTER default_assigned_to");
+   DB::run("UPDATE categories SET checklist_json='[]' WHERE checklist_json IS NULL OR checklist_json=''");
+
+   DB::run("CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    endpoint TEXT NOT NULL,
+    endpoint_hash CHAR(64) NOT NULL,
+    p256dh TEXT NULL,
+    auth_key TEXT NULL,
+    user_agent VARCHAR(255) NULL,
+    active TINYINT NOT NULL DEFAULT 1,
+    last_error TEXT NULL,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    UNIQUE KEY uq_push_endpoint_hash (endpoint_hash),
+    KEY idx_push_user_active (user_id,active)
+   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+   DB::run("CREATE TABLE IF NOT EXISTS system_errors (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NULL,
+    level VARCHAR(20) NOT NULL DEFAULT 'error',
+    context VARCHAR(100) NOT NULL DEFAULT 'app',
+    message TEXT NOT NULL,
+    request_uri TEXT NULL,
+    details_json LONGTEXT NULL,
+    resolved_at DATETIME NULL,
+    created_at DATETIME NOT NULL,
+    KEY idx_system_errors_created (created_at),
+    KEY idx_system_errors_open (resolved_at,created_at)
+   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+
+   self::index('demands','idx_demands_ops',"ALTER TABLE demands ADD INDEX idx_demands_ops (deleted_at,stage_id,client_id,category_id,assigned_to,due_at)");
+   self::index('invoices','idx_invoices_ops',"ALTER TABLE invoices ADD INDEX idx_invoices_ops (deleted_at,client_id,due_on,status)");
+   self::index('audit_log','idx_audit_entity',"ALTER TABLE audit_log ADD INDEX idx_audit_entity (entity,entity_id,created_at)");
+   self::index('notifications','idx_notifications_user',"ALTER TABLE notifications ADD INDEX idx_notifications_user (user_id,seen,created_at)");
+   self::index('events','idx_events_calendar_time',"ALTER TABLE events ADD INDEX idx_events_calendar_time (calendar_id,starts_at,status)");
+
+   foreach([
+    'last_cron_at'=>'',
+    'last_cron_error'=>'',
+    'monitor_email'=>'',
+    'browser_notifications'=>'1',
+    'dashboard_default_period'=>'month'
+   ] as $k=>$v)DB::run('INSERT INTO settings (`key`,value) VALUES (?,?) ON DUPLICATE KEY UPDATE value=value',[$k,$v]);
+
+   DB::run("INSERT INTO settings (`key`,value) VALUES ('schema_version','10') ON DUPLICATE KEY UPDATE value='10'");$version=10;
+  }
  }
  private static function hasColumn(string $table,string $column): bool {return (bool)DB::one('SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?',[$table,$column]);}
  private static function column(string $table,string $column,string $sql): void {if(!self::hasColumn($table,$column))DB::run($sql);}
+ private static function hasIndex(string $table,string $index): bool {return (bool)DB::one('SELECT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND INDEX_NAME=?',[$table,$index]);}
+ private static function index(string $table,string $index,string $sql): void {if(!self::hasIndex($table,$index))DB::run($sql);}
  private static function dropColumn(string $table,string $column): void {
   if(!self::hasColumn($table,$column))return;
   $fks=DB::all('SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=? AND REFERENCED_TABLE_NAME IS NOT NULL',[$table,$column]);

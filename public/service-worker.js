@@ -1,8 +1,8 @@
-const CACHE='taskesc-shell-v2.12.2';
+const CACHE='taskesc-shell-v2.13.0';
 const SHELL=[
   '/offline.html',
-  '/assets/app.css?v=2.12.0',
-  '/assets/app.js?v=2.12.2',
+  '/assets/app.css?v=2.13.0',
+  '/assets/app.js?v=2.13.0',
   '/assets/taskesc-logo.svg'
 ];
 
@@ -20,7 +20,7 @@ self.addEventListener('fetch',event=>{
   const url=new URL(request.url);
   if(url.origin!==self.location.origin)return;
 
-  const sensitive=/\/(api\.php|api\/|drive-upload\.php|download\.php|google|oauth|cron\.php|mcp\.php)/i.test(url.pathname);
+  const sensitive=/\/(api\.php|api\/|drive-upload\.php|download\.php|download-all\.php|google|oauth|cron\.php|mcp\.php)/i.test(url.pathname);
   if(sensitive)return;
 
   if(request.mode==='navigate'){

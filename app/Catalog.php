@@ -1,20 +1,63 @@
 <?php
 final class Catalog {
 public static function meta(): array {
-  [$w,$a]=Auth::clientFilter('c.id');$clients=DB::all('SELECT c.id,c.name,c.brand,c.commercial_type,c.monthly_amount_cents,c.monthly_payment_day,c.drive_account_id,c.email,c.phone,ga.email AS own_drive_email,ga.status AS own_drive_status,ga.drive_enabled AS own_drive_enabled,ga.scopes AS own_drive_scopes FROM clients c LEFT JOIN google_accounts ga ON ga.id=c.drive_account_id WHERE '.$w.' ORDER BY c.name',$a);
+  [$w,$a]=Auth::clientFilter('c.id');$clients=DB::all('SELECT c.id,c.name,c.brand,c.commercial_type,c.monthly_amount_cents,c.monthly_payment_day,c.drive_account_id,c.email,c.phone,ga.email AS own_drive_email,ga.status AS own_drive_status,ga.drive_enabled AS own_drive_enabled,ga.scopes AS own_drive_scopes FROM clients c LEFT JOIN google_accounts ga ON ga.id=c.drive_account_id WHERE '.$w.' AND c.active=1 ORDER BY c.name',$a);
   $users=Auth::$user['role']==='admin'?DB::all('SELECT id,name,email,role,active FROM users ORDER BY name'):DB::all("SELECT id,name FROM users WHERE role IN ('admin','staff') AND active=1");
   [$pw,$pa]=Auth::clientFilter('client_id');$driveId=(int)setting('drive_account_id','0');$defaultDrive=$driveId?DB::one("SELECT id,email FROM google_accounts WHERE id=? AND status='connected' AND drive_enabled=1 AND scopes LIKE ?",[$driveId,'%https://www.googleapis.com/auth/drive.file%']):null;
   foreach($clients as &$c){if(!empty($c['drive_account_id'])){$ready=$c['own_drive_status']==='connected'&&(bool)$c['own_drive_enabled']&&str_contains((string)($c['own_drive_scopes']??''),'https://www.googleapis.com/auth/drive.file');$c['drive_ready']=$ready;if(Auth::$user['role']==='admin')$c['drive_email']=$c['own_drive_email']??'';}else{$c['drive_ready']=(bool)$defaultDrive;if(Auth::$user['role']==='admin')$c['drive_email']=$defaultDrive['email']??'';}unset($c['own_drive_email'],$c['own_drive_status'],$c['own_drive_enabled'],$c['own_drive_scopes']);}unset($c);
   $pwaIcon=ROOT.'/public/uploads/branding/pwa-192.png';$pwaIconUrl=is_file($pwaIcon)?base('uploads/branding/pwa-192.png?v='.filemtime($pwaIcon)):base('assets/taskesc-logo.svg');
   return ['user'=>Auth::$user,'csrf'=>csrf(),'clients'=>$clients,'projects'=>DB::all('SELECT * FROM projects WHERE '.$pw.' ORDER BY name',$pa),'contracts'=>Auth::$user['role']==='admin'?DB::all("SELECT id,client_id,name,status FROM contracts WHERE status<>'cancelled' ORDER BY name"):[],'users'=>$users,'stages'=>DB::all('SELECT * FROM stages WHERE active=1 ORDER BY position,id'),'categories'=>DB::all('SELECT * FROM categories WHERE active=1'),'brand'=>['name'=>setting('brand_name','TaskEsc'),'color'=>setting('brand_color','#ffffff'),'logo'=>setting('logo_url'),'pwa_icon'=>$pwaIconUrl],'timezone'=>config('timezone'),'upload_mb'=>(int)setting('upload_mb','0'),'server_time'=>now(),'min_delivery_business_hours'=>minDeliveryHours(),'min_delivery_at'=>minDeliveryLocal(),'drive_ready'=>(bool)$defaultDrive,'permissions'=>Auth::isPreview()?[['client_id'=>Auth::$previewClientId,'can_approve'=>1,'can_finance'=>1]]:(Auth::$user['role']==='client'?DB::all('SELECT client_id,can_approve,can_finance FROM user_clients WHERE user_id=?',[Auth::$user['id']]):[])];
  }
- public static function clients(array $p): array {Auth::admin();return DB::all('SELECT c.*,ga.email AS drive_email,ga.status AS drive_status,ga.drive_enabled FROM clients c LEFT JOIN google_accounts ga ON ga.id=c.drive_account_id WHERE c.name LIKE ? ORDER BY c.name',['%'.($p['q']??'').'%']);}
+ public static function clients(array $p): array {Auth::admin();return DB::all('SELECT c.*,ga.email AS drive_email,ga.status AS drive_status,ga.drive_enabled FROM clients c LEFT JOIN google_accounts ga ON ga.id=c.drive_account_id WHERE c.active=1 AND c.name LIKE ? ORDER BY c.name',['%'.($p['q']??'').'%']);}
 public static function clientSave(array $p): array {
-  Auth::admin();$id=(int)($p['id']??0);$old=$id?Auth::client($id):null;$type=enumv($p['commercial_type']??($old['commercial_type']??'one_off'),['one_off','monthly'],'modelo comercial');$monthly=$type==='monthly'?integer($p['monthly_amount_cents']??($old['monthly_amount_cents']??0),0,1000000000):0;$paymentDay=$type==='monthly'?integer($p['monthly_payment_day']??($old['monthly_payment_day']??10),1,31):10;$driveId=array_key_exists('drive_account_id',$p)?(int)$p['drive_account_id']:(int)($old['drive_account_id']??0);
+  Auth::admin();$id=(int)($p['id']??0);$old=$id?Auth::client($id):null;$isNew=!$old;$type=enumv($p['commercial_type']??($old['commercial_type']??'one_off'),['one_off','monthly'],'modelo comercial');$monthly=$type==='monthly'?integer($p['monthly_amount_cents']??($old['monthly_amount_cents']??0),0,1000000000):0;$paymentDay=$type==='monthly'?integer($p['monthly_payment_day']??($old['monthly_payment_day']??10),1,31):10;$driveId=array_key_exists('drive_account_id',$p)?(int)$p['drive_account_id']:(int)($old['drive_account_id']??0);
   if($driveId&&!DB::one("SELECT id FROM google_accounts WHERE id=? AND status='connected' AND drive_enabled=1 AND scopes LIKE ?",[$driveId,'%https://www.googleapis.com/auth/drive.file%']))fail('O Google Drive selecionado não está disponível. Reconecte essa conta como Drive.');
-  $row=['name'=>required($p,'name',190),'brand'=>mb_substr($p['brand']??($old['brand']??''),0,190),'commercial_type'=>$type,'monthly_amount_cents'=>$monthly,'monthly_payment_day'=>$paymentDay,'drive_account_id'=>$driveId?:null,'email'=>trim($p['email']??($old['email']??'')),'phone'=>mb_substr($p['phone']??($old['phone']??''),0,60),'document'=>mb_substr($p['document']??($old['document']??''),0,40),'notes'=>$p['notes']??($old['notes']??''),'brand_url'=>urlv($p['brand_url']??($old['brand_url']??'')),'active'=>(int)(bool)($p['active']??1)];if($row['email']&&!filter_var($row['email'],FILTER_VALIDATE_EMAIL))fail('E-mail inválido.');$driveChanged=$old&&((int)($old['drive_account_id']??0)!==$driveId);if($driveChanged)$row['drive_folder_id']=null;if($id)DB::update('clients',$id,$row);else $id=DB::insert('clients',$row+['drive_folder_id'=>null,'created_at'=>now()]);if($driveChanged)DB::run('UPDATE demands SET drive_folder_id=NULL WHERE client_id=?',[$id]);audit('client',$id,'save',$old,$row);Notify::clientLifecycle($row+['id'=>$id],!$old);return ['id'=>$id];
+  $row=['name'=>required($p,'name',190),'brand'=>mb_substr($p['brand']??($old['brand']??''),0,190),'commercial_type'=>$type,'monthly_amount_cents'=>$monthly,'monthly_payment_day'=>$paymentDay,'drive_account_id'=>$driveId?:null,'email'=>trim($p['email']??($old['email']??'')),'phone'=>mb_substr($p['phone']??($old['phone']??''),0,60),'document'=>mb_substr($p['document']??($old['document']??''),0,40),'notes'=>$p['notes']??($old['notes']??''),'brand_url'=>urlv($p['brand_url']??($old['brand_url']??'')),'active'=>(int)(bool)($p['active']??1)];
+  if($row['email']&&!filter_var($row['email'],FILTER_VALIDATE_EMAIL))fail('E-mail inválido.');
+  $createAccess=$isNew&&!empty($p['create_access']);$accessEmail='';$accessName='';$accessHash=null;
+  if($createAccess){
+   $accessEmail=strtolower(trim((string)($p['access_email']??$row['email'])));if($accessEmail===''||!filter_var($accessEmail,FILTER_VALIDATE_EMAIL))fail('Informe um e-mail válido para a conta de acesso.');
+   if(DB::one('SELECT id FROM users WHERE email=?',[$accessEmail]))fail('Já existe uma conta de acesso com este e-mail.',409);
+   $accessName=trim((string)($p['access_name']??$row['name']));if($accessName==='')$accessName=$row['name'];$accessName=mb_substr($accessName,0,150);
+   $accessHash=Auth::password((string)($p['access_password']??''));
+  }
+  $driveChanged=$old&&((int)($old['drive_account_id']??0)!==$driveId);if($driveChanged)$row['drive_folder_id']=null;
+  $result=DB::tx(function() use(&$id,$old,$isNew,$row,$driveChanged,$createAccess,$accessEmail,$accessName,$accessHash): array {
+   if($id)DB::update('clients',$id,$row);else $id=DB::insert('clients',$row+['drive_folder_id'=>null,'created_at'=>now()]);
+   if($driveChanged)DB::run('UPDATE demands SET drive_folder_id=NULL WHERE client_id=?',[$id]);
+   audit('client',$id,$isNew?'created':'save',$old,$row);
+   $userId=null;
+   if($createAccess){
+    $userId=DB::insert('users',['name'=>$accessName,'email'=>$accessEmail,'password_hash'=>$accessHash,'role'=>'client','active'=>1,'email_notifications'=>1,'created_at'=>now()]);
+    DB::insert('user_clients',['user_id'=>$userId,'client_id'=>$id,'can_approve'=>1,'can_finance'=>0]);
+    audit('user',$userId,'client_access.created',null,['client_id'=>$id,'client_name'=>$row['name'],'email'=>$accessEmail]);
+    audit('client',$id,'access.created',null,['user_id'=>$userId,'email'=>$accessEmail]);
+   }
+   return ['id'=>$id,'access_created'=>(bool)$createAccess,'access_user_id'=>$userId,'access_email'=>$createAccess?$accessEmail:null];
+  });
+  Notify::clientLifecycle($row+['id'=>$id],$isNew);return $result;
  }
- public static function clientDelete(array $p): array {Auth::admin();$id=integer($p['id']??0,1);$old=Auth::client($id);DB::update('clients',$id,['active'=>0]);audit('client',$id,'deactivated',$old,['active'=>0]);Notify::team('Cliente desativado',$old['name'].' foi desativado no TaskEsc.');return ['deleted'=>true,'id'=>$id];}
+ public static function clientDelete(array $p): array {
+  Auth::admin();$id=integer($p['id']??0,1);$reason=required($p,'reason',500);if(mb_strlen($reason)<5)fail('Informe um motivo de exclusão com pelo menos 5 caracteres.');
+  $old=Auth::client($id);if(!(int)($old['active']??0))fail('Este cliente já está excluído ou inativo.',409);
+  $revoked=[];
+  DB::tx(function() use($id,$reason,$old,&$revoked): void {
+   $linked=DB::all("SELECT u.id,u.name,u.email FROM users u JOIN user_clients uc ON uc.user_id=u.id WHERE uc.client_id=? AND u.role='client'",[$id]);
+   DB::run('DELETE FROM user_clients WHERE client_id=?',[$id]);
+   foreach($linked as $u){
+    $other=DB::one('SELECT client_id FROM user_clients WHERE user_id=? LIMIT 1',[$u['id']]);
+    if(!$other){DB::update('users',(int)$u['id'],['active'=>0]);$revoked[]=['id'=>(int)$u['id'],'name'=>$u['name'],'email'=>$u['email']];audit('user',(int)$u['id'],'client_access.revoked',null,['client_id'=>$id,'client_name'=>$old['name'],'reason'=>$reason]);}
+   }
+   DB::update('clients',$id,['active'=>0]);
+   audit('client',$id,'deleted',$old,['active'=>0,'reason'=>$reason,'revoked_access_users'=>$revoked,'deleted_by_name'=>Auth::$user['name']??null]);
+  });
+  Notify::team('Cliente excluído',$old['name'].' foi excluído do TaskEsc. Motivo: '.$reason);
+  return ['deleted'=>true,'id'=>$id,'revoked_access_users'=>$revoked];
+ }
+ public static function clientLog(array $p=[]): array {
+  Auth::admin();$limit=max(1,min(200,(int)($p['limit']??100)));
+  return DB::all("SELECT a.id,a.entity_id AS client_id,a.action,a.before_json,a.after_json,a.origin,a.created_at,u.name AS user_name,u.email AS user_email,c.name AS client_name FROM audit_log a LEFT JOIN users u ON u.id=a.user_id LEFT JOIN clients c ON c.id=a.entity_id WHERE a.entity='client' ORDER BY a.id DESC LIMIT ".$limit);
+ }
  public static function projectSave(array $p): array {Auth::admin();$client=integer($p['client_id']??0,1);Auth::client($client);$id=(int)($p['id']??0);if($id&&!DB::one('SELECT id FROM projects WHERE id=?',[$id]))fail('Projeto não encontrado.',404);$row=['client_id'=>$client,'name'=>required($p,'name',190),'description'=>$p['description']??''];if($id)DB::update('projects',$id,$row);else $id=DB::insert('projects',$row+['created_at'=>now()]);audit('project',$id,'save',null,$row);return ['id'=>$id];}
  public static function users(): array {Auth::admin();$rows=DB::all('SELECT id,name,email,role,active,email_notifications,weekly_report FROM users ORDER BY name');foreach($rows as &$r)$r['clients']=DB::all('SELECT * FROM user_clients WHERE user_id=?',[$r['id']]);return $rows;}
  public static function userSave(array $p): array {Auth::admin();$id=(int)($p['id']??0);$old=$id?DB::one('SELECT id,role FROM users WHERE id=?',[$id]):null;if($id&&!$old)fail('Usuário não encontrado.',404);$email=strtolower(required($p,'email',190));if(!filter_var($email,FILTER_VALIDATE_EMAIL))fail('E-mail inválido.');$row=['name'=>required($p,'name',150),'email'=>$email,'role'=>enumv($p['role']??'client',['admin','staff','client'],'perfil'),'active'=>(int)(bool)($p['active']??1),'email_notifications'=>(int)(bool)($p['email_notifications']??1)];if($id==Auth::$user['id']&&($row['role']!=='admin'||!$row['active']))fail('Não é possível remover seu próprio acesso administrativo.');if(!$id||!empty($p['password']))$row['password_hash']=Auth::password($p['password']??'');if($id)DB::update('users',$id,$row);else $id=DB::insert('users',$row+['created_at'=>now()]);DB::run('DELETE FROM user_clients WHERE user_id=?',[$id]);foreach($p['clients']??[] as $c){$cid=integer($c['client_id']??0,1);Auth::client($cid);DB::insert('user_clients',['user_id'=>$id,'client_id'=>$cid,'can_approve'=>(int)(bool)($c['can_approve']??1),'can_finance'=>(int)(bool)($c['can_finance']??0)]);}unset($row['password_hash']);audit('user',$id,'save',$old,$row);return ['id'=>$id];}

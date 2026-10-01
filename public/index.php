@@ -22,7 +22,7 @@ $pwa192Url=is_file($pwa192)?(($basePath?:'').'/uploads/branding/pwa-192.png?v='.
   <link rel="icon" href="<?=e($pwa192Url)?>">
   <link rel="apple-touch-icon" href="<?=e($pwa180Url)?>">
   <link rel="stylesheet" href="<?=e($basePath)?>/assets/app.css?v=3.1.0">
-  <script src="https://unpkg.com/lucide@0.577.0/dist/umd/lucide.min.js" defer></script>
+  <script src="https://unpkg.com/lucide@0.575.0/dist/umd/lucide.min.js" defer></script>
 </head>
 <body data-base-path="<?=e($basePath)?>">
   <div id="toast" class="toast"></div><div id="page-loader" class="page-loader hidden" aria-live="polite"><div class="page-loader-card"><span class="loader-ring"></span><b>Carregando</b></div></div>

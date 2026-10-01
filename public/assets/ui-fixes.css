@@ -1,0 +1,144 @@
+/* TaskEsc v3.3 — responsividade, filtros e iconografia */
+
+/* Nunca exibir os caracteres de fallback como "ícones". A biblioteca local
+   public/assets/taskesc-icons.js hidrata todos os data-lucide com SVG. */
+.icon-fallback{display:none!important}
+
+/* O menu mobile já possui um SVG. A regra antiga #menu:before criava um
+   segundo hambúrguer e deixava o botão visualmente duplicado. */
+#menu::before{content:none!important;display:none!important}
+
+/* Popover fecha ao clicar novamente no sino, fora dele ou com Esc. */
+.notification-popover .notification-close{display:none!important}
+
+/* Kanban — filtros alinhados em uma grade estável no desktop. */
+.toolbar.kanban-filters{
+  display:grid;
+  grid-template-columns:minmax(178px,1.35fr) repeat(4,minmax(142px,1fr)) auto auto;
+  align-items:center;
+  gap:7px;
+}
+.toolbar.kanban-filters>.input,
+.toolbar.kanban-filters>.select,
+.toolbar.kanban-filters>.check,
+.toolbar.kanban-filters>button{
+  width:100%;
+  max-width:none;
+  min-width:0;
+  margin:0;
+}
+.toolbar.kanban-filters>.input,
+.toolbar.kanban-filters>.select,
+.toolbar.kanban-filters>.check,
+.toolbar.kanban-filters>button{
+  height:35px;
+  min-height:35px;
+}
+.toolbar.kanban-filters>.filter-check{
+  padding:0 10px;
+  white-space:nowrap;
+}
+
+/* Conteúdo de cards nunca deve empurrar a viewport. Rolagens horizontais
+   continuam apenas onde são intencionais (tabelas e o próprio Kanban). */
+.stat-card,.comparison-card,.chart-panel,.panel,.task-card{min-width:0;max-width:100%}
+.chart-panel{overflow:hidden}
+.metric-chart{max-width:100%}
+
+@media(max-width:1180px) and (min-width:761px){
+  .toolbar.kanban-filters{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .toolbar.kanban-filters>#demand-search{grid-column:span 2}
+}
+
+@media(max-width:760px){
+  .grid.stats,.client-stats{
+    display:grid!important;
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:8px!important;
+    margin:0 0 12px!important;
+    padding:0!important;
+    overflow:visible!important;
+    scroll-snap-type:none!important;
+  }
+  .grid.stats .stat-card,.client-stats .stat-card{
+    flex:initial!important;
+    width:100%!important;
+    min-width:0!important;
+    scroll-snap-align:none!important;
+  }
+  .comparison-grid{
+    display:grid!important;
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:8px!important;
+    margin:0 0 12px!important;
+    padding:0!important;
+    overflow:visible!important;
+    scroll-snap-type:none!important;
+  }
+  .comparison-card{
+    flex:initial!important;
+    width:100%!important;
+    min-width:0!important;
+    scroll-snap-align:none!important;
+  }
+  .comparison-card.finance-summary-card{grid-column:1/-1!important}
+
+  .chart-panel{overflow:hidden!important}
+  .metric-chart,
+  .metric-chart.finance-chart{
+    width:100%!important;
+    min-width:0!important;
+    max-width:100%!important;
+    gap:4px!important;
+    padding-inline:0!important;
+  }
+  .metric-chart{grid-template-columns:repeat(8,minmax(0,1fr))!important}
+  .metric-chart.finance-chart{grid-template-columns:repeat(6,minmax(0,1fr))!important}
+  .metric-bars{gap:2px!important}
+  .metric-bar{width:min(15px,44%)!important}
+  .metric-column>span{
+    min-width:0;
+    overflow:hidden;
+    text-overflow:clip;
+    white-space:nowrap;
+    font-size:8px;
+  }
+
+  .dashboard-period-bar{overflow:visible!important;flex-wrap:wrap!important;padding-bottom:0!important}
+
+  .toolbar.kanban-filters{
+    display:grid!important;
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:6px!important;
+    margin-bottom:9px!important;
+  }
+  .toolbar.kanban-filters>#demand-search{grid-column:1/-1}
+  .toolbar.kanban-filters>.input,
+  .toolbar.kanban-filters>.select,
+  .toolbar.kanban-filters>.check,
+  .toolbar.kanban-filters>button{
+    width:100%!important;
+    min-width:0!important;
+    max-width:none!important;
+    height:40px!important;
+    min-height:40px!important;
+    margin:0!important;
+  }
+  .toolbar.kanban-filters>.input,
+  .toolbar.kanban-filters>.select{
+    padding-inline:10px!important;
+    font-size:13px!important;
+  }
+  .toolbar.kanban-filters>.filter-check{
+    padding:0 9px!important;
+    font-size:11px!important;
+  }
+  .toolbar.kanban-filters>#refresh-kanban{font-size:11px!important}
+
+  .notification-popover{max-width:calc(100vw - 20px)}
+}
+
+@media(max-width:380px){
+  .grid.stats,.client-stats,.comparison-grid{grid-template-columns:1fr!important}
+  .comparison-card.finance-summary-card{grid-column:auto!important}
+}

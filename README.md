@@ -51,6 +51,14 @@ As notificações de task passam a enfileirar e-mail diretamente para o endereç
 A Agenda passa a abrir por padrão na **visão semanal**.
 
 
+
+### Ajustes v3.3 de responsividade, filtros e iconografia
+
+A v3.3 é uma atualização visual e **não altera o schema do banco**. Ela remove rolagens horizontais indevidas dos cards do Dashboard em telas pequenas, reorganiza os indicadores e gráficos para a largura disponível e mantém rolagem lateral apenas nos componentes em que ela é funcional, como tabelas extensas e o quadro Kanban.
+
+No Kanban, os filtros passam a usar uma grade alinhada no desktop e uma composição compacta em duas colunas no mobile, com a busca ocupando a largura total. O menu mobile deixa de renderizar o ícone duplicado. A interface deixa de depender do CDN externo de ícones e passa a carregar os SVGs localmente, incluindo o sino de notificações. O botão **X** redundante foi removido do popover de notificações; ele continua fechando ao tocar novamente no sino, clicar fora ou pressionar Esc.
+
+
 ## Apache
 
 O caminho público deve terminar em `/public`. Exemplo conceitual:

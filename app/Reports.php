@@ -12,14 +12,7 @@ final class Reports {
   if(Auth::$user['role']!=='admin'){
    $financial=null;
   }else{
-   Finance::syncCommercialInvoices($from,$to);[$iw,$ia]=Auth::clientFilter('i.client_id',true);$today=(new DateTimeImmutable('now',$tz))->format('Y-m-d');
-   $financial=DB::one("SELECT
-    COALESCE(SUM(CASE WHEN i.status<>'cancelled' THEN i.amount_cents ELSE 0 END),0) AS billed_cents,
-    COALESCE(SUM(CASE WHEN i.status<>'cancelled' THEN (SELECT COALESCE(SUM(p.amount_cents),0) FROM payments p WHERE p.invoice_id=i.id) ELSE 0 END),0) AS received_cents,
-    COALESCE(SUM(CASE WHEN i.status<>'cancelled' THEN GREATEST(0,i.amount_cents-(SELECT COALESCE(SUM(p.amount_cents),0) FROM payments p WHERE p.invoice_id=i.id)) ELSE 0 END),0) AS open_cents,
-    COALESCE(SUM(CASE WHEN i.status<>'cancelled' AND i.due_on<? THEN GREATEST(0,i.amount_cents-(SELECT COALESCE(SUM(p.amount_cents),0) FROM payments p WHERE p.invoice_id=i.id)) ELSE 0 END),0) AS overdue_cents
-    FROM invoices i WHERE $iw AND i.deleted_at IS NULL AND i.due_on BETWEEN ? AND ?",[$today,...$ia,$from,$to]);
-   $financial['approved_cents']=(int)($financial['billed_cents']??0);
+   $financial=Finance::analysis(['from'=>$from,'to'=>$to]);$financial['approved_cents']=(int)($financial['billed_cents']??0);
   }
   $upcomingSql='SELECT e.id,e.title,e.starts_at,e.ends_at,e.location,c.name AS calendar_name,c.color,d.id AS demand_id,d.title AS demand_title,cl.name AS client_name FROM events e JOIN calendars c ON c.id=e.calendar_id LEFT JOIN demands d ON d.id=e.demand_id AND d.deleted_at IS NULL LEFT JOIN clients cl ON cl.id=d.client_id WHERE c.selected=1 AND e.status<>\'cancelled\' AND e.starts_at BETWEEN ? AND ?';$upcomingArgs=[$from.' 00:00:00',$to.' 23:59:59'];if(Auth::$user['role']==='client'){if(Auth::isPreview()){$upcomingSql.=' AND e.private=0 AND d.client_id=?';$upcomingArgs[]=Auth::$previewClientId;}else{$upcomingSql.=' AND e.private=0 AND d.client_id IN (SELECT client_id FROM user_clients WHERE user_id=?)';$upcomingArgs[]=Auth::$user['id'];}}$upcoming=DB::all($upcomingSql.' ORDER BY e.starts_at LIMIT 20',$upcomingArgs);
   $pending=DB::all('SELECT d.id,d.title,d.due_at,c.name AS client_name,s.name AS stage_name FROM demands d JOIN clients c ON c.id=d.client_id JOIN stages s ON s.id=d.stage_id WHERE '.$dw." AND s.kind IN ('inbox','analysis','waiting','approval') ORDER BY COALESCE(d.due_at,'9999-12-31') LIMIT 20",$da);
@@ -41,11 +34,13 @@ final class Reports {
  }
 
  public static function report(array $p=[]): array {
-  Auth::load();$from=datev($p['from']??gmdate('Y-m-01'),false);$to=datev($p['to']??gmdate('Y-m-t'),false);$type=enumv($p['type']??'production',['production','financial','clients','contracts'],'relatório');if($type==='clients'&&Auth::$user['role']!=='admin')fail('Relatório de clientes restrito ao administrador.',403);$d=self::dashboard(['from'=>$from,'to'=>$to]);
+  Auth::load();$from=datev($p['from']??gmdate('Y-m-01'),false);$to=datev($p['to']??gmdate('Y-m-t'),false);$type=enumv($p['type']??'production',['production','financial','expenses','clients','contracts'],'relatório');if($type==='clients'&&Auth::$user['role']!=='admin')fail('Relatório de clientes restrito ao administrador.',403);$d=self::dashboard(['from'=>$from,'to'=>$to]);
   if($type==='production'){
    $filter=Auth::demandFilter('d');$d['rows']=DB::all('SELECT d.id,d.title,c.name AS client_name,ca.name AS category_name,s.name AS stage_name,d.priority,d.due_at,d.created_at,d.completed_at,COALESCE((SELECT SUM(minutes) FROM time_entries t WHERE t.demand_id=d.id),0) AS worked_minutes,COALESCE((SELECT COUNT(*) FROM reviews r JOIN files f ON f.id=r.file_id WHERE f.demand_id=d.id AND r.decision=\'changes\'),0) AS changes FROM demands d JOIN clients c ON c.id=d.client_id JOIN categories ca ON ca.id=d.category_id JOIN stages s ON s.id=d.stage_id WHERE '.$filter[0].' AND d.created_at BETWEEN ? AND ? ORDER BY d.created_at DESC',[...$filter[1],$from.' 00:00:00',$to.' 23:59:59']);
   }elseif($type==='financial'){
-   $d['rows']=Finance::invoices(['from'=>$from,'to'=>$to]);
+   $d['rows']=Finance::invoices(['from'=>$from,'to'=>$to]);$d['analysis']=Finance::analysis(['from'=>$from,'to'=>$to]);
+  }elseif($type==='expenses'){
+   $d['rows']=Finance::expenseReportRows($from,$to);$d['analysis']=Finance::analysis(['from'=>$from,'to'=>$to]);
   }elseif($type==='clients'){
    Finance::syncCommercialInvoices($from,$to);$d['rows']=DB::all("SELECT c.id,c.name,c.commercial_type,c.monthly_amount_cents,c.monthly_payment_day,
     (SELECT COUNT(*) FROM demands d WHERE d.client_id=c.id AND d.deleted_at IS NULL AND d.created_at BETWEEN ? AND ?) AS demands_count,

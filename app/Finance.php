@@ -72,5 +72,92 @@ final class Finance {
    return ['deleted'=>true,'id'=>$id,'deleted_at'=>$deletedAt,'deleted_by'=>$actor,'reason'=>$reason];
   });
  }
- public static function cost(array $p): array {Auth::admin();$d=Auth::demand(integer($p['demand_id'],1));$id=DB::insert('costs',['demand_id'=>$d['id'],'description'=>required($p,'description',190),'amount_cents'=>integer($p['amount_cents']??0,1),'spent_on'=>datev($p['spent_on']??'',false),'created_at'=>now()]);return ['id'=>$id];}
+ private static function expenseRange(array $p=[]): array {
+  $tz=new DateTimeZone(config('timezone','America/Fortaleza'));$now=new DateTimeImmutable('now',$tz);
+  $from=datev($p['from']??$now->modify('first day of this month')->format('Y-m-d'),false);
+  $to=datev($p['to']??$now->modify('last day of this month')->format('Y-m-d'),false);
+  if($from>$to)fail('Período de custos inválido.');return [$from,$to,$tz];
+ }
+ private static function syncExpenses(string $from,string $to): int {
+  $tz=new DateTimeZone(config('timezone','America/Fortaleza'));$rules=DB::all("SELECT * FROM expense_rules WHERE active=1 AND starts_on<=? AND (ends_on IS NULL OR ends_on>=?) ORDER BY id",[$to,$from]);$count=0;
+  $monthFloor=(new DateTimeImmutable('first day of this month',$tz))->format('Y-m-d');
+  foreach($rules as $rule){
+   $dates=[];$start=new DateTimeImmutable((string)$rule['starts_on'],$tz);$end=!empty($rule['ends_on'])?new DateTimeImmutable((string)$rule['ends_on'],$tz):null;
+   if($rule['recurrence']==='monthly'){
+    $cursor=(new DateTimeImmutable($from,$tz))->modify('first day of this month');$last=(new DateTimeImmutable($to,$tz))->modify('first day of this month');
+    for($guard=0;$cursor<=$last&&$guard<240;$cursor=$cursor->modify('+1 month'),$guard++){
+     $day=min((int)$start->format('d'),(int)$cursor->format('t'));$occ=$cursor->setDate((int)$cursor->format('Y'),(int)$cursor->format('m'),$day);$date=$occ->format('Y-m-d');
+     if($date<$rule['starts_on']||$date<$from||$date>$to||($end&&$date>$end->format('Y-m-d')))continue;$dates[]=$date;
+    }
+   }else{
+    $fromYear=(int)substr($from,0,4);$toYear=(int)substr($to,0,4);$month=(int)$start->format('m');$day=(int)$start->format('d');
+    for($year=$fromYear;$year<=$toYear&&$year<$fromYear+100;$year++){
+     $base=(new DateTimeImmutable(sprintf('%04d-%02d-01',$year,$month),$tz));$occ=$base->setDate($year,$month,min($day,(int)$base->format('t')));$date=$occ->format('Y-m-d');
+     if($date<$rule['starts_on']||$date<$from||$date>$to||($end&&$date>$end->format('Y-m-d')))continue;$dates[]=$date;
+    }
+   }
+   foreach($dates as $date){
+    $key='expense-rule:'.$rule['id'].':'.$date;$existing=DB::one('SELECT * FROM expenses WHERE source_key=? LIMIT 1',[$key]);
+    $row=['rule_id'=>(int)$rule['id'],'description'=>(string)$rule['name'],'vendor'=>(string)$rule['vendor'],'category'=>(string)$rule['category'],'amount_cents'=>(int)$rule['amount_cents'],'spent_on'=>$date,'notes'=>(string)($rule['notes']??''),'updated_at'=>now()];
+    if(!$existing){DB::insert('expenses',$row+['source_key'=>$key,'created_by'=>(int)$rule['created_by'],'created_at'=>now()]);$count++;}
+    elseif(empty($existing['deleted_at'])&&$date>=$monthFloor){DB::update('expenses',(int)$existing['id'],$row);}
+   }
+  }
+  return $count;
+ }
+ public static function expenses(array $p=[]): array {
+  Auth::admin();[$from,$to]=self::expenseRange($p);self::syncExpenses($from,$to);$w='e.deleted_at IS NULL AND e.spent_on BETWEEN ? AND ?';$a=[$from,$to];
+  if(!empty($p['q'])){$like='%'.trim((string)$p['q']).'%';$w.=' AND (e.description LIKE ? OR e.vendor LIKE ? OR e.category LIKE ?)';array_push($a,$like,$like,$like);}
+  if(!empty($p['category'])){$w.=' AND e.category=?';$a[]=mb_substr(trim((string)$p['category']),0,80);}
+  $rows=DB::all("SELECT e.*,r.recurrence,r.active AS rule_active FROM expenses e LEFT JOIN expense_rules r ON r.id=e.rule_id WHERE $w ORDER BY e.spent_on DESC,e.id DESC",$a);
+  foreach($rows as &$row)$row['source_type']=$row['rule_id']?($row['recurrence']==='yearly'?'yearly':'monthly'):'one_off';unset($row);
+  return $rows;
+ }
+ public static function expenseRules(array $p=[]): array {
+  Auth::admin();$w=!empty($p['active_only'])?'WHERE active=1':'';$rows=DB::all("SELECT * FROM expense_rules $w ORDER BY active DESC,name,id DESC");
+  foreach($rows as &$row)$row['monthly_equivalent_cents']=$row['recurrence']==='yearly'?(int)round((int)$row['amount_cents']/12):(int)$row['amount_cents'];unset($row);return $rows;
+ }
+ public static function expenseSave(array $p): array {
+  Auth::admin();$id=(int)($p['id']??0);$old=$id?DB::one('SELECT * FROM expenses WHERE id=? AND deleted_at IS NULL',[$id]):null;if($id&&!$old)fail('Custo não encontrado.',404);if($old&&!empty($old['rule_id']))fail('Edite este custo pela regra recorrente.',409);
+  $row=['description'=>required($p,'description',190),'vendor'=>mb_substr(trim((string)($p['vendor']??'')),0,190),'category'=>mb_substr(trim((string)($p['category']??'Outros'))?:'Outros',0,80),'amount_cents'=>integer($p['amount_cents']??0,1),'spent_on'=>datev($p['spent_on']??'',false),'notes'=>mb_substr(trim((string)($p['notes']??'')),0,4000),'updated_at'=>now()];
+  if($id)DB::update('expenses',$id,$row);else $id=DB::insert('expenses',$row+['rule_id'=>null,'source_key'=>null,'created_by'=>(int)Auth::$user['id'],'created_at'=>now()]);
+  audit('expense',$id,$old?'updated':'created',$old,$row);return ['id'=>$id];
+ }
+ public static function expenseDelete(array $p): array {
+  Auth::admin();$id=integer($p['id']??0,1);$row=DB::one('SELECT * FROM expenses WHERE id=? AND deleted_at IS NULL',[$id]);if(!$row)fail('Custo não encontrado.',404);$reason=mb_substr(trim((string)($p['reason']??'Removido pelo financeiro')),0,500);DB::update('expenses',$id,['deleted_at'=>now(),'updated_at'=>now()]);audit('expense',$id,'deleted',$row,['reason'=>$reason]);return ['deleted'=>true];
+ }
+ public static function expenseRuleSave(array $p): array {
+  Auth::admin();$id=(int)($p['id']??0);$old=$id?DB::one('SELECT * FROM expense_rules WHERE id=?',[$id]):null;if($id&&!$old)fail('Custo recorrente não encontrado.',404);
+  $starts=datev($p['starts_on']??'',false);$ends=!empty($p['ends_on'])?datev($p['ends_on'],false):null;if($ends&&$ends<$starts)fail('A data final não pode ser anterior ao início.');
+  $row=['name'=>required($p,'name',190),'vendor'=>mb_substr(trim((string)($p['vendor']??'')),0,190),'category'=>mb_substr(trim((string)($p['category']??'Outros'))?:'Outros',0,80),'amount_cents'=>integer($p['amount_cents']??0,1),'recurrence'=>enumv($p['recurrence']??'monthly',['monthly','yearly'],'recorrência'),'starts_on'=>$starts,'ends_on'=>$ends,'active'=>(int)(bool)($p['active']??1),'notes'=>mb_substr(trim((string)($p['notes']??'')),0,4000),'updated_at'=>now()];
+  if($id)DB::update('expense_rules',$id,$row);else $id=DB::insert('expense_rules',$row+['created_by'=>(int)Auth::$user['id'],'created_at'=>now()]);
+  $tz=new DateTimeZone(config('timezone','America/Fortaleza'));$monthFloor=(new DateTimeImmutable('first day of this month',$tz))->format('Y-m-d');DB::run('DELETE FROM expenses WHERE rule_id=? AND spent_on>=?',[$id,$monthFloor]);
+  audit('expense_rule',$id,$old?'updated':'created',$old,$row);if($row['active'])self::syncExpenses($monthFloor,(new DateTimeImmutable('last day of this month',$tz))->format('Y-m-d'));return ['id'=>$id];
+ }
+ public static function expenseRuleDelete(array $p): array {
+  Auth::admin();$id=integer($p['id']??0,1);$old=DB::one('SELECT * FROM expense_rules WHERE id=?',[$id]);if(!$old)fail('Custo recorrente não encontrado.',404);$tz=new DateTimeZone(config('timezone','America/Fortaleza'));$monthFloor=(new DateTimeImmutable('first day of this month',$tz))->format('Y-m-d');DB::update('expense_rules',$id,['active'=>0,'updated_at'=>now()]);DB::run('DELETE FROM expenses WHERE rule_id=? AND spent_on>=?',[$id,$monthFloor]);audit('expense_rule',$id,'disabled',$old,['active'=>0]);return ['saved'=>true];
+ }
+ public static function analysis(array $p=[]): array {
+  Auth::admin();[$from,$to,$tz]=self::expenseRange($p);self::syncCommercialInvoices($from,$to);self::syncExpenses($from,$to);$today=(new DateTimeImmutable('now',$tz))->format('Y-m-d');
+  $billed=(int)(DB::one("SELECT COALESCE(SUM(amount_cents),0) AS n FROM invoices WHERE status<>'cancelled' AND deleted_at IS NULL AND due_on BETWEEN ? AND ?",[$from,$to])['n']??0);
+  $received=(int)(DB::one("SELECT COALESCE(SUM(p.amount_cents),0) AS n FROM payments p JOIN invoices i ON i.id=p.invoice_id WHERE i.status<>'cancelled' AND i.deleted_at IS NULL AND p.paid_on BETWEEN ? AND ?",[$from,$to])['n']??0);
+  $open=(int)(DB::one("SELECT COALESCE(SUM(GREATEST(0,i.amount_cents-(SELECT COALESCE(SUM(p.amount_cents),0) FROM payments p WHERE p.invoice_id=i.id))),0) AS n FROM invoices i WHERE i.status<>'cancelled' AND i.deleted_at IS NULL AND i.due_on BETWEEN ? AND ?",[$from,$to])['n']??0);
+  $overdue=(int)(DB::one("SELECT COALESCE(SUM(GREATEST(0,i.amount_cents-(SELECT COALESCE(SUM(p.amount_cents),0) FROM payments p WHERE p.invoice_id=i.id))),0) AS n FROM invoices i WHERE i.status<>'cancelled' AND i.deleted_at IS NULL AND i.due_on<? AND i.due_on BETWEEN ? AND ?",[$today,$from,$to])['n']??0);
+  $operational=(int)(DB::one('SELECT COALESCE(SUM(amount_cents),0) AS n FROM expenses WHERE deleted_at IS NULL AND spent_on BETWEEN ? AND ?',[$from,$to])['n']??0);
+  $task=(int)(DB::one('SELECT COALESCE(SUM(amount_cents),0) AS n FROM costs WHERE spent_on BETWEEN ? AND ?',[$from,$to])['n']??0);$expenses=$operational+$task;
+  $rules=DB::all("SELECT amount_cents,recurrence FROM expense_rules WHERE active=1 AND starts_on<=? AND (ends_on IS NULL OR ends_on>=?)",[$to,$from]);$fixed=0;foreach($rules as $rule)$fixed+=(int)($rule['recurrence']==='yearly'?round((int)$rule['amount_cents']/12):(int)$rule['amount_cents']);
+  $projected=$billed-$expenses;$cash=$received-$expenses;$margin=$billed>0?round(($projected/$billed)*100,1):0.0;$cashMargin=$received>0?round(($cash/$received)*100,1):0.0;
+  $categories=DB::all("SELECT category, SUM(amount_cents) AS amount_cents FROM (SELECT category,amount_cents FROM expenses WHERE deleted_at IS NULL AND spent_on BETWEEN ? AND ? UNION ALL SELECT 'Custos de task' AS category,amount_cents FROM costs WHERE spent_on BETWEEN ? AND ?) x GROUP BY category ORDER BY amount_cents DESC",[$from,$to,$from,$to]);
+  $billRows=DB::all("SELECT DATE_FORMAT(due_on,'%Y-%m') bucket,SUM(amount_cents) n FROM invoices WHERE status<>'cancelled' AND deleted_at IS NULL AND due_on BETWEEN ? AND ? GROUP BY bucket",[$from,$to]);
+  $paidRows=DB::all("SELECT DATE_FORMAT(p.paid_on,'%Y-%m') bucket,SUM(p.amount_cents) n FROM payments p JOIN invoices i ON i.id=p.invoice_id WHERE i.status<>'cancelled' AND i.deleted_at IS NULL AND p.paid_on BETWEEN ? AND ? GROUP BY bucket",[$from,$to]);
+  $expenseRows=DB::all("SELECT bucket,SUM(n) n FROM (SELECT DATE_FORMAT(spent_on,'%Y-%m') bucket,SUM(amount_cents) n FROM expenses WHERE deleted_at IS NULL AND spent_on BETWEEN ? AND ? GROUP BY bucket UNION ALL SELECT DATE_FORMAT(spent_on,'%Y-%m') bucket,SUM(amount_cents) n FROM costs WHERE spent_on BETWEEN ? AND ? GROUP BY bucket) z GROUP BY bucket",[$from,$to,$from,$to]);
+  $bm=[];$pm=[];$em=[];foreach($billRows as $x)$bm[$x['bucket']]=(int)$x['n'];foreach($paidRows as $x)$pm[$x['bucket']]=(int)$x['n'];foreach($expenseRows as $x)$em[$x['bucket']]=(int)$x['n'];
+  $months=[];$cursor=(new DateTimeImmutable($from,$tz))->modify('first day of this month');$last=(new DateTimeImmutable($to,$tz))->modify('first day of this month');for($i=0;$cursor<=$last&&$i<24;$cursor=$cursor->modify('+1 month'),$i++){$key=$cursor->format('Y-m');$b=$bm[$key]??0;$pmt=$pm[$key]??0;$ex=$em[$key]??0;$months[]=['bucket'=>$key,'label'=>$cursor->format('m/Y'),'billed_cents'=>$b,'received_cents'=>$pmt,'expense_cents'=>$ex,'projected_result_cents'=>$b-$ex,'cash_result_cents'=>$pmt-$ex];}
+  return ['period'=>['from'=>$from,'to'=>$to],'billed_cents'=>$billed,'received_cents'=>$received,'open_cents'=>$open,'overdue_cents'=>$overdue,'operational_expense_cents'=>$operational,'task_cost_cents'=>$task,'expense_cents'=>$expenses,'fixed_monthly_cents'=>$fixed,'projected_result_cents'=>$projected,'cash_result_cents'=>$cash,'margin_pct'=>$margin,'cash_margin_pct'=>$cashMargin,'categories'=>$categories,'monthly'=>$months];
+ }
+ public static function expenseReportRows(string $from,string $to): array {
+  Auth::admin();self::syncExpenses($from,$to);$rows=DB::all("SELECT CONCAT('op-',e.id) AS id,e.description,e.vendor,e.category,e.amount_cents,e.spent_on,CASE WHEN e.rule_id IS NULL THEN 'Avulso' WHEN r.recurrence='yearly' THEN 'Anual' ELSE 'Mensal' END AS recurrence,'Operacional' AS source_type FROM expenses e LEFT JOIN expense_rules r ON r.id=e.rule_id WHERE e.deleted_at IS NULL AND e.spent_on BETWEEN ? AND ? ORDER BY e.spent_on DESC,e.id DESC",[$from,$to]);
+  $taskRows=DB::all("SELECT CONCAT('task-',c.id) AS id,c.description,'' AS vendor,'Custos de task' AS category,c.amount_cents,c.spent_on,'Avulso' AS recurrence,CONCAT('Task #',c.demand_id) AS source_type FROM costs c WHERE c.spent_on BETWEEN ? AND ? ORDER BY c.spent_on DESC,c.id DESC",[$from,$to]);return array_merge($rows,$taskRows);
+ }
+ public static function cost(array $p): array {Auth::admin();$d=Auth::demand(integer($p['demand_id'],1));$id=DB::insert('costs',['demand_id'=>$d['id'],'description'=>required($p,'description',190),'amount_cents'=>integer($p['amount_cents']??0,1),'spent_on'=>datev($p['spent_on']??'',false),'created_at'=>now()]);audit('cost',$id,'created',null,['demand_id'=>$d['id'],'description'=>$p['description']??'','amount_cents'=>$p['amount_cents']??0,'spent_on'=>$p['spent_on']??'']);return ['id'=>$id];}
 }

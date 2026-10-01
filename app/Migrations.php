@@ -134,6 +134,46 @@ final class Migrations {
 
    DB::run("INSERT INTO settings (`key`,value) VALUES ('schema_version','10') ON DUPLICATE KEY UPDATE value='10'");$version=10;
   }
+  if($version<11){
+   DB::run("CREATE TABLE IF NOT EXISTS expense_rules (
+    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(190) NOT NULL,
+    vendor VARCHAR(190) NOT NULL DEFAULT '',
+    category VARCHAR(80) NOT NULL DEFAULT 'Outros',
+    amount_cents BIGINT NOT NULL,
+    recurrence VARCHAR(20) NOT NULL DEFAULT 'monthly',
+    starts_on DATE NOT NULL,
+    ends_on DATE NULL,
+    active TINYINT NOT NULL DEFAULT 1,
+    notes TEXT NULL,
+    created_by INT NOT NULL,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    KEY idx_expense_rules_active (active,recurrence,starts_on),
+    CONSTRAINT fk_expense_rules_user FOREIGN KEY (created_by) REFERENCES users(id)
+   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+   DB::run("CREATE TABLE IF NOT EXISTS expenses (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    rule_id INT NULL,
+    description VARCHAR(190) NOT NULL,
+    vendor VARCHAR(190) NOT NULL DEFAULT '',
+    category VARCHAR(80) NOT NULL DEFAULT 'Outros',
+    amount_cents BIGINT NOT NULL,
+    spent_on DATE NOT NULL,
+    notes TEXT NULL,
+    source_key VARCHAR(160) NULL,
+    created_by INT NOT NULL,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    deleted_at DATETIME NULL,
+    UNIQUE KEY uq_expenses_source (source_key),
+    KEY idx_expenses_period (deleted_at,spent_on,category),
+    KEY idx_expenses_rule (rule_id,spent_on),
+    CONSTRAINT fk_expenses_rule FOREIGN KEY (rule_id) REFERENCES expense_rules(id),
+    CONSTRAINT fk_expenses_user FOREIGN KEY (created_by) REFERENCES users(id)
+   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+   DB::run("INSERT INTO settings (`key`,value) VALUES ('schema_version','11') ON DUPLICATE KEY UPDATE value='11'");$version=11;
+  }
  }
  private static function hasColumn(string $table,string $column): bool {return (bool)DB::one('SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?',[$table,$column]);}
  private static function column(string $table,string $column,string $sql): void {if(!self::hasColumn($table,$column))DB::run($sql);}

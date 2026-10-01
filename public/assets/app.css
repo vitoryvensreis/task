@@ -1776,3 +1776,50 @@ button.compact-row{cursor:pointer}.compact-row:hover{border-color:#3a4854}.compa
   .settings-form .form-actions,.modal .form-actions{align-items:stretch;flex-direction:column-reverse}
   .settings-form .form-actions button,.modal .form-actions button,.modal .form-actions a{width:100%}
 }
+
+
+/* TaskEsc v3.2 — centro de custos e análise financeira */
+.finance-stats-wide{grid-template-columns:repeat(7,minmax(0,1fr))}
+.finance-analysis-panel{margin:14px 0}
+.finance-analysis-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+.finance-analysis-grid>div{display:grid;gap:4px;min-width:0;padding:11px;border:1px solid #28313a;border-radius:7px;background:#090c0f}
+.finance-analysis-grid span{font-size:9px;text-transform:uppercase;letter-spacing:.65px;color:#75818c}
+.finance-analysis-grid b{font-size:16px;letter-spacing:-.3px}
+.finance-analysis-grid small{font-size:9px;line-height:1.35;color:#697681}
+.expense-category-strip{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:7px;margin-top:10px}
+.expense-category-strip>div{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 9px;border:1px solid #232c34;border-radius:6px;background:#0b0e11}
+.expense-category-strip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#87939c;font-size:9px}
+.expense-category-strip b{font-size:10px}
+.expense-panel,.recurring-expense-panel{margin-top:17px}
+.expense-table{min-width:900px}
+.report-finance-stats{grid-template-columns:repeat(5,minmax(0,1fr));margin-bottom:14px}
+.report-analysis-panel{margin-bottom:14px}
+.report-analysis-grid{grid-template-columns:repeat(5,minmax(0,1fr));margin-bottom:12px}
+.report-analysis-columns{display:grid;grid-template-columns:minmax(260px,.75fr) minmax(0,1.25fr);gap:12px}
+.report-analysis-columns h4{margin:0 0 8px;font-size:11px;color:#cfd6db}
+.expense-breakdown-list{display:grid;gap:6px}
+.expense-breakdown-list>div{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 10px;border:1px solid #242d34;border-radius:6px;background:#0a0d10}
+.expense-breakdown-list span{color:#8a969f;font-size:10px}
+.expense-breakdown-list b{font-size:10px}
+.compact-finance-table{min-width:560px}
+.recurring-only.hidden{display:none!important}
+
+@media(max-width:1320px){
+  .finance-stats-wide{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .finance-analysis-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .expense-category-strip{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media(max-width:960px){
+  .finance-stats-wide,.report-finance-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .finance-analysis-grid,.report-analysis-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .report-analysis-columns{grid-template-columns:1fr}
+}
+@media(max-width:760px){
+  .finance-stats-wide,.report-finance-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .finance-analysis-grid,.report-analysis-grid{grid-template-columns:1fr 1fr}
+  .expense-category-strip{grid-template-columns:1fr 1fr}
+  .expense-table{min-width:760px}
+}
+@media(max-width:520px){
+  .finance-stats-wide,.report-finance-stats,.finance-analysis-grid,.report-analysis-grid,.expense-category-strip{grid-template-columns:1fr}
+}

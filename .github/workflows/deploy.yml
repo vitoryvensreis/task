@@ -39,6 +39,15 @@ jobs:
           set -e
           node --check public/assets/app.js
           node --check public/service-worker.js
+          node - <<'NODE'
+          const fs=require('fs');
+          const src=fs.readFileSync('public/assets/app.js','utf8');
+          const bad=[...src.matchAll(/(^|[^$])\$\([^)]*\)\.forEach/g)].map(m=>m[0].trim());
+          if(bad.length){
+            console.error('ERRO: seletor único $() usado com forEach:',bad);
+            process.exit(1);
+          }
+          NODE
 
   deploy:
     name: Deploy na VPS

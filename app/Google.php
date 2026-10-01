@@ -183,6 +183,14 @@ final class Google {
   if($fileId==='')return;try{self::driveApi($account,'files/'.rawurlencode($fileId).'?supportsAllDrives=true','DELETE');}catch(AppError $e){if(!in_array((int)($e->details['google_status']??0),[404,410],true))throw $e;}
  }
 
+ public static function downloadDriveFileToPath(int $account,string $fileId,string $path): void {
+  $token=self::token($account);$fh=fopen($path,'wb');if(!$fh)throw new RuntimeException('Não foi possível preparar o arquivo temporário.');
+  $ch=curl_init(self::DRIVE.'files/'.rawurlencode($fileId).'?alt=media');
+  curl_setopt_array($ch,[CURLOPT_HTTPHEADER=>['Authorization: Bearer '.$token,'Accept: */*'],CURLOPT_FOLLOWLOCATION=>false,CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>0,CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS,CURLOPT_FILE=>$fh]);
+  $ok=curl_exec($ch);$code=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);$err=curl_error($ch);curl_close($ch);fclose($fh);
+  if($ok===false||$code<200||$code>=300){@unlink($path);throw new RuntimeException('Não foi possível baixar um arquivo do Google Drive'.($err?': '.$err:'.'));}
+ }
+
  public static function streamDriveFile(int $account,string $fileId,string $mime,string $name,bool $inline=false): never {
   $token=self::token($account);$url=self::DRIVE.'files/'.rawurlencode($fileId).'?alt=media';$headers=['Authorization: Bearer '.$token,'Accept: */*'];
   $range=$_SERVER['HTTP_RANGE']??'';if($range&&preg_match('/^bytes=\d*-\d*$/',$range))$headers[]='Range: '.$range;

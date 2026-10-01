@@ -1,8 +1,8 @@
-const CACHE='taskesc-shell-v2.13.2';
+const CACHE='taskesc-shell-v2.14.0';
 const SHELL=[
   '/offline.html',
-  '/assets/app.css?v=2.13.2',
-  '/assets/app.js?v=2.13.2',
+  '/assets/app.css?v=2.14.0',
+  '/assets/app.js?v=2.14.0',
   '/assets/taskesc-logo.svg'
 ];
 

@@ -196,8 +196,8 @@ final class Migrations {
    self::column('costs','paid_on',"ALTER TABLE costs ADD COLUMN paid_on DATE NULL AFTER payment_status");
    DB::run("UPDATE expenses SET payment_status='paid', paid_on=COALESCE(paid_on,spent_on) WHERE payment_status='paid' AND paid_on IS NULL");
    DB::run("UPDATE costs SET payment_status='paid', paid_on=COALESCE(paid_on,spent_on) WHERE payment_status='paid' AND paid_on IS NULL");
-   DB::run("ALTER TABLE expenses ALTER payment_status SET DEFAULT 'pending'");
-   DB::run("ALTER TABLE costs ALTER payment_status SET DEFAULT 'paid'");
+   DB::run("ALTER TABLE expenses MODIFY payment_status VARCHAR(20) NOT NULL DEFAULT 'pending'");
+   DB::run("ALTER TABLE costs MODIFY payment_status VARCHAR(20) NOT NULL DEFAULT 'paid'");
    self::index('expenses','idx_expenses_payment',"ALTER TABLE expenses ADD INDEX idx_expenses_payment (payment_status,paid_on,spent_on)");
    self::index('costs','idx_costs_payment',"ALTER TABLE costs ADD INDEX idx_costs_payment (payment_status,paid_on,spent_on)");
    DB::run("INSERT INTO settings (`key`,value) VALUES ('schema_version','14') ON DUPLICATE KEY UPDATE value='14'");$version=14;

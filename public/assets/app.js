@@ -399,21 +399,21 @@
         <button class="stat-card dashboard-stat" id="finance-monthly-card"><div class="stat-label">Receita mensal cadastrada</div><div class="stat-value blue">${money(monthlyTotal)}</div><div class="stat-note">${monthly.length} cliente(s) mensal(is)</div></button>
       </div>
       <section class="panel finance-profit-comparison">
-        <div class="panel-head"><div><h3>Faturamento x custos</h3><div class="panel-sub">\${date(analysisFrom)} até \${date(analysisTo)} · comparativo direto para acompanhar o lucro.</div></div><div class="finance-profit-margin \${resultClass}">\${Number(analysis.margin_pct||0).toLocaleString('pt-BR',{maximumFractionDigits:1})}% margem</div></div>
+        <div class="panel-head"><div><h3>Faturamento x custos</h3><div class="panel-sub">${date(analysisFrom)} até ${date(analysisTo)} · comparativo direto para acompanhar o lucro.</div></div><div class="finance-profit-margin ${resultClass}">${Number(analysis.margin_pct||0).toLocaleString('pt-BR',{maximumFractionDigits:1})}% margem</div></div>
         <div class="finance-profit-grid">
-          <div class="finance-profit-metric revenue"><span>Faturamento</span><b>\${money(billedAmount)}</b><small>receita prevista no período</small></div>
+          <div class="finance-profit-metric revenue"><span>Faturamento</span><b>${money(billedAmount)}</b><small>receita prevista no período</small></div>
           <div class="finance-profit-equation">−</div>
-          <div class="finance-profit-metric costs"><span>Custos totais</span><b>\${money(costAmount)}</b><small>operacionais + custos de tasks</small></div>
+          <div class="finance-profit-metric costs"><span>Custos totais</span><b>${money(costAmount)}</b><small>operacionais + custos de tasks</small></div>
           <div class="finance-profit-equation">=</div>
-          <div class="finance-profit-metric result \${profitAmount>=0?'positive':'negative'}"><span>\${profitLabel}</span><b>\${money(profitAmount)}</b><small>faturamento − custos</small></div>
+          <div class="finance-profit-metric result ${profitAmount>=0?'positive':'negative'}"><span>${profitLabel}</span><b>${money(profitAmount)}</b><small>faturamento − custos</small></div>
         </div>
         <div class="finance-profit-bars">
-          <div class="finance-profit-bar-row"><div><span>Faturamento</span><b>\${money(billedAmount)}</b></div><div class="finance-profit-track"><i class="revenue" style="width:\${billedWidth}%"></i></div></div>
-          <div class="finance-profit-bar-row"><div><span>Custos</span><b>\${money(costAmount)}</b></div><div class="finance-profit-track"><i class="costs" style="width:\${costWidth}%"></i></div></div>
+          <div class="finance-profit-bar-row"><div><span>Faturamento</span><b>${money(billedAmount)}</b></div><div class="finance-profit-track"><i class="revenue" style="width:${billedWidth}%"></i></div></div>
+          <div class="finance-profit-bar-row"><div><span>Custos</span><b>${money(costAmount)}</b></div><div class="finance-profit-track"><i class="costs" style="width:${costWidth}%"></i></div></div>
         </div>
         <div class="finance-profit-foot">
-          <span>\${billedAmount>0?\`A cada R$ 1,00 faturado, <b>\${money(Math.round(costPerReal*100))}</b> vai para custos e <b class="\${resultClass}">\${money(Math.round(profitPerReal*100))}</b> fica como resultado.\`:'Cadastre faturamento no período para calcular a relação entre receita e custos.'}</span>
-          <span>Resultado de caixa: <b class="\${cashResult>=0?'green':'red'}">\${money(cashResult)}</b> <small>(recebido − custos)</small></span>
+          <span>${billedAmount>0?`A cada R$ 1,00 faturado, <b>${money(Math.round(costPerReal*100))}</b> vai para custos e <b class="${resultClass}">${money(Math.round(profitPerReal*100))}</b> fica como resultado.`:'Cadastre faturamento no período para calcular a relação entre receita e custos.'}</span>
+          <span>Resultado de caixa: <b class="${cashResult>=0?'green':'red'}">${money(cashResult)}</b> <small>(recebido − custos)</small></span>
         </div>
       </section>
       <section class="panel finance-analysis-panel">

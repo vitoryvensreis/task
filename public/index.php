@@ -21,8 +21,9 @@ $pwa192Url=is_file($pwa192)?(($basePath?:'').'/uploads/branding/pwa-192.png?v='.
   <link rel="manifest" href="<?=e($basePath)?>/manifest.php?v=<?=e((string)(is_file($pwa192)?filemtime($pwa192):1))?>">
   <link rel="icon" href="<?=e($pwa192Url)?>">
   <link rel="apple-touch-icon" href="<?=e($pwa180Url)?>">
-  <link rel="stylesheet" href="<?=e($basePath)?>/assets/app.css?v=3.3.0">\n  <link rel="stylesheet" href="<?=e($basePath)?>/assets/ui-fixes.css?v=3.3.0">
-  <script src="<?=e($basePath)?>/assets/taskesc-icons.js?v=3.3.0" defer></script>
+  <link rel="stylesheet" href="<?=e($basePath)?>/assets/app.css?v=3.4.0">
+  <link rel="stylesheet" href="<?=e($basePath)?>/assets/ui-fixes.css?v=3.4.0">
+  <script src="<?=e($basePath)?>/assets/taskesc-icons.js?v=3.4.0" defer></script>
 </head>
 <body data-base-path="<?=e($basePath)?>">
   <div id="toast" class="toast"></div><div id="page-loader" class="page-loader hidden" aria-live="polite"><div class="page-loader-card"><span class="loader-ring"></span><b>Carregando</b></div></div>
@@ -37,6 +38,6 @@ $pwa192Url=is_file($pwa192)?(($basePath?:'').'/uploads/branding/pwa-192.png?v='.
     <div id="nav-backdrop" class="nav-backdrop"></div><main class="main"><header class="topbar"><button id="menu" class="icon-btn mobile-only" type="button" aria-label="Abrir menu"><span class="icon-slot"><i data-lucide="menu" class="ui-icon" aria-hidden="true"></i><span class="icon-fallback"></span></span></button><div class="page-heading"><div id="page-kicker" class="kicker">VISÃO GERAL</div><h2 id="page-title">Dashboard</h2></div><div class="top-actions"><button id="preview-exit" class="secondary hidden">Sair da visão do cliente</button><button id="new-demand" class="primary"><i data-lucide="plus" class="ui-icon" aria-hidden="true"></i><span class="button-label">Nova task</span></button><div class="notification-shell"><button id="notifications-btn" class="icon-btn notification-btn" type="button" aria-label="Notificações" title="Notificações" aria-haspopup="dialog" aria-expanded="false"><span class="icon-slot"><i data-lucide="bell" class="ui-icon" aria-hidden="true"></i><span class="icon-fallback"></span></span><span id="notification-badge" class="notification-badge hidden">0</span></button><div id="notification-popover" class="notification-popover hidden" role="dialog" aria-label="Notificações"></div></div><div id="user-chip" class="user-chip"></div></div></header><div id="content" class="content"></div></main>
   </div>
   <div id="modal-root"></div>
-  <script src="<?=e($basePath)?>/assets/app.js?v=3.3.0" defer></script>
+  <script src="<?=e($basePath)?>/assets/app.js?v=3.4.0" defer></script>
 </body>
 </html>

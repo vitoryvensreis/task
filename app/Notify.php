@@ -2,7 +2,7 @@
 final class Notify {
  public static function team(string $title,string $body,?int $demand=null): void {
   foreach(DB::all("SELECT id FROM users WHERE active=1 AND role IN ('admin','staff')") as $u){
-   if((int)$u['id']!==(int)(Auth::$user['id']??0))self::user((int)$u['id'],$title,$body,$demand);
+   if((int)$u['id']!==(int)(Auth::$user['id']??0))self::user((int)$u['id'],$title,$body,$demand,null,false);
   }
  }
 
@@ -10,12 +10,23 @@ final class Notify {
   self::team($created?'Novo cliente cadastrado':'Cliente atualizado',($client['name']??'Cliente').($created?' foi adicionado ao TaskEsc.':' teve sua ficha atualizada.'));
  }
 
- public static function user(int $id,string $title,string $body,?int $demand=null,?string $key=null): ?string {
+ public static function user(int $id,string $title,string $body,?int $demand=null,?string $key=null,bool $push=false): ?string {
   $u=DB::one('SELECT * FROM users WHERE id=? AND active=1',[$id]);
   if(!$u)return null;
   if($key&&DB::one('SELECT id FROM notifications WHERE dedupe_key=?',[$key]))return null;
-  DB::insert('notifications',['user_id'=>$id,'title'=>mb_substr($title,0,190),'body'=>$body,'demand_id'=>$demand,'dedupe_key'=>$key,'created_at'=>now()]);
-  Push::notifyUser($id);
+  $notificationId=DB::insert('notifications',['user_id'=>$id,'title'=>mb_substr($title,0,190),'body'=>$body,'demand_id'=>$demand,'dedupe_key'=>$key,'created_at'=>now()]);
+  if($push){
+   $unread=(int)(DB::one('SELECT COUNT(*) AS n FROM notifications WHERE user_id=? AND seen=0',[$id])['n']??0);
+   Push::notifyUser($id,[
+    'notification_id'=>$notificationId,
+    'title'=>$title,
+    'body'=>$body,
+    'demand_id'=>$demand,
+    'url'=>base($demand?'kanban/task/'.$demand:'dashboard'),
+    'tag'=>'taskesc-notification-'.$notificationId,
+    'badge_count'=>$unread
+   ]);
+  }
   if(!$u['email_notifications'])return null;
   $email=strtolower(trim((string)$u['email']));
   self::mail($email,$title,$body."\n\n".base($demand?'kanban/task/'.$demand:'dashboard'));
@@ -23,12 +34,14 @@ final class Notify {
  }
 
  public static function demand(array $d,string $title,string $body,bool $internal=false): void {
-  $args=$internal?[$d['assigned_to']??0]:[$d['assigned_to']??0,$d['client_id']];
+  $assigned=(int)($d['assigned_to']??0);
+  $args=$internal?[$assigned]:[$assigned,$d['client_id']];
   $rows=DB::all("SELECT DISTINCT u.id FROM users u LEFT JOIN user_clients uc ON uc.user_id=u.id WHERE u.active=1 AND (u.role='admin' OR u.id=?".($internal?'':" OR (u.role='client' AND uc.client_id=?)").')',$args);
-  $emailed=[];
+  $emailed=[];$actor=(int)(Auth::$user['id']??0);
   foreach($rows as $u){
-   if((int)$u['id']===(int)(Auth::$user['id']??0))continue;
-   $email=self::user((int)$u['id'],$title,$body,(int)$d['id']);
+   $uid=(int)$u['id'];$isResponsible=$assigned>0&&$uid===$assigned;
+   if($uid===$actor&&!$isResponsible)continue;
+   $email=self::user($uid,$title,$body,(int)$d['id'],null,$isResponsible);
    if($email)$emailed[$email]=true;
   }
   if($internal)return;

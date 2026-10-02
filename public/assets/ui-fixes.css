@@ -827,3 +827,136 @@
   }
   .expense-category-manager-row .row-actions{grid-column:1/-1}
 }
+
+
+/* TaskEsc v3.7.1 — filtros individuais nos cards financeiros */
+.finance-period-panel{overflow:hidden!important}
+.finance-period-controls{
+  display:grid;
+  grid-template-columns:minmax(160px,220px) minmax(160px,220px) auto;
+  align-items:end;
+  gap:8px;
+}
+.finance-period-controls .filter-actions{
+  display:flex;
+  gap:7px;
+  align-items:center;
+  padding-bottom:1px;
+}
+.panel-head-actions{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.finance-filter-result{
+  display:inline-flex;
+  align-items:center;
+  min-height:26px;
+  padding:0 8px;
+  border:1px solid #27323a;
+  border-radius:999px;
+  background:#0a0e11;
+  color:#74828d;
+  font-size:8px;
+  font-weight:700;
+  white-space:nowrap;
+}
+.finance-card-filters{
+  display:grid;
+  grid-template-columns:minmax(220px,1.6fr) repeat(3,minmax(135px,.8fr)) auto;
+  gap:7px;
+  align-items:center;
+  margin:10px 0 12px;
+}
+.finance-card-filters-wide{
+  grid-template-columns:minmax(220px,1.5fr) repeat(4,minmax(125px,.75fr)) auto;
+}
+.finance-card-filters .search-box{
+  min-width:0;
+  width:100%;
+}
+.finance-card-filters .input,
+.finance-card-filters .select{
+  min-width:0;
+  width:100%;
+  height:38px;
+}
+.finance-card-filters .search-box .input{padding-left:34px}
+.finance-filter-clear{
+  min-height:38px;
+  white-space:nowrap;
+}
+.finance-entry-panel,
+.expense-panel,
+.recurring-expense-panel,
+.monthly-billing-panel,
+.finance-log-panel{
+  overflow:hidden!important;
+}
+.finance-entry-panel .table-wrap,
+.expense-panel .table-wrap,
+.recurring-expense-panel .table-wrap,
+.monthly-billing-panel .table-wrap,
+.finance-log-panel .table-wrap{
+  margin-top:2px;
+}
+.finance-log-panel .finance-card-filters{margin-top:8px}
+.finance-log-wrap{max-height:430px;overflow:auto}
+.finance-card-filters + .table-wrap tbody tr[data-filter-row]{
+  transition:opacity .12s ease;
+}
+
+@media(max-width:1180px){
+  .finance-card-filters,
+  .finance-card-filters-wide{
+    grid-template-columns:repeat(3,minmax(0,1fr));
+  }
+  .finance-card-filters .search-box{
+    grid-column:span 2;
+  }
+  .finance-filter-clear{width:100%}
+}
+@media(max-width:760px){
+  .finance-period-controls{
+    grid-template-columns:1fr 1fr;
+  }
+  .finance-period-controls .filter-actions{
+    grid-column:1/-1;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+  }
+  .finance-card-filters,
+  .finance-card-filters-wide{
+    grid-template-columns:1fr 1fr;
+    margin-top:8px;
+  }
+  .finance-card-filters .search-box{
+    grid-column:1/-1;
+  }
+  .finance-filter-clear{
+    grid-column:1/-1;
+  }
+  .panel-head-actions{
+    width:100%;
+    justify-content:flex-start;
+  }
+  .expense-panel .panel-head,
+  .monthly-billing-panel .panel-head,
+  .finance-log-panel .panel-head{
+    align-items:flex-start;
+  }
+}
+@media(max-width:480px){
+  .finance-period-controls,
+  .finance-card-filters,
+  .finance-card-filters-wide{
+    grid-template-columns:1fr;
+  }
+  .finance-period-controls .filter-actions,
+  .finance-card-filters .search-box,
+  .finance-filter-clear{
+    grid-column:auto;
+  }
+}

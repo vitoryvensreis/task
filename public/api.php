@@ -91,6 +91,7 @@ try {
   'expense_rules.save'=>Finance::expenseRuleSave($p),
   'expense_rules.delete'=>Finance::expenseRuleDelete($p),
   'finance.analysis'=>Finance::analysis($p),
+  'finance.cash_breakdown'=>Finance::cashBreakdown($p),
   'finance.monthly_status'=>Finance::monthlyBillingStatus($p),
   'files.add'=>Files::add($p),
   'files.upload_start'=>Files::uploadStart($p),

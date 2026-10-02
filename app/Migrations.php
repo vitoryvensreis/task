@@ -189,6 +189,19 @@ final class Migrations {
    self::column('events','attachments_json',"ALTER TABLE events ADD COLUMN attachments_json LONGTEXT NULL AFTER event_url");
    DB::run("INSERT INTO settings (`key`,value) VALUES ('schema_version','13') ON DUPLICATE KEY UPDATE value='13'");$version=13;
   }
+  if($version<14){
+   self::column('expenses','payment_status',"ALTER TABLE expenses ADD COLUMN payment_status VARCHAR(20) NOT NULL DEFAULT 'paid' AFTER spent_on");
+   self::column('expenses','paid_on',"ALTER TABLE expenses ADD COLUMN paid_on DATE NULL AFTER payment_status");
+   self::column('costs','payment_status',"ALTER TABLE costs ADD COLUMN payment_status VARCHAR(20) NOT NULL DEFAULT 'paid' AFTER spent_on");
+   self::column('costs','paid_on',"ALTER TABLE costs ADD COLUMN paid_on DATE NULL AFTER payment_status");
+   DB::run("UPDATE expenses SET payment_status='paid', paid_on=COALESCE(paid_on,spent_on) WHERE payment_status='paid' AND paid_on IS NULL");
+   DB::run("UPDATE costs SET payment_status='paid', paid_on=COALESCE(paid_on,spent_on) WHERE payment_status='paid' AND paid_on IS NULL");
+   DB::run("ALTER TABLE expenses ALTER payment_status SET DEFAULT 'pending'");
+   DB::run("ALTER TABLE costs ALTER payment_status SET DEFAULT 'paid'");
+   self::index('expenses','idx_expenses_payment',"ALTER TABLE expenses ADD INDEX idx_expenses_payment (payment_status,paid_on,spent_on)");
+   self::index('costs','idx_costs_payment',"ALTER TABLE costs ADD INDEX idx_costs_payment (payment_status,paid_on,spent_on)");
+   DB::run("INSERT INTO settings (`key`,value) VALUES ('schema_version','14') ON DUPLICATE KEY UPDATE value='14'");$version=14;
+  }
  }
  private static function hasColumn(string $table,string $column): bool {return (bool)DB::one('SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?',[$table,$column]);}
  private static function column(string $table,string $column,string $sql): void {if(!self::hasColumn($table,$column))DB::run($sql);}

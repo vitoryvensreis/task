@@ -398,61 +398,72 @@
 
     const billedAmount=Number(analysis.billed_cents||0),receivedAmount=Number(analysis.received_cents||0),committedCostAmount=Number(analysis.expense_cents||0),paidCostAmount=Number(analysis.paid_expense_cents||0),pendingCostAmount=Number(analysis.pending_expense_cents||0),profitAmount=Number(analysis.profit_cents||0);
     const futureIn=Number(analysis.future_in_cents||analysis.open_cents||0),futureOut=Number(analysis.future_out_cents||pendingCostAmount),futureNet=Number(analysis.future_net_cents??(futureIn-futureOut)),overallProjected=Number(analysis.overall_projected_cents??(profitAmount+futureNet));
-    const resultClass=profitAmount>=0?'green':'red',profitLabel=profitAmount>=0?'Lucro líquido':'Prejuízo líquido',futureClass=futureNet>=0?'green':'red',futureLabel=futureNet>=0?'Saldo projetado':'Déficit projetado';
-    const comparisonMax=Math.max(1,receivedAmount,paidCostAmount),receivedWidth=Math.max(receivedAmount>0?3:0,Math.round(receivedAmount/comparisonMax*100)),costWidth=Math.max(paidCostAmount>0?3:0,Math.round(paidCostAmount/comparisonMax*100));
-    const futureMax=Math.max(1,futureIn,futureOut),futureInWidth=Math.max(futureIn>0?3:0,Math.round(futureIn/futureMax*100)),futureOutWidth=Math.max(futureOut>0?3:0,Math.round(futureOut/futureMax*100));
-    const costPerReal=receivedAmount>0?paidCostAmount/receivedAmount:0,profitPerReal=receivedAmount>0?profitAmount/receivedAmount:0;
+    const resultClass=profitAmount>=0?'green':'red',futureClass=overallProjected>=0?'green':'red';
     const categories=(analysis.categories||[]).slice(0,8);
     const health=String(analysis.health_status||'attention'),healthLabel={healthy:'Saudável',attention:'Atenção',critical:'Crítico'}[health]||'Atenção';
-    const healthText=health==='healthy'?'O caixa está positivo e as entradas previstas cobrem as saídas pendentes.':health==='critical'?'O caixa ou a projeção após pendências está negativa. Revise recebimentos e custos.':'O caixa está positivo, mas a margem ou as pendências pedem acompanhamento.';
-    const healthIcon=health==='healthy'?'shield-check':'activity';
 
     $('#content').innerHTML=`<div class="section-title finance-title"><div><h3>Financeiro</h3><div class="panel-sub">Controle simples do que entra, do que sai e do que ainda está pendente.</div></div><div class="top-actions"><button class="secondary" id="manage-expense-categories">${icon('folder','')} Categorias</button><button class="secondary" id="new-expense">${icon('wallet','+')} Novo custo</button><button class="primary" id="new-invoice">${icon('receipt','+')} Nova cobrança</button></div></div>
 
-      <section class="panel finance-health-panel health-${health}">
-        <div class="finance-health-head">
-          <div class="finance-health-title"><span class="finance-health-icon">${icon(healthIcon,'')}</span><div><span class="eyebrow">SAÚDE DO CAIXA</span><h3>${healthLabel}</h3><p>${healthText}</p></div></div>
-          <div class="finance-health-projection"><span>Saldo após pendências</span><b class="${overallProjected>=0?'green':'red'}">${money(overallProjected)}</b><small>saldo atual + a receber − a pagar</small></div>
-        </div>
-        <div class="finance-flow-grid">
-          <div class="finance-flow-card incoming"><span>Entrou</span><b>${money(receivedAmount)}</b><small>recebido no período</small></div>
-          <div class="finance-flow-card outgoing"><span>Saiu</span><b>${money(paidCostAmount)}</b><small>custos pagos</small></div>
-          <div class="finance-flow-card balance"><span>Saldo atual</span><b class="${resultClass}">${money(profitAmount)}</b><small>entrou − saiu</small></div>
-          <div class="finance-flow-card pending-in"><span>A receber</span><b>${money(futureIn)}</b><small>entradas ainda abertas</small></div>
-          <div class="finance-flow-card pending-out"><span>A pagar</span><b>${money(futureOut)}</b><small>custos pendentes</small></div>
-        </div>
-      </section>
+            <section class="panel finance-period-panel"><div class="panel-head compact"><div><h3>Período financeiro</h3><div class="panel-sub">O período abaixo atualiza os totais e todas as tabelas desta página.</div></div></div><div class="finance-period-controls"><div class="field"><label>De</label><input class="input" id="finance-from" type="date" value="${esc(f.from||analysisFrom)}"></div><div class="field"><label>Até</label><input class="input" id="finance-to" type="date" value="${esc(f.to||analysisTo)}"></div><div class="filter-actions"><button class="secondary" id="apply-finance-filters">Aplicar período</button><button class="ghost" id="clear-finance-filters">Mês atual</button></div></div></section>
 
-      <section class="panel finance-profit-comparison">
-        <div class="panel-head"><div><h3>Recebido x custos pagos</h3><div class="panel-sub">${date(analysisFrom)} até ${date(analysisTo)} · visão do dinheiro que realmente entrou e saiu.</div></div><div class="finance-profit-margin ${resultClass}">${Number(analysis.profit_margin_pct||0).toLocaleString('pt-BR',{maximumFractionDigits:1})}% margem</div></div>
-        <div class="finance-profit-grid">
-          <div class="finance-profit-metric revenue"><span>Recebido</span><b>${money(receivedAmount)}</b><small>valor efetivamente recebido</small></div>
-          <div class="finance-profit-equation">−</div>
-          <div class="finance-profit-metric costs"><span>Custos pagos</span><b>${money(paidCostAmount)}</b><small>valores já debitados do caixa</small></div>
-          <div class="finance-profit-equation">=</div>
-          <div class="finance-profit-metric result ${profitAmount>=0?'positive':'negative'}"><span>${profitLabel}</span><b>${money(profitAmount)}</b><small>recebido − custos pagos</small></div>
+      <section class="panel finance-cash-overview">
+        <div class="finance-cash-overview-head">
+          <div><span class="eyebrow">RESUMO DO CAIXA</span><h3>Dinheiro do período</h3><div class="panel-sub">${date(analysisFrom)} até ${date(analysisTo)} · veja de forma direta o que entrou, saiu e o que ainda vai acontecer.</div></div>
+          <span class="finance-cash-health health-${health}">${healthLabel}</span>
         </div>
-        <div class="finance-profit-bars">
-          <div class="finance-profit-bar-row"><div><span>Recebido</span><b>${money(receivedAmount)}</b></div><div class="finance-profit-track"><i class="revenue" style="width:${receivedWidth}%"></i></div></div>
-          <div class="finance-profit-bar-row"><div><span>Custos pagos</span><b>${money(paidCostAmount)}</b></div><div class="finance-profit-track"><i class="costs" style="width:${costWidth}%"></i></div></div>
-        </div>
-        <div class="finance-profit-foot"><span>${receivedAmount>0?`A cada R$ 1,00 recebido, <b>${money(Math.round(costPerReal*100))}</b> saiu em custos e <b class="${resultClass}">${money(Math.round(profitPerReal*100))}</b> ficou no caixa.`:'Ainda não há recebimentos no período.'}</span><span>Custos lançados: <b>${money(committedCostAmount)}</b></span></div>
-      </section>
 
-      <section class="panel finance-profit-comparison finance-future-comparison">
-        <div class="panel-head"><div><h3>Faturamento a receber x custos pendentes</h3><div class="panel-sub">Projeção do que ainda deve entrar e sair no período.</div></div><div class="finance-profit-margin ${futureClass}">${futureNet>=0?'projeção positiva':'projeção negativa'}</div></div>
-        <div class="finance-profit-grid">
-          <div class="finance-profit-metric revenue"><span>Total a receber</span><b>${money(futureIn)}</b><small>cobranças ainda em aberto</small></div>
-          <div class="finance-profit-equation">−</div>
-          <div class="finance-profit-metric costs"><span>Custos a pagar</span><b>${money(futureOut)}</b><small>custos cadastrados como pendentes</small></div>
-          <div class="finance-profit-equation">=</div>
-          <div class="finance-profit-metric result ${futureNet>=0?'positive':'negative'}"><span>${futureLabel}</span><b>${money(futureNet)}</b><small>a receber − a pagar</small></div>
+        <div class="finance-cash-groups">
+          <div class="finance-cash-group current">
+            <div class="finance-cash-group-head"><span>ATÉ AGORA</span><small>movimentação já realizada</small></div>
+            <div class="finance-cash-cards">
+              <div class="finance-cash-card incoming">
+                <span>Quanto entrou</span>
+                <b>${money(receivedAmount)}</b>
+                <small>recebimentos confirmados</small>
+              </div>
+              <div class="finance-cash-operator">−</div>
+              <div class="finance-cash-card outgoing">
+                <span>Quanto já saiu</span>
+                <b>${money(paidCostAmount)}</b>
+                <small>custos já pagos</small>
+              </div>
+              <div class="finance-cash-operator">=</div>
+              <div class="finance-cash-card balance ${profitAmount>=0?'positive':'negative'}">
+                <span>Quanto tem no momento</span>
+                <b>${money(profitAmount)}</b>
+                <small>entrou − já saiu</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="finance-cash-group future">
+            <div class="finance-cash-group-head"><span>DAQUI PRA FRENTE</span><small>movimentação ainda pendente</small></div>
+            <div class="finance-cash-cards">
+              <div class="finance-cash-card incoming">
+                <span>Quanto vai entrar</span>
+                <b>${money(futureIn)}</b>
+                <small>cobranças ainda a receber</small>
+              </div>
+              <div class="finance-cash-operator">−</div>
+              <div class="finance-cash-card outgoing">
+                <span>Quanto vai sair</span>
+                <b>${money(futureOut)}</b>
+                <small>custos ainda a pagar</small>
+              </div>
+              <div class="finance-cash-operator">→</div>
+              <div class="finance-cash-card final ${overallProjected>=0?'positive':'negative'}">
+                <span>Quanto vai sobrar no final</span>
+                <b>${money(overallProjected)}</b>
+                <small>saldo atual + vai entrar − vai sair</small>
+              </div>
+            </div>
+          </div>
         </div>
-        <div class="finance-profit-bars">
-          <div class="finance-profit-bar-row"><div><span>A receber</span><b>${money(futureIn)}</b></div><div class="finance-profit-track"><i class="revenue" style="width:${futureInWidth}%"></i></div></div>
-          <div class="finance-profit-bar-row"><div><span>A pagar</span><b>${money(futureOut)}</b></div><div class="finance-profit-track"><i class="costs" style="width:${futureOutWidth}%"></i></div></div>
+
+        <div class="finance-cash-formula">
+          <span><b>Agora:</b> ${money(receivedAmount)} − ${money(paidCostAmount)} = <strong class="${resultClass}">${money(profitAmount)}</strong></span>
+          <span><b>Final previsto:</b> ${money(profitAmount)} + ${money(futureIn)} − ${money(futureOut)} = <strong class="${futureClass}">${money(overallProjected)}</strong></span>
         </div>
-        <div class="finance-profit-foot"><span>Se todas as pendências forem liquidadas, esta parte do período acrescenta <b class="${futureClass}">${money(futureNet)}</b> ao caixa.</span><span>Faturado total: <b>${money(billedAmount)}</b></span></div>
       </section>
 
       <details class="panel finance-details-panel">
@@ -470,7 +481,7 @@
         </div>
       </details>
 
-      <section class="panel finance-period-panel"><div class="panel-head compact"><div><h3>Período financeiro</h3><div class="panel-sub">O período abaixo atualiza os totais e todas as tabelas desta página.</div></div></div><div class="finance-period-controls"><div class="field"><label>De</label><input class="input" id="finance-from" type="date" value="${esc(f.from||analysisFrom)}"></div><div class="field"><label>Até</label><input class="input" id="finance-to" type="date" value="${esc(f.to||analysisTo)}"></div><div class="filter-actions"><button class="secondary" id="apply-finance-filters">Aplicar período</button><button class="ghost" id="clear-finance-filters">Mês atual</button></div></div></section>
+
 
       <section class="panel finance-entry-panel" data-filter-scope="entries">
         <div class="panel-head"><div><h3>Entradas / cobranças</h3><div class="panel-sub">Pesquise por cliente ou cobrança e filtre por origem e status.</div></div><span class="finance-filter-result" data-filter-count>${rows.length} de ${rows.length}</span></div>

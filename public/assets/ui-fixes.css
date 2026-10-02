@@ -960,3 +960,236 @@
     grid-column:auto;
   }
 }
+
+
+/* TaskEsc v3.8 — visão financeira centrada no caixa */
+.finance-cash-overview{
+  display:grid;
+  gap:14px;
+  overflow:hidden!important;
+  padding:16px!important;
+}
+.finance-cash-overview-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:14px;
+}
+.finance-cash-overview-head h3{
+  margin:3px 0 2px;
+  font-size:17px;
+}
+.finance-cash-health{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:29px;
+  padding:0 10px;
+  border:1px solid #303a42;
+  border-radius:999px;
+  background:#0b0f12;
+  color:#93a0aa;
+  font-size:9px;
+  font-weight:800;
+  white-space:nowrap;
+}
+.finance-cash-health.health-healthy{
+  border-color:#355443;
+  background:#0c1510;
+  color:#9ac1a8;
+}
+.finance-cash-health.health-attention{
+  border-color:#51472f;
+  background:#16130b;
+  color:#c5b276;
+}
+.finance-cash-health.health-critical{
+  border-color:#5c3941;
+  background:#170d10;
+  color:#d99aa5;
+}
+.finance-cash-groups{
+  display:grid;
+  gap:10px;
+}
+.finance-cash-group{
+  min-width:0;
+  padding:11px;
+  border:1px solid #252f36;
+  border-radius:11px;
+  background:#090d10;
+}
+.finance-cash-group.current{border-color:#2b3943}
+.finance-cash-group.future{border-color:#333b42;background:#0b0e11}
+.finance-cash-group-head{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-bottom:8px;
+}
+.finance-cash-group-head>span{
+  font-size:8px;
+  font-weight:900;
+  letter-spacing:.7px;
+  color:#9babb7;
+}
+.finance-cash-group-head>small{
+  font-size:8px;
+  color:#65727c;
+}
+.finance-cash-cards{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 28px minmax(0,1fr) 28px minmax(0,1.15fr);
+  align-items:stretch;
+  gap:6px;
+}
+.finance-cash-card{
+  min-width:0;
+  display:grid;
+  align-content:center;
+  gap:4px;
+  padding:14px 15px;
+  border:1px solid #28333b;
+  border-radius:10px;
+  background:#0d1114;
+}
+.finance-cash-card>span{
+  color:#82919d;
+  font-size:9px;
+  font-weight:800;
+  letter-spacing:.45px;
+  text-transform:uppercase;
+}
+.finance-cash-card>b{
+  color:#eef2f5;
+  font-size:23px;
+  line-height:1.08;
+  overflow-wrap:anywhere;
+}
+.finance-cash-card>small{
+  color:#687680;
+  font-size:8.5px;
+  line-height:1.35;
+}
+.finance-cash-card.incoming{
+  border-color:#304453;
+  background:#0c1216;
+}
+.finance-cash-card.incoming>b{color:#a9c4d7}
+.finance-cash-card.outgoing{
+  border-color:#4a343a;
+  background:#130d0f;
+}
+.finance-cash-card.outgoing>b{color:#d798a4}
+.finance-cash-card.balance,
+.finance-cash-card.final{
+  border-width:1px;
+}
+.finance-cash-card.balance.positive,
+.finance-cash-card.final.positive{
+  border-color:#36533f;
+  background:#0c1510;
+}
+.finance-cash-card.balance.positive>b,
+.finance-cash-card.final.positive>b{color:#9fc9ad}
+.finance-cash-card.balance.negative,
+.finance-cash-card.final.negative{
+  border-color:#603b44;
+  background:#180d10;
+}
+.finance-cash-card.balance.negative>b,
+.finance-cash-card.final.negative>b{color:#e09ba6}
+.finance-cash-card.final{
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.02);
+}
+.finance-cash-operator{
+  display:grid;
+  place-items:center;
+  color:#64717b;
+  font-size:18px;
+  font-weight:900;
+}
+.finance-cash-formula{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+}
+.finance-cash-formula>span{
+  min-width:0;
+  padding:9px 11px;
+  border:1px solid #242d34;
+  border-radius:8px;
+  background:#0a0d10;
+  color:#7f8c96;
+  font-size:9px;
+  line-height:1.45;
+}
+.finance-cash-formula b{color:#aeb9c1}
+.finance-cash-formula strong{font-size:10px}
+.finance-period-panel{
+  padding:11px 13px!important;
+}
+.finance-period-panel .panel-head{margin-bottom:7px}
+.finance-period-panel .panel-head h3{font-size:11px}
+.finance-period-panel .panel-sub{font-size:8px}
+.finance-period-controls{
+  grid-template-columns:minmax(140px,190px) minmax(140px,190px) auto!important;
+}
+.finance-period-controls .field label{
+  font-size:8px;
+  margin-bottom:4px;
+}
+.finance-period-controls .input{
+  height:36px;
+}
+
+@media(max-width:980px){
+  .finance-cash-cards{
+    grid-template-columns:minmax(0,1fr) 22px minmax(0,1fr) 22px minmax(0,1fr);
+  }
+  .finance-cash-card{
+    padding:12px;
+  }
+  .finance-cash-card>b{font-size:19px}
+}
+@media(max-width:760px){
+  .finance-cash-overview{
+    padding:12px!important;
+    gap:10px;
+  }
+  .finance-cash-overview-head{
+    display:grid;
+    grid-template-columns:1fr;
+    gap:7px;
+  }
+  .finance-cash-health{
+    justify-self:start;
+  }
+  .finance-cash-cards{
+    grid-template-columns:1fr;
+    gap:6px;
+  }
+  .finance-cash-operator{display:none}
+  .finance-cash-card{
+    padding:11px 12px;
+  }
+  .finance-cash-card>b{font-size:20px}
+  .finance-cash-card.balance,
+  .finance-cash-card.final{
+    padding:14px 12px;
+  }
+  .finance-cash-formula{
+    grid-template-columns:1fr;
+  }
+  .finance-period-controls{
+    grid-template-columns:1fr 1fr!important;
+  }
+}
+@media(max-width:480px){
+  .finance-period-controls{
+    grid-template-columns:1fr!important;
+  }
+  .finance-period-controls .filter-actions{
+    grid-column:auto!important;
+  }
+}

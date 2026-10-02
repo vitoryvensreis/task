@@ -124,7 +124,7 @@ final class Finance {
   foreach($rows as &$row)$row['monthly_equivalent_cents']=$row['recurrence']==='yearly'?(int)round((int)$row['amount_cents']/12):(int)$row['amount_cents'];unset($row);return $rows;
  }
  private static function expenseCategoryName(mixed $value): string {
-  $name=mb_substr(trim((string)$value),0,190);if($name==='')fail('Selecione uma categoria de custo.');
+  $name=mb_substr(trim((string)$value),0,80);if($name==='')fail('Selecione uma categoria de custo.');
   $row=DB::one('SELECT name FROM expense_categories WHERE name=? AND active=1 LIMIT 1',[$name]);if(!$row)fail('Categoria de custo inválida ou desativada.',422);return (string)$row['name'];
  }
  public static function expenseCategories(array $p=[]): array {
@@ -132,7 +132,7 @@ final class Finance {
   return DB::all("SELECT ec.*, (SELECT COUNT(*) FROM expenses e WHERE e.deleted_at IS NULL AND e.category=ec.name)+(SELECT COUNT(*) FROM expense_rules r WHERE r.category=ec.name) AS usage_count FROM expense_categories ec $w ORDER BY ec.active DESC,ec.name");
  }
  public static function expenseCategorySave(array $p): array {
-  Auth::admin();$id=(int)($p['id']??0);$name=mb_substr(trim(required($p,'name',190)),0,190);if($name==='')fail('Informe o nome da categoria.');
+  Auth::admin();$id=(int)($p['id']??0);$name=mb_substr(trim(required($p,'name',80)),0,80);if($name==='')fail('Informe o nome da categoria.');
   $existing=DB::one('SELECT * FROM expense_categories WHERE name=? LIMIT 1',[$name]);if($existing&&(!$id||(int)$existing['id']!==$id)){if(!(int)$existing['active']){DB::update('expense_categories',(int)$existing['id'],['active'=>1,'updated_at'=>now()]);audit('expense_category',(int)$existing['id'],'reactivated',$existing,['name'=>$name,'active'=>1]);return ['id'=>(int)$existing['id'],'reactivated'=>true];}fail('Essa categoria já existe.',409);}
   $row=['name'=>$name,'active'=>(int)(bool)($p['active']??1),'updated_at'=>now()];if($id){$old=DB::one('SELECT * FROM expense_categories WHERE id=?',[$id]);if(!$old)fail('Categoria não encontrada.',404);if($old['name']!==$name){DB::run('UPDATE expenses SET category=? WHERE category=?',[$name,$old['name']]);DB::run('UPDATE expense_rules SET category=? WHERE category=?',[$name,$old['name']]);}DB::update('expense_categories',$id,$row);audit('expense_category',$id,'updated',$old,$row);}else{$id=DB::insert('expense_categories',$row+['created_by'=>(int)Auth::$user['id'],'created_at'=>now()]);audit('expense_category',$id,'created',null,$row);}return ['id'=>$id];
  }

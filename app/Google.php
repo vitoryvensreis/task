@@ -219,6 +219,15 @@ final class Google {
   return ['title'=>mb_substr($e['summary']??'Ocupado',0,255),'starts_at'=>$start,'ends_at'=>$end,'all_day'=>(int)$all,'location'=>$e['location']??'','description'=>$e['description']??'','organizer_name'=>mb_substr((string)($organizer['displayName']??''),0,190)?:null,'organizer_email'=>mb_substr((string)($organizer['email']??''),0,190)?:null,'attendees_json'=>$attendees?json($attendees):null,'meet_url'=>$meetUrl?:null,'conference_json'=>$entryPoints?json($entryPoints):null,'event_url'=>trim((string)($e['htmlLink']??''))?:null,'attachments_json'=>$attachments?json($attachments):null,'private'=>(int)(($e['visibility']??'')==='private'),'status'=>($e['status']??'')==='cancelled'?'cancelled':'confirmed','google_etag'=>$e['etag']??null,'recurring_id'=>$e['recurringEventId']??null];
  }
 
+ public static function refreshEvent(int $eventId): void {
+  $e=DB::one("SELECT e.id,e.google_id,e.google_etag,e.version,e.updated_at,e.sync_status,c.account_id,c.google_id AS calendar_google_id,c.access_role FROM events e JOIN calendars c ON c.id=e.calendar_id WHERE e.id=?",[$eventId]);
+  if(!$e||!$e['account_id']||!$e['google_id']||$e['access_role']==='freeBusyReader'||in_array($e['sync_status'],['pending','error','conflict'],true))return;
+  $remote=self::api((int)$e['account_id'],'calendars/'.rawurlencode((string)$e['calendar_google_id']).'/events/'.rawurlencode((string)$e['google_id']));
+  if(($remote['status']??'')==='cancelled'){DB::update('events',$eventId,['status'=>'cancelled','updated_at'=>now()]);return;}
+  $fields=self::eventFields($remote);$changed=(($e['google_etag']??'')!==($remote['etag']??''));
+  DB::update('events',$eventId,$fields+['sync_status'=>'synced','remote_json'=>null,'version'=>$changed?(int)$e['version']+1:(int)$e['version'],'updated_at'=>$changed?now():$e['updated_at']]);
+ }
+
  public static function syncCalendarNow(int $calendarId): array {
   $c=DB::one("SELECT c.* FROM calendars c JOIN google_accounts a ON a.id=c.account_id WHERE c.id=? AND a.status<>'disconnected' AND a.calendar_enabled=1",[$calendarId]);if(!$c)return ['synced'=>false,'message'=>'Agenda local ou conta Google indisponível.'];try{self::push($c);DB::update('calendars',$c['id'],['synced_at'=>now(),'last_error'=>null,'dirty'=>0]);return ['synced'=>true];}catch(Throwable $e){$message=mb_substr($e->getMessage(),0,1000);DB::update('calendars',$c['id'],['last_error'=>$message]);return ['synced'=>false,'message'=>$message];}
  }

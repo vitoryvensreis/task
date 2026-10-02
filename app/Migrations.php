@@ -137,7 +137,7 @@ final class Migrations {
   if($version<11){
    DB::run("CREATE TABLE IF NOT EXISTS expense_rules (
     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(80) NOT NULL,
+    name VARCHAR(190) NOT NULL,
     vendor VARCHAR(190) NOT NULL DEFAULT '',
     category VARCHAR(80) NOT NULL DEFAULT 'Outros',
     amount_cents BIGINT NOT NULL,

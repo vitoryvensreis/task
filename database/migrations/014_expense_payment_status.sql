@@ -12,8 +12,8 @@ ALTER TABLE costs
 UPDATE expenses SET payment_status='paid', paid_on=spent_on WHERE paid_on IS NULL;
 UPDATE costs SET payment_status='paid', paid_on=spent_on WHERE paid_on IS NULL;
 
-ALTER TABLE expenses ALTER payment_status SET DEFAULT 'pending';
-ALTER TABLE costs ALTER payment_status SET DEFAULT 'paid';
+ALTER TABLE expenses MODIFY payment_status VARCHAR(20) NOT NULL DEFAULT 'pending';
+ALTER TABLE costs MODIFY payment_status VARCHAR(20) NOT NULL DEFAULT 'paid';
 
 INSERT INTO settings (`key`, value)
 VALUES ('schema_version', '14')

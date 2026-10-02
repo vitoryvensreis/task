@@ -1,10 +1,10 @@
-const CACHE='taskesc-shell-v3.10.0';
+const CACHE='taskesc-shell-v3.10.1';
 const scopeUrl=new URL('./',self.registration.scope);
 const assetUrl=path=>new URL(path,scopeUrl).toString();
 const SHELL=[
   assetUrl('offline.html'),
   assetUrl('assets/app.css?v=3.4.0'),
-  assetUrl('assets/app.js?v=3.10.0'),
+  assetUrl('assets/app.js?v=3.10.1'),
   assetUrl('assets/taskesc-logo.svg')
 ];
 

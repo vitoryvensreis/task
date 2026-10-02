@@ -167,6 +167,16 @@ final class Google {
   $result=json_decode((string)$resp,true)??[];if(empty($result['id']))throw new RuntimeException('O Google Drive não confirmou o arquivo enviado.');return ['complete'=>true,'next_offset'=>$total,'file'=>$result];
  }
 
+ public static function driveUploadStatus(int $account,string $location,int $total): array {
+  $host=strtolower((string)parse_url($location,PHP_URL_HOST));if($host===''||($host!=='www.googleapis.com'&&!str_ends_with($host,'.googleapis.com')))throw new RuntimeException('Sessão de upload inválida.');$range='';
+  $ch=curl_init($location);curl_setopt_array($ch,[CURLOPT_CUSTOMREQUEST=>'PUT',CURLOPT_POSTFIELDS=>'',CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>45,CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS,CURLOPT_HTTPHEADER=>['Authorization: Bearer '.self::token($account),'Content-Length: 0','Content-Range: bytes */'.$total,'Expect:'],CURLOPT_HEADERFUNCTION=>function($ch,$line)use(&$range){$l=strlen($line);$p=explode(':',$line,2);if(count($p)===2&&strtolower(trim($p[0]))==='range')$range=trim($p[1]);return $l;}]);
+  $resp=curl_exec($ch);$status=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);$err=curl_error($ch);curl_close($ch);
+  if($resp===false)throw new RuntimeException('Não foi possível consultar o estado do upload: '.$err);
+  if(in_array($status,[200,201],true)){$result=json_decode((string)$resp,true)??[];if(empty($result['id']))throw new RuntimeException('O Google confirmou o upload sem retornar o arquivo.');return ['complete'=>true,'next_offset'=>$total,'file'=>$result];}
+  if($status===308){$next=0;if($range&&preg_match('/bytes=0-(\d+)/i',$range,$m))$next=(int)$m[1]+1;return ['complete'=>false,'next_offset'=>$next];}
+  $dec=json_decode((string)$resp,true)??[];throw new AppError('Não foi possível consultar o estado do upload: '.($dec['error']['message']??$err?:('HTTP '.$status)),502,['google_status'=>$status]);
+ }
+
  public static function uploadToDrive(int $account,string $path,string $name,string $mime,string $folderId): array {
   $size=filesize($path);if($size===false||$size<1)fail('O arquivo está vazio ou não pôde ser lido.');
   $metadata=['name'=>mb_substr($name,0,240),'parents'=>[$folderId]];$location='';$responseHeaders=[];

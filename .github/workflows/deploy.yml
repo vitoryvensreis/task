@@ -42,6 +42,11 @@ jobs:
           node - <<'NODE'
           const fs=require('fs');
           const src=fs.readFileSync('public/assets/app.js','utf8');
+          const html=fs.readFileSync('public/index.php','utf8');
+          if(html.includes('>\\n  <link')){
+            console.error('ERRO: texto literal \\n encontrado entre assets do index.php');
+            process.exit(1);
+          }
           const bad=[...src.matchAll(/(^|[^$])\$\([^)]*\)\.forEach/g)].map(m=>m[0].trim());
           if(bad.length){
             console.error('ERRO: seletor único $() usado com forEach:',bad);
@@ -52,19 +57,19 @@ jobs:
       - name: Gerar ZIP completo
         run: |
           set -e
-          rm -f "/tmp/taskesc-v3.3.0.zip" "taskesc-v3.3.0.zip"
-          zip -qr "/tmp/taskesc-v3.3.0.zip" . \
+          rm -f "/tmp/taskesc-v3.4.0.zip" "taskesc-v3.4.0.zip"
+          zip -qr "/tmp/taskesc-v3.4.0.zip" . \
             -x '.git/*' \
                'config/config.php' \
                'storage/sessions/*' \
                'storage/logs/*'
-          cp "/tmp/taskesc-v3.3.0.zip" "taskesc-v3.3.0.zip"
+          cp "/tmp/taskesc-v3.4.0.zip" "taskesc-v3.4.0.zip"
 
       - name: Publicar ZIP da versão
         uses: actions/upload-artifact@v4
         with:
-          name: taskesc-v3.3.0
-          path: taskesc-v3.3.0.zip
+          name: taskesc-v3.4.0
+          path: taskesc-v3.4.0.zip
           if-no-files-found: error
           retention-days: 7
 

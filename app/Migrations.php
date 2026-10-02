@@ -174,6 +174,11 @@ final class Migrations {
    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
    DB::run("INSERT INTO settings (`key`,value) VALUES ('schema_version','11') ON DUPLICATE KEY UPDATE value='11'");$version=11;
   }
+  if($version<12){
+   self::column('files','upload_key',"ALTER TABLE files ADD COLUMN upload_key CHAR(64) NULL AFTER size_bytes");
+   self::index('files','uq_files_upload_key',"ALTER TABLE files ADD UNIQUE INDEX uq_files_upload_key (upload_key)");
+   DB::run("INSERT INTO settings (`key`,value) VALUES ('schema_version','12') ON DUPLICATE KEY UPDATE value='12'");$version=12;
+  }
  }
  private static function hasColumn(string $table,string $column): bool {return (bool)DB::one('SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?',[$table,$column]);}
  private static function column(string $table,string $column,string $sql): void {if(!self::hasColumn($table,$column))DB::run($sql);}

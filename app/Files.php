@@ -30,22 +30,53 @@ final class Files {
   $label=required($p,'label',255);$name=basename(str_replace('\\','/',required($p,'name',255)));self::uploadExtension($name);
   $rawSize=$p['size']??0;if(filter_var($rawSize,FILTER_VALIDATE_INT)===false||(int)$rawSize<1)fail('Tamanho de arquivo inválido.');$size=(int)$rawSize;$limitMb=(int)setting('upload_mb','0');$max=$limitMb>0?$limitMb*1024*1024:0;if($max>0&&$size>$max)fail('Arquivo acima do limite configurado de '.$limitMb.' MB.');
   $mime=trim((string)($p['mime']??'application/octet-stream'));if($mime===''||strlen($mime)>120||preg_match('/[\r\n]/',$mime))$mime='application/octet-stream';
+  $uploadId=trim((string)($p['upload_id']??''));if($uploadId!==''&&!preg_match('/^[A-Za-z0-9_-]{12,96}$/',$uploadId))fail('Identificador de upload inválido.',400);
+  $uploadKey=$uploadId!==''?hash('sha256',(string)Auth::$user['id'].'|'.$d['id'].'|'.$uploadId):null;
+  foreach($_SESSION['drive_uploads']??[] as $key=>$state)if((int)($state['expires']??0)<time())unset($_SESSION['drive_uploads'][$key]);
+  foreach($_SESSION['drive_uploads_done']??[] as $key=>$state)if((int)($state['expires']??0)<time())unset($_SESSION['drive_uploads_done'][$key]);
+  if($uploadKey){
+   $existing=DB::one('SELECT id,version_no,storage_provider FROM files WHERE demand_id=? AND upload_key=? LIMIT 1',[$d['id'],$uploadKey]);
+   if($existing)return ['complete'=>true,'id'=>(int)$existing['id'],'version_no'=>$existing['version_no']!==null?(int)$existing['version_no']:null,'storage'=>$existing['storage_provider']??'drive','next_offset'=>$size,'size'=>$size,'deduplicated'=>true];
+   foreach($_SESSION['drive_uploads']??[] as $token=>$state)if(($state['upload_key']??null)===$uploadKey&&(int)($state['user_id']??0)===(int)Auth::$user['id']&&(int)($state['demand_id']??0)===(int)$d['id']){
+    return ['upload_token'=>$token,'chunk_size'=>(int)($state['chunk_size']??1048576),'next_offset'=>(int)($state['offset']??0),'size'=>$size,'unlimited'=>$limitMb===0,'resumed'=>true];
+   }
+  }
   $folder=Google::ensureDemandFileFolder($d,$kind);$location=Google::startDriveUpload($folder['account_id'],$name,$mime,$size,$folder['folder_id']);
-  foreach($_SESSION['drive_uploads']??[] as $key=>$state)if((int)($state['expires']??0)<time())unset($_SESSION['drive_uploads'][$key]);foreach($_SESSION['drive_uploads_done']??[] as $key=>$state)if((int)($state['expires']??0)<time())unset($_SESSION['drive_uploads_done'][$key]);
-  $token=bin2hex(random_bytes(24));$_SESSION['drive_uploads'][$token]=['user_id'=>(int)Auth::$user['id'],'demand_id'=>(int)$d['id'],'account_id'=>(int)$folder['account_id'],'location'=>$location,'label'=>$label,'name'=>$name,'mime'=>$mime,'size'=>$size,'offset'=>0,'kind'=>$kind,'shared'=>$shared,'final_delivery_link'=>$kind==='final'?($folder['share_url']??null):null,'expires'=>time()+518400];
-  return ['upload_token'=>$token,'chunk_size'=>1048576,'size'=>$size,'unlimited'=>$limitMb===0];
+  $chunkSize=min($size,8*1024*1024);if($size>$chunkSize&&$chunkSize%262144!==0)$chunkSize=(int)(floor($chunkSize/262144)*262144);$chunkSize=max(262144,$chunkSize);
+  $token=bin2hex(random_bytes(24));$_SESSION['drive_uploads'][$token]=['user_id'=>(int)Auth::$user['id'],'demand_id'=>(int)$d['id'],'account_id'=>(int)$folder['account_id'],'location'=>$location,'label'=>$label,'name'=>$name,'mime'=>$mime,'size'=>$size,'offset'=>0,'chunk_size'=>$chunkSize,'upload_key'=>$uploadKey,'kind'=>$kind,'shared'=>$shared,'final_delivery_link'=>$kind==='final'?($folder['share_url']??null):null,'expires'=>time()+518400];
+  return ['upload_token'=>$token,'chunk_size'=>$chunkSize,'next_offset'=>0,'size'=>$size,'unlimited'=>$limitMb===0];
  }
 
  public static function uploadChunk(string $token,string $binary,int $offset): array {
   if(!preg_match('/^[a-f0-9]{48}$/',$token))fail('Sessão de upload inválida.',400);$done=$_SESSION['drive_uploads_done'][$token]??null;if($done&&(int)($done['user_id']??0)===(int)Auth::$user['id']&&(int)($done['expires']??0)>=time()){unset($done['user_id'],$done['expires']);return $done;}$state=$_SESSION['drive_uploads'][$token]??null;
   if(!$state||(int)$state['user_id']!==(int)Auth::$user['id']||(int)$state['expires']<time()){unset($_SESSION['drive_uploads'][$token]);fail('A sessão de upload expirou. Inicie o envio novamente.',409);}
   if($offset!==(int)$state['offset'])fail('O bloco recebido está fora de ordem. Recomece o upload.',409,['expected_offset'=>(int)$state['offset']]);
-  $length=strlen($binary);if($length<1||$length>1048576)fail('Tamanho de bloco inválido.',413);$isFinal=$offset+$length===(int)$state['size'];if(!$isFinal&&$length%262144!==0)fail('Bloco intermediário inválido.',400);
-  Auth::demand((int)$state['demand_id']);$result=Google::uploadDriveChunk((int)$state['account_id'],(string)$state['location'],$binary,$offset,(int)$state['size'],(string)$state['mime']);
+  $length=strlen($binary);$chunkLimit=max(262144,(int)($state['chunk_size']??1048576));if($length<1||$length>$chunkLimit)fail('Tamanho de bloco inválido.',413);$isFinal=$offset+$length===(int)$state['size'];if(!$isFinal&&$length%262144!==0)fail('Bloco intermediário inválido.',400);
+  Auth::demand((int)$state['demand_id']);
+  try{$result=Google::uploadDriveChunk((int)$state['account_id'],(string)$state['location'],$binary,$offset,(int)$state['size'],(string)$state['mime']);}
+  catch(Throwable $uploadError){
+   try{$status=Google::driveUploadStatus((int)$state['account_id'],(string)$state['location'],(int)$state['size']);if($status['complete'])$result=$status;elseif((int)$status['next_offset']>$offset){$_SESSION['drive_uploads'][$token]['offset']=(int)$status['next_offset'];$_SESSION['drive_uploads'][$token]['expires']=time()+518400;return ['complete'=>false,'next_offset'=>(int)$status['next_offset'],'recovered'=>true];}else throw $uploadError;}
+   catch(Throwable $statusError){throw $uploadError;}
+  }
   if(!$result['complete']){$_SESSION['drive_uploads'][$token]['offset']=(int)$result['next_offset'];$_SESSION['drive_uploads'][$token]['expires']=time()+518400;return ['complete'=>false,'next_offset'=>(int)$result['next_offset']];}
-  $drive=$result['file'];$d=Auth::demand((int)$state['demand_id'],true);$row=['demand_id'=>$d['id'],'author_id'=>Auth::$user['id'],'label'=>$state['label'],'shared'=>(int)$state['shared'],'kind'=>$state['kind'],'created_at'=>now(),'original_name'=>mb_substr((string)$state['name'],0,255),'disk_name'=>null,'storage_provider'=>'drive','drive_file_id'=>$drive['id'],'drive_account_id'=>(int)$state['account_id'],'drive_web_view_url'=>$drive['webViewLink']??null,'mime'=>$drive['mimeType']??$state['mime'],'size_bytes'=>(int)($drive['size']??$state['size'])];
+  $drive=$result['file'];$d=Auth::demand((int)$state['demand_id'],true);$uploadKey=$state['upload_key']??null;
+  if($uploadKey){
+   $existing=DB::one('SELECT id,version_no,storage_provider,drive_file_id FROM files WHERE demand_id=? AND upload_key=? LIMIT 1',[$d['id'],$uploadKey]);
+   if($existing){
+    if(!empty($drive['id'])&&($existing['drive_file_id']??'')!==$drive['id'])try{Google::deleteDriveFile((int)$state['account_id'],(string)$drive['id']);}catch(Throwable $e){error_log('TaskEsc duplicate upload cleanup: '.$e->getMessage());}
+    unset($_SESSION['drive_uploads'][$token]);$response=['complete'=>true,'id'=>(int)$existing['id'],'version_no'=>$existing['version_no']!==null?(int)$existing['version_no']:null,'storage'=>$existing['storage_provider']??'drive','next_offset'=>(int)$state['size'],'final_delivery_link'=>$state['final_delivery_link']??null,'deduplicated'=>true];$_SESSION['drive_uploads_done'][$token]=$response+['user_id'=>(int)Auth::$user['id'],'expires'=>time()+900];return $response;
+   }
+  }
+  $row=['demand_id'=>$d['id'],'author_id'=>Auth::$user['id'],'label'=>$state['label'],'shared'=>(int)$state['shared'],'kind'=>$state['kind'],'created_at'=>now(),'original_name'=>mb_substr((string)$state['name'],0,255),'disk_name'=>null,'storage_provider'=>'drive','drive_file_id'=>$drive['id'],'drive_account_id'=>(int)$state['account_id'],'drive_web_view_url'=>$drive['webViewLink']??null,'mime'=>$drive['mimeType']??$state['mime'],'size_bytes'=>(int)($drive['size']??$state['size']),'upload_key'=>$uploadKey];
   if(in_array($state['kind'],['review','final'],true))$row['version_no']=(int)DB::one('SELECT COALESCE(MAX(version_no),0) AS n FROM files WHERE demand_id=?',[$d['id']])['n']+1;
-  $id=DB::insert('files',$row);unset($_SESSION['drive_uploads'][$token]);audit('demand',$d['id'],'file.added',null,['file_id'=>$id,'version'=>$row['version_no']??null,'storage'=>'drive']);Notify::demand($d,$state['kind']==='review'?'Versão para aprovação':'Novo arquivo',$row['label'],!$row['shared']);
+  try{$id=DB::insert('files',$row);}
+  catch(PDOException $e){
+   if(!$uploadKey||!str_contains(strtolower($e->getMessage()),'duplicate'))throw $e;
+   $existing=DB::one('SELECT id,version_no,storage_provider,drive_file_id FROM files WHERE upload_key=? LIMIT 1',[$uploadKey]);if(!$existing)throw $e;
+   if(!empty($drive['id'])&&($existing['drive_file_id']??'')!==$drive['id'])try{Google::deleteDriveFile((int)$state['account_id'],(string)$drive['id']);}catch(Throwable $cleanup){error_log('TaskEsc duplicate upload cleanup: '.$cleanup->getMessage());}
+   unset($_SESSION['drive_uploads'][$token]);$response=['complete'=>true,'id'=>(int)$existing['id'],'version_no'=>$existing['version_no']!==null?(int)$existing['version_no']:null,'storage'=>$existing['storage_provider']??'drive','next_offset'=>(int)$state['size'],'final_delivery_link'=>$state['final_delivery_link']??null,'deduplicated'=>true];$_SESSION['drive_uploads_done'][$token]=$response+['user_id'=>(int)Auth::$user['id'],'expires'=>time()+900];return $response;
+  }
+  unset($_SESSION['drive_uploads'][$token]);audit('demand',$d['id'],'file.added',null,['file_id'=>$id,'version'=>$row['version_no']??null,'storage'=>'drive']);Notify::demand($d,$state['kind']==='review'?'Versão para aprovação':'Novo arquivo',$row['label'],!$row['shared']);
   $response=['complete'=>true,'id'=>$id,'version_no'=>$row['version_no']??null,'storage'=>'drive','next_offset'=>(int)$state['size'],'final_delivery_link'=>$state['final_delivery_link']??null];$_SESSION['drive_uploads_done'][$token]=$response+['user_id'=>(int)Auth::$user['id'],'expires'=>time()+900];return $response;
  }
 

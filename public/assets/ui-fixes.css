@@ -1892,3 +1892,161 @@
     grid-column:auto;
   }
 }
+
+
+/* TaskEsc v3.10.2 — polimento mobile dos prints */
+@media(max-width:760px){
+  /* Financeiro: campos de período nunca podem escapar do card. */
+  .finance-period-panel{
+    min-width:0!important;
+    overflow:hidden!important;
+  }
+  .finance-period-controls,
+  .finance-period-controls .field,
+  .finance-period-controls .filter-actions{
+    min-width:0!important;
+    max-width:100%!important;
+  }
+  .finance-period-controls .input,
+  #finance-from,
+  #finance-to{
+    display:block!important;
+    width:100%!important;
+    max-width:100%!important;
+    min-width:0!important;
+    box-sizing:border-box!important;
+  }
+
+  /* Dashboard: quinto card ocupa as duas colunas. */
+  .grid.stats .dashboard-finance-open{
+    grid-column:1/-1!important;
+  }
+
+  /* Kanban: nenhuma informação pode sair do card. */
+  .kanban .task-card{
+    overflow:hidden!important;
+  }
+  .kanban .task-meta{
+    min-width:0;
+    max-width:100%;
+  }
+  .kanban .task-meta>span,
+  .kanban .task-meta>.badge{
+    min-width:0;
+    max-width:100%;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .kanban .task-foot{
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) auto;
+    align-items:center;
+    width:100%;
+    min-width:0;
+    gap:8px;
+  }
+  .kanban .task-foot>span:first-child{
+    min-width:0;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .kanban .task-foot>span:last-child{
+    flex:0 0 auto;
+    white-space:nowrap;
+    justify-self:end;
+  }
+
+  /* Ações da task: ícones no mobile para economizar largura. */
+  .task-detail-modal .task-detail-action{
+    width:42px!important;
+    min-width:42px!important;
+    height:42px!important;
+    min-height:42px!important;
+    flex:0 0 42px!important;
+    display:inline-flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    gap:0!important;
+    padding:0!important;
+    font-size:0!important;
+    line-height:1!important;
+  }
+  .task-detail-modal .task-detail-action .ui-icon{
+    width:18px!important;
+    height:18px!important;
+    flex:0 0 18px!important;
+  }
+  .task-detail-modal .detail-section>.panel-head .top-actions{
+    width:auto!important;
+    display:flex!important;
+    flex-wrap:wrap!important;
+    grid-template-columns:none!important;
+    justify-content:flex-end!important;
+    gap:7px!important;
+  }
+  .task-detail-modal .detail-section>.panel-head .top-actions>*{
+    width:42px!important;
+    min-width:42px!important;
+    padding:0!important;
+    white-space:nowrap!important;
+  }
+  .task-detail-modal .detail-section>.panel-head .top-actions>*:last-child:nth-child(odd){
+    grid-column:auto!important;
+  }
+  .task-detail-modal>.form-actions,
+  .task-detail-modal .split-actions{
+    width:100%;
+    display:flex!important;
+    flex-direction:row!important;
+    align-items:center!important;
+    justify-content:flex-end!important;
+    gap:7px!important;
+    flex-wrap:wrap!important;
+  }
+  .task-detail-modal .split-actions>div{
+    display:flex!important;
+    align-items:center!important;
+    justify-content:flex-end!important;
+    gap:7px!important;
+    flex-wrap:wrap!important;
+  }
+  .task-detail-modal .split-actions>.danger{
+    margin-right:auto;
+  }
+
+  /* Mais respiro entre os grandes cards do financeiro. */
+  .finance-cash-overview,
+  .finance-details-panel,
+  .finance-entry-panel,
+  .expense-panel,
+  .recurring-expense-panel,
+  .monthly-billing-panel,
+  .finance-log-panel{
+    margin-bottom:12px!important;
+  }
+  .finance-details-panel + .finance-entry-panel{
+    margin-top:0!important;
+  }
+}
+
+@media(max-width:480px){
+  .finance-period-controls{
+    width:100%!important;
+  }
+  .finance-period-controls .filter-actions{
+    width:100%!important;
+  }
+  .finance-period-controls .filter-actions>*{
+    min-width:0!important;
+    width:100%!important;
+  }
+  .task-detail-modal .detail-section>.panel-head{
+    gap:8px!important;
+  }
+  .task-detail-modal .detail-section>.panel-head .top-actions{
+    width:100%!important;
+    justify-content:flex-start!important;
+  }
+}

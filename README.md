@@ -155,6 +155,18 @@ Os cards derivados também explicam a conta: **Quanto tem no momento** abre entr
 O detalhamento usa o mesmo período do Financeiro e os mesmos critérios dos totais, para que a soma da lista corresponda ao valor exibido no card.
 
 
+
+### Ajustes v3.9 do Web Push
+
+A v3.9 transforma as notificações do TaskEsc em **Web Push com payload criptografado**, permitindo que o navegador exiba a notificação diretamente pelo Service Worker mesmo quando a página do sistema não está aberta. Uma mesma conta pode manter várias assinaturas ativas, portanto o responsável pode receber a mesma atualização no PC e no celular depois de ativar as notificações em cada dispositivo.
+
+Para tasks, o push possui uma regra rígida de destinatário: **somente o usuário definido em `demands.assigned_to` recebe Web Push**. Administradores, clientes e outros membros da equipe podem continuar recebendo os registros internos/e-mails previstos pelo fluxo existente, mas não recebem push daquela task se não forem o responsável. O próprio autor da ação não recebe push sobre a ação que acabou de executar.
+
+O payload enviado ao dispositivo contém título, texto, URL da task, identificador da notificação e badge. O conteúdo é criptografado conforme Web Push `aes128gcm`/VAPID e o Service Worker abre diretamente a task ao tocar na notificação.
+
+Em **Configurações → App**, cada dispositivo pode ativar ou desativar sua própria assinatura e há um botão **Enviar teste** para validar as assinaturas da conta. No iPhone/iPad, o TaskEsc precisa estar adicionado à Tela de Início para solicitar permissão de Web Push.
+
+
 ## Apache
 
 O caminho público deve terminar em `/public`. Exemplo conceitual:

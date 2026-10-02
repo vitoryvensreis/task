@@ -383,7 +383,10 @@
     const total=rows.filter(x=>x.status!=='cancelled').reduce((a,x)=>a+Number(x.amount_cents||0),0),paid=rows.reduce((a,x)=>a+Number(x.paid_cents||0),0),open=rows.reduce((a,x)=>a+Number(x.balance_cents||0),0),overdue=rows.filter(x=>x.payment_status==='overdue').reduce((a,x)=>a+Number(x.balance_cents||0),0),monthlyTotal=monthly.reduce((a,x)=>a+Number(x.monthly_amount_cents||0),0);
     const sourceLabel=i=>({monthly:'Mensalidade',task:'Task avulsa',manual:'Manual'}[i.source_type]||'Manual'),paymentClass=i=>i.payment_status==='paid'?'status-ok':i.payment_status==='overdue'?'status-error':i.payment_status==='partial'?'status-warn':'muted';
     const expenseType=e=>({monthly:'Mensal',yearly:'Anual',one_off:'Avulso'}[e.source_type]||'Avulso');
-    const resultClass=Number(analysis.projected_result_cents||0)>=0?'green':'red';
+    const billedAmount=Number(analysis.billed_cents||0),costAmount=Number(analysis.expense_cents||0),profitAmount=Number(analysis.projected_result_cents||0),cashResult=Number(analysis.cash_result_cents||0);
+    const resultClass=profitAmount>=0?'green':'red',profitLabel=profitAmount>=0?'Lucro projetado':'Prejuízo projetado';
+    const comparisonMax=Math.max(1,billedAmount,costAmount),billedWidth=Math.max(billedAmount>0?3:0,Math.round(billedAmount/comparisonMax*100)),costWidth=Math.max(costAmount>0?3:0,Math.round(costAmount/comparisonMax*100));
+    const costPerReal=billedAmount>0?costAmount/billedAmount:0,profitPerReal=billedAmount>0?profitAmount/billedAmount:0;
     const categories=(analysis.categories||[]).slice(0,6);
     $('#content').innerHTML=`<div class="section-title"><div><h3>Financeiro</h3><div class="panel-sub">Receitas, cobranças, custos e resultado líquido em uma visão única.</div></div><div class="top-actions"><button class="secondary" id="new-expense">${icon('wallet','+')} Novo custo</button><button class="primary" id="new-invoice">${icon('receipt','+')} Nova cobrança</button></div></div>
       <div class="grid stats finance-stats finance-stats-wide">
@@ -395,6 +398,24 @@
         <div class="stat-card"><div class="stat-label">Resultado projetado</div><div class="stat-value ${resultClass}">${money(analysis.projected_result_cents||0)}</div><div class="stat-note">faturado − custos</div></div>
         <button class="stat-card dashboard-stat" id="finance-monthly-card"><div class="stat-label">Receita mensal cadastrada</div><div class="stat-value blue">${money(monthlyTotal)}</div><div class="stat-note">${monthly.length} cliente(s) mensal(is)</div></button>
       </div>
+      <section class="panel finance-profit-comparison">
+        <div class="panel-head"><div><h3>Faturamento x custos</h3><div class="panel-sub">\${date(analysisFrom)} até \${date(analysisTo)} · comparativo direto para acompanhar o lucro.</div></div><div class="finance-profit-margin \${resultClass}">\${Number(analysis.margin_pct||0).toLocaleString('pt-BR',{maximumFractionDigits:1})}% margem</div></div>
+        <div class="finance-profit-grid">
+          <div class="finance-profit-metric revenue"><span>Faturamento</span><b>\${money(billedAmount)}</b><small>receita prevista no período</small></div>
+          <div class="finance-profit-equation">−</div>
+          <div class="finance-profit-metric costs"><span>Custos totais</span><b>\${money(costAmount)}</b><small>operacionais + custos de tasks</small></div>
+          <div class="finance-profit-equation">=</div>
+          <div class="finance-profit-metric result \${profitAmount>=0?'positive':'negative'}"><span>\${profitLabel}</span><b>\${money(profitAmount)}</b><small>faturamento − custos</small></div>
+        </div>
+        <div class="finance-profit-bars">
+          <div class="finance-profit-bar-row"><div><span>Faturamento</span><b>\${money(billedAmount)}</b></div><div class="finance-profit-track"><i class="revenue" style="width:\${billedWidth}%"></i></div></div>
+          <div class="finance-profit-bar-row"><div><span>Custos</span><b>\${money(costAmount)}</b></div><div class="finance-profit-track"><i class="costs" style="width:\${costWidth}%"></i></div></div>
+        </div>
+        <div class="finance-profit-foot">
+          <span>\${billedAmount>0?\`A cada R$ 1,00 faturado, <b>\${money(Math.round(costPerReal*100))}</b> vai para custos e <b class="\${resultClass}">\${money(Math.round(profitPerReal*100))}</b> fica como resultado.\`:'Cadastre faturamento no período para calcular a relação entre receita e custos.'}</span>
+          <span>Resultado de caixa: <b class="\${cashResult>=0?'green':'red'}">\${money(cashResult)}</b> <small>(recebido − custos)</small></span>
+        </div>
+      </section>
       <section class="panel finance-analysis-panel">
         <div class="panel-head"><div><h3>Análise financeira do período</h3><div class="panel-sub">${date(analysisFrom)} até ${date(analysisTo)} · receitas e custos consolidados.</div></div><button class="secondary" id="open-financial-report">${icon('chart-bar','▤')} Ver relatório completo</button></div>
         <div class="finance-analysis-grid">

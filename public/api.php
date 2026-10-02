@@ -92,6 +92,7 @@ try {
   'files.delete'=>Files::delete($p),
   'files.review'=>Files::review($p),
   'agenda.list'=>Agenda::list($p),
+  'agenda.detail'=>Agenda::detail($p),
   'agenda.calendars'=>Agenda::calendars(),
   'agenda.save'=>Agenda::save($p),
   'agenda.cancel'=>Agenda::cancel($p),

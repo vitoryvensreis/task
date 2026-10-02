@@ -179,6 +179,16 @@ final class Migrations {
    self::index('files','uq_files_upload_key',"ALTER TABLE files ADD UNIQUE INDEX uq_files_upload_key (upload_key)");
    DB::run("INSERT INTO settings (`key`,value) VALUES ('schema_version','12') ON DUPLICATE KEY UPDATE value='12'");$version=12;
   }
+  if($version<13){
+   self::column('events','organizer_name',"ALTER TABLE events ADD COLUMN organizer_name VARCHAR(190) NULL AFTER description");
+   self::column('events','organizer_email',"ALTER TABLE events ADD COLUMN organizer_email VARCHAR(190) NULL AFTER organizer_name");
+   self::column('events','attendees_json',"ALTER TABLE events ADD COLUMN attendees_json LONGTEXT NULL AFTER organizer_email");
+   self::column('events','meet_url',"ALTER TABLE events ADD COLUMN meet_url TEXT NULL AFTER attendees_json");
+   self::column('events','conference_json',"ALTER TABLE events ADD COLUMN conference_json LONGTEXT NULL AFTER meet_url");
+   self::column('events','event_url',"ALTER TABLE events ADD COLUMN event_url TEXT NULL AFTER conference_json");
+   self::column('events','attachments_json',"ALTER TABLE events ADD COLUMN attachments_json LONGTEXT NULL AFTER event_url");
+   DB::run("INSERT INTO settings (`key`,value) VALUES ('schema_version','13') ON DUPLICATE KEY UPDATE value='13'");$version=13;
+  }
  }
  private static function hasColumn(string $table,string $column): bool {return (bool)DB::one('SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?',[$table,$column]);}
  private static function column(string $table,string $column,string $sql): void {if(!self::hasColumn($table,$column))DB::run($sql);}

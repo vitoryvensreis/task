@@ -206,3 +206,202 @@
 
   .comparison-card::after{pointer-events:none}
 }
+
+
+/* TaskEsc v3.5 — modal enriquecido da Agenda */
+.event-detail-modal.modal.compact{
+  width:min(700px,100%);
+  max-height:min(92dvh,860px);
+  overflow-y:auto;
+  overflow-x:hidden;
+}
+.event-detail-modal .modal-head{margin-bottom:10px}
+.event-primary-actions{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  margin-bottom:10px;
+}
+.event-primary-actions>a{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  min-height:40px;
+  text-decoration:none;
+}
+.event-meet-btn{flex:1 1 230px}
+.event-calendar-link{flex:0 1 auto}
+.event-detail-grid>div{
+  display:grid;
+  align-content:start;
+  gap:3px;
+  min-width:0;
+}
+.event-detail-grid>div>span{margin-bottom:1px}
+.event-detail-grid>div>b{
+  overflow-wrap:anywhere;
+  white-space:normal;
+}
+.event-detail-grid>div>small{
+  color:#7d8994;
+  font-size:9px;
+  line-height:1.45;
+  overflow-wrap:anywhere;
+}
+.event-detail-grid>div>small a,
+.event-inline-link{
+  color:#9bb8d0;
+  text-decoration:none;
+}
+.event-detail-grid>div>small a:hover,
+.event-inline-link:hover{text-decoration:underline}
+
+.event-detail-section{
+  margin-top:8px;
+  padding:10px;
+  border:1px solid #242b32;
+  border-radius:8px;
+  background:#0d1013;
+}
+.event-section-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:8px;
+}
+.event-section-head>div{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-width:0;
+}
+.event-section-head .ui-icon{
+  width:15px;
+  height:15px;
+  color:#8ca5b9;
+}
+.event-section-head span{
+  display:grid;
+  gap:2px;
+  min-width:0;
+}
+.event-section-head b{
+  color:#dce5ed;
+  font-size:11px;
+}
+.event-section-head small{
+  color:#71808d;
+  font-size:9px;
+}
+
+.event-attendee-list{display:grid;gap:5px}
+.event-attendee{
+  display:grid;
+  grid-template-columns:30px minmax(0,1fr) auto;
+  align-items:center;
+  gap:8px;
+  min-width:0;
+  padding:7px 8px;
+  border:1px solid #202830;
+  border-radius:7px;
+  background:#0a0d10;
+}
+.event-attendee-avatar{
+  width:30px;
+  height:30px;
+  display:grid;
+  place-items:center;
+  border:1px solid #30404d;
+  border-radius:50%;
+  background:#111a21;
+  color:#dce7ef;
+  font-size:10px;
+  font-weight:800;
+}
+.event-attendee-info{
+  display:grid;
+  gap:2px;
+  min-width:0;
+}
+.event-attendee-info>b{
+  color:#e4e9ed;
+  font-size:10.5px;
+  overflow-wrap:anywhere;
+}
+.event-attendee-info>b em{
+  display:inline-flex;
+  margin-left:4px;
+  padding:1px 4px;
+  border:1px solid #31414d;
+  border-radius:5px;
+  color:#8195a5;
+  font-size:7px;
+  font-style:normal;
+  font-weight:700;
+  text-transform:uppercase;
+}
+.event-attendee-info>a,
+.event-attendee-info>small{
+  color:#74818c;
+  font-size:9px;
+  text-decoration:none;
+  overflow-wrap:anywhere;
+}
+.event-attendee-info>a:hover{text-decoration:underline}
+.event-rsvp{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:23px;
+  padding:0 7px;
+  border:1px solid #303a43;
+  border-radius:20px;
+  color:#8e9ba6;
+  font-size:8px;
+  white-space:nowrap;
+}
+.event-rsvp.accepted{border-color:#35483f;color:#9eb8a8;background:#0d1511}
+.event-rsvp.declined{border-color:#4a3438;color:#c69ba2;background:#160d0f}
+.event-rsvp.tentative{border-color:#4b4535;color:#c4b68f;background:#15130d}
+.event-rsvp.pending{border-color:#343e48;color:#8e9ba6;background:#0c1013}
+
+.event-link-list{display:grid;gap:6px}
+.event-resource-link{
+  display:grid;
+  gap:2px;
+  min-width:0;
+  padding:8px 9px;
+  border:1px solid #26313a;
+  border-radius:7px;
+  background:#0a0d10;
+  color:#dce5ed;
+  text-decoration:none;
+}
+.event-resource-link:hover{border-color:#3b4c59;background:#0e1317}
+.event-resource-link b{
+  font-size:10px;
+  overflow-wrap:anywhere;
+}
+.event-resource-link small{
+  color:#74818c;
+  font-size:9px;
+  overflow-wrap:anywhere;
+}
+
+@media(max-width:760px){
+  .event-detail-modal.modal.compact{
+    width:100%;
+    max-height:96dvh;
+  }
+  .event-primary-actions{display:grid;grid-template-columns:1fr}
+  .event-primary-actions>a{width:100%}
+  .event-attendee{
+    grid-template-columns:30px minmax(0,1fr);
+  }
+  .event-rsvp{
+    grid-column:2;
+    justify-self:start;
+  }
+}

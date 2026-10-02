@@ -202,6 +202,22 @@ final class Migrations {
    self::index('costs','idx_costs_payment',"ALTER TABLE costs ADD INDEX idx_costs_payment (payment_status,paid_on,spent_on)");
    DB::run("INSERT INTO settings (`key`,value) VALUES ('schema_version','14') ON DUPLICATE KEY UPDATE value='14'");$version=14;
   }
+  if($version<15){
+   DB::run("CREATE TABLE IF NOT EXISTS expense_categories (
+    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(80) NOT NULL,
+    active TINYINT NOT NULL DEFAULT 1,
+    created_by INT NULL,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    UNIQUE KEY uq_expense_categories_name (name),
+    KEY idx_expense_categories_active (active,name)
+   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
+   foreach(['Água','Energia / Luz','Internet / Telefonia','Aluguel','Software','Armazenamento / Cloud','Assinaturas','Marketing','Transporte','Equipamentos','Impostos','Serviços','Alimentação','Custo Pessoal','Outros'] as $name)DB::run("INSERT IGNORE INTO expense_categories (name,active,created_by,created_at,updated_at) VALUES (?,1,NULL,?,?)",[$name,now(),now()]);
+   DB::run("INSERT IGNORE INTO expense_categories (name,active,created_by,created_at,updated_at) SELECT DISTINCT TRIM(category),1,NULL,?,? FROM expenses WHERE TRIM(category)<>''",[now(),now()]);
+   DB::run("INSERT IGNORE INTO expense_categories (name,active,created_by,created_at,updated_at) SELECT DISTINCT TRIM(category),1,NULL,?,? FROM expense_rules WHERE TRIM(category)<>''",[now(),now()]);
+   DB::run("INSERT INTO settings (`key`,value) VALUES ('schema_version','15') ON DUPLICATE KEY UPDATE value='15'");$version=15;
+  }
  }
  private static function hasColumn(string $table,string $column): bool {return (bool)DB::one('SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?',[$table,$column]);}
  private static function column(string $table,string $column,string $sql): void {if(!self::hasColumn($table,$column))DB::run($sql);}

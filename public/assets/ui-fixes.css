@@ -621,3 +621,209 @@
   }
   .monthly-billing-summary b{font-size:13px}
 }
+
+
+/* TaskEsc v3.7 — financeiro mais claro e categorias de custo */
+.finance-health-panel{
+  display:grid;
+  gap:14px;
+  overflow:hidden!important;
+}
+.finance-health-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:18px;
+}
+.finance-health-title{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  min-width:0;
+}
+.finance-health-icon{
+  width:42px;
+  height:42px;
+  flex:0 0 42px;
+  display:grid;
+  place-items:center;
+  border:1px solid #31404a;
+  border-radius:12px;
+  background:#0b1014;
+}
+.finance-health-icon .ui-icon{width:20px;height:20px}
+.finance-health-title h3{margin:2px 0 2px;font-size:18px}
+.finance-health-title p{margin:0;color:#77838e;font-size:10px;line-height:1.45}
+.finance-health-projection{
+  display:grid;
+  gap:2px;
+  min-width:210px;
+  padding:10px 12px;
+  border:1px solid #27313a;
+  border-radius:10px;
+  background:#0b0f12;
+  text-align:right;
+}
+.finance-health-projection span{font-size:8px;letter-spacing:.5px;text-transform:uppercase;color:#72808b}
+.finance-health-projection b{font-size:18px}
+.finance-health-projection small{font-size:8px;color:#65717a}
+.finance-health-panel.health-healthy{border-color:#2b4135}
+.finance-health-panel.health-healthy .finance-health-icon{border-color:#355743;color:#91bea0;background:#0b1510}
+.finance-health-panel.health-attention{border-color:#463f2f}
+.finance-health-panel.health-attention .finance-health-icon{border-color:#5b5137;color:#c4ae73;background:#16130b}
+.finance-health-panel.health-critical{border-color:#4a3137}
+.finance-health-panel.health-critical .finance-health-icon{border-color:#68424b;color:#d88b98;background:#170d10}
+.finance-flow-grid{
+  display:grid;
+  grid-template-columns:repeat(5,minmax(0,1fr));
+  gap:8px;
+}
+.finance-flow-card{
+  min-width:0;
+  display:grid;
+  gap:4px;
+  padding:12px;
+  border:1px solid #253039;
+  border-radius:9px;
+  background:#0b0f12;
+}
+.finance-flow-card>span{
+  color:#73828d;
+  font-size:8px;
+  font-weight:800;
+  letter-spacing:.55px;
+  text-transform:uppercase;
+}
+.finance-flow-card>b{
+  color:#e5ebef;
+  font-size:18px;
+  overflow-wrap:anywhere;
+}
+.finance-flow-card>small{font-size:8px;color:#64717a;line-height:1.35}
+.finance-flow-card.incoming,.finance-flow-card.pending-in{border-color:#304252}
+.finance-flow-card.outgoing,.finance-flow-card.pending-out{border-color:#49333a}
+.finance-flow-card.balance{border-color:#34423a}
+.finance-future-comparison{margin-top:0}
+.finance-details-panel{
+  overflow:hidden!important;
+  padding:0!important;
+}
+.finance-details-panel>summary{
+  list-style:none;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:13px 15px;
+  cursor:pointer;
+  user-select:none;
+}
+.finance-details-panel>summary::-webkit-details-marker{display:none}
+.finance-details-panel>summary span{font-size:11px;font-weight:800;color:#d8e0e6}
+.finance-details-panel>summary small{font-size:9px;color:#687681}
+.finance-details-panel[open]>summary{border-bottom:1px solid #222b32}
+.finance-details-body{padding:13px 15px}
+.finance-details-grid{
+  display:grid;
+  grid-template-columns:repeat(5,minmax(0,1fr));
+  gap:7px;
+}
+.finance-details-grid>div{
+  min-width:0;
+  display:grid;
+  gap:3px;
+  padding:10px;
+  border:1px solid #222c33;
+  border-radius:8px;
+  background:#0a0d10;
+}
+.finance-details-grid span{font-size:8px;color:#72808a;text-transform:uppercase;letter-spacing:.4px}
+.finance-details-grid b{font-size:13px;overflow-wrap:anywhere}
+.field-label-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  margin-bottom:6px;
+}
+.field-label-row label{margin:0!important}
+.category-modal-backdrop{
+  z-index:40;
+  background:rgba(0,0,0,.72);
+}
+.category-quick-modal{width:min(430px,calc(100% - 26px))!important}
+.expense-categories-modal{width:min(680px,calc(100% - 26px))!important}
+.category-create-row{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:8px;
+  margin-bottom:12px;
+}
+.expense-category-manager-list{
+  display:grid;
+  gap:6px;
+  max-height:52vh;
+  overflow:auto;
+  padding-right:3px;
+}
+.expense-category-manager-row{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto auto;
+  align-items:center;
+  gap:9px;
+  min-width:0;
+  padding:9px 10px;
+  border:1px solid #232d34;
+  border-radius:8px;
+  background:#0b0f12;
+}
+.expense-category-manager-row>div:first-child{
+  display:grid;
+  gap:2px;
+  min-width:0;
+}
+.expense-category-manager-row b{
+  font-size:10px;
+  color:#dce4e9;
+  overflow-wrap:anywhere;
+}
+.expense-category-manager-row small{font-size:8px;color:#687680}
+
+@media(max-width:980px){
+  .finance-flow-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .finance-details-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media(max-width:760px){
+  .finance-title{align-items:flex-start}
+  .finance-title .top-actions{
+    width:100%;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+  }
+  .finance-title .top-actions #manage-expense-categories{grid-column:1/-1}
+  .finance-health-head{
+    display:grid;
+    grid-template-columns:1fr;
+  }
+  .finance-health-projection{
+    min-width:0;
+    text-align:left;
+  }
+  .finance-flow-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+  .finance-flow-card.balance{grid-column:1/-1}
+  .finance-details-panel>summary{
+    align-items:flex-start;
+    flex-direction:column;
+    gap:3px;
+  }
+  .finance-details-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+  .category-create-row{grid-template-columns:1fr}
+  .expense-category-manager-row{
+    grid-template-columns:minmax(0,1fr) auto;
+  }
+  .expense-category-manager-row .row-actions{grid-column:1/-1}
+}

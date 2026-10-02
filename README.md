@@ -28,7 +28,7 @@ O instalador aplica `database/schema.sql`, cria o administrador e grava as chave
 
 Substitua os arquivos da aplicação pelo conteúdo desta versão sem apagar `config/config.php`, `storage/installed.lock` ou seus dados. Na primeira requisição autenticada, o TaskEsc executa a migração compatível em `app/Migrations.php` e atualiza a estrutura necessária sem recriar o banco.
 
-A atualização mantém todas as migrações anteriores e inclui todas as migrações até o **schema 14**. Ela preserva clientes, tasks, arquivos, histórico e integrações existentes. O schema 8 acrescenta apenas metadados de tentativa/conclusão na fila de e-mails para alimentar o log administrativo. Os SQLs de referência ficam em `database/migrations/`, incluindo `005_taskesc_finance_routes_upload.sql`, `006_taskesc_api_notifications.sql`, `007_client_drive_routing.sql` e `008_email_delivery_log.sql`.
+A atualização mantém todas as migrações anteriores e inclui todas as migrações até o **schema 15**. Ela preserva clientes, tasks, arquivos, histórico e integrações existentes. O schema 8 acrescenta apenas metadados de tentativa/conclusão na fila de e-mails para alimentar o log administrativo. Os SQLs de referência ficam em `database/migrations/`, incluindo `005_taskesc_finance_routes_upload.sql`, `006_taskesc_api_notifications.sql`, `007_client_drive_routing.sql` e `008_email_delivery_log.sql`.
 
 Faça backup do banco antes de qualquer atualização em produção.
 
@@ -105,6 +105,16 @@ A v3.6 separa **custos lançados**, **custos pagos** e **custos pendentes**. Cad
 A tela Financeiro também ganha um quadro de **mensalidades recorrentes**, mostrando por cliente se a mensalidade do mês foi cobrada, quanto foi recebido, saldo aberto e situação (pago, parcial, pendente ou vencido). Isso deixa separado o que é cobrança mensal recorrente do que é cobrança avulsa.
 
 O schema 14 adiciona o status e a data de pagamento aos custos operacionais e aos custos vinculados às tasks. Registros antigos são preservados como pagos na data original para não alterar o histórico financeiro existente.
+
+
+
+### Ajustes v3.7 do painel financeiro
+
+A v3.7 reorganiza o Financeiro para priorizar **entradas, saídas, saldo e saúde do caixa**. O topo passa a mostrar um indicador operacional de saúde, quanto entrou, quanto saiu, o saldo atual, quanto ainda há para receber e quanto ainda há para pagar. Os dados secundários ficam recolhidos em **Detalhes do período**, reduzindo a poluição visual.
+
+Além do comparativo de **Recebido − Custos pagos = Lucro líquido**, há um segundo comparativo de **Faturamento a receber − Custos pendentes = Saldo projetado**, usando as cobranças ainda abertas e os custos ainda não pagos. O saldo após pendências combina o resultado atual com essa projeção.
+
+O schema 15 adiciona categorias de custo gerenciáveis em banco. O cadastro de custo usa um select alimentado por essas categorias e permite criar uma nova categoria sem sair do formulário. Também há um gerenciador de categorias no Financeiro. Instalações novas recebem categorias como Água, Energia / Luz, Internet / Telefonia, Aluguel, Software, Armazenamento / Cloud, Assinaturas, Marketing, Transporte, Equipamentos, Impostos, Serviços, Alimentação, Custo Pessoal e Outros. Categorias já existentes nos lançamentos são importadas automaticamente durante a migração.
 
 
 ## Apache

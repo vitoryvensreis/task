@@ -28,7 +28,7 @@ O instalador aplica `database/schema.sql`, cria o administrador e grava as chave
 
 Substitua os arquivos da aplicação pelo conteúdo desta versão sem apagar `config/config.php`, `storage/installed.lock` ou seus dados. Na primeira requisição autenticada, o TaskEsc executa a migração compatível em `app/Migrations.php` e atualiza a estrutura necessária sem recriar o banco.
 
-A atualização mantém todas as migrações anteriores e inclui todas as migrações até o **schema 15**. Ela preserva clientes, tasks, arquivos, histórico e integrações existentes. O schema 8 acrescenta apenas metadados de tentativa/conclusão na fila de e-mails para alimentar o log administrativo. Os SQLs de referência ficam em `database/migrations/`, incluindo `005_taskesc_finance_routes_upload.sql`, `006_taskesc_api_notifications.sql`, `007_client_drive_routing.sql` e `008_email_delivery_log.sql`.
+A atualização mantém todas as migrações anteriores e inclui todas as migrações até o **schema 16**. Ela preserva clientes, tasks, arquivos, histórico e integrações existentes. O schema 8 acrescenta apenas metadados de tentativa/conclusão na fila de e-mails para alimentar o log administrativo. Os SQLs de referência ficam em `database/migrations/`, incluindo `005_taskesc_finance_routes_upload.sql`, `006_taskesc_api_notifications.sql`, `007_client_drive_routing.sql` e `008_email_delivery_log.sql`.
 
 Faça backup do banco antes de qualquer atualização em produção.
 
@@ -165,6 +165,18 @@ Para tasks, o push possui uma regra rígida de destinatário: **somente o usuár
 O payload enviado ao dispositivo contém título, texto, URL da task, identificador da notificação e badge. O conteúdo é criptografado conforme Web Push `aes128gcm`/VAPID e o Service Worker abre diretamente a task ao tocar na notificação.
 
 Em **Configurações → App**, cada dispositivo pode ativar ou desativar sua própria assinatura e há um botão **Enviar teste** para validar as assinaturas da conta. No iPhone/iPad, o TaskEsc precisa estar adicionado à Tela de Início para solicitar permissão de Web Push.
+
+
+
+### Ajustes v3.9.1 do log de Push
+
+A v3.9.1 adiciona um histórico persistente para cada tentativa de **Web Push**. O log registra **data, destinatário, task, título, mensagem, regra de envio, dispositivo, status HTTP e erro**, sem armazenar endpoint ou chaves privadas do navegador.
+
+Para notificações de task, o campo **Regra** aparece como **Responsável da task**, refletindo a regra de segurança aplicada na v3.9: o Web Push da task é disparado somente para `demands.assigned_to`. Se o responsável possuir mais de um dispositivo ativo, o histórico terá uma entrega por dispositivo, permitindo confirmar se o push chegou ao PC, celular ou ambos.
+
+Também são registrados casos em que o push não pôde ser entregue: **Sem dispositivo**, **Push desativado** e **Falhou**. A tela **Saúde & Logs** ganhou a aba **Push**, e o card de saúde das notificações passa a considerar falhas de entrega das últimas 24 horas.
+
+O schema 16 cria a tabela `push_delivery_log`.
 
 
 ## Apache

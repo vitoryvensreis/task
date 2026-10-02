@@ -16,7 +16,7 @@ final class SystemHealth {
   $cal=DB::all("SELECT id,name,last_error,synced_at,selected FROM calendars WHERE selected=1 ORDER BY name");$calBad=array_values(array_filter($cal,fn($x)=>!empty($x['last_error'])||(!$x['synced_at']&&$x['selected'])));$cStatus=$calBad?'warn':'ok';$items[]=self::item('calendar','Google Calendar',$cStatus,count($cal).' agenda(s) ativa(s), '.count($calBad).' com atenção',$cal);if($cStatus==='warn'&&$overall==='ok')$overall='warn';
   $root=ROOT;$free=@disk_free_space($root);$total=@disk_total_space($root);$pct=($free!==false&&$total)?round(($free/$total)*100,1):null;$diskStatus=$pct!==null&&$pct<10?'error':($pct!==null&&$pct<20?'warn':'ok');$items[]=self::item('disk','Armazenamento da VPS',$diskStatus,$pct===null?'Não foi possível medir':$pct.'% livre',['free'=>$free,'total'=>$total]);if($diskStatus==='error')$overall='error';elseif($diskStatus==='warn'&&$overall==='ok')$overall='warn';
   $openErrors=(int)(DB::one('SELECT COUNT(*) AS n FROM system_errors WHERE resolved_at IS NULL AND created_at>=?',[gmdate('Y-m-d H:i:s',time()-86400*7)])['n']??0);$eStatus=$openErrors>10?'error':($openErrors>0?'warn':'ok');$items[]=self::item('errors','Erros internos',$eStatus,$openErrors.' erro(s) aberto(s) nos últimos 7 dias');if($eStatus==='error')$overall='error';elseif($eStatus==='warn'&&$overall==='ok')$overall='warn';
-  $pushBad=(int)(DB::one("SELECT COUNT(*) AS n FROM push_subscriptions WHERE active=1 AND last_error IS NOT NULL AND last_error<>''")['n']??0);$pushAll=(int)(DB::one('SELECT COUNT(*) AS n FROM push_subscriptions WHERE active=1')['n']??0);$pStatus=$pushBad?'warn':'ok';$items[]=self::item('push','Notificações Push',$pStatus,$pushAll.' dispositivo(s) ativo(s), '.$pushBad.' com erro');if($pStatus==='warn'&&$overall==='ok')$overall='warn';
+  $pushBad=(int)(DB::one("SELECT COUNT(*) AS n FROM push_subscriptions WHERE active=1 AND last_error IS NOT NULL AND last_error<>''")['n']??0);$pushAll=(int)(DB::one('SELECT COUNT(*) AS n FROM push_subscriptions WHERE active=1')['n']??0);$pushFailed=(int)(DB::one("SELECT COUNT(*) AS n FROM push_delivery_log WHERE status='failed' AND created_at>=?",[gmdate('Y-m-d H:i:s',time()-86400)])['n']??0);$pStatus=($pushBad||$pushFailed)?'warn':'ok';$items[]=self::item('push','Notificações Push',$pStatus,$pushAll.' dispositivo(s) ativo(s), '.$pushBad.' assinatura(s) com erro, '.$pushFailed.' falha(s) de entrega nas últimas 24h');if($pStatus==='warn'&&$overall==='ok')$overall='warn';
   return ['status'=>$overall,'checked_at'=>now(),'items'=>$items];
  }
  public static function logs(array $p=[]): array {
@@ -25,7 +25,13 @@ final class SystemHealth {
   $audit=DB::all("SELECT a.*,u.name AS user_name FROM audit_log a LEFT JOIN users u ON u.id=a.user_id WHERE $aw ORDER BY a.id DESC LIMIT ".$limit,$aa);
   $errors=DB::all('SELECT e.*,u.name AS user_name FROM system_errors e LEFT JOIN users u ON u.id=e.user_id ORDER BY e.id DESC LIMIT '.$limit);
   $mail=DB::all('SELECT id,recipient,subject,status,attempts,error,last_attempt_at,sent_at,created_at FROM mail_queue ORDER BY id DESC LIMIT '.$limit);
-  return ['audit'=>$audit,'errors'=>$errors,'mail'=>$mail];
+  $push=DB::all("SELECT l.id,l.user_id,l.subscription_id,l.notification_id,l.demand_id,l.scope,l.title,l.body,l.url,l.status,l.http_code,l.error,l.user_agent,l.created_at,u.name AS user_name,u.email AS user_email,d.title AS demand_title,ru.name AS responsible_name
+   FROM push_delivery_log l
+   LEFT JOIN users u ON u.id=l.user_id
+   LEFT JOIN demands d ON d.id=l.demand_id
+   LEFT JOIN users ru ON ru.id=d.assigned_to
+   ORDER BY l.id DESC LIMIT ".$limit);
+  return ['audit'=>$audit,'errors'=>$errors,'mail'=>$mail,'push'=>$push];
  }
  public static function resolve(array $p): array {Auth::admin();$id=integer($p['id']??0,1);if(!DB::one('SELECT id FROM system_errors WHERE id=?',[$id]))fail('Erro não encontrado.',404);DB::update('system_errors',$id,['resolved_at'=>now()]);audit('system_error',$id,'resolved');return ['saved'=>true];}
  public static function watch(): array {

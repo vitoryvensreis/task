@@ -1476,3 +1476,52 @@
   }
   .pwa-actions button{width:100%}
 }
+
+
+/* TaskEsc v3.9.1 — log de notificações Push */
+.push-log-summary{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:7px;
+  flex-wrap:wrap;
+}
+.push-log-summary>span{
+  display:inline-flex;
+  align-items:baseline;
+  gap:4px;
+  min-height:27px;
+  padding:0 8px;
+  border:1px solid #29343c;
+  border-radius:999px;
+  background:#0a0e11;
+  color:#788690;
+  font-size:8px;
+}
+.push-log-summary b{
+  color:#e3e9ed;
+  font-size:11px;
+}
+.push-log-table .push-log-message{
+  max-width:330px;
+}
+.push-log-table .push-log-message span{
+  white-space:normal;
+  line-height:1.35;
+  max-width:330px;
+}
+.push-log-table td{
+  vertical-align:top;
+}
+.push-http-code{
+  display:block;
+  margin-top:3px;
+  color:#697680;
+  font-size:8px;
+}
+@media(max-width:760px){
+  .push-log-summary{
+    width:100%;
+    justify-content:flex-start;
+  }
+}

@@ -47,6 +47,7 @@ final class Push {
    'body'=>'Se você recebeu isto, as notificações push estão funcionando neste dispositivo.',
    'url'=>base('configuracoes'),
    'tag'=>'taskesc-push-test-'.time(),
+   'scope'=>'test',
    'test'=>true
   ]);
   return ['sent'=>$count,'subscriptions'=>(int)(DB::one('SELECT COUNT(*) AS n FROM push_subscriptions WHERE user_id=? AND active=1',[Auth::$user['id']])['n']??0)];
@@ -76,20 +77,41 @@ final class Push {
   $plain=json($payload)."\x02";$tag='';$cipher=openssl_encrypt($plain,'aes-128-gcm',$cek,OPENSSL_RAW_DATA,$nonce,$tag,'',16);if($cipher===false||strlen($tag)!==16)throw new RuntimeException('Falha ao criptografar o payload push.');
   $recordSize=4096;return $salt.pack('N',$recordSize).chr(strlen($serverPub)).$serverPub.$cipher.$tag;
  }
- private static function send(array $sub,array $keys,array $payload): bool {
+ private static function logDelivery(int $userId,?array $sub,array $payload,string $status,?int $httpCode=null,?string $error=null): void {
+  try{
+   DB::insert('push_delivery_log',[
+    'user_id'=>$userId,
+    'subscription_id'=>$sub?(int)$sub['id']:null,
+    'notification_id'=>!empty($payload['notification_id'])?(int)$payload['notification_id']:null,
+    'demand_id'=>!empty($payload['demand_id'])?(int)$payload['demand_id']:null,
+    'scope'=>mb_substr((string)($payload['scope']??(!empty($payload['test'])?'test':(!empty($payload['demand_id'])?'task_responsible':'system'))),0,40),
+    'title'=>mb_substr((string)($payload['title']??'TaskEsc'),0,190),
+    'body'=>(string)($payload['body']??''),
+    'url'=>mb_substr((string)($payload['url']??''),0,2000),
+    'status'=>mb_substr($status,0,30),
+    'http_code'=>$httpCode,
+    'error'=>$error!==null?mb_substr($error,0,2000):null,
+    'user_agent'=>$sub?mb_substr((string)($sub['user_agent']??''),0,255):null,
+    'created_at'=>now()
+   ]);
+  }catch(Throwable $e){error_log('TaskEsc push log: '.$e->getMessage());}
+ }
+ private static function send(array $sub,array $keys,array $payload): array {
   $endpoint=(string)$sub['endpoint'];$parts=parse_url($endpoint);$scheme=(string)($parts['scheme']??'');$host=(string)($parts['host']??'');if($scheme!=='https'||$host==='')throw new RuntimeException('Endpoint push inválido.');
   $port=isset($parts['port'])?':'.(int)$parts['port']:'';$aud=$scheme.'://'.$host.$port;$jwt=self::jwt($aud,$keys['private'],$keys['public']);$body=self::encryptPayload($sub,$payload);
   $ch=curl_init($endpoint);curl_setopt_array($ch,[CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>$body,CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>8,CURLOPT_TIMEOUT=>20,CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS,CURLOPT_HTTPHEADER=>[
    'TTL: 86400','Urgency: normal','Content-Encoding: aes128gcm','Content-Type: application/octet-stream','Authorization: vapid t='.$jwt.', k='.$keys['public'],'Content-Length: '.strlen($body)
   ]]);curl_exec($ch);$code=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);$err=curl_error($ch);curl_close($ch);
-  if(in_array($code,[404,410],true)){DB::update('push_subscriptions',(int)$sub['id'],['active'=>0,'last_error'=>'Endpoint expirado ('.$code.')','updated_at'=>now()]);return false;}
-  if($code<200||$code>=300){DB::update('push_subscriptions',(int)$sub['id'],['last_error'=>mb_substr($err?:('HTTP '.$code),0,1000),'updated_at'=>now()]);return false;}
-  DB::update('push_subscriptions',(int)$sub['id'],['last_error'=>null,'updated_at'=>now()]);return true;
+  if(in_array($code,[404,410],true)){$msg='Endpoint expirado ('.$code.')';DB::update('push_subscriptions',(int)$sub['id'],['active'=>0,'last_error'=>$msg,'updated_at'=>now()]);return ['ok'=>false,'http_code'=>$code,'error'=>$msg];}
+  if($code<200||$code>=300){$msg=mb_substr($err?:('HTTP '.$code),0,1000);DB::update('push_subscriptions',(int)$sub['id'],['last_error'=>$msg,'updated_at'=>now()]);return ['ok'=>false,'http_code'=>$code?:null,'error'=>$msg];}
+  DB::update('push_subscriptions',(int)$sub['id'],['last_error'=>null,'updated_at'=>now()]);return ['ok'=>true,'http_code'=>$code,'error'=>null];
  }
  public static function notifyUser(int $userId,array $payload=[]): int {
-  if(setting('browser_notifications','1')!=='1')return 0;$rows=DB::all('SELECT * FROM push_subscriptions WHERE user_id=? AND active=1',[$userId]);if(!$rows)return 0;
-  $payload+=['title'=>'TaskEsc','body'=>'Você tem uma nova atualização no TaskEsc.','url'=>base('dashboard'),'tag'=>'taskesc-update-'.time()];$payload['title']=mb_substr((string)$payload['title'],0,120);$payload['body']=mb_substr((string)$payload['body'],0,360);$payload['url']=filter_var((string)$payload['url'],FILTER_VALIDATE_URL)?(string)$payload['url']:base('dashboard');
-  try{$keys=self::keys();}catch(Throwable $e){error_log('TaskEsc push keys: '.$e->getMessage());return 0;}
-  $sent=0;foreach($rows as $sub){try{if(self::send($sub,$keys,$payload))$sent++;}catch(Throwable $e){$msg=mb_substr($e->getMessage(),0,1000);try{DB::update('push_subscriptions',(int)$sub['id'],['last_error'=>$msg,'updated_at'=>now()]);}catch(Throwable){}error_log('TaskEsc push: '.$msg);}}return $sent;
+  $payload+=['title'=>'TaskEsc','body'=>'Você tem uma nova atualização no TaskEsc.','url'=>base('dashboard'),'tag'=>'taskesc-update-'.time(),'scope'=>!empty($payload['demand_id'])?'task_responsible':'system'];
+  $payload['title']=mb_substr((string)$payload['title'],0,120);$payload['body']=mb_substr((string)$payload['body'],0,360);$payload['url']=filter_var((string)$payload['url'],FILTER_VALIDATE_URL)?(string)$payload['url']:base('dashboard');
+  if(setting('browser_notifications','1')!=='1'){self::logDelivery($userId,null,$payload,'disabled',null,'Notificações push desativadas nas configurações.');return 0;}
+  $rows=DB::all('SELECT * FROM push_subscriptions WHERE user_id=? AND active=1',[$userId]);if(!$rows){self::logDelivery($userId,null,$payload,'no_subscription',null,'Usuário sem dispositivo push ativo.');return 0;}
+  try{$keys=self::keys();}catch(Throwable $e){$msg=mb_substr($e->getMessage(),0,1000);self::logDelivery($userId,null,$payload,'failed',null,$msg);error_log('TaskEsc push keys: '.$msg);return 0;}
+  $sent=0;foreach($rows as $sub){try{$result=self::send($sub,$keys,$payload);self::logDelivery($userId,$sub,$payload,$result['ok']?'sent':'failed',$result['http_code']??null,$result['error']??null);if($result['ok'])$sent++;}catch(Throwable $e){$msg=mb_substr($e->getMessage(),0,1000);try{DB::update('push_subscriptions',(int)$sub['id'],['last_error'=>$msg,'updated_at'=>now()]);}catch(Throwable){}self::logDelivery($userId,$sub,$payload,'failed',null,$msg);error_log('TaskEsc push: '.$msg);}}return $sent;
  }
 }

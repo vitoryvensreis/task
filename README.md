@@ -137,6 +137,14 @@ O primeiro bloco, **Até agora**, usa apenas movimentos realizados: recebimentos
 O seletor de período foi movido para cima do resumo para deixar claro que os valores representam o intervalo selecionado. Os detalhes de faturamento, categorias e recorrências continuam disponíveis abaixo, assim como os filtros independentes das tabelas.
 
 
+
+### Ajustes v3.8.1 do cadastro de custos
+
+A v3.8.1 corrige o alinhamento dos campos do modal **Novo custo**, especialmente o campo de categoria com o botão **Nova categoria**. O botão deixa de alterar a altura da linha do formulário e os controles voltam a alinhar corretamente em duas colunas.
+
+Também corrige o cadastro rápido de categoria. O modal secundário agora é aberto acima do modal de custo em uma camada própria, com foco automático no campo de nome e atualização imediata do select de categoria após o cadastro.
+
+
 ## Apache
 
 O caminho público deve terminar em `/public`. Exemplo conceitual:

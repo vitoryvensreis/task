@@ -416,19 +416,19 @@
           <div class="finance-cash-group current">
             <div class="finance-cash-group-head"><span>ATÉ AGORA</span><small>movimentação já realizada</small></div>
             <div class="finance-cash-cards">
-              <div class="finance-cash-card incoming">
+              <div class="finance-cash-card incoming" data-breakdown="received" role="button" tabindex="0" title="Ver recebimentos que compõem este valor">
                 <span>Quanto entrou</span>
                 <b>${money(receivedAmount)}</b>
                 <small>recebimentos confirmados</small>
               </div>
               <div class="finance-cash-operator">−</div>
-              <div class="finance-cash-card outgoing">
+              <div class="finance-cash-card outgoing" data-breakdown="paid_out" role="button" tabindex="0" title="Ver custos pagos que compõem este valor">
                 <span>Quanto já saiu</span>
                 <b>${money(paidCostAmount)}</b>
                 <small>custos já pagos</small>
               </div>
               <div class="finance-cash-operator">=</div>
-              <div class="finance-cash-card balance ${profitAmount>=0?'positive':'negative'}">
+              <div class="finance-cash-card balance ${profitAmount data-breakdown="current" role="button" tabindex="0" title="Ver entradas e saídas que formam o saldo atual">=0?'positive':'negative'}">
                 <span>Quanto tem no momento</span>
                 <b>${money(profitAmount)}</b>
                 <small>entrou − já saiu</small>
@@ -439,19 +439,19 @@
           <div class="finance-cash-group future">
             <div class="finance-cash-group-head"><span>DAQUI PRA FRENTE</span><small>movimentação ainda pendente</small></div>
             <div class="finance-cash-cards">
-              <div class="finance-cash-card incoming">
+              <div class="finance-cash-card incoming" data-breakdown="future_in" role="button" tabindex="0" title="Ver cobranças ainda a receber">
                 <span>Quanto vai entrar</span>
                 <b>${money(futureIn)}</b>
                 <small>cobranças ainda a receber</small>
               </div>
               <div class="finance-cash-operator">−</div>
-              <div class="finance-cash-card outgoing">
+              <div class="finance-cash-card outgoing" data-breakdown="future_out" role="button" tabindex="0" title="Ver custos ainda a pagar">
                 <span>Quanto vai sair</span>
                 <b>${money(futureOut)}</b>
                 <small>custos ainda a pagar</small>
               </div>
               <div class="finance-cash-operator">→</div>
-              <div class="finance-cash-card final ${overallProjected>=0?'positive':'negative'}">
+              <div class="finance-cash-card final ${overallProjected data-breakdown="final" role="button" tabindex="0" title="Ver tudo que forma a projeção final">=0?'positive':'negative'}">
                 <span>Quanto vai sobrar no final</span>
                 <b>${money(overallProjected)}</b>
                 <small>saldo atual + vai entrar − vai sair</small>

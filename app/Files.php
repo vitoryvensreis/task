@@ -52,7 +52,12 @@ final class Files {
   if(!$state||(int)$state['user_id']!==(int)Auth::$user['id']||(int)$state['expires']<time()){unset($_SESSION['drive_uploads'][$token]);fail('A sessão de upload expirou. Inicie o envio novamente.',409);}
   if($offset!==(int)$state['offset'])fail('O bloco recebido está fora de ordem. Recomece o upload.',409,['expected_offset'=>(int)$state['offset']]);
   $length=strlen($binary);$chunkLimit=max(262144,(int)($state['chunk_size']??1048576));if($length<1||$length>$chunkLimit)fail('Tamanho de bloco inválido.',413);$isFinal=$offset+$length===(int)$state['size'];if(!$isFinal&&$length%262144!==0)fail('Bloco intermediário inválido.',400);
-  Auth::demand((int)$state['demand_id']);$result=Google::uploadDriveChunk((int)$state['account_id'],(string)$state['location'],$binary,$offset,(int)$state['size'],(string)$state['mime']);
+  Auth::demand((int)$state['demand_id']);
+  try{$result=Google::uploadDriveChunk((int)$state['account_id'],(string)$state['location'],$binary,$offset,(int)$state['size'],(string)$state['mime']);}
+  catch(Throwable $uploadError){
+   try{$status=Google::driveUploadStatus((int)$state['account_id'],(string)$state['location'],(int)$state['size']);if($status['complete'])$result=$status;elseif((int)$status['next_offset']>$offset){$_SESSION['drive_uploads'][$token]['offset']=(int)$status['next_offset'];$_SESSION['drive_uploads'][$token]['expires']=time()+518400;return ['complete'=>false,'next_offset'=>(int)$status['next_offset'],'recovered'=>true];}else throw $uploadError;}
+   catch(Throwable $statusError){throw $uploadError;}
+  }
   if(!$result['complete']){$_SESSION['drive_uploads'][$token]['offset']=(int)$result['next_offset'];$_SESSION['drive_uploads'][$token]['expires']=time()+518400;return ['complete'=>false,'next_offset'=>(int)$result['next_offset']];}
   $drive=$result['file'];$d=Auth::demand((int)$state['demand_id'],true);$uploadKey=$state['upload_key']??null;
   if($uploadKey){

@@ -127,6 +127,16 @@ Os filtros são aplicados instantaneamente na tabela sem recarregar a página e 
 Esta versão também corrige a exibição do saldo de clientes mensais cuja cobrança do mês foi removida ou ainda não está ativa: nesses casos o painel usa corretamente o valor mensal configurado no cliente, sem reaproveitar valores de cobranças antigas.
 
 
+
+### Ajustes v3.8 do resumo de caixa
+
+A v3.8 simplifica novamente o topo do Financeiro para responder seis perguntas sem exigir interpretação de vários indicadores: **quanto entrou**, **quanto já saiu**, **quanto tem no momento**, **quanto vai entrar**, **quanto vai sair** e **quanto vai sobrar no final**.
+
+O primeiro bloco, **Até agora**, usa apenas movimentos realizados: recebimentos confirmados menos custos pagos resultam no saldo atual do período. O segundo bloco, **Daqui pra frente**, mostra cobranças em aberto e custos pendentes. A previsão final usa a fórmula **saldo atual + a receber − a pagar**.
+
+O seletor de período foi movido para cima do resumo para deixar claro que os valores representam o intervalo selecionado. Os detalhes de faturamento, categorias e recorrências continuam disponíveis abaixo, assim como os filtros independentes das tabelas.
+
+
 ## Apache
 
 O caminho público deve terminar em `/public`. Exemplo conceitual:

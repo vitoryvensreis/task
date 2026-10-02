@@ -69,7 +69,13 @@ final class Files {
   }
   $row=['demand_id'=>$d['id'],'author_id'=>Auth::$user['id'],'label'=>$state['label'],'shared'=>(int)$state['shared'],'kind'=>$state['kind'],'created_at'=>now(),'original_name'=>mb_substr((string)$state['name'],0,255),'disk_name'=>null,'storage_provider'=>'drive','drive_file_id'=>$drive['id'],'drive_account_id'=>(int)$state['account_id'],'drive_web_view_url'=>$drive['webViewLink']??null,'mime'=>$drive['mimeType']??$state['mime'],'size_bytes'=>(int)($drive['size']??$state['size']),'upload_key'=>$uploadKey];
   if(in_array($state['kind'],['review','final'],true))$row['version_no']=(int)DB::one('SELECT COALESCE(MAX(version_no),0) AS n FROM files WHERE demand_id=?',[$d['id']])['n']+1;
-  try{$id=DB::insert('files',$row);}catch(PDOException $e){if($uploadKey&&str_contains(strtolower($e->getMessage()),'duplicate')){$existing=DB::one('SELECT id,version_no,storage_provider,drive_file_id FROM files WHERE upload_key=? LIMIT 1',[$uploadKey]);if($existing){if(!empty($drive['id'])&&($existing['drive_file_id']??'')!==$drive['id'])try{Google::deleteDriveFile((int)$state['account_id'],(string)$drive['id']);}catch(Throwable $cleanup){error_log('TaskEsc duplicate upload cleanup: '.$cleanup->getMessage());}$id=(int)$existing['id'];$row['version_no']=$existing['version_no'];}else throw $e;}else throw $e;}
+  try{$id=DB::insert('files',$row);}
+  catch(PDOException $e){
+   if(!$uploadKey||!str_contains(strtolower($e->getMessage()),'duplicate'))throw $e;
+   $existing=DB::one('SELECT id,version_no,storage_provider,drive_file_id FROM files WHERE upload_key=? LIMIT 1',[$uploadKey]);if(!$existing)throw $e;
+   if(!empty($drive['id'])&&($existing['drive_file_id']??'')!==$drive['id'])try{Google::deleteDriveFile((int)$state['account_id'],(string)$drive['id']);}catch(Throwable $cleanup){error_log('TaskEsc duplicate upload cleanup: '.$cleanup->getMessage());}
+   unset($_SESSION['drive_uploads'][$token]);$response=['complete'=>true,'id'=>(int)$existing['id'],'version_no'=>$existing['version_no']!==null?(int)$existing['version_no']:null,'storage'=>$existing['storage_provider']??'drive','next_offset'=>(int)$state['size'],'final_delivery_link'=>$state['final_delivery_link']??null,'deduplicated'=>true];$_SESSION['drive_uploads_done'][$token]=$response+['user_id'=>(int)Auth::$user['id'],'expires'=>time()+900];return $response;
+  }
   unset($_SESSION['drive_uploads'][$token]);audit('demand',$d['id'],'file.added',null,['file_id'=>$id,'version'=>$row['version_no']??null,'storage'=>'drive']);Notify::demand($d,$state['kind']==='review'?'Versão para aprovação':'Novo arquivo',$row['label'],!$row['shared']);
   $response=['complete'=>true,'id'=>$id,'version_no'=>$row['version_no']??null,'storage'=>'drive','next_offset'=>(int)$state['size'],'final_delivery_link'=>$state['final_delivery_link']??null];$_SESSION['drive_uploads_done'][$token]=$response+['user_id'=>(int)Auth::$user['id'],'expires'=>time()+900];return $response;
  }

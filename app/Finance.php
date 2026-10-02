@@ -163,6 +163,60 @@ final class Finance {
  public static function expenseRuleDelete(array $p): array {
   Auth::admin();$id=integer($p['id']??0,1);$old=DB::one('SELECT * FROM expense_rules WHERE id=?',[$id]);if(!$old)fail('Custo recorrente não encontrado.',404);$tz=new DateTimeZone(config('timezone','America/Fortaleza'));$monthFloor=(new DateTimeImmutable('first day of this month',$tz))->format('Y-m-d');DB::update('expense_rules',$id,['active'=>0,'updated_at'=>now()]);DB::run('DELETE FROM expenses WHERE rule_id=? AND spent_on>=?',[$id,$monthFloor]);audit('expense_rule',$id,'disabled',$old,['active'=>0]);return ['saved'=>true];
  }
+ public static function cashBreakdown(array $p=[]): array {
+  Auth::admin();[$from,$to]=self::expenseRange($p);self::syncCommercialInvoices($from,$to);self::syncExpenses($from,$to);
+
+  $received=DB::all("SELECT p.id,p.invoice_id,p.amount_cents,p.paid_on AS movement_on,p.method,p.note,p.refund_of,i.description,c.name AS client_name
+   FROM payments p
+   JOIN invoices i ON i.id=p.invoice_id
+   JOIN clients c ON c.id=i.client_id
+   WHERE i.status<>'cancelled' AND i.deleted_at IS NULL AND p.paid_on BETWEEN ? AND ?
+   ORDER BY p.paid_on DESC,p.id DESC",[$from,$to]);
+
+  $paidOperational=DB::all("SELECT e.id,e.description,e.vendor,e.category,e.amount_cents,e.paid_on AS movement_on,'expense' AS source_type,NULL AS task_title,NULL AS client_name
+   FROM expenses e
+   WHERE e.deleted_at IS NULL AND e.payment_status='paid' AND e.paid_on BETWEEN ? AND ?
+   ORDER BY e.paid_on DESC,e.id DESC",[$from,$to]);
+  $paidTask=DB::all("SELECT co.id,co.description,'' AS vendor,'Custos de task' AS category,co.amount_cents,co.paid_on AS movement_on,'task_cost' AS source_type,d.title AS task_title,cl.name AS client_name
+   FROM costs co
+   JOIN demands d ON d.id=co.demand_id
+   JOIN clients cl ON cl.id=d.client_id
+   WHERE co.payment_status='paid' AND co.paid_on BETWEEN ? AND ?
+   ORDER BY co.paid_on DESC,co.id DESC",[$from,$to]);
+  $paidOut=array_merge($paidOperational,$paidTask);
+  usort($paidOut,fn($a,$b)=>strcmp((string)$b['movement_on'],(string)$a['movement_on'])?:((int)$b['id']<=> (int)$a['id']));
+
+  $futureIn=DB::all("SELECT q.* FROM (
+    SELECT i.id,i.description,i.due_on AS movement_on,i.amount_cents,c.name AS client_name,
+      GREATEST(0,i.amount_cents-(SELECT COALESCE(SUM(p.amount_cents),0) FROM payments p WHERE p.invoice_id=i.id)) AS balance_cents,
+      CASE WHEN i.source_key LIKE 'client-monthly:%' THEN 'monthly' WHEN i.source_key LIKE 'task:%' OR i.demand_id IS NOT NULL THEN 'task' ELSE 'manual' END AS source_type
+    FROM invoices i JOIN clients c ON c.id=i.client_id
+    WHERE i.status<>'cancelled' AND i.deleted_at IS NULL AND i.due_on BETWEEN ? AND ?
+   ) q WHERE q.balance_cents>0 ORDER BY q.movement_on,q.id",[$from,$to]);
+
+  $pendingOperational=DB::all("SELECT e.id,e.description,e.vendor,e.category,e.amount_cents,e.spent_on AS movement_on,'expense' AS source_type,NULL AS task_title,NULL AS client_name
+   FROM expenses e
+   WHERE e.deleted_at IS NULL AND e.payment_status<>'paid' AND e.spent_on BETWEEN ? AND ?
+   ORDER BY e.spent_on,e.id",[$from,$to]);
+  $pendingTask=DB::all("SELECT co.id,co.description,'' AS vendor,'Custos de task' AS category,co.amount_cents,co.spent_on AS movement_on,'task_cost' AS source_type,d.title AS task_title,cl.name AS client_name
+   FROM costs co
+   JOIN demands d ON d.id=co.demand_id
+   JOIN clients cl ON cl.id=d.client_id
+   WHERE co.payment_status<>'paid' AND co.spent_on BETWEEN ? AND ?
+   ORDER BY co.spent_on,co.id",[$from,$to]);
+  $futureOut=array_merge($pendingOperational,$pendingTask);
+  usort($futureOut,fn($a,$b)=>strcmp((string)$a['movement_on'],(string)$b['movement_on'])?:((int)$a['id']<=> (int)$b['id']));
+
+  $receivedTotal=array_reduce($received,fn($n,$x)=>$n+(int)$x['amount_cents'],0);
+  $paidOutTotal=array_reduce($paidOut,fn($n,$x)=>$n+(int)$x['amount_cents'],0);
+  $futureInTotal=array_reduce($futureIn,fn($n,$x)=>$n+(int)$x['balance_cents'],0);
+  $futureOutTotal=array_reduce($futureOut,fn($n,$x)=>$n+(int)$x['amount_cents'],0);
+  $current=$receivedTotal-$paidOutTotal;$final=$current+$futureInTotal-$futureOutTotal;
+
+  return ['period'=>['from'=>$from,'to'=>$to],'received'=>$received,'paid_out'=>$paidOut,'future_in'=>$futureIn,'future_out'=>$futureOut,'totals'=>[
+    'received_cents'=>$receivedTotal,'paid_out_cents'=>$paidOutTotal,'current_cents'=>$current,'future_in_cents'=>$futureInTotal,'future_out_cents'=>$futureOutTotal,'final_cents'=>$final
+  ]];
+ }
  public static function analysis(array $p=[]): array {
   Auth::admin();[$from,$to,$tz]=self::expenseRange($p);self::syncCommercialInvoices($from,$to);self::syncExpenses($from,$to);$today=(new DateTimeImmutable('now',$tz))->format('Y-m-d');
   $billed=(int)(DB::one("SELECT COALESCE(SUM(amount_cents),0) AS n FROM invoices WHERE status<>'cancelled' AND deleted_at IS NULL AND due_on BETWEEN ? AND ?",[$from,$to])['n']??0);

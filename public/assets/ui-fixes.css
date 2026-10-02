@@ -1255,3 +1255,202 @@
     right:0;
   }
 }
+
+
+/* TaskEsc v3.8.2 — detalhamento clicável dos totais do caixa */
+.finance-cash-card[data-breakdown]{
+  cursor:pointer;
+  transition:border-color .14s ease,background .14s ease,transform .14s ease,box-shadow .14s ease;
+}
+.finance-cash-card[data-breakdown]:hover{
+  transform:translateY(-1px);
+  border-color:#526370;
+  box-shadow:0 8px 24px rgba(0,0,0,.16);
+}
+.finance-cash-card[data-breakdown]:focus-visible{
+  outline:2px solid #607b91;
+  outline-offset:2px;
+}
+.finance-cash-card[data-breakdown]::after{
+  content:"Ver itens";
+  justify-self:start;
+  margin-top:4px;
+  color:#718494;
+  font-size:8px;
+  font-weight:700;
+  letter-spacing:.25px;
+}
+.cash-breakdown-modal{
+  width:min(920px,100%)!important;
+}
+.cash-breakdown-loading{
+  min-height:220px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  color:#9aa7b1;
+}
+.cash-breakdown-loading b{font-size:11px}
+.cash-breakdown-summary{
+  display:grid;
+  gap:3px;
+  margin-bottom:12px;
+  padding:13px 14px;
+  border:1px solid #29343c;
+  border-radius:9px;
+  background:#0a0e11;
+}
+.cash-breakdown-summary>span{
+  color:#788792;
+  font-size:8px;
+  font-weight:800;
+  letter-spacing:.55px;
+  text-transform:uppercase;
+}
+.cash-breakdown-summary>b{
+  font-size:24px;
+  line-height:1.1;
+}
+.cash-breakdown-summary>small{
+  color:#77848e;
+  font-size:9px;
+}
+.cash-breakdown-summary.positive{
+  border-color:#31473a;
+  background:#0b130f;
+}
+.cash-breakdown-summary.positive>b{color:#9fc6ad}
+.cash-breakdown-summary.negative{
+  border-color:#54353d;
+  background:#160d0f;
+}
+.cash-breakdown-summary.negative>b{color:#dc99a4}
+.cash-breakdown-groups{
+  display:grid;
+  gap:10px;
+}
+.cash-breakdown-group{
+  overflow:hidden;
+  border:1px solid #252f36;
+  border-radius:9px;
+  background:#090d10;
+}
+.cash-breakdown-group.incoming{border-color:#2d414f}
+.cash-breakdown-group.outgoing{border-color:#46343a}
+.cash-breakdown-group-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:9px 11px;
+  border-bottom:1px solid #222a30;
+  background:#0d1114;
+}
+.cash-breakdown-group-head>div{
+  display:grid;
+  gap:1px;
+}
+.cash-breakdown-group-head b{
+  color:#dbe3e8;
+  font-size:10px;
+}
+.cash-breakdown-group-head small{
+  color:#65727c;
+  font-size:8px;
+}
+.cash-breakdown-group-head>strong{
+  color:#d9e1e6;
+  font-size:12px;
+  white-space:nowrap;
+}
+.cash-breakdown-list{
+  display:grid;
+}
+.cash-breakdown-row{
+  display:grid;
+  grid-template-columns:82px minmax(0,1fr) auto 120px;
+  align-items:center;
+  gap:10px;
+  min-width:0;
+  padding:9px 11px;
+  border-bottom:1px solid #1d252b;
+}
+.cash-breakdown-row:last-child{border-bottom:0}
+.cash-breakdown-row>time{
+  color:#74828c;
+  font-size:9px;
+  white-space:nowrap;
+}
+.cash-breakdown-main{
+  display:grid;
+  gap:2px;
+  min-width:0;
+}
+.cash-breakdown-main>b{
+  color:#e3e9ed;
+  font-size:10px;
+  overflow-wrap:anywhere;
+}
+.cash-breakdown-main>small{
+  color:#6e7a84;
+  font-size:8.5px;
+  overflow-wrap:anywhere;
+}
+.cash-breakdown-tag{
+  display:inline-flex;
+  align-items:center;
+  min-height:22px;
+  padding:0 7px;
+  border:1px solid #2d3840;
+  border-radius:99px;
+  color:#86949f;
+  font-size:8px;
+  white-space:nowrap;
+}
+.cash-breakdown-row>strong{
+  justify-self:end;
+  font-size:11px;
+  white-space:nowrap;
+}
+.cash-breakdown-row>strong.positive{color:#98c1a7}
+.cash-breakdown-row>strong.negative{color:#d995a0}
+
+@media(max-width:760px){
+  .finance-cash-card[data-breakdown]::after{font-size:9px}
+  .cash-breakdown-modal{
+    width:100%!important;
+  }
+  .cash-breakdown-row{
+    grid-template-columns:70px minmax(0,1fr) auto;
+    gap:7px;
+  }
+  .cash-breakdown-tag{
+    grid-column:2;
+    justify-self:start;
+  }
+  .cash-breakdown-row>strong{
+    grid-column:3;
+    grid-row:1/3;
+    align-self:center;
+  }
+}
+@media(max-width:480px){
+  .cash-breakdown-row{
+    grid-template-columns:1fr auto;
+    padding:10px;
+  }
+  .cash-breakdown-row>time{
+    grid-column:1;
+  }
+  .cash-breakdown-main{
+    grid-column:1/-1;
+  }
+  .cash-breakdown-tag{
+    grid-column:1;
+  }
+  .cash-breakdown-row>strong{
+    grid-column:2;
+    grid-row:1;
+  }
+}

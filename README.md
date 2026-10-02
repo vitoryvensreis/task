@@ -145,6 +145,16 @@ A v3.8.1 corrige o alinhamento dos campos do modal **Novo custo**, especialmente
 Também corrige o cadastro rápido de categoria. O modal secundário agora é aberto acima do modal de custo em uma camada própria, com foco automático no campo de nome e atualização imediata do select de categoria após o cadastro.
 
 
+
+### Ajustes v3.8.2 do detalhamento do caixa
+
+A v3.8.2 torna os seis cards principais do resumo financeiro clicáveis. Ao abrir **Quanto entrou**, o sistema lista cada pagamento que compõe o total, incluindo cliente, forma de pagamento e eventuais estornos. **Quanto já saiu** lista os custos operacionais e custos de tasks efetivamente pagos.
+
+Os cards derivados também explicam a conta: **Quanto tem no momento** abre entradas confirmadas e saídas pagas; **Quanto vai entrar** lista cobranças abertas pelo saldo restante; **Quanto vai sair** lista custos pendentes; e **Quanto vai sobrar no final** reúne os quatro grupos para mostrar exatamente como a projeção final é formada.
+
+O detalhamento usa o mesmo período do Financeiro e os mesmos critérios dos totais, para que a soma da lista corresponda ao valor exibido no card.
+
+
 ## Apache
 
 O caminho público deve terminar em `/public`. Exemplo conceitual:

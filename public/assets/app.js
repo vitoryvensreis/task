@@ -404,6 +404,8 @@
 
     $('#content').innerHTML=`<div class="section-title finance-title"><div><h3>Financeiro</h3><div class="panel-sub">Controle simples do que entra, do que sai e do que ainda está pendente.</div></div><div class="top-actions"><button class="secondary" id="manage-expense-categories">${icon('folder','')} Categorias</button><button class="secondary" id="new-expense">${icon('wallet','+')} Novo custo</button><button class="primary" id="new-invoice">${icon('receipt','+')} Nova cobrança</button></div></div>
 
+            <section class="panel finance-period-panel"><div class="panel-head compact"><div><h3>Período financeiro</h3><div class="panel-sub">O período abaixo atualiza os totais e todas as tabelas desta página.</div></div></div><div class="finance-period-controls"><div class="field"><label>De</label><input class="input" id="finance-from" type="date" value="${esc(f.from||analysisFrom)}"></div><div class="field"><label>Até</label><input class="input" id="finance-to" type="date" value="${esc(f.to||analysisTo)}"></div><div class="filter-actions"><button class="secondary" id="apply-finance-filters">Aplicar período</button><button class="ghost" id="clear-finance-filters">Mês atual</button></div></div></section>
+
       <section class="panel finance-cash-overview">
         <div class="finance-cash-overview-head">
           <div><span class="eyebrow">RESUMO DO CAIXA</span><h3>Dinheiro do período</h3><div class="panel-sub">${date(analysisFrom)} até ${date(analysisTo)} · veja de forma direta o que entrou, saiu e o que ainda vai acontecer.</div></div>
@@ -479,7 +481,7 @@
         </div>
       </details>
 
-      <section class="panel finance-period-panel"><div class="panel-head compact"><div><h3>Período financeiro</h3><div class="panel-sub">O período abaixo atualiza os totais e todas as tabelas desta página.</div></div></div><div class="finance-period-controls"><div class="field"><label>De</label><input class="input" id="finance-from" type="date" value="${esc(f.from||analysisFrom)}"></div><div class="field"><label>Até</label><input class="input" id="finance-to" type="date" value="${esc(f.to||analysisTo)}"></div><div class="filter-actions"><button class="secondary" id="apply-finance-filters">Aplicar período</button><button class="ghost" id="clear-finance-filters">Mês atual</button></div></div></section>
+
 
       <section class="panel finance-entry-panel" data-filter-scope="entries">
         <div class="panel-head"><div><h3>Entradas / cobranças</h3><div class="panel-sub">Pesquise por cliente ou cobrança e filtre por origem e status.</div></div><span class="finance-filter-result" data-filter-count>${rows.length} de ${rows.length}</span></div>

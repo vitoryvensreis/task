@@ -28,7 +28,7 @@ O instalador aplica `database/schema.sql`, cria o administrador e grava as chave
 
 Substitua os arquivos da aplicação pelo conteúdo desta versão sem apagar `config/config.php`, `storage/installed.lock` ou seus dados. Na primeira requisição autenticada, o TaskEsc executa a migração compatível em `app/Migrations.php` e atualiza a estrutura necessária sem recriar o banco.
 
-A atualização mantém todas as migrações anteriores e inclui todas as migrações até o **schema 12**. Ela preserva clientes, tasks, arquivos, histórico e integrações existentes. O schema 8 acrescenta apenas metadados de tentativa/conclusão na fila de e-mails para alimentar o log administrativo. Os SQLs de referência ficam em `database/migrations/`, incluindo `005_taskesc_finance_routes_upload.sql`, `006_taskesc_api_notifications.sql`, `007_client_drive_routing.sql` e `008_email_delivery_log.sql`.
+A atualização mantém todas as migrações anteriores e inclui todas as migrações até o **schema 13**. Ela preserva clientes, tasks, arquivos, histórico e integrações existentes. O schema 8 acrescenta apenas metadados de tentativa/conclusão na fila de e-mails para alimentar o log administrativo. Os SQLs de referência ficam em `database/migrations/`, incluindo `005_taskesc_finance_routes_upload.sql`, `006_taskesc_api_notifications.sql`, `007_client_drive_routing.sql` e `008_email_delivery_log.sql`.
 
 Faça backup do banco antes de qualquer atualização em produção.
 
@@ -71,6 +71,14 @@ O upload retomável continua passando pelo TaskEsc, mas agora usa blocos de até
 ### Ajustes v3.4.1 de cards no mobile
 
 A v3.4.1 remove barras de rolagem horizontais indevidas de cards do Dashboard e de outros cards compactos. Os conteúdos internos agora podem encolher e quebrar linha corretamente, enquanto rolagens horizontais continuam apenas em componentes onde são intencionais, como tabelas extensas e o Kanban.
+
+
+
+### Ajustes v3.5 da Agenda
+
+A v3.5 enriquece o card de detalhes dos compromissos sincronizados com o Google Agenda. Ao clicar em um evento, o TaskEsc consulta o evento remoto naquele momento e exibe, quando disponíveis, Google Meet, link do evento no Google Agenda, local/endereço, organizador, participantes com status de confirmação, telefones ou acessos alternativos de conferência, anexos e descrição com links clicáveis.
+
+O schema 13 adiciona campos próprios para armazenar esses metadados. Eventos já existentes são enriquecidos automaticamente no próximo sync e também ao serem abertos, sem necessidade de recriá-los.
 
 
 ## Apache

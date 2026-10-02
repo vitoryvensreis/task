@@ -81,6 +81,14 @@ A v3.5 enriquece o card de detalhes dos compromissos sincronizados com o Google 
 O schema 13 adiciona campos próprios para armazenar esses metadados. Eventos já existentes são enriquecidos automaticamente no próximo sync e também ao serem abertos, sem necessidade de recriá-los.
 
 
+
+### Ajustes v3.5.1 do Financeiro
+
+A v3.5.1 adiciona ao Financeiro um comparativo permanente de **faturamento x custos = lucro/prejuízo** para o período analisado. O bloco exibe os três valores lado a lado, barras proporcionais, margem projetada e o resultado de caixa (recebido menos custos). Quando o faturamento é maior que zero, também mostra quanto de cada R$ 1,00 faturado é consumido por custos e quanto permanece como resultado.
+
+O comparativo usa os mesmos dados consolidados do Financeiro: faturamento das cobranças do período e custos operacionais somados aos custos vinculados às tasks. Ao aplicar um intervalo de datas, o comparativo acompanha automaticamente o período selecionado.
+
+
 ## Apache
 
 O caminho público deve terminar em `/public`. Exemplo conceitual:

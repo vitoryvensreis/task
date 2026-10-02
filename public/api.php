@@ -28,6 +28,7 @@ try {
   'push.status'=>Push::status(),
   'push.subscribe'=>Push::subscribe($p),
   'push.unsubscribe'=>Push::unsubscribe($p),
+  'push.test'=>Push::test(),
   'system.health'=>SystemHealth::health(),
   'system.logs'=>SystemHealth::logs($p),
   'system.error_resolve'=>SystemHealth::resolve($p),

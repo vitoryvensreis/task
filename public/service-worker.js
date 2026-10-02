@@ -1,10 +1,10 @@
-const CACHE='taskesc-shell-v3.2.0';
+const CACHE='taskesc-shell-v3.9.0';
 const scopeUrl=new URL('./',self.registration.scope);
 const assetUrl=path=>new URL(path,scopeUrl).toString();
 const SHELL=[
   assetUrl('offline.html'),
-  assetUrl('assets/app.css?v=3.2.0'),
-  assetUrl('assets/app.js?v=3.2.0'),
+  assetUrl('assets/app.css?v=3.4.0'),
+  assetUrl('assets/app.js?v=3.9.0'),
   assetUrl('assets/taskesc-logo.svg')
 ];
 
@@ -43,15 +43,22 @@ self.addEventListener('fetch',event=>{
 
 self.addEventListener('push',event=>{
   event.waitUntil((async()=>{
-    let title='TaskEsc',body='Você tem uma nova atualização no TaskEsc.',target=assetUrl('dashboard'),tag='taskesc-update';
-    try{
-      const response=await fetch(assetUrl('api.php?action=notifications'),{credentials:'include',cache:'no-store',headers:{Accept:'application/json'}});
-      if(response.ok){
-        const data=await response.json(),item=Array.isArray(data)?data[0]:null;
-        if(item){title=item.title||title;body=item.body||body;tag='taskesc-'+String(item.id||'update');if(item.demand_id)target=assetUrl('kanban/task/'+Number(item.demand_id));}
-      }
-    }catch{}
-    await self.registration.showNotification(title,{body,tag,icon:assetUrl('assets/taskesc-logo.svg'),badge:assetUrl('assets/taskesc-logo.svg'),data:{url:target}});
+    let payload={};
+    try{if(event.data)payload=event.data.json()||{}}catch{try{payload={body:event.data?.text()||''}}catch{}}
+    const title=String(payload.title||'TaskEsc');
+    const body=String(payload.body||'Você tem uma nova atualização no TaskEsc.');
+    const target=String(payload.url||assetUrl(payload.demand_id?'kanban/task/'+Number(payload.demand_id):'dashboard'));
+    const tag=String(payload.tag||('taskesc-'+String(payload.notification_id||'update')));
+    await self.registration.showNotification(title,{
+      body,
+      tag,
+      icon:assetUrl('assets/taskesc-logo.svg'),
+      badge:assetUrl('assets/taskesc-logo.svg'),
+      data:{url:target,notification_id:Number(payload.notification_id||0),demand_id:Number(payload.demand_id||0)},
+      renotify:true
+    });
+    const count=Number(payload.badge_count||0);
+    try{if(count>0&&self.navigator?.setAppBadge)await self.navigator.setAppBadge(count);else if(self.navigator?.clearAppBadge)await self.navigator.clearAppBadge()}catch{}
   })());
 });
 

@@ -1454,3 +1454,25 @@
     grid-row:1;
   }
 }
+
+
+/* TaskEsc v3.9 — status de Web Push por dispositivo */
+.push-device-status{
+  margin-top:4px;
+  padding:8px 10px;
+  border:1px solid #27313a;
+  border-radius:7px;
+  background:#0a0e11;
+  color:#82909b;
+  font-size:9px;
+  line-height:1.45;
+}
+.pwa-actions [data-push-test].hidden{display:none!important}
+@media(max-width:600px){
+  .pwa-actions{
+    width:100%;
+    display:grid;
+    grid-template-columns:1fr;
+  }
+  .pwa-actions button{width:100%}
+}

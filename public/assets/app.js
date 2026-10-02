@@ -9,34 +9,49 @@
   window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredInstallPrompt=e;document.querySelectorAll('[data-pwa-install]').forEach(b=>{b.disabled=false;b.textContent='Instalar TaskEsc'})});
   window.addEventListener('appinstalled',()=>{deferredInstallPrompt=null;document.querySelectorAll('[data-pwa-install]').forEach(b=>{b.disabled=true;b.textContent='App instalado'});try{toast('TaskEsc instalado com sucesso')}catch(_){}});
   function pwaSettingsCard(){
-    const installed=pwaStandalone(),icon=S.meta?.brand?.pwa_icon||DEFAULT_LOGO,canPush='Notification' in window&&'serviceWorker' in navigator&&'PushManager' in window;
-    return `<section class="panel pwa-settings-card"><div class="pwa-icon-preview"><img src="${esc(icon)}" alt="Ícone TaskEsc"></div><div class="pwa-settings-copy"><span class="eyebrow">APP</span><h3>TaskEsc no seu dispositivo</h3><div class="panel-sub">${installed?'Você está usando o TaskEsc como aplicativo.':'Instale o TaskEsc para abrir em janela própria, ter ícone na tela inicial e acesso mais rápido.'}</div><div class="pwa-actions"><button type="button" class="primary" data-pwa-install ${installed?'disabled':''}>${installed?'App instalado':deferredInstallPrompt?'Instalar TaskEsc':'Como instalar'}</button>${canPush?'<button type="button" class="secondary" data-push-toggle>Ativar notificações</button>':''}</div></div></section>`;
+    const installed=pwaStandalone(),icon=S.meta?.brand?.pwa_icon||DEFAULT_LOGO,canPush='Notification' in window&&'serviceWorker' in navigator&&'PushManager' in window,ios=/iphone|ipad|ipod/i.test(navigator.userAgent);
+    const pushCopy=ios&&!installed?'No iPhone/iPad, adicione o TaskEsc à Tela de Início antes de ativar o push.':canPush?'As notificações podem chegar mesmo com o TaskEsc fechado. Cada dispositivo precisa ser ativado uma vez.':'Este navegador não oferece Web Push para o TaskEsc.';
+    return `<section class="panel pwa-settings-card"><div class="pwa-icon-preview"><img src="${esc(icon)}" alt="Ícone TaskEsc"></div><div class="pwa-settings-copy"><span class="eyebrow">APP</span><h3>TaskEsc no seu dispositivo</h3><div class="panel-sub">${installed?'Você está usando o TaskEsc como aplicativo.':'Instale o TaskEsc para abrir em janela própria, ter ícone na tela inicial e acesso mais rápido.'}</div><div class="push-device-status" data-push-status>${esc(pushCopy)}</div><div class="pwa-actions"><button type="button" class="primary" data-pwa-install ${installed?'disabled':''}>${installed?'App instalado':deferredInstallPrompt?'Instalar TaskEsc':'Como instalar'}</button>${canPush?'<button type="button" class="secondary" data-push-toggle>Ativar notificações</button><button type="button" class="ghost hidden" data-push-test>Enviar teste</button>':''}</div></div></section>`;
   }
-  async function installPwa(){if(pwaStandalone()){toast('O TaskEsc já está instalado neste dispositivo');return}if(deferredInstallPrompt){deferredInstallPrompt.prompt();const choice=await deferredInstallPrompt.userChoice;deferredInstallPrompt=null;if(choice?.outcome==='accepted')toast('Instalação iniciada');return}const ios=/iphone|ipad|ipod/i.test(navigator.userAgent);toast(ios?'No iPhone/iPad: Compartilhar → Adicionar à Tela de Início.':'Use o menu do navegador e escolha “Instalar aplicativo” ou “Adicionar à tela inicial”.')}
+  async function installPwa(){if(pwaStandalone()){toast('O TaskEsc já está instalado neste dispositivo');return}if(deferredInstallPrompt){deferredInstallPrompt.prompt();const choice=await deferredInstallPrompt.userChoice;deferredInstallPrompt=null;if(choice?.outcome==='accepted')toast('Instalação iniciada');return}const ios=/iphone|ipad|ipod/i.test(navigator.userAgent);toast(ios?'No iPhone/iPad: Compartilhar → Adicionar à Tela de Início. Depois abra o TaskEsc pelo ícone e ative as notificações.':'Use o menu do navegador e escolha “Instalar aplicativo” ou “Adicionar à tela inicial”.')}
   function vapidBytes(v){const pad='='.repeat((4-v.length%4)%4),base=(v+pad).replace(/-/g,'+').replace(/_/g,'/'),raw=atob(base),out=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)out[i]=raw.charCodeAt(i);return out}
   async function pushState(){try{return await api('push.status')}catch{return null}}
+  async function updatePushControls(){
+    const statusEl=document.querySelector('[data-push-status]'),toggles=[...document.querySelectorAll('[data-push-toggle]')],tests=[...document.querySelectorAll('[data-push-test]')];
+    if(!toggles.length)return;
+    try{
+      const reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription(),status=await pushState(),count=Number(status?.subscriptions||0),ios=/iphone|ipad|ipod/i.test(navigator.userAgent),installed=pwaStandalone();
+      toggles.forEach(b=>{b.textContent=sub?'Desativar notificações':'Ativar notificações';b.disabled=ios&&!installed});
+      tests.forEach(b=>b.classList.toggle('hidden',!sub));
+      if(statusEl)statusEl.textContent=ios&&!installed?'No iPhone/iPad, instale o TaskEsc na Tela de Início para receber notificações como app.':sub?`Push ativo neste dispositivo · ${count} dispositivo(s) ativo(s) na sua conta`:`Push desativado neste dispositivo · ${count} dispositivo(s) ativo(s) na sua conta`;
+    }catch{if(statusEl)statusEl.textContent='Não foi possível verificar o status das notificações neste dispositivo.'}
+  }
   async function togglePush(button){
     if(!('Notification' in window)&&button){button.disabled=true;return}
+    const ios=/iphone|ipad|ipod/i.test(navigator.userAgent);if(ios&&!pwaStandalone()){toast('No iPhone/iPad, primeiro adicione o TaskEsc à Tela de Início e abra pelo ícone.',true);return}
     button.disabled=true;
     try{
       const reg=await navigator.serviceWorker.ready,status=await pushState(),existing=await reg.pushManager.getSubscription();
       if(existing){
-        await api('push.unsubscribe',{endpoint:existing.endpoint},'POST');await existing.unsubscribe();toast('Notificações desativadas neste dispositivo');button.textContent='Ativar notificações';return;
+        await api('push.unsubscribe',{endpoint:existing.endpoint},'POST');await existing.unsubscribe();toast('Notificações desativadas neste dispositivo');return;
       }
       const permission=await Notification.requestPermission();if(permission!=='granted')throw new Error('Permissão de notificação não concedida.');
       if(!status?.public_key)throw new Error('Notificações push ainda não estão configuradas.');
       const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:vapidBytes(status.public_key)}),j=sub.toJSON();
-      await api('push.subscribe',{endpoint:sub.endpoint,p256dh:j.keys?.p256dh||'',auth:j.keys?.auth||''},'POST');toast('Notificações ativadas neste dispositivo');button.textContent='Desativar notificações';
-    }catch(x){toast(x.message||'Não foi possível configurar as notificações.',true)}finally{button.disabled=false}
+      await api('push.subscribe',{endpoint:sub.endpoint,p256dh:j.keys?.p256dh||'',auth:j.keys?.auth||''},'POST');toast('Notificações ativadas neste dispositivo');
+    }catch(x){toast(x.message||'Não foi possível configurar as notificações.',true)}finally{button.disabled=false;await updatePushControls()}
+  }
+  async function testPush(button){
+    button.disabled=true;const old=button.textContent;button.textContent='Enviando…';
+    try{const r=await api('push.test',{},'POST');if(!Number(r.sent||0))throw new Error('Nenhum dispositivo aceitou o teste. Confira a permissão de notificações.');toast(`Teste enviado para ${Number(r.sent)} dispositivo(s)`)}catch(x){toast(x.message||'Não foi possível enviar o teste.',true)}finally{button.disabled=false;button.textContent=old}
   }
   async function wirePwaInstall(){
     document.querySelectorAll('[data-pwa-install]').forEach(b=>b.onclick=installPwa);
-    for(const b of document.querySelectorAll('[data-push-toggle]')){
-      try{const reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription();b.textContent=sub?'Desativar notificações':'Ativar notificações'}catch{}
-      b.onclick=()=>togglePush(b);
-    }
+    document.querySelectorAll('[data-push-toggle]').forEach(b=>b.onclick=()=>togglePush(b));
+    document.querySelectorAll('[data-push-test]').forEach(b=>b.onclick=()=>testPush(b));
+    await updatePushControls();
   }
-  const ROUTES={dashboard:'dashboard',kanban:'kanban',demands:'tasks',agenda:'agenda',clients:'clientes',services:'servicos',finance:'financeiro',reports:'relatorios',logs:'saude-logs',settings:'configuracoes'};
+    const ROUTES={dashboard:'dashboard',kanban:'kanban',demands:'tasks',agenda:'agenda',clients:'clientes',services:'servicos',finance:'financeiro',reports:'relatorios',logs:'saude-logs',settings:'configuracoes'};
   const ROUTE_PAGES=Object.fromEntries(Object.entries(ROUTES).map(([k,v])=>[v,k]));
   function readRoute(){let path=location.pathname;if(BASE&&path.startsWith(BASE))path=path.slice(BASE.length);path=path.replace(/^\/+|\/+$/g,'');const parts=path.split('/').filter(Boolean);let page=ROUTE_PAGES[parts[0]]||'';let taskId=0;if(parts[0]==='kanban'&&parts[1]==='task'&&/^\d+$/.test(parts[2]||'')){page='kanban';taskId=Number(parts[2])}if(!page&&location.hash){const legacy=location.hash.replace(/^#/,'').split('/');page=['dashboard','kanban','demands','agenda','clients','services','finance','reports','logs','settings'].includes(legacy[0])?legacy[0]:'';if(legacy[0]==='demands'&&/^\d+$/.test(legacy[1]||'')){page='kanban';taskId=Number(legacy[1])}}return {page:page||'dashboard',taskId}}
   const initialRoute=readRoute();
@@ -106,7 +121,7 @@
   function showApp(){S.user=S.meta.user;$('#login').classList.add('hidden');$('#app').classList.remove('hidden');applyBranding();const preview=!!S.user.is_preview;$('#user-chip').textContent=preview?`Visualizando: ${S.user.preview_client_name}`:S.user.name+' · '+({admin:'Administrador',staff:'Equipe',client:'Cliente'}[S.user.role]||S.user.role);$('#preview-exit')?.classList.toggle('hidden',!preview);$('#new-demand')?.classList.toggle('hidden',preview);buildNav();startAutoRefresh();refreshNotificationBadge();{const cleanPath=location.pathname.replace(/\/+$/,'');const baseClean=(BASE||'').replace(/\/+$/,'');if(location.hash||/\/index\.php$/i.test(location.pathname)||cleanPath===baseClean||cleanPath===baseClean+'/public')history.replaceState({},'',S.pendingTaskId?appPath(`kanban/task/${S.pendingTaskId}`):routeUrl(S.page||'dashboard'));}go(S.page||'dashboard',false);const flash=sessionStorage.getItem('taskesc-flash');if(flash){sessionStorage.removeItem('taskesc-flash');setTimeout(()=>toast(flash),350)}}
   function startAutoRefresh(){if(S.timer)clearInterval(S.timer);S.timer=setInterval(()=>{const notificationOpen=$('#notification-popover')&&!$('#notification-popover').classList.contains('hidden');if(!S.user||document.visibilityState==='hidden'||$('#modal-root').innerHTML.trim()||notificationOpen)return;refreshNotificationBadge();if(['dashboard','kanban','demands','agenda','finance','reports','logs'].includes(S.page)){refresh();const i=$('#sync-indicator');if(i)i.innerHTML='<i></i> Atualizado às '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:S.meta.timezone||'America/Fortaleza'})}},30000)}
   async function refreshNotificationBadge(){
-    if(!S.user||S.user.is_preview)return;try{const rows=await api('notifications'),unread=rows.filter(x=>!Number(x.seen)).length,b=$('#notification-badge');if(!b)return;b.textContent=unread>99?'99+':String(unread);b.classList.toggle('hidden',unread===0);$('#notifications-btn')?.classList.toggle('has-unread',unread>0)}catch{}
+    if(!S.user||S.user.is_preview)return;try{const rows=await api('notifications'),unread=rows.filter(x=>!Number(x.seen)).length,b=$('#notification-badge');if(b){b.textContent=unread>99?'99+':String(unread);b.classList.toggle('hidden',unread===0);$('#notifications-btn')?.classList.toggle('has-unread',unread>0)}try{if(unread>0&&navigator.setAppBadge)await navigator.setAppBadge(unread);else if(navigator.clearAppBadge)await navigator.clearAppBadge()}catch{}}catch{}
   }
   function closeNotifications(){
     const panel=$('#notification-popover'),btn=$('#notifications-btn');if(!panel)return;

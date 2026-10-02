@@ -151,7 +151,9 @@ final class Demands {
    if($action==='priority')$row['priority']=enumv((string)($p['priority']??''),['low','normal','high','urgent'],'prioridade');
    elseif($action==='assigned'){$assigned=!empty($p['assigned_to'])?(int)$p['assigned_to']:null;if($assigned&&!DB::one("SELECT id FROM users WHERE id=? AND active=1 AND role IN ('admin','staff')",[$assigned]))fail('Responsável inválido.');$row['assigned_to']=$assigned;}
    else{$stage=DB::one('SELECT * FROM stages WHERE id=? AND active=1',[integer($p['stage_id']??0,1)]);if(!$stage)fail('Etapa inválida.');$row['stage_id']=$stage['id'];$row['completed_at']=$stage['kind']==='completed'?($d['completed_at']??now()):null;if($stage['kind']==='completed')$row['first_completed_at']=$d['first_completed_at']??now();DB::insert('transitions',['demand_id'=>$id,'from_stage'=>$d['stage_id'],'to_stage'=>$stage['id'],'actor_id'=>Auth::$user['id'],'happened_at'=>now()]);}
-   DB::update('demands',$id,$row);audit('demand',$id,'bulk.'.$action,$d,$row);$updated++;
+   DB::update('demands',$id,$row);audit('demand',$id,'bulk.'.$action,$d,$row);$fresh=DB::one('SELECT * FROM demands WHERE id=?',[$id])?:array_merge($d,$row);
+   if(empty($fresh['draft'])){if($action==='assigned')Notify::demand($fresh,'Responsável atualizado',$fresh['title'],true);elseif($action==='stage')Notify::demand($fresh,'Etapa atualizada',$fresh['title'],true);elseif($action==='priority')Notify::demand($fresh,'Prioridade atualizada',$fresh['title'],true);}
+   $updated++;
   }return ['updated'=>$updated];
  }
  public static function delete(array $p): array {Auth::admin();$d=Auth::demand(integer($p['id']??0,1),true);Notify::demand($d,'Task excluída',$d['title']);DB::update('demands',$d['id'],['deleted_at'=>now(),'version'=>(int)$d['version']+1,'updated_at'=>now()]);audit('demand',$d['id'],'deleted',$d,['deleted_at'=>now()]);return ['deleted'=>true,'id'=>$d['id']];}

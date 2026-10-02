@@ -28,7 +28,7 @@ O instalador aplica `database/schema.sql`, cria o administrador e grava as chave
 
 Substitua os arquivos da aplicação pelo conteúdo desta versão sem apagar `config/config.php`, `storage/installed.lock` ou seus dados. Na primeira requisição autenticada, o TaskEsc executa a migração compatível em `app/Migrations.php` e atualiza a estrutura necessária sem recriar o banco.
 
-A atualização mantém todas as migrações anteriores e inclui todas as migrações até o **schema 13**. Ela preserva clientes, tasks, arquivos, histórico e integrações existentes. O schema 8 acrescenta apenas metadados de tentativa/conclusão na fila de e-mails para alimentar o log administrativo. Os SQLs de referência ficam em `database/migrations/`, incluindo `005_taskesc_finance_routes_upload.sql`, `006_taskesc_api_notifications.sql`, `007_client_drive_routing.sql` e `008_email_delivery_log.sql`.
+A atualização mantém todas as migrações anteriores e inclui todas as migrações até o **schema 14**. Ela preserva clientes, tasks, arquivos, histórico e integrações existentes. O schema 8 acrescenta apenas metadados de tentativa/conclusão na fila de e-mails para alimentar o log administrativo. Os SQLs de referência ficam em `database/migrations/`, incluindo `005_taskesc_finance_routes_upload.sql`, `006_taskesc_api_notifications.sql`, `007_client_drive_routing.sql` e `008_email_delivery_log.sql`.
 
 Faça backup do banco antes de qualquer atualização em produção.
 
@@ -95,6 +95,16 @@ O comparativo usa os mesmos dados consolidados do Financeiro: faturamento das co
 A v3.5.2 define o **lucro líquido** como o valor efetivamente recebido no período menos os custos do mesmo período. O faturamento continua disponível como indicador de receita prevista/cobrada, mas não é mais usado como base do lucro exibido.
 
 Assim, o comparativo principal passa a ser **Recebido − Custos = Lucro/Prejuízo líquido**, e a margem líquida também é calculada sobre o valor recebido. O Dashboard, a tela Financeiro e o relatório financeiro usam a mesma regra.
+
+
+
+### Ajustes v3.6 do controle financeiro
+
+A v3.6 separa **custos lançados**, **custos pagos** e **custos pendentes**. Cada custo avulso pode ser criado como pendente ou pago, e os lançamentos recorrentes são gerados como pendentes até que o pagamento seja confirmado. A data de pagamento também fica registrada. O lucro líquido passa a considerar somente os custos efetivamente pagos no período: **recebido − custos pagos**.
+
+A tela Financeiro também ganha um quadro de **mensalidades recorrentes**, mostrando por cliente se a mensalidade do mês foi cobrada, quanto foi recebido, saldo aberto e situação (pago, parcial, pendente ou vencido). Isso deixa separado o que é cobrança mensal recorrente do que é cobrança avulsa.
+
+O schema 14 adiciona o status e a data de pagamento aos custos operacionais e aos custos vinculados às tasks. Registros antigos são preservados como pagos na data original para não alterar o histórico financeiro existente.
 
 
 ## Apache

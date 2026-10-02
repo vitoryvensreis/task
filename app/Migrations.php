@@ -245,6 +245,13 @@ final class Migrations {
    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
    DB::run("INSERT INTO settings (`key`,value) VALUES ('schema_version','16') ON DUPLICATE KEY UPDATE value='16'");$version=16;
   }
+  if($version<17){
+   self::column('payments','discount_cents',"ALTER TABLE payments ADD COLUMN discount_cents BIGINT NOT NULL DEFAULT 0 AFTER amount_cents");
+   self::column('payments','discount_type',"ALTER TABLE payments ADD COLUMN discount_type VARCHAR(10) NULL AFTER discount_cents");
+   self::column('payments','discount_percent',"ALTER TABLE payments ADD COLUMN discount_percent DECIMAL(7,4) NULL AFTER discount_type");
+   self::index('payments','idx_payments_invoice_settlement',"ALTER TABLE payments ADD INDEX idx_payments_invoice_settlement (invoice_id,paid_on)");
+   DB::run("INSERT INTO settings (`key`,value) VALUES ('schema_version','17') ON DUPLICATE KEY UPDATE value='17'");$version=17;
+  }
  }
  private static function hasColumn(string $table,string $column): bool {return (bool)DB::one('SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?',[$table,$column]);}
  private static function column(string $table,string $column,string $sql): void {if(!self::hasColumn($table,$column))DB::run($sql);}

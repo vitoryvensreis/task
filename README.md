@@ -28,7 +28,7 @@ O instalador aplica `database/schema.sql`, cria o administrador e grava as chave
 
 Substitua os arquivos da aplicação pelo conteúdo desta versão sem apagar `config/config.php`, `storage/installed.lock` ou seus dados. Na primeira requisição autenticada, o TaskEsc executa a migração compatível em `app/Migrations.php` e atualiza a estrutura necessária sem recriar o banco.
 
-A atualização mantém todas as migrações anteriores e inclui todas as migrações até o **schema 16**. Ela preserva clientes, tasks, arquivos, histórico e integrações existentes. O schema 8 acrescenta apenas metadados de tentativa/conclusão na fila de e-mails para alimentar o log administrativo. Os SQLs de referência ficam em `database/migrations/`, incluindo `005_taskesc_finance_routes_upload.sql`, `006_taskesc_api_notifications.sql`, `007_client_drive_routing.sql` e `008_email_delivery_log.sql`.
+A atualização mantém todas as migrações anteriores e inclui todas as migrações até o **schema 17**. Ela preserva clientes, tasks, arquivos, histórico e integrações existentes. O schema 8 acrescenta apenas metadados de tentativa/conclusão na fila de e-mails para alimentar o log administrativo. Os SQLs de referência ficam em `database/migrations/`, incluindo `005_taskesc_finance_routes_upload.sql`, `006_taskesc_api_notifications.sql`, `007_client_drive_routing.sql` e `008_email_delivery_log.sql`.
 
 Faça backup do banco antes de qualquer atualização em produção.
 
@@ -177,6 +177,18 @@ Para notificações de task, o campo **Regra** aparece como **Responsável da ta
 Também são registrados casos em que o push não pôde ser entregue: **Sem dispositivo**, **Push desativado** e **Falhou**. A tela **Saúde & Logs** ganhou a aba **Push**, e o card de saúde das notificações passa a considerar falhas de entrega das últimas 24 horas.
 
 O schema 16 cria a tabela `push_delivery_log`.
+
+
+
+### Ajustes v3.10 dos descontos em pagamentos
+
+A v3.10 adiciona **desconto no registro de pagamento**, com duas formas: **percentual (%)** ou **valor fixo (R$)**. O desconto é aplicado sobre o saldo aberto da cobrança e o modal recalcula em tempo real o valor recebido, o desconto e o saldo restante.
+
+O financeiro continua separando dinheiro real de concessões: **Recebido** considera somente o valor que entrou no caixa, enquanto o **saldo da cobrança** desconta tanto pagamentos quanto descontos concedidos. Assim, uma cobrança de R$ 400 com R$ 40 de desconto e R$ 360 recebidos fica quitada, mas o caixa registra apenas R$ 360 como entrada.
+
+Os detalhes da cobrança e as tabelas de cobranças/mensalidades mostram o total de desconto aplicado. O histórico financeiro também registra o desconto junto do pagamento.
+
+O schema 17 adiciona `discount_cents`, `discount_type` e `discount_percent` em `payments`.
 
 
 ## Apache

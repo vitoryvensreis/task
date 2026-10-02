@@ -1525,3 +1525,99 @@
     justify-content:flex-start;
   }
 }
+
+
+/* TaskEsc v3.10 — desconto em pagamentos */
+.finance-discount-value{
+  color:#d7b26f!important;
+}
+.payment-discount-modal{
+  width:min(600px,100%)!important;
+}
+.payment-discount-box{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:9px;
+  margin:10px 0 12px;
+  padding:11px;
+  border:1px solid #2b3238;
+  border-radius:9px;
+  background:#0a0d10;
+}
+.payment-discount-box>.field.hidden{display:none!important}
+.payment-discount-summary{
+  grid-column:1/-1;
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:6px;
+  margin-top:2px;
+}
+.payment-discount-summary>div{
+  min-width:0;
+  display:grid;
+  gap:3px;
+  padding:8px 9px;
+  border:1px solid #242d34;
+  border-radius:7px;
+  background:#0d1114;
+}
+.payment-discount-summary span{
+  color:#71808a;
+  font-size:8px;
+  text-transform:uppercase;
+  letter-spacing:.45px;
+}
+.payment-discount-summary b{
+  color:#dfe6ea;
+  font-size:11px;
+  overflow-wrap:anywhere;
+}
+.payment-discount-result{
+  border-color:#34503f!important;
+  background:#0c1510!important;
+}
+.payment-discount-result b{color:#9dc6aa!important}
+.percent-input{
+  position:relative;
+}
+.percent-input .input{
+  padding-right:34px;
+}
+.percent-input>span{
+  position:absolute;
+  top:50%;
+  right:12px;
+  transform:translateY(-50%);
+  color:#7d8992;
+  font-size:11px;
+  pointer-events:none;
+}
+.invoice-summary-grid-discount{
+  grid-template-columns:repeat(5,minmax(0,1fr))!important;
+}
+.finance-table .finance-discount-value,
+.monthly-billing-panel .finance-discount-value{
+  font-weight:700;
+  white-space:nowrap;
+}
+
+@media(max-width:760px){
+  .payment-discount-summary{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+  .invoice-summary-grid-discount{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  }
+}
+@media(max-width:520px){
+  .payment-discount-box{
+    grid-template-columns:1fr;
+  }
+  .payment-discount-summary{
+    grid-column:1;
+    grid-template-columns:1fr 1fr;
+  }
+  .invoice-summary-grid-discount{
+    grid-template-columns:1fr!important;
+  }
+}

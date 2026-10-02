@@ -24,6 +24,7 @@ final class Notify {
     'demand_id'=>$demand,
     'url'=>base($demand?'kanban/task/'.$demand:'dashboard'),
     'tag'=>'taskesc-notification-'.$notificationId,
+    'scope'=>'task_responsible',
     'badge_count'=>$unread
    ]);
   }

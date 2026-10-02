@@ -28,7 +28,7 @@ O instalador aplica `database/schema.sql`, cria o administrador e grava as chave
 
 Substitua os arquivos da aplicação pelo conteúdo desta versão sem apagar `config/config.php`, `storage/installed.lock` ou seus dados. Na primeira requisição autenticada, o TaskEsc executa a migração compatível em `app/Migrations.php` e atualiza a estrutura necessária sem recriar o banco.
 
-A atualização mantém todas as migrações anteriores e inclui agora a migração **v2.8 / schema 8**. Ela preserva clientes, tasks, arquivos, histórico e integrações existentes. O schema 8 acrescenta apenas metadados de tentativa/conclusão na fila de e-mails para alimentar o log administrativo. Os SQLs de referência ficam em `database/migrations/`, incluindo `005_taskesc_finance_routes_upload.sql`, `006_taskesc_api_notifications.sql`, `007_client_drive_routing.sql` e `008_email_delivery_log.sql`.
+A atualização mantém todas as migrações anteriores e inclui todas as migrações até o **schema 12**. Ela preserva clientes, tasks, arquivos, histórico e integrações existentes. O schema 8 acrescenta apenas metadados de tentativa/conclusão na fila de e-mails para alimentar o log administrativo. Os SQLs de referência ficam em `database/migrations/`, incluindo `005_taskesc_finance_routes_upload.sql`, `006_taskesc_api_notifications.sql`, `007_client_drive_routing.sql` e `008_email_delivery_log.sql`.
 
 Faça backup do banco antes de qualquer atualização em produção.
 
@@ -57,6 +57,14 @@ A Agenda passa a abrir por padrão na **visão semanal**.
 A v3.3 é uma atualização visual e **não altera o schema do banco**. Ela remove rolagens horizontais indevidas dos cards do Dashboard em telas pequenas, reorganiza os indicadores e gráficos para a largura disponível e mantém rolagem lateral apenas nos componentes em que ela é funcional, como tabelas extensas e o quadro Kanban.
 
 No Kanban, os filtros passam a usar uma grade alinhada no desktop e uma composição compacta em duas colunas no mobile, com a busca ocupando a largura total. O menu mobile deixa de renderizar o ícone duplicado. A interface deixa de depender do CDN externo de ícones e passa a carregar os SVGs localmente, incluindo o sino de notificações. O botão **X** redundante foi removido do popover de notificações; ele continua fechando ao tocar novamente no sino, clicar fora ou pressionar Esc.
+
+
+
+### Ajustes v3.4 de upload e correções mobile
+
+A v3.4 corrige o texto literal `\\n` que podia aparecer no topo da interface mobile e adiciona proteção de idempotência aos uploads. Cada envio recebe uma chave única por operação; reenvios causados por duplo submit, repetição de requisição ou recuperação de rede reutilizam a mesma sessão/registro em vez de criar outro anexo. O schema 12 adiciona a coluna `files.upload_key` com índice único para reforçar essa garantia no banco.
+
+O upload retomável continua passando pelo TaskEsc, mas agora usa blocos de até **8 MB** em vez de 1 MB, reduzindo significativamente a quantidade de requisições. Arquivos de até 8 MB são enviados em um único bloco. Se a hospedagem rejeitar blocos maiores com HTTP 413, o navegador reduz automaticamente o tamanho até encontrar um valor aceito e guarda essa preferência durante a sessão. Em falhas de comunicação com o Google Drive, o backend consulta a posição já confirmada antes de reenviar dados, evitando retransmissões desnecessárias.
 
 
 ## Apache

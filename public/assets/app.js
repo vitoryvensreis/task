@@ -428,7 +428,7 @@
                 <small>custos já pagos</small>
               </div>
               <div class="finance-cash-operator">=</div>
-              <div class="finance-cash-card balance ${profitAmount data-breakdown="current" role="button" tabindex="0" title="Ver entradas e saídas que formam o saldo atual">=0?'positive':'negative'}">
+              <div class="finance-cash-card balance ${profitAmount>=0?'positive':'negative'}" data-breakdown="current" role="button" tabindex="0" title="Ver entradas e saídas que formam o saldo atual">
                 <span>Quanto tem no momento</span>
                 <b>${money(profitAmount)}</b>
                 <small>entrou − já saiu</small>
@@ -451,7 +451,7 @@
                 <small>custos ainda a pagar</small>
               </div>
               <div class="finance-cash-operator">→</div>
-              <div class="finance-cash-card final ${overallProjected data-breakdown="final" role="button" tabindex="0" title="Ver tudo que forma a projeção final">=0?'positive':'negative'}">
+              <div class="finance-cash-card final ${overallProjected>=0?'positive':'negative'}" data-breakdown="final" role="button" tabindex="0" title="Ver tudo que forma a projeção final">
                 <span>Quanto vai sobrar no final</span>
                 <b>${money(overallProjected)}</b>
                 <small>saldo atual + vai entrar − vai sair</small>

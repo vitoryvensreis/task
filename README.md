@@ -191,6 +191,16 @@ Os detalhes da cobrança e as tabelas de cobranças/mensalidades mostram o total
 O schema 17 adiciona `discount_cents`, `discount_type` e `discount_percent` em `payments`.
 
 
+
+### Ajustes v3.10.1 de mobile e valores a receber
+
+A v3.10.1 corrige a experiência mobile observada no Financeiro e no detalhe das tasks. O modal da task passa a respeitar a área segura do iPhone, mantém o botão de fechar visível, empilha corretamente cabeçalhos e ações, impede quebra ruim do texto dos botões e dá mais espaço entre arquivos e cards.
+
+No Financeiro, as tabelas principais de **Entradas / cobranças**, **Saídas / custos** e **Mensalidades recorrentes** deixam de depender de uma tabela larga no celular e passam a ser apresentadas como cards responsivos com rótulos, ações acessíveis e sem colunas cortadas.
+
+O cálculo de **Quanto vai entrar / A receber** agora soma **todas as cobranças em aberto existentes**, independentemente do período financeiro selecionado. O período continua sendo usado para valores já recebidos, custos pagos, custos pendentes e demais análises do intervalo. O detalhamento do card **Quanto vai entrar** segue a mesma regra e mostra cobranças abertas de qualquer data.
+
+
 ## Apache
 
 O caminho público deve terminar em `/public`. Exemplo conceitual:

@@ -67,6 +67,12 @@ A v3.4 corrige o texto literal `\\n` que podia aparecer no topo da interface mob
 O upload retomável continua passando pelo TaskEsc, mas agora usa blocos de até **8 MB** em vez de 1 MB, reduzindo significativamente a quantidade de requisições. Arquivos de até 8 MB são enviados em um único bloco. Se a hospedagem rejeitar blocos maiores com HTTP 413, o navegador reduz automaticamente o tamanho até encontrar um valor aceito e guarda essa preferência durante a sessão. Em falhas de comunicação com o Google Drive, o backend consulta a posição já confirmada antes de reenviar dados, evitando retransmissões desnecessárias.
 
 
+
+### Ajustes v3.4.1 de cards no mobile
+
+A v3.4.1 remove barras de rolagem horizontais indevidas de cards do Dashboard e de outros cards compactos. Os conteúdos internos agora podem encolher e quebrar linha corretamente, enquanto rolagens horizontais continuam apenas em componentes onde são intencionais, como tabelas extensas e o Kanban.
+
+
 ## Apache
 
 O caminho público deve terminar em `/public`. Exemplo conceitual:

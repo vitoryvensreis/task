@@ -57,22 +57,30 @@ final class Finance {
   Auth::admin();
   return DB::tx(function() use($p): array {
    $i=DB::one('SELECT * FROM invoices WHERE id=? FOR UPDATE',[integer($p['invoice_id'],1)]);if(!$i||$i['status']==='cancelled'||!empty($i['deleted_at']))fail('Cobrança indisponível.');
-   $amount=integer($p['amount_cents']??0,1);$paid=(int)(DB::one('SELECT COALESCE(SUM(amount_cents),0) AS n FROM payments WHERE invoice_id=?',[$i['id']])['n']??0);$refund=null;
+   $amount=integer($p['amount_cents']??0,0);$paid=(int)(DB::one('SELECT COALESCE(SUM(amount_cents),0) AS n FROM payments WHERE invoice_id=?',[$i['id']])['n']??0);$discounted=(int)(DB::one('SELECT COALESCE(SUM(discount_cents),0) AS n FROM payments WHERE invoice_id=?',[$i['id']])['n']??0);$settled=$paid+$discounted;$open=max(0,(int)$i['amount_cents']-$settled);$refund=null;$discount=0;$discountType='none';$discountPercent=null;
    if(!empty($p['refund_of'])){
     $refund=DB::one('SELECT * FROM payments WHERE id=? AND invoice_id=?',[(int)$p['refund_of'],$i['id']]);if(!$refund||(int)$refund['amount_cents']<=0)fail('Pagamento original inválido.');
     $already=abs((int)(DB::one('SELECT COALESCE(SUM(amount_cents),0) AS n FROM payments WHERE refund_of=?',[$refund['id']])['n']??0));if($amount>(int)$refund['amount_cents']-$already)fail('Estorno acima do valor recebido.');$amount=-$amount;
-   }elseif($amount>(int)$i['amount_cents']-$paid)fail('Pagamento maior que o saldo aberto.');
-   $id=DB::insert('payments',['invoice_id'=>$i['id'],'amount_cents'=>$amount,'paid_on'=>datev($p['paid_on']??'',false),'method'=>required($p,'method',50),'note'=>mb_substr((string)($p['note']??''),0,1000),'refund_of'=>$refund['id']??null,'created_by'=>Auth::$user['id'],'created_at'=>now()]);
-   audit('invoice',$i['id'],$refund?'refund':'payment',null,['payment_id'=>$id,'amount_cents'=>$amount,'method'=>$p['method']??'','paid_on'=>$p['paid_on']??'']);
-   return ['id'=>$id];
+   }else{
+    $discountType=enumv($p['discount_type']??'none',['none','percent','fixed'],'tipo de desconto');
+    if($discountType==='percent'){
+     $raw=str_replace(',','.',trim((string)($p['discount_percent']??'0')));if(!is_numeric($raw))fail('Percentual de desconto inválido.');$discountPercent=round((float)$raw,4);if($discountPercent<=0||$discountPercent>100)fail('O desconto percentual deve ser maior que 0% e no máximo 100%.');$discount=(int)round($open*$discountPercent/100);
+    }elseif($discountType==='fixed'){$discount=integer($p['discount_cents']??0,1);}
+    if($amount+$discount<1)fail('Informe um valor recebido ou um desconto.');
+    if($amount+$discount>$open)fail('Pagamento + desconto maior que o saldo aberto.');
+   }
+   $method=$refund||$amount>0?required($p,'method',50):'Desconto';
+   $id=DB::insert('payments',['invoice_id'=>$i['id'],'amount_cents'=>$amount,'discount_cents'=>$refund?0:$discount,'discount_type'=>$refund||$discountType==='none'?null:$discountType,'discount_percent'=>$refund?null:$discountPercent,'paid_on'=>datev($p['paid_on']??'',false),'method'=>$method,'note'=>mb_substr((string)($p['note']??''),0,1000),'refund_of'=>$refund['id']??null,'created_by'=>Auth::$user['id'],'created_at'=>now()]);
+   audit('invoice',$i['id'],$refund?'refund':'payment',null,['payment_id'=>$id,'amount_cents'=>$amount,'discount_cents'=>$refund?0:$discount,'discount_type'=>$refund?null:$discountType,'discount_percent'=>$refund?null:$discountPercent,'method'=>$method,'paid_on'=>$p['paid_on']??'']);
+   return ['id'=>$id,'discount_cents'=>$refund?0:$discount,'settled_cents'=>$refund?$amount:$amount+$discount,'balance_cents'=>$refund?max(0,$open-$amount):max(0,$open-$amount-$discount)];
   });
  }
- public static function cancel(array $p): array {Auth::admin();$i=DB::one('SELECT * FROM invoices WHERE id=? FOR UPDATE',[integer($p['id'],1)]);if(!$i)fail('Cobrança não encontrada.',404);$paid=(int)DB::one('SELECT COALESCE(SUM(amount_cents),0) AS n FROM payments WHERE invoice_id=?',[$i['id']])['n'];if($paid!==0)fail('Registre o estorno antes de cancelar a cobrança.');DB::update('invoices',$i['id'],['status'=>'cancelled']);audit('invoice',$i['id'],'cancelled');return ['saved'=>true];}
+ public static function cancel(array $p): array {Auth::admin();$i=DB::one('SELECT * FROM invoices WHERE id=? FOR UPDATE',[integer($p['id'],1)]);if(!$i)fail('Cobrança não encontrada.',404);$settled=(int)DB::one('SELECT COALESCE(SUM(amount_cents+COALESCE(discount_cents,0)),0) AS n FROM payments WHERE invoice_id=?',[$i['id']])['n'];if($settled!==0)fail('Esta cobrança possui pagamentos ou descontos. Regularize antes de cancelar.');DB::update('invoices',$i['id'],['status'=>'cancelled']);audit('invoice',$i['id'],'cancelled');return ['saved'=>true];}
  public static function deleteInvoice(array $p): array {
   Auth::admin();$id=integer($p['id']??0,1);$reason=required($p,'reason',500);if(mb_strlen($reason)<5)fail('Informe um motivo de exclusão com pelo menos 5 caracteres.');
   return DB::tx(function() use($id,$reason): array {
    $i=DB::one('SELECT * FROM invoices WHERE id=? FOR UPDATE',[$id]);if(!$i||!empty($i['deleted_at']))fail('Cobrança não encontrada ou já excluída.',404);
-   $paid=(int)DB::one('SELECT COALESCE(SUM(amount_cents),0) AS n FROM payments WHERE invoice_id=?',[$id])['n'];if($paid!==0)fail('Esta cobrança possui pagamentos. Registre os estornos antes de excluí-la.',409);
+   $settled=(int)DB::one('SELECT COALESCE(SUM(amount_cents+COALESCE(discount_cents,0)),0) AS n FROM payments WHERE invoice_id=?',[$id])['n'];if($settled!==0)fail('Esta cobrança possui pagamentos ou descontos. Regularize antes de excluí-la.',409);
    $deletedAt=now();$actor=(int)Auth::$user['id'];DB::update('invoices',$id,['status'=>'cancelled','deleted_at'=>$deletedAt,'deleted_by'=>$actor,'delete_reason'=>$reason]);
    audit('invoice',$id,'deleted',$i,['deleted_at'=>$deletedAt,'deleted_by'=>$actor,'deleted_by_name'=>Auth::$user['name']??null,'reason'=>$reason]);
    return ['deleted'=>true,'id'=>$id,'deleted_at'=>$deletedAt,'deleted_by'=>$actor,'reason'=>$reason];
@@ -166,11 +174,11 @@ final class Finance {
  public static function cashBreakdown(array $p=[]): array {
   Auth::admin();[$from,$to]=self::expenseRange($p);self::syncCommercialInvoices($from,$to);self::syncExpenses($from,$to);
 
-  $received=DB::all("SELECT p.id,p.invoice_id,p.amount_cents,p.paid_on AS movement_on,p.method,p.note,p.refund_of,i.description,c.name AS client_name
+  $received=DB::all("SELECT p.id,p.invoice_id,p.amount_cents,p.discount_cents,p.discount_type,p.discount_percent,p.paid_on AS movement_on,p.method,p.note,p.refund_of,i.description,c.name AS client_name
    FROM payments p
    JOIN invoices i ON i.id=p.invoice_id
    JOIN clients c ON c.id=i.client_id
-   WHERE i.status<>'cancelled' AND i.deleted_at IS NULL AND p.paid_on BETWEEN ? AND ?
+   WHERE i.status<>'cancelled' AND i.deleted_at IS NULL AND p.paid_on BETWEEN ? AND ? AND p.amount_cents<>0
    ORDER BY p.paid_on DESC,p.id DESC",[$from,$to]);
 
   $paidOperational=DB::all("SELECT e.id,e.description,e.vendor,e.category,e.amount_cents,e.paid_on AS movement_on,'expense' AS source_type,NULL AS task_title,NULL AS client_name
@@ -188,7 +196,7 @@ final class Finance {
 
   $futureIn=DB::all("SELECT q.* FROM (
     SELECT i.id,i.description,i.due_on AS movement_on,i.amount_cents,c.name AS client_name,
-      GREATEST(0,i.amount_cents-(SELECT COALESCE(SUM(p.amount_cents),0) FROM payments p WHERE p.invoice_id=i.id)) AS balance_cents,
+      GREATEST(0,i.amount_cents-(SELECT COALESCE(SUM(p.amount_cents+COALESCE(p.discount_cents,0)),0) FROM payments p WHERE p.invoice_id=i.id)) AS balance_cents,
       CASE WHEN i.source_key LIKE 'client-monthly:%' THEN 'monthly' WHEN i.source_key LIKE 'task:%' OR i.demand_id IS NOT NULL THEN 'task' ELSE 'manual' END AS source_type
     FROM invoices i JOIN clients c ON c.id=i.client_id
     WHERE i.status<>'cancelled' AND i.deleted_at IS NULL AND i.due_on BETWEEN ? AND ?
@@ -221,8 +229,8 @@ final class Finance {
   Auth::admin();[$from,$to,$tz]=self::expenseRange($p);self::syncCommercialInvoices($from,$to);self::syncExpenses($from,$to);$today=(new DateTimeImmutable('now',$tz))->format('Y-m-d');
   $billed=(int)(DB::one("SELECT COALESCE(SUM(amount_cents),0) AS n FROM invoices WHERE status<>'cancelled' AND deleted_at IS NULL AND due_on BETWEEN ? AND ?",[$from,$to])['n']??0);
   $received=(int)(DB::one("SELECT COALESCE(SUM(p.amount_cents),0) AS n FROM payments p JOIN invoices i ON i.id=p.invoice_id WHERE i.status<>'cancelled' AND i.deleted_at IS NULL AND p.paid_on BETWEEN ? AND ?",[$from,$to])['n']??0);
-  $open=(int)(DB::one("SELECT COALESCE(SUM(GREATEST(0,i.amount_cents-(SELECT COALESCE(SUM(p.amount_cents),0) FROM payments p WHERE p.invoice_id=i.id))),0) AS n FROM invoices i WHERE i.status<>'cancelled' AND i.deleted_at IS NULL AND i.due_on BETWEEN ? AND ?",[$from,$to])['n']??0);
-  $overdue=(int)(DB::one("SELECT COALESCE(SUM(GREATEST(0,i.amount_cents-(SELECT COALESCE(SUM(p.amount_cents),0) FROM payments p WHERE p.invoice_id=i.id))),0) AS n FROM invoices i WHERE i.status<>'cancelled' AND i.deleted_at IS NULL AND i.due_on<? AND i.due_on BETWEEN ? AND ?",[$today,$from,$to])['n']??0);
+  $open=(int)(DB::one("SELECT COALESCE(SUM(GREATEST(0,i.amount_cents-(SELECT COALESCE(SUM(p.amount_cents+COALESCE(p.discount_cents,0)),0) FROM payments p WHERE p.invoice_id=i.id))),0) AS n FROM invoices i WHERE i.status<>'cancelled' AND i.deleted_at IS NULL AND i.due_on BETWEEN ? AND ?",[$from,$to])['n']??0);
+  $overdue=(int)(DB::one("SELECT COALESCE(SUM(GREATEST(0,i.amount_cents-(SELECT COALESCE(SUM(p.amount_cents+COALESCE(p.discount_cents,0)),0) FROM payments p WHERE p.invoice_id=i.id))),0) AS n FROM invoices i WHERE i.status<>'cancelled' AND i.deleted_at IS NULL AND i.due_on<? AND i.due_on BETWEEN ? AND ?",[$today,$from,$to])['n']??0);
 
   $operational=(int)(DB::one("SELECT COALESCE(SUM(amount_cents),0) AS n FROM expenses WHERE deleted_at IS NULL AND spent_on BETWEEN ? AND ?",[$from,$to])['n']??0);
   $task=(int)(DB::one("SELECT COALESCE(SUM(amount_cents),0) AS n FROM costs WHERE spent_on BETWEEN ? AND ?",[$from,$to])['n']??0);$expenses=$operational+$task;

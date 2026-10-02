@@ -142,3 +142,67 @@
   .grid.stats,.client-stats,.comparison-grid{grid-template-columns:1fr!important}
   .comparison-card.finance-summary-card{grid-column:auto!important}
 }
+
+
+/* TaskEsc v3.4.1 — remove rolagem horizontal indevida de cards */
+.comparison-card,
+.dashboard-chart-card,
+.stat-card,
+.health-card,
+.finance-analysis-grid>div,
+.report-analysis-grid>div,
+.expense-category-strip>div,
+.client-finance-summary>div,
+.invoice-summary-grid>div,
+.account-check,
+.compact-row{
+  min-width:0!important;
+  max-width:100%!important;
+  overflow-x:hidden!important;
+}
+
+.comparison-card>*,
+.stat-card>*,
+.health-card>*,
+.finance-analysis-grid>div>*,
+.report-analysis-grid>div>*,
+.expense-category-strip>div>*,
+.client-finance-summary>div>*,
+.invoice-summary-grid>div>*{
+  min-width:0;
+  max-width:100%;
+}
+
+.comparison-card>span,
+.comparison-card>b,
+.comparison-card>small,
+.comparison-card>em,
+.stat-card .stat-label,
+.stat-card .stat-value,
+.stat-card .stat-note,
+.finance-analysis-grid span,
+.finance-analysis-grid b,
+.finance-analysis-grid small,
+.report-analysis-grid span,
+.report-analysis-grid b,
+.report-analysis-grid small{
+  white-space:normal!important;
+  overflow-wrap:anywhere;
+  word-break:normal;
+}
+
+@media(max-width:760px){
+  .comparison-card,
+  .dashboard-chart-card,
+  .stat-card,
+  .health-card,
+  .finance-analysis-grid>div,
+  .report-analysis-grid>div,
+  .expense-category-strip>div,
+  .client-finance-summary>div,
+  .invoice-summary-grid>div{
+    overflow:hidden!important;
+  }
+
+  .comparison-card::after{pointer-events:none}
+}

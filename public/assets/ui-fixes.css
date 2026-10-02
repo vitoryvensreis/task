@@ -1621,3 +1621,274 @@
     grid-template-columns:1fr!important;
   }
 }
+
+
+/* TaskEsc v3.10.1 — mobile financeiro/tasks e tabelas sem corte */
+@media(max-width:760px){
+  /* Task: respeita notch/safe-area e evita conteúdo cortado no topo. */
+  .task-backdrop{
+    place-items:start center!important;
+    overflow:auto;
+    padding:
+      calc(env(safe-area-inset-top, 0px) + 58px)
+      10px
+      calc(env(safe-area-inset-bottom, 0px) + 12px)!important;
+  }
+  .task-screen-close{
+    top:calc(env(safe-area-inset-top, 0px) + 10px)!important;
+    right:10px!important;
+  }
+  .task-backdrop>.task-detail-modal,
+  .task-backdrop>.task-modal{
+    width:100%!important;
+    max-width:100%!important;
+    max-height:none!important;
+    margin:0!important;
+    border-radius:12px;
+  }
+  .task-detail-modal{
+    padding:12px!important;
+  }
+  .task-detail-modal>.modal-head{
+    margin-bottom:10px;
+    padding:2px 2px 12px;
+  }
+  .task-detail-modal>.modal-head h3{
+    font-size:20px;
+    line-height:1.15;
+    overflow-wrap:anywhere;
+  }
+  .task-detail-modal .detail-section{
+    margin-top:10px;
+    padding:12px;
+  }
+  .task-detail-modal .detail-section>.panel-head{
+    width:100%;
+    align-items:stretch;
+    flex-direction:column;
+    gap:10px;
+  }
+  .task-detail-modal .detail-section>.panel-head>div:first-child{
+    min-width:0;
+    width:100%;
+  }
+  .task-detail-modal .detail-section>.panel-head .top-actions{
+    width:100%;
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:8px;
+  }
+  .task-detail-modal .detail-section>.panel-head .top-actions>*{
+    width:100%;
+    min-width:0;
+    min-height:42px;
+    padding-left:10px;
+    padding-right:10px;
+    justify-content:center;
+    white-space:nowrap;
+  }
+  .task-detail-modal .detail-section>.panel-head .top-actions>*:last-child:nth-child(odd){
+    grid-column:1/-1;
+  }
+  .task-detail-modal .file-grid{
+    gap:10px;
+  }
+  .task-detail-modal .file-card{
+    grid-template-columns:42px minmax(0,1fr);
+    gap:9px;
+    padding:10px;
+  }
+  .task-detail-modal .file-icon{
+    width:42px;
+    height:42px;
+  }
+  .task-detail-modal .file-info b,
+  .task-detail-modal .file-info span{
+    min-width:0;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .task-detail-modal .file-actions{
+    grid-column:1/-1;
+    width:100%;
+    padding-left:0!important;
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+  }
+  .task-detail-modal .file-actions>*{
+    flex:1 1 96px;
+    min-width:0;
+    min-height:39px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    white-space:nowrap;
+  }
+  .task-detail-modal .task-summary{
+    gap:8px;
+  }
+
+  /* Financeiro: ações e cards com respiro e sem texto quebrado. */
+  .finance-title .top-actions{
+    gap:8px!important;
+  }
+  .finance-title .top-actions button{
+    min-width:0;
+    min-height:44px;
+    white-space:nowrap;
+  }
+  .finance-cash-groups{
+    gap:12px;
+  }
+  .finance-cash-group{
+    padding:10px;
+  }
+  .finance-cash-cards{
+    gap:10px!important;
+  }
+  .finance-cash-card{
+    margin:0;
+    min-height:126px;
+  }
+  .finance-cash-formula{
+    gap:10px;
+  }
+
+  /* Tabelas principais viram cards no celular em vez de cortar colunas. */
+  .finance-mobile-cards{
+    display:block;
+    width:100%;
+    min-width:0!important;
+  }
+  .finance-mobile-cards thead{
+    display:none;
+  }
+  .finance-mobile-cards tbody{
+    display:grid;
+    gap:10px;
+    width:100%;
+  }
+  .finance-mobile-cards tbody tr[data-filter-row]{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:0 12px;
+    width:100%;
+    padding:11px 12px;
+    border:1px solid #252e35;
+    border-radius:10px;
+    background:#0a0e11;
+  }
+  .finance-mobile-cards tbody tr[data-filter-row]:hover{
+    background:#0a0e11;
+  }
+  .finance-mobile-cards tbody tr[data-filter-row] td{
+    display:grid;
+    gap:3px;
+    min-width:0;
+    padding:8px 0;
+    border-bottom:1px solid #1c242a;
+    white-space:normal;
+  }
+  .finance-mobile-cards tbody tr[data-filter-row] td::before{
+    color:#66747e;
+    font-size:7.5px;
+    font-weight:800;
+    letter-spacing:.55px;
+    text-transform:uppercase;
+  }
+  .finance-mobile-cards tbody tr[data-filter-row] td:last-child{
+    border-bottom:0;
+  }
+  .finance-mobile-cards .row-actions{
+    width:100%;
+    display:flex;
+    flex-wrap:wrap;
+    gap:7px;
+  }
+  .finance-mobile-cards .row-actions>*{
+    flex:1 1 110px;
+    min-width:0;
+    min-height:38px;
+    justify-content:center;
+    white-space:nowrap;
+  }
+  .finance-mobile-cards tr[data-filter-empty]{
+    display:block;
+    width:100%;
+  }
+  .finance-mobile-cards tr[data-filter-empty] td{
+    display:block;
+    width:100%;
+  }
+
+  .finance-entry-panel .finance-mobile-cards td:nth-child(1)::before{content:"Origem"}
+  .finance-entry-panel .finance-mobile-cards td:nth-child(2)::before{content:"Descrição"}
+  .finance-entry-panel .finance-mobile-cards td:nth-child(3)::before{content:"Cliente"}
+  .finance-entry-panel .finance-mobile-cards td:nth-child(4)::before{content:"Vencimento"}
+  .finance-entry-panel .finance-mobile-cards td:nth-child(5)::before{content:"Valor"}
+  .finance-entry-panel .finance-mobile-cards td:nth-child(6)::before{content:"Recebido"}
+  .finance-entry-panel .finance-mobile-cards td:nth-child(7)::before{content:"Desconto"}
+  .finance-entry-panel .finance-mobile-cards td:nth-child(8)::before{content:"Saldo"}
+  .finance-entry-panel .finance-mobile-cards td:nth-child(9)::before{content:"Status"}
+  .finance-entry-panel .finance-mobile-cards td:nth-child(10)::before{content:"Ações"}
+  .finance-entry-panel .finance-mobile-cards td:nth-child(1),
+  .finance-entry-panel .finance-mobile-cards td:nth-child(2),
+  .finance-entry-panel .finance-mobile-cards td:nth-child(10){
+    grid-column:1/-1;
+  }
+
+  .expense-panel .finance-mobile-cards td:nth-child(1)::before{content:"Data"}
+  .expense-panel .finance-mobile-cards td:nth-child(2)::before{content:"Descrição"}
+  .expense-panel .finance-mobile-cards td:nth-child(3)::before{content:"Categoria"}
+  .expense-panel .finance-mobile-cards td:nth-child(4)::before{content:"Tipo"}
+  .expense-panel .finance-mobile-cards td:nth-child(5)::before{content:"Valor"}
+  .expense-panel .finance-mobile-cards td:nth-child(6)::before{content:"Pagamento"}
+  .expense-panel .finance-mobile-cards td:nth-child(7)::before{content:"Pago em"}
+  .expense-panel .finance-mobile-cards td:nth-child(8)::before{content:"Ações"}
+  .expense-panel .finance-mobile-cards td:nth-child(1),
+  .expense-panel .finance-mobile-cards td:nth-child(2),
+  .expense-panel .finance-mobile-cards td:nth-child(8){
+    grid-column:1/-1;
+  }
+
+  .monthly-billing-panel .monthly-mobile-table td:nth-child(1)::before{content:"Cliente"}
+  .monthly-billing-panel .monthly-mobile-table td:nth-child(2)::before{content:"Mensalidade"}
+  .monthly-billing-panel .monthly-mobile-table td:nth-child(3)::before{content:"Vencimento"}
+  .monthly-billing-panel .monthly-mobile-table td:nth-child(4)::before{content:"Cobrança"}
+  .monthly-billing-panel .monthly-mobile-table td:nth-child(5)::before{content:"Recebido"}
+  .monthly-billing-panel .monthly-mobile-table td:nth-child(6)::before{content:"Desconto"}
+  .monthly-billing-panel .monthly-mobile-table td:nth-child(7)::before{content:"Saldo"}
+  .monthly-billing-panel .monthly-mobile-table td:nth-child(8)::before{content:"Status"}
+  .monthly-billing-panel .monthly-mobile-table td:nth-child(9)::before{content:"Ações"}
+  .monthly-billing-panel .monthly-mobile-table td:nth-child(1),
+  .monthly-billing-panel .monthly-mobile-table td:nth-child(9){
+    grid-column:1/-1;
+  }
+}
+
+@media(max-width:480px){
+  .task-detail-modal .detail-section>.panel-head .top-actions{
+    grid-template-columns:1fr;
+  }
+  .task-detail-modal .detail-section>.panel-head .top-actions>*:last-child:nth-child(odd){
+    grid-column:auto;
+  }
+  .task-detail-modal .file-actions>*{
+    flex-basis:calc(50% - 4px);
+  }
+  .finance-mobile-cards tbody tr[data-filter-row]{
+    grid-template-columns:1fr;
+  }
+  .finance-entry-panel .finance-mobile-cards td:nth-child(1),
+  .finance-entry-panel .finance-mobile-cards td:nth-child(2),
+  .finance-entry-panel .finance-mobile-cards td:nth-child(10),
+  .expense-panel .finance-mobile-cards td:nth-child(1),
+  .expense-panel .finance-mobile-cards td:nth-child(2),
+  .expense-panel .finance-mobile-cards td:nth-child(8),
+  .monthly-billing-panel .monthly-mobile-table td:nth-child(1),
+  .monthly-billing-panel .monthly-mobile-table td:nth-child(9){
+    grid-column:auto;
+  }
+}

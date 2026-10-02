@@ -1833,6 +1833,7 @@
   .finance-entry-panel .finance-mobile-cards td:nth-child(8)::before{content:"Saldo"}
   .finance-entry-panel .finance-mobile-cards td:nth-child(9)::before{content:"Status"}
   .finance-entry-panel .finance-mobile-cards td:nth-child(10)::before{content:"Ações"}
+  .finance-entry-panel .finance-mobile-cards td:nth-child(1),
   .finance-entry-panel .finance-mobile-cards td:nth-child(2),
   .finance-entry-panel .finance-mobile-cards td:nth-child(10){
     grid-column:1/-1;
@@ -1846,6 +1847,7 @@
   .expense-panel .finance-mobile-cards td:nth-child(6)::before{content:"Pagamento"}
   .expense-panel .finance-mobile-cards td:nth-child(7)::before{content:"Pago em"}
   .expense-panel .finance-mobile-cards td:nth-child(8)::before{content:"Ações"}
+  .expense-panel .finance-mobile-cards td:nth-child(1),
   .expense-panel .finance-mobile-cards td:nth-child(2),
   .expense-panel .finance-mobile-cards td:nth-child(8){
     grid-column:1/-1;
@@ -1879,8 +1881,10 @@
   .finance-mobile-cards tbody tr[data-filter-row]{
     grid-template-columns:1fr;
   }
+  .finance-entry-panel .finance-mobile-cards td:nth-child(1),
   .finance-entry-panel .finance-mobile-cards td:nth-child(2),
   .finance-entry-panel .finance-mobile-cards td:nth-child(10),
+  .expense-panel .finance-mobile-cards td:nth-child(1),
   .expense-panel .finance-mobile-cards td:nth-child(2),
   .expense-panel .finance-mobile-cards td:nth-child(8),
   .monthly-billing-panel .monthly-mobile-table td:nth-child(1),

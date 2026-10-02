@@ -201,6 +201,16 @@ No Financeiro, as tabelas principais de **Entradas / cobranças**, **Saídas / c
 O cálculo de **Quanto vai entrar / A receber** agora soma **todas as cobranças em aberto existentes**, independentemente do período financeiro selecionado. O período continua sendo usado para valores já recebidos, custos pagos, custos pendentes e demais análises do intervalo. O detalhamento do card **Quanto vai entrar** segue a mesma regra e mostra cobranças abertas de qualquer data.
 
 
+
+### Ajustes v3.10.2 de interface mobile
+
+A v3.10.2 corrige detalhes adicionais observados no iPhone. Os campos de data do **Período financeiro** passam a respeitar integralmente a largura do card, sem escapar pela lateral.
+
+No detalhe da task, as ações principais passam a usar **ícones compactos no mobile**, mantendo texto no desktop e atributos de acessibilidade. O Kanban também limita corretamente o nome do responsável e outros textos ao interior do card, usando reticências quando necessário.
+
+No Dashboard, quando o administrador possui cinco cards no resumo, o card **A receber** ocupa as duas colunas da última linha no celular. O Financeiro também recebe espaçamento vertical explícito entre os painéis principais para evitar o efeito de cards colados.
+
+
 ## Apache
 
 O caminho público deve terminar em `/public`. Exemplo conceitual:

@@ -211,6 +211,16 @@ No detalhe da task, as ações principais passam a usar **ícones compactos no m
 No Dashboard, quando o administrador possui cinco cards no resumo, o card **A receber** ocupa as duas colunas da última linha no celular. O Financeiro também recebe espaçamento vertical explícito entre os painéis principais para evitar o efeito de cards colados.
 
 
+
+### Ajustes v3.10.3 de estabilidade mobile
+
+A v3.10.3 reforça a responsividade de **todos os campos de data** (`date`, `datetime-local`, `month` e `time`) para que respeitem a largura do card/formulário inclusive no Safari/iOS. Grids de formulários, filtros, relatórios e período financeiro também recebem limites explícitos de largura para impedir overflow horizontal.
+
+No mobile, os principais grupos de cards passam a usar espaçamento consistente entre painéis, grids, cards financeiros, arquivos e blocos de análise. A área de arquivos da task usa ações compactas com ícones para **visualizar, baixar, avaliar e excluir**, mantendo `title` e `aria-label` para acessibilidade. Ações principais que precisam de contexto continuam com texto.
+
+A atualização automática foi alterada para não interromper o usuário. O TaskEsc não faz rerender automático enquanto houver campo em edição, seletor/data em foco, navegação aberta ou interação recente. Quando uma atualização da mesma tela é necessária, o sistema preserva a posição vertical da página e também as rolagens internas de Kanban, tabelas, calendário e logs. Navegação da Agenda, filtros, paginação e atualizações na mesma tela usam o mesmo mecanismo para evitar saltos perceptíveis ao topo.
+
+
 ## Apache
 
 O caminho público deve terminar em `/public`. Exemplo conceitual:

@@ -40,7 +40,7 @@ final class Notify {
   $emailed=[];$actor=(int)(Auth::$user['id']??0);
   foreach($rows as $u){
    $uid=(int)$u['id'];$isResponsible=$assigned>0&&$uid===$assigned;
-   if($uid===$actor&&!$isResponsible)continue;
+   if($uid===$actor)continue;
    $email=self::user($uid,$title,$body,(int)$d['id'],null,$isResponsible);
    if($email)$emailed[$email]=true;
   }

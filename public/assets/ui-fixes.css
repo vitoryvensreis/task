@@ -555,3 +555,69 @@
     gap:5px;
   }
 }
+
+
+/* TaskEsc v3.6 — pagamentos de custos e mensalidades recorrentes */
+.monthly-billing-panel{overflow:hidden!important}
+.monthly-billing-summary{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:7px;
+  margin:0 0 11px;
+}
+.monthly-billing-summary>span{
+  min-width:0;
+  display:flex;
+  align-items:baseline;
+  gap:6px;
+  padding:9px 10px;
+  border:1px solid #26313a;
+  border-radius:8px;
+  background:#0b0f12;
+  color:#7d8994;
+  font-size:9px;
+}
+.monthly-billing-summary b{
+  color:#e1e8ed;
+  font-size:14px;
+}
+.expense-table .status-ok,
+.expense-table .status-warn,
+.monthly-billing-panel .status-ok,
+.monthly-billing-panel .status-warn,
+.monthly-billing-panel .status-error{
+  display:inline-flex;
+  align-items:center;
+  min-height:22px;
+  padding:0 7px;
+  border-radius:99px;
+  white-space:nowrap;
+}
+.expense-table .status-ok,
+.monthly-billing-panel .status-ok{
+  border:1px solid #31483a;
+  background:#0c1510;
+}
+.expense-table .status-warn,
+.monthly-billing-panel .status-warn{
+  border:1px solid #4a4130;
+  background:#15120b;
+}
+.monthly-billing-panel .status-error{
+  border:1px solid #4c3238;
+  background:#150d0f;
+}
+.expense-payment-field.hidden,
+.expense-payment-date.hidden{display:none!important}
+
+@media(max-width:760px){
+  .monthly-billing-summary{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:6px;
+  }
+  .monthly-billing-summary>span{
+    padding:8px;
+    font-size:8px;
+  }
+  .monthly-billing-summary b{font-size:13px}
+}

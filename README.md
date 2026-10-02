@@ -89,6 +89,14 @@ A v3.5.1 adiciona ao Financeiro um comparativo permanente de **faturamento x cus
 O comparativo usa os mesmos dados consolidados do Financeiro: faturamento das cobranças do período e custos operacionais somados aos custos vinculados às tasks. Ao aplicar um intervalo de datas, o comparativo acompanha automaticamente o período selecionado.
 
 
+
+### Ajustes v3.5.2 do lucro
+
+A v3.5.2 define o **lucro líquido** como o valor efetivamente recebido no período menos os custos do mesmo período. O faturamento continua disponível como indicador de receita prevista/cobrada, mas não é mais usado como base do lucro exibido.
+
+Assim, o comparativo principal passa a ser **Recebido − Custos = Lucro/Prejuízo líquido**, e a margem líquida também é calculada sobre o valor recebido. O Dashboard, a tela Financeiro e o relatório financeiro usam a mesma regra.
+
+
 ## Apache
 
 O caminho público deve terminar em `/public`. Exemplo conceitual:

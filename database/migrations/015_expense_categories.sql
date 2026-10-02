@@ -1,7 +1,7 @@
 -- TaskEsc schema 15 — categorias de custo gerenciáveis
 CREATE TABLE IF NOT EXISTS expense_categories (
   id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  name VARCHAR(190) NOT NULL,
+  name VARCHAR(80) NOT NULL,
   active TINYINT NOT NULL DEFAULT 1,
   created_by INT NULL,
   created_at DATETIME NOT NULL,

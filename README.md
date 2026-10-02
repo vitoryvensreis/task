@@ -117,6 +117,16 @@ Além do comparativo de **Recebido − Custos pagos = Lucro líquido**, há um s
 O schema 15 adiciona categorias de custo gerenciáveis em banco. O cadastro de custo usa um select alimentado por essas categorias e permite criar uma nova categoria sem sair do formulário. Também há um gerenciador de categorias no Financeiro. Instalações novas recebem categorias como Água, Energia / Luz, Internet / Telefonia, Aluguel, Software, Armazenamento / Cloud, Assinaturas, Marketing, Transporte, Equipamentos, Impostos, Serviços, Alimentação, Custo Pessoal e Outros. Categorias já existentes nos lançamentos são importadas automaticamente durante a migração.
 
 
+
+### Ajustes v3.7.1 dos filtros financeiros
+
+A v3.7.1 adiciona filtros independentes em todos os principais cards operacionais do Financeiro. **Entradas / cobranças** pode ser pesquisado por texto e filtrado por origem, cliente e status. **Saídas / custos** recebe busca, categoria, tipo e situação de pagamento. **Custos recorrentes** pode ser filtrado por categoria, recorrência, ativo/pausado e pagamento no período. **Mensalidades recorrentes** recebe busca por cliente, situação de cobrança e status de pagamento. O **Histórico financeiro** também passa a ter busca e filtros por ação, cliente, usuário e origem.
+
+Os filtros são aplicados instantaneamente na tabela sem recarregar a página e cada card mantém seu próprio estado durante a sessão. O filtro geral anterior foi reduzido a **Período financeiro**, pois datas continuam afetando os totais e todas as tabelas.
+
+Esta versão também corrige a exibição do saldo de clientes mensais cuja cobrança do mês foi removida ou ainda não está ativa: nesses casos o painel usa corretamente o valor mensal configurado no cliente, sem reaproveitar valores de cobranças antigas.
+
+
 ## Apache
 
 O caminho público deve terminar em `/public`. Exemplo conceitual:

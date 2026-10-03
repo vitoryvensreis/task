@@ -667,3 +667,170 @@ body{background:var(--v312-bg)}
   .stat-card{padding:13px!important}
   .stat-value{font-size:21px!important}
 }
+
+
+/* TaskEsc v3.13 — mobile scroll stability */
+@media(max-width:760px){
+  /* Dashboard: os períodos ficam em uma única faixa horizontal, sem quebra. */
+  .dashboard-period-bar{
+    display:flex!important;
+    align-items:center!important;
+    flex-wrap:nowrap!important;
+    gap:7px!important;
+    width:100%!important;
+    max-width:100%!important;
+    overflow-x:auto!important;
+    overflow-y:hidden!important;
+    padding:1px 0 5px!important;
+    margin-bottom:12px!important;
+    scrollbar-width:none!important;
+    -webkit-overflow-scrolling:touch;
+    overscroll-behavior-inline:contain;
+  }
+  .dashboard-period-bar::-webkit-scrollbar{display:none!important}
+  .dashboard-period-bar>span,
+  .dashboard-period-bar>.dashboard-period{
+    flex:0 0 auto!important;
+    width:auto!important;
+    min-width:max-content!important;
+    white-space:nowrap!important;
+  }
+
+  /* Kanban: viewport fixo, cada coluna ocupa a área útil e sua lista rola verticalmente. */
+  body.kanban-page{
+    height:100dvh!important;
+    min-height:100dvh!important;
+    overflow:hidden!important;
+  }
+  body.kanban-page .app,
+  body.kanban-page .main{
+    height:100dvh!important;
+    min-height:0!important;
+    overflow:hidden!important;
+  }
+  body.kanban-page .content{
+    box-sizing:border-box!important;
+    height:calc(100dvh - var(--topbar))!important;
+    min-height:0!important;
+    max-height:calc(100dvh - var(--topbar))!important;
+    overflow:hidden!important;
+    display:flex!important;
+    flex-direction:column!important;
+    padding:14px 12px max(12px,env(safe-area-inset-bottom,0px))!important;
+  }
+  body.kanban-page .section-title,
+  body.kanban-page .ux-filter-toggle,
+  body.kanban-page .toolbar.kanban-filters{
+    flex:0 0 auto!important;
+  }
+  body.kanban-page .kanban{
+    flex:1 1 auto!important;
+    min-height:0!important;
+    max-height:100%!important;
+    height:auto!important;
+    width:100%!important;
+    align-items:stretch!important;
+    overflow-x:auto!important;
+    overflow-y:hidden!important;
+    grid-auto-columns:calc(100vw - 36px)!important;
+    gap:12px!important;
+    padding:0 2px max(8px,env(safe-area-inset-bottom,0px))!important;
+    scroll-snap-type:x mandatory!important;
+    -webkit-overflow-scrolling:touch;
+    overscroll-behavior-inline:contain!important;
+  }
+  body.kanban-page .kanban-col{
+    box-sizing:border-box!important;
+    width:calc(100vw - 36px)!important;
+    min-width:0!important;
+    height:100%!important;
+    min-height:0!important;
+    max-height:100%!important;
+    display:flex!important;
+    flex-direction:column!important;
+    overflow:hidden!important;
+    padding:10px!important;
+    scroll-snap-align:start!important;
+    scroll-snap-stop:always!important;
+  }
+  body.kanban-page .kanban-head{
+    flex:0 0 auto!important;
+  }
+  body.kanban-page .kanban-list{
+    flex:1 1 auto!important;
+    min-height:0!important;
+    max-height:100%!important;
+    overflow-x:hidden!important;
+    overflow-y:auto!important;
+    overscroll-behavior-y:contain!important;
+    -webkit-overflow-scrolling:touch!important;
+    touch-action:pan-y!important;
+    align-content:start!important;
+    padding:8px 3px max(16px,env(safe-area-inset-bottom,0px)) 0!important;
+    scrollbar-width:thin!important;
+    scrollbar-color:#344754 transparent!important;
+  }
+  body.kanban-page .kanban-list::-webkit-scrollbar{width:5px!important}
+  body.kanban-page .kanban-list::-webkit-scrollbar-thumb{background:#344754!important;border-radius:99px!important}
+
+  /* Task aberta: a área de conteúdo sempre recebe rolagem vertical própria. */
+  .task-backdrop{
+    overflow:hidden!important;
+    overscroll-behavior:contain!important;
+    touch-action:none!important;
+    padding:
+      calc(env(safe-area-inset-top,0px) + 54px)
+      8px
+      max(8px,env(safe-area-inset-bottom,0px))!important;
+  }
+  .task-backdrop>.task-detail-modal{
+    box-sizing:border-box!important;
+    width:100%!important;
+    max-width:100%!important;
+    height:auto!important;
+    max-height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px) - 70px)!important;
+    overflow-x:hidden!important;
+    overflow-y:auto!important;
+    overscroll-behavior-y:contain!important;
+    -webkit-overflow-scrolling:touch!important;
+    touch-action:pan-y!important;
+    scrollbar-gutter:auto!important;
+    padding-bottom:max(18px,env(safe-area-inset-bottom,0px))!important;
+  }
+  .task-backdrop>.task-detail-modal>.modal-head{
+    position:sticky!important;
+    top:-12px!important;
+    z-index:5!important;
+    background:linear-gradient(180deg,#0b0f12 86%,rgba(11,15,18,0))!important;
+  }
+  .task-backdrop>.task-modal{
+    box-sizing:border-box!important;
+    width:100%!important;
+    max-width:100%!important;
+    height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px) - 70px)!important;
+    max-height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px) - 70px)!important;
+    overflow:hidden!important;
+    display:flex!important;
+    flex-direction:column!important;
+  }
+  .task-backdrop>.task-modal>.task-form{
+    flex:1 1 auto!important;
+    min-height:0!important;
+    max-height:none!important;
+    overflow-x:hidden!important;
+    overflow-y:auto!important;
+    overscroll-behavior-y:contain!important;
+    -webkit-overflow-scrolling:touch!important;
+    touch-action:pan-y!important;
+    padding-bottom:max(8px,env(safe-area-inset-bottom,0px))!important;
+  }
+}
+
+@media(max-width:430px){
+  body.kanban-page .kanban{
+    grid-auto-columns:calc(100vw - 28px)!important;
+  }
+  body.kanban-page .kanban-col{
+    width:calc(100vw - 28px)!important;
+  }
+}

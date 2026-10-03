@@ -1,0 +1,63 @@
+name: Package TaskEsc v3.11 UX Review
+
+on:
+  push:
+    branches:
+      - ux-v3.11-mobile-audit
+
+permissions:
+  contents: read
+
+jobs:
+  validate-package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          extensions: pdo_mysql, curl, openssl, fileinfo, mbstring, zip
+          coverage: none
+
+      - name: Validar PHP
+        run: |
+          set -e
+          find app bin public -type f -name '*.php' -print0 | xargs -0 -n1 php -l
+
+      - name: Validar JavaScript e integração dos assets
+        run: |
+          set -e
+          node --check public/assets/app.js
+          node --check public/assets/ux-v3.js
+          node --check public/assets/taskesc-icons.js
+          node --check public/service-worker.js
+          grep -q 'assets/ux-v3.css?v=3.11.0' public/index.php
+          grep -q 'assets/ux-v3.js?v=3.11.0' public/index.php
+          node - <<'NODE'
+          const fs=require('fs');
+          const css=fs.readFileSync('public/assets/ux-v3.css','utf8');
+          if((css.match(/{/g)||[]).length !== (css.match(/}/g)||[]).length){
+            throw new Error('CSS com chaves desbalanceadas');
+          }
+          const js=fs.readFileSync('public/assets/ux-v3.js','utf8');
+          const required=['ux-date-trigger','ux-card-table','ux-filter-toggle','agenda-view[data-view="day"]'];
+          for(const token of required) if(!js.includes(token)) throw new Error('UX runtime sem '+token);
+          NODE
+
+      - name: Gerar ZIP completo
+        run: |
+          set -e
+          rm -f taskesc-v3.11.zip
+          zip -qr taskesc-v3.11.zip .             -x '.git/*'                'config/config.php'                'storage/sessions/*'                'storage/logs/*'
+          unzip -t taskesc-v3.11.zip >/dev/null
+
+      - name: Publicar ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: taskesc-v3.11
+          path: taskesc-v3.11.zip
+          if-no-files-found: error
+          retention-days: 7

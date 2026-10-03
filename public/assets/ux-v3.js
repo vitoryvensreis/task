@@ -30,8 +30,8 @@ function dateInput(i){
   b.innerHTML='<span class="ux-date-trigger-label"></span><span class="ux-date-trigger-icon">'+icon+'</span>';
   b.setAttribute('aria-label',labelOf(i)+': abrir seletor');
   i.parentNode.insertBefore(w,i);w.append(i,b);i.classList.add('ux-date-native');i.tabIndex=-1;i.setAttribute('aria-hidden','true');
-  const paint=()=>{b.querySelector('.ux-date-trigger-label').textContent=displayValue(i);b.classList.toggle('is-empty',!i.value);w.classList.toggle('has-error',i.matches(':invalid'));b.disabled=i.disabled};
-  b.addEventListener('click',()=>picker(i));i.addEventListener('input',paint);i.addEventListener('change',paint);i.addEventListener('invalid',()=>{w.classList.add('has-error');b.focus()});paint();
+  const paint=()=>{const shown=displayValue(i);b.querySelector('.ux-date-trigger-label').textContent=shown;b.setAttribute('aria-label',labelOf(i)+': '+shown+'. Abrir seletor');b.classList.toggle('is-empty',!i.value);w.classList.toggle('has-error',i.matches(':invalid'));b.disabled=i.disabled};
+  i._uxDatePaint=paint;b.addEventListener('click',()=>picker(i));i.addEventListener('input',paint);i.addEventListener('change',paint);i.addEventListener('invalid',()=>{w.classList.add('has-error');b.focus()});paint();
 }
 function dates(){all('input[type="date"],input[type="datetime-local"],input[type="month"],input[type="time"]').forEach(dateInput)}
 
@@ -45,10 +45,10 @@ function tables(){all('#content table.table,#modal-root table.table').forEach(ta
 
 function filterInfo(g){const c=all('select,input',g).filter(x=>!x.closest('.search-box'));const n=c.filter(x=>x.type==='checkbox'?x.checked:String(x.value||'').trim()).length;return n?(n+' ativo'+(n>1?'s':'')):'Refinar resultados'}
 function filterGroup(g){
-  if(!(g instanceof HTMLElement)||g.dataset.uxFilterEnhanced)return;g.dataset.uxFilterEnhanced='1';
+  if(!(g instanceof HTMLElement))return;if(g.dataset.uxFilterEnhanced){if(typeof g._uxFilterSync==='function')g._uxFilterSync();return}g.dataset.uxFilterEnhanced='1';
   const b=document.createElement('button');b.type='button';b.className='ux-filter-toggle';b.innerHTML='<span>Filtros</span><small>Refinar resultados</small>';g.parentNode.insertBefore(b,g);
   let open=false;const sync=()=>{const m=mobile();g.classList.toggle('ux-filter-collapsed',m&&!open);b.hidden=!m;b.querySelector('small').textContent=open?'Ocultar opções':filterInfo(g);b.setAttribute('aria-expanded',String(!m||open))};
-  b.addEventListener('click',()=>{open=!open;sync()});g.addEventListener('change',sync);addEventListener('resize',sync,{passive:true});sync();
+  g._uxFilterSync=sync;b.addEventListener('click',()=>{open=!open;sync()});g.addEventListener('change',sync);sync();
 }
 function filters(){all('.advanced-filter-grid,.toolbar.kanban-filters').forEach(filterGroup)}
 
@@ -66,5 +66,5 @@ function run(){dates();tables();filters();agenda();document.documentElement.clas
 let queued=false;function schedule(){if(queued)return;queued=true;requestAnimationFrame(()=>{queued=false;run()})}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',run,{once:true});else run();
 new MutationObserver(m=>{if(m.some(x=>x.addedNodes.length))schedule()}).observe(document.documentElement,{childList:true,subtree:true});
-addEventListener('popstate',schedule);addEventListener('resize',schedule,{passive:true});
+document.addEventListener('change',schedule,true);addEventListener('popstate',schedule);addEventListener('resize',schedule,{passive:true});
 })();

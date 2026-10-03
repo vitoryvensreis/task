@@ -6,6 +6,15 @@ const all=(s,r=document)=>Array.from(r.querySelectorAll(s));
 const icon='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M16 3v4M8 3v4M3 10h18"></path></svg>';
 
 function labelOf(i){
+  const explicit=i.id?document.querySelector('label[for="'+CSS.escape(i.id)+'"]'):null;
+  const wrap=i.closest('label');
+  const source=explicit||wrap;
+  if(source){
+    const clone=source.cloneNode(true);
+    clone.querySelectorAll('input,select,textarea,button,.ux-date-control').forEach(x=>x.remove());
+    const txt=clone.textContent.replace(/\\s+/g,' ').trim();
+    if(txt)return txt;
+  }
   return i.getAttribute('title')||i.getAttribute('aria-label')||({date:'Data','datetime-local':'Data e horário',month:'Mês',time:'Horário'}[i.type]||'Data');
 }
 function displayValue(i){
@@ -26,13 +35,26 @@ function dateInput(i){
   if(!(i instanceof HTMLInputElement)||!TYPES.has(i.type))return;
   if(i.dataset.uxDateEnhanced){if(typeof i._uxDatePaint==='function')i._uxDatePaint();return}
   i.dataset.uxDateEnhanced='1';
-  const w=document.createElement('span'),b=document.createElement('button');
-  w.className='ux-date-control';b.type='button';b.className='ux-date-trigger';
-  b.innerHTML='<span class="ux-date-trigger-label"></span><span class="ux-date-trigger-icon">'+icon+'</span>';
-  b.setAttribute('aria-label',labelOf(i)+': abrir seletor');b.setAttribute('aria-haspopup','dialog');
-  i.parentNode.insertBefore(w,i);w.append(i,b);i.classList.add('ux-date-native');i.tabIndex=-1;i.setAttribute('aria-hidden','true');
-  const paint=()=>{const shown=displayValue(i);b.querySelector('.ux-date-trigger-label').textContent=shown;b.setAttribute('aria-label',labelOf(i)+': '+shown+'. Abrir seletor');b.classList.toggle('is-empty',!i.value);w.classList.toggle('has-error',i.matches(':invalid'));b.disabled=i.disabled};
-  i._uxDatePaint=paint;b.addEventListener('click',()=>picker(i));i.addEventListener('input',paint);i.addEventListener('change',paint);i.addEventListener('invalid',()=>{w.classList.add('has-error');b.focus()});paint();
+  const w=document.createElement('span'),visual=document.createElement('span');
+  w.className='ux-date-control';
+  visual.className='ux-date-trigger';
+  visual.setAttribute('aria-hidden','true');
+  visual.innerHTML='<span class="ux-date-trigger-label"></span><span class="ux-date-trigger-icon">'+icon+'</span>';
+  i.parentNode.insertBefore(w,i);
+  w.append(i,visual);
+  i.classList.add('ux-date-native');
+  if(!i.getAttribute('aria-label'))i.setAttribute('aria-label',labelOf(i));
+  const paint=()=>{
+    const shown=displayValue(i);
+    visual.querySelector('.ux-date-trigger-label').textContent=shown;
+    visual.classList.toggle('is-empty',!i.value);
+    w.classList.toggle('has-error',i.matches(':invalid'));
+  };
+  i._uxDatePaint=paint;
+  i.addEventListener('input',paint);
+  i.addEventListener('change',paint);
+  i.addEventListener('invalid',()=>w.classList.add('has-error'));
+  paint();
 }
 function dates(){all('input[type="date"],input[type="datetime-local"],input[type="month"],input[type="time"]').forEach(dateInput)}
 
@@ -63,9 +85,9 @@ function agenda(){
   const wrap=document.createElement('div');wrap.className='row-actions ux-agenda-source-actions';const sync=head.querySelector('#sync-google');if(sync)wrap.append(sync);wrap.append(b);head.append(wrap);
   b.addEventListener('click',()=>{const open=box.classList.toggle('is-open');b.textContent=open?'Ocultar agendas':'Mostrar agendas';b.setAttribute('aria-expanded',String(open))});
 }
-function run(){dates();tables();filters();agenda();document.documentElement.classList.add('ux-v311')}
+function run(){dates();tables();filters();agenda();document.documentElement.classList.add('ux-v311','ux-v312');document.body.classList.toggle('ux-mobile',mobile())}
 let queued=false;function schedule(){if(queued)return;queued=true;requestAnimationFrame(()=>{queued=false;run()})}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',run,{once:true});else run();
 new MutationObserver(m=>{if(m.some(x=>x.addedNodes.length))schedule()}).observe(document.documentElement,{childList:true,subtree:true});
-document.addEventListener('change',schedule,true);addEventListener('popstate',schedule);addEventListener('resize',schedule,{passive:true});
+document.addEventListener('input',schedule,true);document.addEventListener('change',schedule,true);addEventListener('popstate',schedule);addEventListener('resize',schedule,{passive:true});
 })();

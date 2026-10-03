@@ -380,3 +380,16 @@ Ao criar, editar ou cancelar um compromisso em uma agenda Google gravável, o Ta
 A navegação principal exibe um carregamento discreto em tela cheia, apenas com o indicador giratório e o texto “Carregando”, enquanto troca de módulo. A tipografia foi ampliada para melhorar a leitura em monitores Full HD e 4K, sem alterar a estrutura compacta do painel.
 
 No formulário de criação e na área de arquivos de uma task é possível selecionar e enviar **múltiplos arquivos**; eles são processados sequencialmente pelo fluxo resumível do Google Drive, com progresso individual/geral e sem carregar o arquivo completo na memória da VPS.
+
+### Ajustes v3.12 de UX/UI, mobile e controles de data
+
+A v3.12 é uma revisão visual e de usabilidade baseada na auditoria completa das telas em desktop/mobile e **não altera o schema do banco**. A atualização adiciona uma camada de Design System e responsividade que aumenta legibilidade, hierarquia, contraste, áreas de toque, espaçamentos e consistência sem remover funcionalidades existentes.
+
+Os controles nativos de `date`, `datetime-local`, `month` e `time` continuam presentes no formulário para manter validação e envio dos valores, mas deixam de ser o elemento visual. A interface mostra um botão de data estável e acessível que abre o seletor nativo do dispositivo, evitando o overflow observado principalmente no Safari/iOS.
+
+No mobile, tabelas administrativas de Tasks, Clientes, Serviços, Financeiro, Relatórios, Saúde & Logs e Configurações passam a se reorganizar em cards com rótulos, em vez de comprimir ou cortar colunas. Filtros extensos de Tasks e Kanban mantêm a busca visível e recolhem opções secundárias atrás de um controle **Filtros**.
+
+A Agenda abre em **Dia** na primeira entrada pelo smartphone. A visualização semanal continua disponível com rolagem horizontal intencional, e a lista de agendas conectadas fica recolhida por padrão para priorizar o calendário. Relatórios ganham composição de período sem o grande vazio entre abas e filtros; Serviços passa a aproveitar toda a linha de indicadores; Financeiro ganha hierarquia mais clara entre período, caixa atual e projeção.
+
+No desktop, a interface recebe largura máxima de leitura, tipografia e controles ligeiramente maiores, melhor densidade dos painéis, login mais confortável e alvos de interação mais consistentes. Estados de foco visível, suporte a `prefers-reduced-motion` e áreas de toque maiores reforçam acessibilidade.
+\n

@@ -1,0 +1,669 @@
+/* TaskEsc v3.11 — UX/UI audit, responsive structure and accessible date controls */
+
+:root{
+  --ux-content-max:1580px;
+  --ux-touch:44px;
+  --ux-gap-1:8px;
+  --ux-gap-2:12px;
+  --ux-gap-3:16px;
+  --ux-gap-4:24px;
+  --ux-text-secondary:#9aa5ae;
+  --ux-text-tertiary:#74808a;
+  --ux-focus:#7fa8c8;
+}
+
+body{font-size:14px;line-height:1.5}
+.content{max-width:var(--ux-content-max);margin-inline:auto;padding:24px 28px 64px}
+.sidebar{width:216px;flex-basis:216px;padding:16px 12px}
+.brand{font-size:16px;margin-bottom:18px}
+.nav-btn{height:42px;font-size:12px}
+.topbar{min-height:72px;height:72px;padding-inline:28px}
+.topbar h2{font-size:20px}
+.kicker,.eyebrow{font-size:9.5px;letter-spacing:1.35px}
+.panel-sub,.help,.field-help{color:var(--ux-text-tertiary);font-size:11px;line-height:1.5}
+.field>label,.login-card label{font-size:11px;color:var(--ux-text-secondary)}
+.primary,.secondary,.danger,.ghost,.icon-btn{min-height:40px;padding:8px 13px}
+.mini-btn{min-height:32px;padding:5px 9px;font-size:11px}
+.input,.select{height:42px;padding-inline:12px;font-size:12.5px}
+.textarea{font-size:12.5px;line-height:1.55}
+.input:focus-visible,.select:focus-visible,.textarea:focus-visible,
+button:focus-visible,a:focus-visible,[role="button"]:focus-visible{
+  outline:2px solid var(--ux-focus)!important;
+  outline-offset:2px!important;
+}
+.panel{padding:18px;border-radius:12px}
+.panel-head{margin-bottom:15px}
+.panel-head h3,.panel h3{font-size:14px}
+.section-title{margin-bottom:16px}
+.section-title h3{font-size:18px}
+.stat-card{padding:17px 18px;min-height:96px}
+.stat-label{font-size:9.5px;color:#8a959d}
+.stat-value{font-size:25px}
+.stat-note{font-size:10px;color:#727d86}
+.table th,.table td{padding:12px 14px}
+.table th{font-size:9.5px;color:#7c8790}
+.table td{font-size:12px;color:#d0d5d9}
+.row-title b{font-size:12px}.row-title span{font-size:10px}
+.badge,.tag{font-size:10px;padding:4px 8px}
+
+.login-screen{padding:28px}
+.login-card{width:min(440px,94vw);padding:38px 38px 34px;border-color:#30363c;background:#0a0d10}
+.login-card .brand-logo,.brand-logo-login{width:64px;height:64px}
+.login-card h1{font-size:30px}
+.login-card>p{font-size:13px;line-height:1.5;margin-bottom:28px;color:#87919a}
+.login-card form{gap:17px}
+.login-card form input,.login-input{height:46px!important;font-size:14px!important}
+.login-card form button{height:46px}
+
+.grid.stats{grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:16px}
+.comparison-grid{gap:14px;margin-bottom:14px}
+.comparison-card{padding:18px 19px;min-height:112px}
+.comparison-card>span{font-size:10px}.comparison-card>b{font-size:21px}.comparison-card>small{font-size:11.5px}.comparison-card>em{font-size:10.5px}
+.analytics-grid{gap:14px;margin-bottom:14px}
+.chart-panel{min-height:270px}
+.finance-chart-panel{min-height:255px}
+.metric-chart{height:180px}
+.dashboard-period-bar{gap:8px;margin-bottom:14px;font-size:11.5px}
+
+.service-stats{grid-template-columns:repeat(3,minmax(0,1fr))!important;max-width:none!important}
+
+.report-toolbar{
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:start!important;
+  gap:16px!important;
+  margin-bottom:16px!important;
+}
+.report-toolbar>.tabs{margin:0;align-self:center}
+.report-period-controls{
+  display:grid!important;
+  grid-template-columns:170px 155px 155px auto;
+  align-items:center!important;
+  gap:8px!important;
+  width:auto!important;
+}
+.report-period-controls>.select,.report-period-controls>.input,.report-period-controls>.ux-date-control{width:100%!important;min-width:0!important}
+.report-table-wrap{max-height:none}
+
+.settings-grid{gap:14px}
+.settings-grid>.panel,.settings-wide{min-width:0}
+.settings-form,.integration-stack{gap:14px}
+.settings-wide>form{max-width:1180px}.settings-wide>.table-wrap{max-width:100%}
+.code{font-size:11px;padding:11px}
+.integration-row{padding-block:11px}
+
+.agenda-layout{grid-template-columns:minmax(0,1fr) 320px;gap:14px}
+.calendar-toolbar{margin-bottom:14px}
+.calendar-toolbar strong{font-size:12px}
+.calendar-source{padding:11px 0}
+.calendar-source b{font-size:11px}.calendar-source small{font-size:9px}
+.event{font-size:9px;padding:5px 6px}
+
+.health-summary{gap:14px;margin-bottom:16px}
+.health-card{min-height:104px}
+.system-log-tabs{margin-block:8px 14px}
+
+.ux-date-control{position:relative;display:block;width:100%;min-width:0}
+.ux-date-native{
+  position:absolute!important;
+  width:1px!important;
+  height:1px!important;
+  min-width:1px!important;
+  min-height:1px!important;
+  opacity:0!important;
+  pointer-events:none!important;
+  overflow:hidden!important;
+  padding:0!important;
+  border:0!important;
+  margin:0!important;
+  inset:auto!important;
+}
+.ux-date-trigger{
+  width:100%;min-width:0;min-height:42px;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:0 12px;border:1px solid #303942;border-radius:8px;
+  background:#0b0f12;color:#eef2f5;text-align:left;font:inherit;
+  transition:border-color .14s ease,background .14s ease,box-shadow .14s ease;
+}
+.ux-date-trigger:hover{border-color:#46535e;background:#0e1317}
+.ux-date-trigger:focus-visible{border-color:var(--ux-focus)!important;box-shadow:0 0 0 3px rgba(127,168,200,.12)}
+.ux-date-trigger.is-empty{color:#89949d}
+.ux-date-trigger-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ux-date-trigger-icon{width:18px;height:18px;flex:0 0 18px;display:inline-flex;align-items:center;justify-content:center;color:#9baab5}
+.ux-date-trigger-icon svg{width:17px;height:17px;display:block}
+.ux-date-control.has-error .ux-date-trigger{border-color:#7e4248}
+
+.ux-filter-toggle{display:none}
+.ux-agenda-source-toggle{display:none}
+.row-actions,.panel-head-actions,.top-actions{min-width:0;flex-wrap:wrap}
+.row-actions{display:flex;gap:6px;align-items:center}
+
+@media(max-width:1280px){
+  .content{padding-inline:22px}
+  .report-toolbar{grid-template-columns:1fr}
+  .report-period-controls{grid-template-columns:minmax(160px,1.2fr) repeat(2,minmax(145px,1fr)) auto;width:100%!important}
+  .agenda-layout{grid-template-columns:minmax(0,1fr) 280px}
+}
+
+@media(max-width:960px){
+  .content{padding-inline:18px}
+  .comparison-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .finance-summary-card{grid-column:1/-1}
+  .report-period-controls{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .report-period-controls>.select{grid-column:1/-1}
+  .report-period-controls>button{grid-column:1/-1}
+  .agenda-layout{grid-template-columns:1fr}
+  .calendar-sources{position:static}
+}
+
+@media(max-width:760px){
+  :root{--topbar:60px}
+  body{font-size:14px;overflow-x:hidden}
+  .sidebar{width:min(86vw,310px);flex-basis:min(86vw,310px);padding:12px}
+  .brand{font-size:16px}
+  .nav-btn{min-height:46px;height:46px;font-size:13px}
+  .topbar{height:var(--topbar);min-height:var(--topbar);padding:0 12px;gap:8px}
+  .topbar h2{font-size:17px}
+  .page-heading .kicker{font-size:8px}
+  #menu,.notification-btn{width:42px!important;height:42px!important;min-width:42px!important}
+  .user-chip{display:none}
+  #new-demand{min-width:42px!important;width:42px!important;height:42px!important;padding:0!important}
+  .content{width:100%;max-width:100%;padding:16px 12px calc(40px + env(safe-area-inset-bottom,0))}
+
+  .section-title{align-items:stretch!important;gap:12px;margin-bottom:14px}
+  .section-title h3{font-size:20px;line-height:1.2}
+  .section-title .panel-sub{font-size:12px}
+  .section-title>.top-actions{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));width:100%;gap:8px}
+  .section-title>.top-actions>*{width:100%!important}
+  .section-title>button.primary,.section-title>button.secondary{width:100%!important;align-self:stretch!important}
+
+  .primary,.secondary,.danger,.ghost{min-height:var(--ux-touch);font-size:13px}
+  .mini-btn{min-height:40px;font-size:12px}
+  .input,.select{height:var(--ux-touch);font-size:16px}
+  .textarea{font-size:16px}
+  .check{min-height:44px;font-size:13px}
+  .field>label,.login-card label{font-size:12px}
+  .field-help,.help,.panel-sub{font-size:11.5px}
+
+  .panel{padding:15px;border-radius:13px}
+  .panel-head{gap:10px;margin-bottom:13px}
+  .panel-head h3,.panel h3{font-size:15px}
+  .panel-head{flex-wrap:wrap}
+  .panel-head>.secondary,.panel-head>.primary,.panel-head>.ghost{max-width:100%}
+
+  .grid.stats{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important}
+  .stat-card{padding:14px;min-height:100px}
+  .stat-label{font-size:9px}.stat-value{font-size:22px}.stat-note{font-size:10px}
+  .grid.stats .dashboard-finance-open:last-child:nth-child(odd){grid-column:1/-1}
+  .service-stats{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .service-stats>.stat-card:last-child:nth-child(odd){grid-column:1/-1}
+
+  .comparison-grid,.analytics-grid{grid-template-columns:1fr!important;gap:10px!important}
+  .comparison-card{padding:15px;min-height:auto}
+  .chart-panel{min-height:0!important;overflow:hidden!important}
+  .metric-chart,.metric-chart.finance-chart{min-width:0!important;width:100%!important;height:170px;gap:5px}
+  .metric-column>span{font-size:8px;overflow:hidden;text-overflow:ellipsis}
+  .dashboard-period-bar{overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none;padding-bottom:2px}
+  .dashboard-period-bar::-webkit-scrollbar{display:none}
+  .dashboard-period{flex:0 0 auto;min-height:38px}
+
+  .tabs,.settings-tabs,.system-log-tabs{display:flex!important;overflow-x:auto!important;flex-wrap:nowrap!important;scrollbar-width:none;overscroll-behavior-inline:contain;padding-bottom:2px}
+  .tabs::-webkit-scrollbar,.settings-tabs::-webkit-scrollbar,.system-log-tabs::-webkit-scrollbar{display:none}
+  .tab{flex:0 0 auto;min-height:40px;height:40px;font-size:12px;padding-inline:12px}
+
+  .ux-filter-toggle{display:flex;width:100%;min-height:42px;margin:8px 0;align-items:center;justify-content:space-between;gap:10px;padding:0 12px;border:1px solid #2c3740;border-radius:9px;background:#0e1317;color:#d9e0e5;font-weight:650}
+  .ux-filter-toggle small{color:#89949d;font-weight:500}
+  .advanced-filter-grid.ux-filter-collapsed>:not(.search-box),
+  .toolbar.kanban-filters.ux-filter-collapsed>:not(#demand-search){display:none!important}
+  .advanced-filter-grid,.toolbar.kanban-filters{grid-template-columns:1fr!important;gap:8px!important}
+  .advanced-filter-grid .search-box,.toolbar.kanban-filters #demand-search{grid-column:1/-1!important;width:100%!important;max-width:none!important}
+  .advanced-filter-grid .filter-actions{display:grid!important;grid-template-columns:1fr 1fr;width:100%}
+  .advanced-filter-grid .filter-actions>*{width:100%}
+
+  .ux-date-trigger{min-height:var(--ux-touch);font-size:16px;padding-inline:12px}
+  .ux-date-trigger-label{font-variant-numeric:tabular-nums}
+
+  .report-toolbar{display:grid!important;grid-template-columns:1fr!important;gap:12px!important}
+  .report-toolbar>.tabs{width:100%}
+  .report-period-controls{display:grid!important;grid-template-columns:1fr 1fr!important;width:100%!important;gap:8px!important}
+  .report-period-controls>.select{grid-column:1/-1!important}
+  .report-period-controls>.ux-date-control{width:100%!important}
+  .report-period-controls>button{grid-column:1/-1!important;width:100%!important}
+
+  .finance-title>.top-actions{grid-template-columns:1fr 1fr!important}
+  .finance-title>.top-actions .primary{grid-column:1/-1}
+  .finance-period-panel{padding:14px!important}
+  .finance-period-controls{display:grid!important;grid-template-columns:1fr 1fr!important;gap:10px!important}
+  .finance-period-controls .filter-actions{grid-column:1/-1!important;display:grid!important;grid-template-columns:1fr 1fr!important;gap:8px!important}
+  .finance-period-controls .filter-actions>*{width:100%!important}
+  .finance-cash-overview{padding:15px!important}
+  .finance-cash-overview-head{align-items:flex-start!important;gap:10px!important}
+  .finance-cash-groups{gap:12px!important}
+  .finance-cash-cards{grid-template-columns:1fr!important;gap:8px!important}
+  .finance-cash-operator{display:none!important}
+  .finance-cash-card{min-height:92px!important;padding:14px!important}
+  .finance-cash-card b{font-size:22px!important}
+  .finance-cash-formula{display:grid!important;grid-template-columns:1fr!important;gap:8px!important;font-size:11px}
+  .finance-card-filters,.finance-card-filters-wide{display:grid!important;grid-template-columns:1fr!important;gap:8px!important}
+  .finance-card-filters>*{width:100%!important;max-width:none!important}
+
+  .agenda-layout{display:block!important}
+  .calendar-panel{overflow-x:auto!important;overscroll-behavior-inline:contain}
+  .calendar-toolbar{position:sticky;left:0;display:grid!important;grid-template-columns:1fr auto;gap:9px!important;align-items:center!important;margin-bottom:12px!important;min-width:min(100%,420px)}
+  .calendar-toolbar>strong{grid-column:1/-1;grid-row:1;text-align:left!important;min-width:0!important;width:100%!important;font-size:13px!important}
+  .calendar-nav{grid-column:1;grid-row:2;display:flex;gap:6px}
+  .agenda-view-switch{grid-column:2;grid-row:2;display:flex;gap:5px}
+  .calendar-nav>*{min-height:40px}
+  .agenda-view{min-height:40px;padding:0 11px}
+  .week-schedule-grid{min-width:780px!important}
+  .calendar{min-width:680px!important}
+  .calendar-sources{margin-top:12px!important;padding:14px!important}
+  .ux-agenda-source-toggle{display:inline-flex!important;min-height:40px;padding:0 10px;border:1px solid #2b3640;border-radius:8px;background:#10161b;color:#dce2e7;align-items:center;gap:6px}
+  .calendar-sources:not(.is-open) .calendar-source,
+  .calendar-sources:not(.is-open)>.empty{display:none!important}
+  .calendar-sources:not(.is-open) .panel-head{margin-bottom:0!important}
+  .calendar-source{min-height:54px}
+
+  .table-wrap:has(>table.ux-card-table){overflow:visible!important;max-height:none!important}
+  table.ux-card-table{display:block!important;width:100%!important;min-width:0!important;background:transparent!important}
+  table.ux-card-table thead{display:none!important}
+  table.ux-card-table tbody{display:grid!important;gap:10px!important;width:100%!important}
+  table.ux-card-table tbody>tr{display:block!important;width:100%!important;padding:6px 13px;border:1px solid #273039;border-radius:11px;background:#0d1114;box-shadow:0 1px 0 rgba(255,255,255,.02)}
+  table.ux-card-table tbody>tr:hover{background:#0f1519}
+  table.ux-card-table tbody>tr[style*="display: none"],table.ux-card-table tbody>tr[style*="display:none"]{display:none!important}
+  table.ux-card-table td{display:grid!important;grid-template-columns:minmax(92px,34%) minmax(0,1fr);align-items:start;gap:10px;width:100%!important;min-width:0!important;max-width:100%!important;padding:9px 0!important;border:0!important;border-bottom:1px solid #202930!important;white-space:normal!important;overflow-wrap:anywhere;text-align:left!important;font-size:12.5px!important}
+  table.ux-card-table td:last-child{border-bottom:0!important}
+  table.ux-card-table td::before{content:attr(data-ux-label);color:#778590;font-size:9px;font-weight:750;letter-spacing:.55px;text-transform:uppercase;line-height:1.5}
+  table.ux-card-table td[data-ux-label=""]{display:block!important}
+  table.ux-card-table td[data-ux-label=""]::before{display:none}
+  table.ux-card-table td[colspan]{display:block!important;text-align:center!important;border:0!important}
+  table.ux-card-table td[colspan]::before{display:none!important}
+  table.ux-card-table .row-title b{font-size:13px;color:#f1f4f6}
+  table.ux-card-table .row-title span{font-size:10.5px}
+  table.ux-card-table .row-actions{justify-content:flex-start!important;gap:7px!important}
+  table.ux-card-table .row-actions>*{min-height:40px!important}
+  table.ux-card-table .check-col{display:flex!important;align-items:center!important;gap:8px}
+  table.ux-card-table .check-col::before{content:"Selecionar"}
+  .system-log-scroll,.report-table-wrap{max-height:none!important;overflow:visible!important}
+
+  .settings-grid,.lower-settings,.health-summary{grid-template-columns:1fr!important;gap:12px!important}
+  .settings-wide{grid-column:1!important}
+  .settings-form .form-actions,.modal .form-actions{gap:8px!important}
+  .integration-row{align-items:flex-start;flex-direction:column}
+  .integration-row>button,.integration-row>.ghost{width:100%}
+  .health-overall{min-height:120px;grid-row:auto!important}
+  .health-card{min-height:auto}
+
+  .file-card{grid-template-columns:40px minmax(0,1fr) auto!important;gap:9px!important;padding:10px!important}
+  .file-icon{width:40px;height:40px}
+  .file-actions{gap:6px!important}
+  .markdown-toolbar{overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none}
+  .markdown-toolbar::-webkit-scrollbar{display:none}
+  .markdown-toolbar button{flex:0 0 auto;min-height:38px;font-size:12px}
+  .comment-form{flex-direction:column}
+  .comment-form .input{height:44px}.comment-form button{width:100%}
+
+  .toast{left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0));max-width:none;font-size:12px;padding:12px 14px}
+  .modal-backdrop{padding:6px!important;align-items:end!important}
+  .modal{width:100%!important;max-height:calc(100dvh - 8px)!important;border-radius:16px 16px 0 0!important;padding:16px!important}
+  .modal.task-detail-modal,.modal.task-modal{padding-bottom:calc(14px + env(safe-area-inset-bottom,0))!important}
+}
+
+@media(max-width:480px){
+  .content{padding-inline:10px}
+  .grid.stats{grid-template-columns:1fr 1fr!important}
+  .service-stats{grid-template-columns:1fr 1fr!important}
+  .report-period-controls,.finance-period-controls{grid-template-columns:1fr!important}
+  .report-period-controls>.select,.report-period-controls>.ux-date-control,.report-period-controls>button{grid-column:1!important}
+  .finance-period-controls .filter-actions{grid-column:1!important;grid-template-columns:1fr 1fr!important}
+  .section-title>.top-actions{grid-template-columns:1fr!important}
+  .finance-title>.top-actions{grid-template-columns:1fr 1fr!important}
+  .finance-title>.top-actions .primary{grid-column:1/-1}
+  table.ux-card-table td{grid-template-columns:minmax(84px,32%) minmax(0,1fr)}
+  .file-card{grid-template-columns:38px minmax(0,1fr)!important}
+  .file-actions{grid-column:1/-1;justify-content:flex-end}
+}
+
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{scroll-behavior:auto!important;animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+}
+
+
+/* TaskEsc v3.12 — mobile-first clean UI inspired by modern fintech dashboards */
+:root{
+  --v312-bg:#07090b;
+  --v312-surface:#0d1115;
+  --v312-surface-2:#11171c;
+  --v312-line:#26313a;
+  --v312-line-soft:#1c252c;
+  --v312-text:#f3f6f8;
+  --v312-muted:#8b98a3;
+  --v312-accent:#789fc2;
+}
+body{background:var(--v312-bg)}
+.main{background:var(--v312-bg)}
+.panel,.stat-card,.comparison-card,.task-card,.kanban-col{
+  border-color:var(--v312-line-soft);
+  box-shadow:none;
+}
+.primary{
+  background:#2b4358;
+  border-color:#41627d;
+  color:#f7fbff;
+}
+.primary:hover{background:#34516a}
+.secondary{background:#11171c;border-color:#2b3640;color:#e8edf1}
+.ghost{border-color:#2a333b;color:#9ba7b0}
+.input,.select,.textarea{background:#0a0e11;border-color:#28333c}
+.input:hover,.select:hover,.textarea:hover{background:#0d1216;border-color:#374650}
+.section-title h3{font-weight:760}
+.panel-sub{color:#7f8b95}
+
+/* Date controls: the native input is a transparent tap target over a clean visual trigger.
+   This is intentionally more reliable on iOS Safari than showPicker() on a hidden input. */
+.ux-date-control{
+  position:relative!important;
+  display:block!important;
+  width:100%!important;
+  min-width:0!important;
+  min-height:42px!important;
+  isolation:isolate;
+}
+.ux-date-native{
+  position:absolute!important;
+  inset:0!important;
+  z-index:3!important;
+  width:100%!important;
+  height:100%!important;
+  min-width:0!important;
+  min-height:100%!important;
+  margin:0!important;
+  padding:0!important;
+  border:0!important;
+  opacity:0!important;
+  pointer-events:auto!important;
+  cursor:pointer!important;
+  appearance:auto!important;
+  -webkit-appearance:auto!important;
+}
+.ux-date-trigger{
+  position:relative!important;
+  z-index:1!important;
+  width:100%!important;
+  min-height:42px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  gap:10px!important;
+  padding:0 12px!important;
+  border:1px solid #2c3943!important;
+  border-radius:10px!important;
+  background:#0b1014!important;
+  color:#eef3f6!important;
+  font-weight:600!important;
+  line-height:1!important;
+  pointer-events:none!important;
+}
+.ux-date-trigger.is-empty{color:#85929c!important;font-weight:500!important}
+.ux-date-trigger-icon{color:#8eaac0!important}
+.ux-date-native:focus-visible + .ux-date-trigger{
+  border-color:#7299b9!important;
+  box-shadow:0 0 0 3px rgba(114,153,185,.13)!important;
+}
+
+/* Generic two-column families: never leave a single orphan card occupying half a row. */
+@media(max-width:760px){
+  .grid.stats,
+  .service-stats,
+  .finance-stats,
+  .finance-stats-wide,
+  .report-finance-stats,
+  .finance-analysis-grid,
+  .report-analysis-grid,
+  .expense-category-strip,
+  .client-finance-summary,
+  .invoice-summary-grid,
+  .client-360-stats{
+    display:grid!important;
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:10px!important;
+  }
+  .grid.stats>:last-child:nth-child(odd),
+  .service-stats>:last-child:nth-child(odd),
+  .finance-stats>:last-child:nth-child(odd),
+  .finance-stats-wide>:last-child:nth-child(odd),
+  .report-finance-stats>:last-child:nth-child(odd),
+  .finance-analysis-grid>:last-child:nth-child(odd),
+  .report-analysis-grid>:last-child:nth-child(odd),
+  .expense-category-strip>:last-child:nth-child(odd),
+  .client-finance-summary>:last-child:nth-child(odd),
+  .invoice-summary-grid>:last-child:nth-child(odd),
+  .client-360-stats>:last-child:nth-child(odd){
+    grid-column:1/-1!important;
+  }
+
+  /* Wise-like information rhythm: less decoration, stronger hierarchy. */
+  .content{padding:18px 12px calc(92px + env(safe-area-inset-bottom,0))!important}
+  .section-title{gap:8px!important;margin-bottom:14px!important}
+  .section-title h3{font-size:22px!important;letter-spacing:-.55px!important}
+  .section-title .panel-sub{font-size:12px!important;line-height:1.45!important}
+  .panel{padding:14px!important;border-radius:14px!important;background:#0b0f12!important}
+  .stat-card{border-radius:13px!important;background:#0c1115!important}
+  .primary,.secondary,.ghost,.danger{border-radius:11px!important}
+  .input,.select,.textarea{border-radius:11px!important}
+  .section-title>.top-actions{gap:8px!important}
+  .finance-title>.top-actions{grid-template-columns:1fr 1fr!important}
+  .finance-title>.top-actions>#manage-expense-categories{grid-column:1/-1!important}
+  .finance-title>.top-actions>#new-invoice{grid-column:auto!important}
+
+  /* Compact date range, always as two date buttons side by side. */
+  .finance-period-panel .panel-head{margin-bottom:12px!important}
+  .finance-period-controls{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:8px!important;
+  }
+  .finance-period-controls>.field{min-width:0!important}
+  .finance-period-controls .filter-actions{
+    grid-column:1/-1!important;
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:8px!important;
+    margin-top:2px!important;
+  }
+  .finance-period-controls .ux-date-trigger,
+  .report-period-controls .ux-date-trigger{min-height:46px!important;font-size:14px!important}
+  .finance-period-controls .field>label{margin-bottom:6px!important}
+  .report-period-controls{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:8px!important;
+  }
+  .report-period-controls>.select{grid-column:1/-1!important}
+  .report-period-controls>.ux-date-control{grid-column:auto!important}
+  .report-period-controls>button{grid-column:1/-1!important}
+
+  /* Kanban becomes one clean swipeable column at a time. */
+  body.kanban-page .content{
+    height:auto!important;
+    overflow:visible!important;
+    padding-bottom:calc(88px + env(safe-area-inset-bottom,0))!important;
+  }
+  body.kanban-page .section-title{
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) auto!important;
+    align-items:start!important;
+  }
+  body.kanban-page .section-title>div{min-width:0!important}
+  body.kanban-page .section-title>#add-stage{
+    width:auto!important;
+    min-width:44px!important;
+    min-height:44px!important;
+    padding-inline:12px!important;
+    align-self:start!important;
+  }
+  .toolbar.kanban-filters{
+    margin-bottom:12px!important;
+    padding:10px!important;
+    border:1px solid #202a32!important;
+    border-radius:13px!important;
+    background:#0a0e11!important;
+  }
+  .ux-filter-toggle{
+    border-radius:11px!important;
+    background:#0d1317!important;
+    border-color:#27343d!important;
+    margin:0 0 10px!important;
+  }
+  .kanban{
+    width:100%!important;
+    grid-auto-columns:calc(100vw - 36px)!important;
+    gap:12px!important;
+    padding:0 2px 14px!important;
+    scroll-padding-inline:2px!important;
+    scroll-snap-type:x mandatory!important;
+    overscroll-behavior-inline:contain!important;
+  }
+  .kanban-col{
+    width:calc(100vw - 36px)!important;
+    min-width:0!important;
+    min-height:0!important;
+    height:auto!important;
+    max-height:none!important;
+    padding:10px!important;
+    border-radius:14px!important;
+    background:#0a0e11!important;
+    scroll-snap-align:start!important;
+    scroll-snap-stop:always!important;
+    overflow:visible!important;
+  }
+  .kanban-head{
+    min-height:48px!important;
+    padding:2px 2px 10px!important;
+    margin-bottom:6px!important;
+  }
+  .kanban-name{font-size:11px!important;letter-spacing:.75px!important}
+  .kanban-head-actions{opacity:1!important}
+  .kanban-list{gap:8px!important;min-height:64px!important}
+  .kanban .task-card{
+    height:154px!important;
+    min-height:154px!important;
+    max-height:154px!important;
+    display:grid!important;
+    grid-template-rows:24px minmax(38px,1fr) 34px 26px!important;
+    align-content:stretch!important;
+    padding:12px!important;
+    border-radius:12px!important;
+    background:#10161a!important;
+    border-color:#29343d!important;
+    overflow:hidden!important;
+  }
+  .kanban .task-card .task-meta{
+    min-height:0!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:space-between!important;
+    gap:8px!important;
+    overflow:hidden!important;
+    font-size:10px!important;
+  }
+  .kanban .task-card .task-meta>span:first-child{
+    min-width:0!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+    white-space:nowrap!important;
+  }
+  .kanban .task-card .task-title{
+    display:-webkit-box!important;
+    -webkit-box-orient:vertical!important;
+    -webkit-line-clamp:2!important;
+    overflow:hidden!important;
+    font-size:15px!important;
+    font-weight:750!important;
+    line-height:1.25!important;
+    letter-spacing:-.25px!important;
+    margin:3px 0!important;
+  }
+  .kanban .task-card .badge{flex:0 0 auto!important}
+  .kanban .task-card .task-foot{
+    min-height:0!important;
+    margin-top:0!important;
+    padding-top:7px!important;
+  }
+
+  /* Agenda: day is the mobile default; week remains an intentional horizontal canvas. */
+  .agenda-layout{display:block!important}
+  .calendar-panel{border-radius:14px!important}
+  .calendar-toolbar{
+    grid-template-columns:1fr!important;
+    position:static!important;
+    min-width:0!important;
+  }
+  .calendar-toolbar>strong{grid-column:1!important;grid-row:auto!important;text-align:left!important;font-size:14px!important}
+  .calendar-nav{grid-column:1!important;grid-row:auto!important}
+  .agenda-view-switch{
+    grid-column:1!important;
+    grid-row:auto!important;
+    display:grid!important;
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;
+    width:100%!important;
+  }
+  .agenda-view{width:100%!important;border-radius:10px!important}
+  .calendar-panel:has(.week-schedule-grid){overflow-x:auto!important}
+  .calendar-panel:has(.week-schedule-grid) .calendar-toolbar{position:sticky!important;left:0!important;background:#0b0f12!important;z-index:3!important;padding-bottom:6px!important}
+
+  /* Finance summary: closer to a banking app — strong values, fewer nested boxes. */
+  .finance-cash-overview{background:#0b0f12!important}
+  .finance-cash-groups{gap:10px!important}
+  .finance-cash-group{
+    padding:0!important;
+    border:0!important;
+    background:transparent!important;
+  }
+  .finance-cash-card{
+    min-height:92px!important;
+    border-radius:13px!important;
+    background:#10161a!important;
+  }
+  .finance-cash-card b{font-size:24px!important;letter-spacing:-.6px!important}
+  .finance-cash-formula{
+    border-radius:11px!important;
+    background:#0b1014!important;
+  }
+
+  /* Tables are card lists on mobile with compact, repeatable rhythm. */
+  table.ux-card-table tbody{gap:9px!important}
+  table.ux-card-table tbody>tr{
+    padding:7px 12px!important;
+    border-radius:13px!important;
+    background:#0d1216!important;
+    border-color:#26313a!important;
+  }
+  table.ux-card-table td{
+    padding:8px 0!important;
+    grid-template-columns:minmax(92px,32%) minmax(0,1fr)!important;
+    border-bottom-color:#202a31!important;
+  }
+  table.ux-card-table td::before{color:#73818c!important}
+
+  /* Lists/settings/logs: no half-width orphan blocks. */
+  .settings-grid,.lower-settings,.health-summary,.client-360-grid{grid-template-columns:1fr!important}
+  .integration-row{border-bottom-color:#202930!important}
+}
+
+@media(max-width:430px){
+  .kanban{grid-auto-columns:calc(100vw - 28px)!important}
+  .kanban-col{width:calc(100vw - 28px)!important}
+  .grid.stats,
+  .service-stats,
+  .finance-stats,
+  .finance-stats-wide,
+  .report-finance-stats,
+  .finance-analysis-grid,
+  .report-analysis-grid,
+  .expense-category-strip,
+  .client-finance-summary,
+  .invoice-summary-grid,
+  .client-360-stats{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  }
+  .stat-card{padding:13px!important}
+  .stat-value{font-size:21px!important}
+}

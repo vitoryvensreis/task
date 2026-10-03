@@ -38,12 +38,13 @@ jobs:
         run: |
           set -e
           node --check public/assets/app.js
+          node --check public/assets/ux-v3.js
           node --check public/service-worker.js
           node - <<'NODE'
           const fs=require('fs');
           const src=fs.readFileSync('public/assets/app.js','utf8');
           const html=fs.readFileSync('public/index.php','utf8');
-          if(html.includes('>\\n  <link')){
+          if(html.includes('>\\n  <link') || html.includes('</script>\\n  <script')){
             console.error('ERRO: texto literal \\n encontrado entre assets do index.php');
             process.exit(1);
           }
@@ -57,19 +58,19 @@ jobs:
       - name: Gerar ZIP completo
         run: |
           set -e
-          rm -f "/tmp/taskesc-v3.10.3.zip" "taskesc-v3.10.3.zip"
-          zip -qr "/tmp/taskesc-v3.10.3.zip" . \
+          rm -f "/tmp/taskesc-v3.12.zip" "taskesc-v3.12.zip"
+          zip -qr "/tmp/taskesc-v3.12.zip" . \
             -x '.git/*' \
                'config/config.php' \
                'storage/sessions/*' \
                'storage/logs/*'
-          cp "/tmp/taskesc-v3.10.3.zip" "taskesc-v3.10.3.zip"
+          cp "/tmp/taskesc-v3.12.zip" "taskesc-v3.12.zip"
 
       - name: Publicar ZIP da versão
         uses: actions/upload-artifact@v4
         with:
-          name: taskesc-v3.10.3
-          path: taskesc-v3.10.3.zip
+          name: taskesc-v3.12
+          path: taskesc-v3.12.zip
           if-no-files-found: error
           retention-days: 7
 

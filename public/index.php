@@ -23,7 +23,7 @@ $pwa192Url=is_file($pwa192)?(($basePath?:'').'/uploads/branding/pwa-192.png?v='.
   <link rel="apple-touch-icon" href="<?=e($pwa180Url)?>">
   <link rel="stylesheet" href="<?=e($basePath)?>/assets/app.css?v=3.4.0">
   <link rel="stylesheet" href="<?=e($basePath)?>/assets/ui-fixes.css?v=3.10.3">
-  <link rel="stylesheet" href="<?=e($basePath)?>/assets/ux-v3.css?v=3.16.0">
+  <link rel="stylesheet" href="<?=e($basePath)?>/assets/ux-v3.css?v=3.17.0">
   <script src="<?=e($basePath)?>/assets/taskesc-icons.js?v=3.4.0" defer></script>
 </head>
 <body data-base-path="<?=e($basePath)?>">

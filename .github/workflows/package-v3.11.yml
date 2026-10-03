@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - ux-v3.11-mobile-audit
+      - fix/mobile-kanban-drag-v3.14
 
 permissions:
   contents: read

@@ -38,6 +38,8 @@ jobs:
           grep -q 'assets/ux-v3.js?v=3.11.0' public/index.php
           node - <<'NODE'
           const fs=require('fs');
+          const html=fs.readFileSync('public/index.php','utf8');
+          if(html.includes('>\\n  <link') || html.includes('</script>\\n  <script')) throw new Error('index.php contém texto literal \\n entre assets');
           const css=fs.readFileSync('public/assets/ux-v3.css','utf8');
           if((css.match(/{/g)||[]).length !== (css.match(/}/g)||[]).length){
             throw new Error('CSS com chaves desbalanceadas');

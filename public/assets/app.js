@@ -108,6 +108,70 @@
     const active=document.activeElement,editing=active&&(/^(INPUT|SELECT|TEXTAREA)$/.test(active.tagName)||active.isContentEditable);
     return !!editing||Date.now()-lastInteractionAt<12000||document.body.classList.contains('nav-open');
   }
+  function createKanbanDragAutoScroller(){
+    const board=document.querySelector('.kanban');
+    if(!board)return null;
+    let pointerX=0,pointerY=0,raf=0,active=true,lastTarget=null;
+    const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
+    const getListAtPointer=()=>{
+      const x=clamp(pointerX,0,Math.max(0,window.innerWidth-1));
+      const y=clamp(pointerY,0,Math.max(0,window.innerHeight-1));
+      const direct=document.elementFromPoint(x,y)?.closest?.('.kanban-list');
+      if(direct)return direct;
+      const cols=[...document.querySelectorAll('.kanban-col')];
+      const col=cols.find(c=>{const r=c.getBoundingClientRect();return x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom});
+      return col?.querySelector('.kanban-list')||lastTarget;
+    };
+    const tick=()=>{
+      if(!active)return;
+      const rect=board.getBoundingClientRect();
+      const edge=Math.min(92,Math.max(58,window.innerWidth*.19));
+      let dx=0;
+      if(pointerX>0&&pointerX<rect.left+edge){
+        const p=clamp((rect.left+edge-pointerX)/edge,0,1);
+        dx=-(8+22*p*p);
+      }else if(pointerX>rect.right-edge){
+        const p=clamp((pointerX-(rect.right-edge))/edge,0,1);
+        dx=8+22*p*p;
+      }
+      if(dx){
+        board.scrollLeft+=dx;
+        board.classList.toggle('drag-edge-left',dx<0);
+        board.classList.toggle('drag-edge-right',dx>0);
+      }else{
+        board.classList.remove('drag-edge-left','drag-edge-right');
+      }
+
+      const list=getListAtPointer();
+      if(list){
+        lastTarget=list;
+        const lr=list.getBoundingClientRect();
+        const vEdge=Math.min(78,Math.max(48,lr.height*.12));
+        let dy=0;
+        if(pointerY<lr.top+vEdge){
+          const p=clamp((lr.top+vEdge-pointerY)/vEdge,0,1);
+          dy=-(5+15*p*p);
+        }else if(pointerY>lr.bottom-vEdge){
+          const p=clamp((pointerY-(lr.bottom-vEdge))/vEdge,0,1);
+          dy=5+15*p*p;
+        }
+        if(dy)list.scrollTop+=dy;
+      }
+      raf=requestAnimationFrame(tick);
+    };
+    return {
+      update(x,y){
+        if(Number.isFinite(x)&&x>0)pointerX=x;
+        if(Number.isFinite(y)&&y>0)pointerY=y;
+        if(!raf)raf=requestAnimationFrame(tick);
+      },
+      stop(){
+        active=false;
+        if(raf)cancelAnimationFrame(raf);
+        board.classList.remove('drag-edge-left','drag-edge-right');
+      }
+    };
+  }
   const clientDriveInfo=id=>S.meta?.clients?.find(c=>Number(c.id)===Number(id))||null;
   const clientDriveReady=id=>!!clientDriveInfo(id)?.drive_ready;
   function mdInline(raw){let s=esc(raw);s=s.replace(/`([^`]+)`/g,'<code>$1</code>');s=s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');s=s.replace(/\*([^*]+)\*/g,'<em>$1</em>');s=s.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');return s}
@@ -227,11 +291,39 @@
       const q=($('#demand-search')?.value||'').toLowerCase(),cat=$('#demand-filter')?.value||'',client=$('#kanban-client')?.value||'',assigned=$('#kanban-assigned')?.value||'',priority=$('#kanban-priority')?.value||'',overdue=$('#kanban-overdue')?.checked;$$('.kanban-list').forEach(x=>x.innerHTML='');const counts={};
       rows.filter(d=>(!q||(`${d.title} ${d.client_name} ${d.category_name||''} ${d.assigned_name||''}`).toLowerCase().includes(q))&&(!cat||String(d.category_id)===cat)&&(!client||String(d.client_id)===client)&&(!assigned||String(d.assigned_to||'')===assigned)&&(!priority||d.priority===priority)&&(!overdue||(d.due_at&&parseDateValue(d.due_at)<new Date()&&!['completed','cancelled','archived'].includes(d.stage_kind)))).forEach(d=>{counts[d.stage_id]=(counts[d.stage_id]||0)+1;const target=document.querySelector(`[data-stage="${d.stage_id}"]`);if(!target)return;target.insertAdjacentHTML('beforeend',`<article class="task-card" draggable="${!S.user.is_preview}" data-demand="${d.id}"><div class="task-meta"><span>${esc(d.client_name)}</span><span class="badge ${d.priority==='urgent'?'priority-urgent':d.priority==='high'?'priority-high':''}">${esc(priorityLabel(d.priority))}</span></div><div class="task-title">${esc(d.title)}</div><div class="task-meta"><span>${esc(d.category_name)}</span><span class="${d.due_at&&new Date(d.due_at.replace(' ','T')+'Z')<new Date()?'red':''}">${date(d.due_at)}</span></div><div class="task-foot"><span>${esc(d.assigned_name||'Sem responsável')}</span><span>#${d.id}</span></div></article>`)});
       stages.forEach(s=>{const x=$(`#count-${s.id}`);if(x)x.textContent=counts[s.id]||0});
-      $$('.task-card[data-demand]').forEach(x=>{x.onclick=()=>openDemand(Number(x.dataset.demand));x.ondragstart=e=>{e.stopPropagation();x.classList.add('dragging');e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/taskesc-demand',x.dataset.demand)};x.ondragend=()=>{$$('.kanban-list').forEach(l=>l.classList.remove('drag-over'));x.classList.remove('dragging')}});
-      $$('.kanban-list').forEach(x=>{
-        x.ondragover=e=>{if(!e.dataTransfer.types.includes('text/taskesc-demand'))return;e.preventDefault();x.classList.add('drag-over');const card=document.querySelector('.task-card.dragging');if(!card)return;const siblings=[...x.querySelectorAll('.task-card[data-demand]:not(.dragging)')],after=siblings.reduce((closest,child)=>{const box=child.getBoundingClientRect(),offset=e.clientY-box.top-box.height/2;return offset<0&&offset>closest.offset?{offset,element:child}:closest},{offset:-Infinity,element:null}).element;if(after)x.insertBefore(card,after);else x.appendChild(card)};
+      let dragAutoScroller=null;
+      const stopTaskDrag=card=>{
+        dragAutoScroller?.stop();
+        dragAutoScroller=null;
+        document.body.classList.remove('kanban-task-dragging');
+        $('.kanban-list').forEach(l=>l.classList.remove('drag-over'));
+        card?.classList.remove('dragging');
+      };
+      $('.task-card[data-demand]').forEach(x=>{
+        x.onclick=()=>openDemand(Number(x.dataset.demand));
+        x.ondragstart=e=>{
+          e.stopPropagation();
+          x.classList.add('dragging');
+          document.body.classList.add('kanban-task-dragging');
+          e.dataTransfer.effectAllowed='move';
+          e.dataTransfer.setData('text/taskesc-demand',x.dataset.demand);
+          dragAutoScroller?.stop();
+          dragAutoScroller=createKanbanDragAutoScroller();
+          dragAutoScroller?.update(e.clientX,e.clientY);
+        };
+        x.ondrag=e=>dragAutoScroller?.update(e.clientX,e.clientY);
+        x.ondragend=()=>stopTaskDrag(x);
+      });
+      const kanbanBoard=document.querySelector('.kanban');
+      if(kanbanBoard)kanbanBoard.ondragover=e=>{
+        if(!document.body.classList.contains('kanban-task-dragging'))return;
+        e.preventDefault();
+        dragAutoScroller?.update(e.clientX,e.clientY);
+      };
+      $('.kanban-list').forEach(x=>{
+        x.ondragover=e=>{if(!e.dataTransfer.types.includes('text/taskesc-demand'))return;e.preventDefault();dragAutoScroller?.update(e.clientX,e.clientY);x.classList.add('drag-over');const card=document.querySelector('.task-card.dragging');if(!card)return;const siblings=[...x.querySelectorAll('.task-card[data-demand]:not(.dragging)')],after=siblings.reduce((closest,child)=>{const box=child.getBoundingClientRect(),offset=e.clientY-box.top-box.height/2;return offset<0&&offset>closest.offset?{offset,element:child}:closest},{offset:-Infinity,element:null}).element;if(after)x.insertBefore(card,after);else x.appendChild(card)};
         x.ondragleave=e=>{if(!x.contains(e.relatedTarget))x.classList.remove('drag-over')};
-        x.ondrop=async e=>{const raw=e.dataTransfer.getData('text/taskesc-demand'),card=document.querySelector('.task-card.dragging');if(!raw&&!card)return;e.preventDefault();e.stopPropagation();x.classList.remove('drag-over');const id=Number(raw||card?.dataset.demand),d=rows.find(r=>Number(r.id)===id),toStage=Number(x.dataset.stage);if(!d||!card)return;const fromStage=Number(d.stage_id),previousVersion=Number(d.version),beforeId=Number(card.nextElementSibling?.dataset?.demand||0);try{const moved=await api('demands.reorder',{id,stage_id:toStage,version:previousVersion,before_id:beforeId},'POST');d.stage_id=Number(moved.stage_id||toStage);d.version=Number(moved.version||previousVersion);d.sort_order=Number(moved.sort_order||d.sort_order||0);toast(fromStage!==toStage?'Task movida e posicionada':'Ordem dos cards atualizada');await stableRender(renderKanban)}catch(err){toast(err.message,true);paint()}};
+        x.ondrop=async e=>{const raw=e.dataTransfer.getData('text/taskesc-demand'),card=document.querySelector('.task-card.dragging');if(!raw&&!card)return;e.preventDefault();e.stopPropagation();x.classList.remove('drag-over');dragAutoScroller?.stop();dragAutoScroller=null;document.body.classList.remove('kanban-task-dragging');const id=Number(raw||card?.dataset.demand),d=rows.find(r=>Number(r.id)===id),toStage=Number(x.dataset.stage);if(!d||!card)return;const fromStage=Number(d.stage_id),previousVersion=Number(d.version),beforeId=Number(card.nextElementSibling?.dataset?.demand||0);try{const moved=await api('demands.reorder',{id,stage_id:toStage,version:previousVersion,before_id:beforeId},'POST');d.stage_id=Number(moved.stage_id||toStage);d.version=Number(moved.version||previousVersion);d.sort_order=Number(moved.sort_order||d.sort_order||0);toast(fromStage!==toStage?'Task movida e posicionada':'Ordem dos cards atualizada');await stableRender(renderKanban)}catch(err){toast(err.message,true);paint()}};
       });
     }
     paint();$('#demand-search').oninput=paint;['#demand-filter','#kanban-client','#kanban-assigned','#kanban-priority','#kanban-overdue'].forEach(sel=>{const el=$(sel);if(el)el.onchange=paint});$('#refresh-kanban').onclick=refresh;

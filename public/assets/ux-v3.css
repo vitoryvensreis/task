@@ -1,7 +1,7 @@
 /* TaskEsc v3.11 — UX/UI audit, responsive structure and accessible date controls */
 
 :root{
-  --ux-content-max:1720px;
+  --ux-content-max:1580px;
   --ux-touch:44px;
   --ux-gap-1:8px;
   --ux-gap-2:12px;
@@ -88,7 +88,7 @@ button:focus-visible,a:focus-visible,[role="button"]:focus-visible{
 .settings-grid{gap:14px}
 .settings-grid>.panel,.settings-wide{min-width:0}
 .settings-form,.integration-stack{gap:14px}
-.settings-wide>form,.settings-wide>.table-wrap{max-width:100%}
+.settings-wide>form{max-width:1180px}.settings-wide>.table-wrap{max-width:100%}
 .code{font-size:11px;padding:11px}
 .integration-row{padding-block:11px}
 

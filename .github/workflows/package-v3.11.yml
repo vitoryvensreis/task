@@ -1,4 +1,4 @@
-name: Package TaskEsc v3.16 UX Review
+name: Package TaskEsc v3.17 UX Review
 
 on:
   push:
@@ -7,6 +7,7 @@ on:
       - fix/mobile-kanban-drag-v3.14
       - fix/mobile-icon-actions-v3.15
       - fix/kanban-desktop-edges-v3.16
+      - fix/login-twofa-modern-v3.17
 
 permissions:
   contents: read
@@ -37,7 +38,7 @@ jobs:
           node --check public/assets/ux-v3.js
           node --check public/assets/taskesc-icons.js
           node --check public/service-worker.js
-          grep -q 'assets/ux-v3.css?v=3.16.0' public/index.php
+          grep -q 'assets/ux-v3.css?v=3.17.0' public/index.php
           grep -q 'assets/ux-v3.js?v=3.16.0' public/index.php
           node - <<'NODE'
           const fs=require('fs');
@@ -55,14 +56,14 @@ jobs:
       - name: Gerar ZIP completo
         run: |
           set -e
-          rm -f taskesc-v3.16.zip
-          zip -qr taskesc-v3.16.zip .             -x '.git/*'                'config/config.php'                'storage/sessions/*'                'storage/logs/*'
-          unzip -t taskesc-v3.16.zip >/dev/null
+          rm -f taskesc-v3.17.zip
+          zip -qr taskesc-v3.17.zip .             -x '.git/*'                'config/config.php'                'storage/sessions/*'                'storage/logs/*'
+          unzip -t taskesc-v3.17.zip >/dev/null
 
       - name: Publicar ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: taskesc-v3.16
-          path: taskesc-v3.16.zip
+          name: taskesc-v3.17
+          path: taskesc-v3.17.zip
           if-no-files-found: error
           retention-days: 7

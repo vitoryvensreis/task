@@ -296,10 +296,10 @@
         dragAutoScroller?.stop();
         dragAutoScroller=null;
         document.body.classList.remove('kanban-task-dragging');
-        $('.kanban-list').forEach(l=>l.classList.remove('drag-over'));
+        $$('.kanban-list').forEach(l=>l.classList.remove('drag-over'));
         card?.classList.remove('dragging');
       };
-      $('.task-card[data-demand]').forEach(x=>{
+      $$('.task-card[data-demand]').forEach(x=>{
         x.onclick=()=>openDemand(Number(x.dataset.demand));
         x.ondragstart=e=>{
           e.stopPropagation();
@@ -320,7 +320,7 @@
         e.preventDefault();
         dragAutoScroller?.update(e.clientX,e.clientY);
       };
-      $('.kanban-list').forEach(x=>{
+      $$('.kanban-list').forEach(x=>{
         x.ondragover=e=>{if(!e.dataTransfer.types.includes('text/taskesc-demand'))return;e.preventDefault();dragAutoScroller?.update(e.clientX,e.clientY);x.classList.add('drag-over');const card=document.querySelector('.task-card.dragging');if(!card)return;const siblings=[...x.querySelectorAll('.task-card[data-demand]:not(.dragging)')],after=siblings.reduce((closest,child)=>{const box=child.getBoundingClientRect(),offset=e.clientY-box.top-box.height/2;return offset<0&&offset>closest.offset?{offset,element:child}:closest},{offset:-Infinity,element:null}).element;if(after)x.insertBefore(card,after);else x.appendChild(card)};
         x.ondragleave=e=>{if(!x.contains(e.relatedTarget))x.classList.remove('drag-over')};
         x.ondrop=async e=>{const raw=e.dataTransfer.getData('text/taskesc-demand'),card=document.querySelector('.task-card.dragging');if(!raw&&!card)return;e.preventDefault();e.stopPropagation();x.classList.remove('drag-over');dragAutoScroller?.stop();dragAutoScroller=null;document.body.classList.remove('kanban-task-dragging');const id=Number(raw||card?.dataset.demand),d=rows.find(r=>Number(r.id)===id),toStage=Number(x.dataset.stage);if(!d||!card)return;const fromStage=Number(d.stage_id),previousVersion=Number(d.version),beforeId=Number(card.nextElementSibling?.dataset?.demand||0);try{const moved=await api('demands.reorder',{id,stage_id:toStage,version:previousVersion,before_id:beforeId},'POST');d.stage_id=Number(moved.stage_id||toStage);d.version=Number(moved.version||previousVersion);d.sort_order=Number(moved.sort_order||d.sort_order||0);toast(fromStage!==toStage?'Task movida e posicionada':'Ordem dos cards atualizada');await stableRender(renderKanban)}catch(err){toast(err.message,true);paint()}};

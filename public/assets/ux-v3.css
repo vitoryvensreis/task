@@ -873,3 +873,38 @@ body{background:var(--v312-bg)}
     background:rgba(57,83,106,.1)!important;
   }
 }
+
+
+/* TaskEsc v3.16 — desktop Kanban viewport fix
+   Escopo intencionalmente restrito ao Kanban em telas > 760px. */
+@media(min-width:761px){
+  body.kanban-page .content{
+    width:100%!important;
+    max-width:none!important;
+    margin-inline:0!important;
+    padding-left:22px!important;
+    padding-right:22px!important;
+    box-sizing:border-box!important;
+  }
+  body.kanban-page .kanban{
+    width:100%!important;
+    max-width:100%!important;
+    min-width:0!important;
+    box-sizing:border-box!important;
+    padding-left:2px!important;
+    padding-right:18px!important;
+    scroll-padding-left:2px!important;
+    scroll-padding-right:18px!important;
+    overflow-x:auto!important;
+    overflow-y:hidden!important;
+  }
+  body.kanban-page .kanban-col{
+    box-sizing:border-box!important;
+  }
+  body.kanban-page .section-title,
+  body.kanban-page .toolbar.kanban-filters{
+    width:100%!important;
+    max-width:100%!important;
+    box-sizing:border-box!important;
+  }
+}

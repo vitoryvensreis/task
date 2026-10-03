@@ -1,4 +1,4 @@
-name: Package TaskEsc v3.11 UX Review
+name: Package TaskEsc v3.12 UX Review
 
 on:
   push:
@@ -34,8 +34,8 @@ jobs:
           node --check public/assets/ux-v3.js
           node --check public/assets/taskesc-icons.js
           node --check public/service-worker.js
-          grep -q 'assets/ux-v3.css?v=3.11.0' public/index.php
-          grep -q 'assets/ux-v3.js?v=3.11.0' public/index.php
+          grep -q 'assets/ux-v3.css?v=3.12.0' public/index.php
+          grep -q 'assets/ux-v3.js?v=3.12.0' public/index.php
           node - <<'NODE'
           const fs=require('fs');
           const html=fs.readFileSync('public/index.php','utf8');
@@ -52,14 +52,14 @@ jobs:
       - name: Gerar ZIP completo
         run: |
           set -e
-          rm -f taskesc-v3.11.zip
-          zip -qr taskesc-v3.11.zip .             -x '.git/*'                'config/config.php'                'storage/sessions/*'                'storage/logs/*'
-          unzip -t taskesc-v3.11.zip >/dev/null
+          rm -f taskesc-v3.12.zip
+          zip -qr taskesc-v3.12.zip .             -x '.git/*'                'config/config.php'                'storage/sessions/*'                'storage/logs/*'
+          unzip -t taskesc-v3.12.zip >/dev/null
 
       - name: Publicar ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: taskesc-v3.11
-          path: taskesc-v3.11.zip
+          name: taskesc-v3.12
+          path: taskesc-v3.12.zip
           if-no-files-found: error
           retention-days: 7

@@ -23,12 +23,13 @@ function picker(i){
   try{i.click()}catch(_){}
 }
 function dateInput(i){
-  if(!(i instanceof HTMLInputElement)||!TYPES.has(i.type)||i.dataset.uxDateEnhanced)return;
+  if(!(i instanceof HTMLInputElement)||!TYPES.has(i.type))return;
+  if(i.dataset.uxDateEnhanced){if(typeof i._uxDatePaint==='function')i._uxDatePaint();return}
   i.dataset.uxDateEnhanced='1';
   const w=document.createElement('span'),b=document.createElement('button');
   w.className='ux-date-control';b.type='button';b.className='ux-date-trigger';
   b.innerHTML='<span class="ux-date-trigger-label"></span><span class="ux-date-trigger-icon">'+icon+'</span>';
-  b.setAttribute('aria-label',labelOf(i)+': abrir seletor');
+  b.setAttribute('aria-label',labelOf(i)+': abrir seletor');b.setAttribute('aria-haspopup','dialog');
   i.parentNode.insertBefore(w,i);w.append(i,b);i.classList.add('ux-date-native');i.tabIndex=-1;i.setAttribute('aria-hidden','true');
   const paint=()=>{const shown=displayValue(i);b.querySelector('.ux-date-trigger-label').textContent=shown;b.setAttribute('aria-label',labelOf(i)+': '+shown+'. Abrir seletor');b.classList.toggle('is-empty',!i.value);w.classList.toggle('has-error',i.matches(':invalid'));b.disabled=i.disabled};
   i._uxDatePaint=paint;b.addEventListener('click',()=>picker(i));i.addEventListener('input',paint);i.addEventListener('change',paint);i.addEventListener('invalid',()=>{w.classList.add('has-error');b.focus()});paint();

@@ -381,9 +381,9 @@ A navegação principal exibe um carregamento discreto em tela cheia, apenas com
 
 No formulário de criação e na área de arquivos de uma task é possível selecionar e enviar **múltiplos arquivos**; eles são processados sequencialmente pelo fluxo resumível do Google Drive, com progresso individual/geral e sem carregar o arquivo completo na memória da VPS.
 
-### Ajustes v3.11 de UX/UI, mobile e controles de data
+### Ajustes v3.12 de UX/UI, mobile e controles de data
 
-A v3.11 é uma revisão visual e de usabilidade baseada na auditoria completa das telas em desktop/mobile e **não altera o schema do banco**. A atualização adiciona uma camada de Design System e responsividade que aumenta legibilidade, hierarquia, contraste, áreas de toque, espaçamentos e consistência sem remover funcionalidades existentes.
+A v3.12 é uma revisão visual e de usabilidade baseada na auditoria completa das telas em desktop/mobile e **não altera o schema do banco**. A atualização adiciona uma camada de Design System e responsividade que aumenta legibilidade, hierarquia, contraste, áreas de toque, espaçamentos e consistência sem remover funcionalidades existentes.
 
 Os controles nativos de `date`, `datetime-local`, `month` e `time` continuam presentes no formulário para manter validação e envio dos valores, mas deixam de ser o elemento visual. A interface mostra um botão de data estável e acessível que abre o seletor nativo do dispositivo, evitando o overflow observado principalmente no Safari/iOS.
 

@@ -777,7 +777,7 @@ body{background:var(--v312-bg)}
   .task-backdrop{
     overflow:hidden!important;
     overscroll-behavior:contain!important;
-    touch-action:none!important;
+    touch-action:auto!important;
     padding:
       calc(env(safe-area-inset-top,0px) + 54px)
       8px

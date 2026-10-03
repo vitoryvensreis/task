@@ -327,3 +327,343 @@ button:focus-visible,a:focus-visible,[role="button"]:focus-visible{
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{scroll-behavior:auto!important;animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
 }
+
+
+/* TaskEsc v3.12 — mobile-first clean UI inspired by modern fintech dashboards */
+:root{
+  --v312-bg:#07090b;
+  --v312-surface:#0d1115;
+  --v312-surface-2:#11171c;
+  --v312-line:#26313a;
+  --v312-line-soft:#1c252c;
+  --v312-text:#f3f6f8;
+  --v312-muted:#8b98a3;
+  --v312-accent:#789fc2;
+}
+body{background:var(--v312-bg)}
+.main{background:var(--v312-bg)}
+.panel,.stat-card,.comparison-card,.task-card,.kanban-col{
+  border-color:var(--v312-line-soft);
+  box-shadow:none;
+}
+.primary{
+  background:#2b4358;
+  border-color:#41627d;
+  color:#f7fbff;
+}
+.primary:hover{background:#34516a}
+.secondary{background:#11171c;border-color:#2b3640;color:#e8edf1}
+.ghost{border-color:#2a333b;color:#9ba7b0}
+.input,.select,.textarea{background:#0a0e11;border-color:#28333c}
+.input:hover,.select:hover,.textarea:hover{background:#0d1216;border-color:#374650}
+.section-title h3{font-weight:760}
+.panel-sub{color:#7f8b95}
+
+/* Date controls: the native input is a transparent tap target over a clean visual trigger.
+   This is intentionally more reliable on iOS Safari than showPicker() on a hidden input. */
+.ux-date-control{
+  position:relative!important;
+  display:block!important;
+  width:100%!important;
+  min-width:0!important;
+  min-height:42px!important;
+  isolation:isolate;
+}
+.ux-date-native{
+  position:absolute!important;
+  inset:0!important;
+  z-index:3!important;
+  width:100%!important;
+  height:100%!important;
+  min-width:0!important;
+  min-height:100%!important;
+  margin:0!important;
+  padding:0!important;
+  border:0!important;
+  opacity:0!important;
+  pointer-events:auto!important;
+  cursor:pointer!important;
+  appearance:auto!important;
+  -webkit-appearance:auto!important;
+}
+.ux-date-trigger{
+  position:relative!important;
+  z-index:1!important;
+  width:100%!important;
+  min-height:42px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  gap:10px!important;
+  padding:0 12px!important;
+  border:1px solid #2c3943!important;
+  border-radius:10px!important;
+  background:#0b1014!important;
+  color:#eef3f6!important;
+  font-weight:600!important;
+  line-height:1!important;
+  pointer-events:none!important;
+}
+.ux-date-trigger.is-empty{color:#85929c!important;font-weight:500!important}
+.ux-date-trigger-icon{color:#8eaac0!important}
+.ux-date-native:focus-visible + .ux-date-trigger{
+  border-color:#7299b9!important;
+  box-shadow:0 0 0 3px rgba(114,153,185,.13)!important;
+}
+
+/* Generic two-column families: never leave a single orphan card occupying half a row. */
+@media(max-width:760px){
+  .grid.stats,
+  .service-stats,
+  .finance-stats,
+  .finance-stats-wide,
+  .report-finance-stats,
+  .finance-analysis-grid,
+  .report-analysis-grid,
+  .expense-category-strip,
+  .client-finance-summary,
+  .invoice-summary-grid,
+  .client-360-stats{
+    display:grid!important;
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:10px!important;
+  }
+  .grid.stats>:last-child:nth-child(odd),
+  .service-stats>:last-child:nth-child(odd),
+  .finance-stats>:last-child:nth-child(odd),
+  .finance-stats-wide>:last-child:nth-child(odd),
+  .report-finance-stats>:last-child:nth-child(odd),
+  .finance-analysis-grid>:last-child:nth-child(odd),
+  .report-analysis-grid>:last-child:nth-child(odd),
+  .expense-category-strip>:last-child:nth-child(odd),
+  .client-finance-summary>:last-child:nth-child(odd),
+  .invoice-summary-grid>:last-child:nth-child(odd),
+  .client-360-stats>:last-child:nth-child(odd){
+    grid-column:1/-1!important;
+  }
+
+  /* Wise-like information rhythm: less decoration, stronger hierarchy. */
+  .content{padding:18px 12px calc(92px + env(safe-area-inset-bottom,0))!important}
+  .section-title{gap:8px!important;margin-bottom:14px!important}
+  .section-title h3{font-size:22px!important;letter-spacing:-.55px!important}
+  .section-title .panel-sub{font-size:12px!important;line-height:1.45!important}
+  .panel{padding:14px!important;border-radius:14px!important;background:#0b0f12!important}
+  .stat-card{border-radius:13px!important;background:#0c1115!important}
+  .primary,.secondary,.ghost,.danger{border-radius:11px!important}
+  .input,.select,.textarea{border-radius:11px!important}
+  .section-title>.top-actions{gap:8px!important}
+  .finance-title>.top-actions{grid-template-columns:1fr 1fr!important}
+  .finance-title>.top-actions>#manage-expense-categories{grid-column:1/-1!important}
+  .finance-title>.top-actions>#new-invoice{grid-column:auto!important}
+
+  /* Compact date range, always as two date buttons side by side. */
+  .finance-period-panel .panel-head{margin-bottom:12px!important}
+  .finance-period-controls{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:8px!important;
+  }
+  .finance-period-controls>.field{min-width:0!important}
+  .finance-period-controls .filter-actions{
+    grid-column:1/-1!important;
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:8px!important;
+    margin-top:2px!important;
+  }
+  .finance-period-controls .ux-date-trigger,
+  .report-period-controls .ux-date-trigger{min-height:46px!important;font-size:14px!important}
+  .finance-period-controls .field>label{margin-bottom:6px!important}
+  .report-period-controls{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:8px!important;
+  }
+  .report-period-controls>.select{grid-column:1/-1!important}
+  .report-period-controls>.ux-date-control{grid-column:auto!important}
+  .report-period-controls>button{grid-column:1/-1!important}
+
+  /* Kanban becomes one clean swipeable column at a time. */
+  body.kanban-page .content{
+    height:auto!important;
+    overflow:visible!important;
+    padding-bottom:calc(88px + env(safe-area-inset-bottom,0))!important;
+  }
+  body.kanban-page .section-title{
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) auto!important;
+    align-items:start!important;
+  }
+  body.kanban-page .section-title>div{min-width:0!important}
+  body.kanban-page .section-title>#add-stage{
+    width:auto!important;
+    min-width:44px!important;
+    min-height:44px!important;
+    padding-inline:12px!important;
+    align-self:start!important;
+  }
+  .toolbar.kanban-filters{
+    margin-bottom:12px!important;
+    padding:10px!important;
+    border:1px solid #202a32!important;
+    border-radius:13px!important;
+    background:#0a0e11!important;
+  }
+  .ux-filter-toggle{
+    border-radius:11px!important;
+    background:#0d1317!important;
+    border-color:#27343d!important;
+    margin:0 0 10px!important;
+  }
+  .kanban{
+    width:100%!important;
+    grid-auto-columns:calc(100vw - 36px)!important;
+    gap:12px!important;
+    padding:0 2px 14px!important;
+    scroll-padding-inline:2px!important;
+    scroll-snap-type:x mandatory!important;
+    overscroll-behavior-inline:contain!important;
+  }
+  .kanban-col{
+    width:calc(100vw - 36px)!important;
+    min-width:0!important;
+    min-height:0!important;
+    height:auto!important;
+    max-height:none!important;
+    padding:10px!important;
+    border-radius:14px!important;
+    background:#0a0e11!important;
+    scroll-snap-align:start!important;
+    scroll-snap-stop:always!important;
+    overflow:visible!important;
+  }
+  .kanban-head{
+    min-height:48px!important;
+    padding:2px 2px 10px!important;
+    margin-bottom:6px!important;
+  }
+  .kanban-name{font-size:11px!important;letter-spacing:.75px!important}
+  .kanban-head-actions{opacity:1!important}
+  .kanban-list{gap:8px!important;min-height:64px!important}
+  .kanban .task-card{
+    height:154px!important;
+    min-height:154px!important;
+    max-height:154px!important;
+    display:grid!important;
+    grid-template-rows:24px minmax(38px,1fr) 34px 26px!important;
+    align-content:stretch!important;
+    padding:12px!important;
+    border-radius:12px!important;
+    background:#10161a!important;
+    border-color:#29343d!important;
+    overflow:hidden!important;
+  }
+  .kanban .task-card .task-meta{
+    min-height:0!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:space-between!important;
+    gap:8px!important;
+    overflow:hidden!important;
+    font-size:10px!important;
+  }
+  .kanban .task-card .task-meta>span:first-child{
+    min-width:0!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+    white-space:nowrap!important;
+  }
+  .kanban .task-card .task-title{
+    display:-webkit-box!important;
+    -webkit-box-orient:vertical!important;
+    -webkit-line-clamp:2!important;
+    overflow:hidden!important;
+    font-size:15px!important;
+    font-weight:750!important;
+    line-height:1.25!important;
+    letter-spacing:-.25px!important;
+    margin:3px 0!important;
+  }
+  .kanban .task-card .badge{flex:0 0 auto!important}
+  .kanban .task-card .task-foot{
+    min-height:0!important;
+    margin-top:0!important;
+    padding-top:7px!important;
+  }
+
+  /* Agenda: day is the mobile default; week remains an intentional horizontal canvas. */
+  .agenda-layout{display:block!important}
+  .calendar-panel{border-radius:14px!important}
+  .calendar-toolbar{
+    grid-template-columns:1fr!important;
+    position:static!important;
+    min-width:0!important;
+  }
+  .calendar-toolbar>strong{grid-column:1!important;grid-row:auto!important;text-align:left!important;font-size:14px!important}
+  .calendar-nav{grid-column:1!important;grid-row:auto!important}
+  .agenda-view-switch{
+    grid-column:1!important;
+    grid-row:auto!important;
+    display:grid!important;
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;
+    width:100%!important;
+  }
+  .agenda-view{width:100%!important;border-radius:10px!important}
+  .calendar-panel:has(.week-schedule-grid){overflow-x:auto!important}
+  .calendar-panel:has(.week-schedule-grid) .calendar-toolbar{position:sticky!important;left:0!important;background:#0b0f12!important;z-index:3!important;padding-bottom:6px!important}
+
+  /* Finance summary: closer to a banking app — strong values, fewer nested boxes. */
+  .finance-cash-overview{background:#0b0f12!important}
+  .finance-cash-groups{gap:10px!important}
+  .finance-cash-group{
+    padding:0!important;
+    border:0!important;
+    background:transparent!important;
+  }
+  .finance-cash-card{
+    min-height:92px!important;
+    border-radius:13px!important;
+    background:#10161a!important;
+  }
+  .finance-cash-card b{font-size:24px!important;letter-spacing:-.6px!important}
+  .finance-cash-formula{
+    border-radius:11px!important;
+    background:#0b1014!important;
+  }
+
+  /* Tables are card lists on mobile with compact, repeatable rhythm. */
+  table.ux-card-table tbody{gap:9px!important}
+  table.ux-card-table tbody>tr{
+    padding:7px 12px!important;
+    border-radius:13px!important;
+    background:#0d1216!important;
+    border-color:#26313a!important;
+  }
+  table.ux-card-table td{
+    padding:8px 0!important;
+    grid-template-columns:minmax(92px,32%) minmax(0,1fr)!important;
+    border-bottom-color:#202a31!important;
+  }
+  table.ux-card-table td::before{color:#73818c!important}
+
+  /* Lists/settings/logs: no half-width orphan blocks. */
+  .settings-grid,.lower-settings,.health-summary,.client-360-grid{grid-template-columns:1fr!important}
+  .integration-row{border-bottom-color:#202930!important}
+}
+
+@media(max-width:430px){
+  .kanban{grid-auto-columns:calc(100vw - 28px)!important}
+  .kanban-col{width:calc(100vw - 28px)!important}
+  .grid.stats,
+  .service-stats,
+  .finance-stats,
+  .finance-stats-wide,
+  .report-finance-stats,
+  .finance-analysis-grid,
+  .report-analysis-grid,
+  .expense-category-strip,
+  .client-finance-summary,
+  .invoice-summary-grid,
+  .client-360-stats{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  }
+  .stat-card{padding:13px!important}
+  .stat-value{font-size:21px!important}
+}

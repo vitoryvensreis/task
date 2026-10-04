@@ -13,8 +13,10 @@ if(PHP_SAPI!=='cli'){
  header('Cache-Control: no-store');
  if(session_status()!==PHP_SESSION_ACTIVE){
   $sessionDir=ROOT.'/storage/sessions';if(!is_dir($sessionDir))@mkdir($sessionDir,0700,true);if(is_dir($sessionDir))ini_set('session.save_path',$sessionDir);
+  $sessionLifetime=max(86400,(int)config('session_lifetime_seconds',2592000));
+  ini_set('session.gc_maxlifetime',(string)$sessionLifetime);
   session_name('taskesc');
-  session_set_cookie_params(['lifetime'=>0,'path'=>'/','secure'=>str_starts_with((string)config('base_url'),'https://'),'httponly'=>true,'samesite'=>'Lax']);
+  session_set_cookie_params(['lifetime'=>$sessionLifetime,'path'=>'/','secure'=>str_starts_with((string)config('base_url'),'https://'),'httponly'=>true,'samesite'=>'Lax']);
   ini_set('session.use_strict_mode','1'); session_start();
  }
 }

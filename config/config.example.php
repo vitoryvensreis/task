@@ -3,6 +3,7 @@
 return [
  'base_url' => 'https://seu-dominio.com',
  'timezone' => 'America/Fortaleza',
+ 'session_lifetime_seconds' => 2592000, // 30 dias; mantém o PWA autenticado após fechar/reabrir.
  'db' => ['host'=>'localhost','port'=>3306,'name'=>'taskesc','user'=>'','password'=>''],
  'app_key' => '', // 64 caracteres hexadecimais aleatórios, gerados pelo instalador.
  'cron_key' => '',

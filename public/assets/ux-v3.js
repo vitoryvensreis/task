@@ -35,10 +35,10 @@ function dateInput(i){
   if(!(i instanceof HTMLInputElement)||!TYPES.has(i.type))return;
   if(i.dataset.uxDateEnhanced){if(typeof i._uxDatePaint==='function')i._uxDatePaint();return}
   i.dataset.uxDateEnhanced='1';
-  const w=document.createElement('span'),visual=document.createElement('span');
+  const w=document.createElement('span'),visual=document.createElement('button');
   w.className='ux-date-control';
+  visual.type='button';
   visual.className='ux-date-trigger';
-  visual.setAttribute('aria-hidden','true');
   visual.innerHTML='<span class="ux-date-trigger-label"></span><span class="ux-date-trigger-icon">'+icon+'</span>';
   i.parentNode.insertBefore(w,i);
   w.append(i,visual);
@@ -48,8 +48,10 @@ function dateInput(i){
     const shown=displayValue(i);
     visual.querySelector('.ux-date-trigger-label').textContent=shown;
     visual.classList.toggle('is-empty',!i.value);
+    visual.setAttribute('aria-label',labelOf(i)+': '+shown+'. Abrir seletor');
     w.classList.toggle('has-error',i.matches(':invalid'));
   };
+  visual.addEventListener('click',()=>picker(i));
   i._uxDatePaint=paint;
   i.addEventListener('input',paint);
   i.addEventListener('change',paint);

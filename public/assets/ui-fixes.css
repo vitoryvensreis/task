@@ -2267,3 +2267,11 @@ input[type="time"]::-webkit-calendar-picker-indicator{
     margin-top:12px!important;
   }
 }
+
+
+/* v3.19 — vínculos de usuários com múltiplos clientes */
+.user-client-links{display:grid;gap:10px;margin-top:8px;max-height:320px;overflow:auto;padding-right:4px}
+.user-client-link{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 14px;border:1px solid var(--border,#27272a);border-radius:12px;background:var(--surface-secondary,#181818)}
+.user-client-main{margin:0;min-width:0}.user-client-main span{font-weight:600;overflow-wrap:anywhere}
+.user-client-perms{display:flex;flex-wrap:wrap;gap:12px;justify-content:flex-end}.user-client-perms .check{margin:0;font-size:12px}
+@media(max-width:680px){.user-client-link{align-items:flex-start;flex-direction:column}.user-client-perms{justify-content:flex-start}}

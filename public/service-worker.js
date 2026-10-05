@@ -1,11 +1,11 @@
-const CACHE='taskesc-shell-v3.18.0';
+const CACHE='taskesc-shell-v3.19.0';
 const scopeUrl=new URL('./',self.registration.scope);
 const assetUrl=path=>new URL(path,scopeUrl).toString();
 const SHELL=[
   assetUrl('offline.html'),
   assetUrl('assets/app.css?v=3.4.0'),
-  assetUrl('assets/app.js?v=3.16.0'),
-  assetUrl('assets/ui-fixes.css?v=3.10.3'),
+  assetUrl('assets/app.js?v=3.19.0'),
+  assetUrl('assets/ui-fixes.css?v=3.19.0'),
   assetUrl('assets/ux-v3.css?v=3.18.0'),
   assetUrl('assets/ux-v3.js?v=3.18.0'),
   assetUrl('assets/taskesc-logo.svg')

@@ -65,10 +65,9 @@
             ]
           },
           "assigned_to": {
-            "type": [
-              "integer",
-              "null"
-            ]
+            "type": "integer",
+            "minimum": 1,
+            "description": "Responsável obrigatório. Deve ser Administrador ativo ou usuário da Equipe vinculado ao cliente."
           },
           "billing_mode": {
             "type": "string",
@@ -87,7 +86,8 @@
           "category_id",
           "title",
           "brief",
-          "due_at"
+          "due_at",
+          "assigned_to"
         ]
       },
       "ClientWrite": {

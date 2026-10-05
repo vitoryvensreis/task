@@ -1,5 +1,11 @@
 <?php
 final class Demands {
+ private static function responsible(int $userId,int $clientId): int {
+  if($userId<1)fail('Selecione um responsável para a task.',422);
+  $user=DB::one("SELECT id,role FROM users WHERE id=? AND active=1 AND role IN ('admin','staff')",[$userId]);if(!$user)fail('Responsável inválido.',422);
+  if($user['role']==='staff'&&!DB::one('SELECT client_id FROM user_clients WHERE user_id=? AND client_id=?',[$userId,$clientId]))fail('O responsável da equipe precisa estar vinculado a este cliente.',422);
+  return (int)$user['id'];
+ }
  public static function list(array $p): array {
   [$w,$a]=Auth::demandFilter();
   if(Auth::$user['role']==='client'){$w.=' AND (d.draft=0 OR d.created_by=?)';$a[]=Auth::$user['id'];}
@@ -65,12 +71,13 @@ final class Demands {
  public static function save(array $p): array {
   return DB::tx(function() use($p): array {
    $id=(int)($p['id']??0);$old=$id?Auth::demand($id,true):null;$role=Auth::$user['role'];
-   if($role==='staff')fail('Use o Kanban para atualizar as tasks atribuídas a você.',403);
+   if($old)Auth::requireAbility('tasks.edit');else Auth::requireAbility('tasks.create');
    if($old&&integer($p['version']??0,1)!==(int)$old['version'])fail('A task foi alterada. Atualize antes de salvar.',409);
 
    $client=integer($p['client_id']??($old['client_id']??0),1);$clientRow=Auth::client($client);
    if($old&&$client!==(int)$old['client_id'])fail('O cliente de uma task existente não pode ser trocado.');
    $category=integer($p['category_id']??($old['category_id']??0),1);$categoryRow=DB::one('SELECT * FROM categories WHERE id=? AND active=1',[$category]);if(!$categoryRow)fail('Categoria inválida.');
+   $assignedSource=array_key_exists('assigned_to',$p)?(int)$p['assigned_to']:(int)($old['assigned_to']??0);if(!$old&&!$assignedSource)$assignedSource=(int)($categoryRow['default_assigned_to']??0);if($role==='client'&&$old)$assignedSource=(int)($old['assigned_to']??0);$assigned=self::responsible($assignedSource,$client);
    $project=$old['project_id']??null;if(isset($p['project_id']))$project=!empty($p['project_id'])?(int)$p['project_id']:null;if($project&&!DB::one('SELECT id FROM projects WHERE id=? AND client_id=?',[$project,$client]))fail('Projeto de outro cliente.');
 
    $dueInput=trim((string)($p['due_at']??($old['due_at']??'')));if($dueInput===''&&!$old)$dueInput=businessDeadline(max(1,(int)($categoryRow['default_due_hours']??24)))->format('Y-m-d\\TH:i');if($dueInput==='')fail('Informe a data de entrega.');$due=timestamp($dueInput);if(!$due)fail('Informe a data de entrega.');validateDelivery($due,$old['due_at']??null);
@@ -87,7 +94,6 @@ final class Demands {
    $row['stage_id']=(int)$stage['id'];
 
    if($role==='admin'){
-    $assigned=!empty($p['assigned_to'])?(int)$p['assigned_to']:(!$old&&!empty($categoryRow['default_assigned_to'])?(int)$categoryRow['default_assigned_to']:null);if($assigned&&!DB::one("SELECT id FROM users WHERE id=? AND active=1 AND role IN ('admin','staff')",[$assigned]))fail('Responsável inválido.');
     $clientType=($clientRow['commercial_type']??'one_off')==='monthly'?'monthly':'one_off';
     $mode=$clientType==='monthly'?enumv($p['billing_mode']??($old['billing_mode']??'included'),['included','one_off'],'modelo comercial'):'one_off';
     $amount=$mode==='included'?0:integer($p['amount_cents']??($old['amount_cents']??(!$old?(int)($categoryRow['default_amount_cents']??0):0)),0,1000000000);
@@ -97,8 +103,8 @@ final class Demands {
     }
     $row+=['assigned_to'=>$assigned,'billing_mode'=>$mode,'amount_cents'=>$amount,'commercial_status'=>enumv($p['commercial_status']??($old['commercial_status']??'pending'),['pending','approved','rejected'],'aprovação comercial'),'blocked_reason'=>$old['blocked_reason']??'','internal_notes'=>$old['internal_notes']??'','revisions_limit'=>(int)($old['revisions_limit']??($categoryRow['default_revisions']??2)),'estimated_minutes'=>(int)($old['estimated_minutes']??0)];
    }else{
-    if($old){$row+=['assigned_to'=>$old['assigned_to'],'billing_mode'=>$old['billing_mode'],'amount_cents'=>$old['amount_cents'],'commercial_status'=>$old['commercial_status'],'blocked_reason'=>$old['blocked_reason'],'internal_notes'=>$old['internal_notes'],'revisions_limit'=>$old['revisions_limit'],'estimated_minutes'=>$old['estimated_minutes']];}
-    else{$mode=($clientRow['commercial_type']??'one_off')==='monthly'?'included':'one_off';$row+=['assigned_to'=>!empty($categoryRow['default_assigned_to'])?(int)$categoryRow['default_assigned_to']:null,'billing_mode'=>$mode,'amount_cents'=>0,'commercial_status'=>'pending','blocked_reason'=>'','internal_notes'=>'','revisions_limit'=>(int)($categoryRow['default_revisions']??2),'estimated_minutes'=>0];}
+    if($old){$row+=['assigned_to'=>$assigned,'billing_mode'=>$old['billing_mode'],'amount_cents'=>$old['amount_cents'],'commercial_status'=>$old['commercial_status'],'blocked_reason'=>$old['blocked_reason'],'internal_notes'=>$old['internal_notes'],'revisions_limit'=>$old['revisions_limit'],'estimated_minutes'=>$old['estimated_minutes']];}
+    else{$mode=($clientRow['commercial_type']??'one_off')==='monthly'?'included':'one_off';$row+=['assigned_to'=>$assigned,'billing_mode'=>$mode,'amount_cents'=>0,'commercial_status'=>'pending','blocked_reason'=>'','internal_notes'=>'','revisions_limit'=>(int)($categoryRow['default_revisions']??2),'estimated_minutes'=>0];}
    }
 
    $accepted=in_array($stage['kind'],['planned','production','approval','completed'],true);$row['accepted_at']=$old['accepted_at']??($accepted?now():null);
@@ -149,14 +155,14 @@ final class Demands {
   $action=enumv((string)($p['bulk_action']??''),['stage','priority','assigned'],'ação em lote');$updated=0;
   foreach($ids as $id){$d=Auth::demand($id,true);$row=['updated_at'=>now(),'version'=>(int)$d['version']+1];
    if($action==='priority')$row['priority']=enumv((string)($p['priority']??''),['low','normal','high','urgent'],'prioridade');
-   elseif($action==='assigned'){$assigned=!empty($p['assigned_to'])?(int)$p['assigned_to']:null;if($assigned&&!DB::one("SELECT id FROM users WHERE id=? AND active=1 AND role IN ('admin','staff')",[$assigned]))fail('Responsável inválido.');$row['assigned_to']=$assigned;}
+   elseif($action==='assigned'){$assigned=integer($p['assigned_to']??0,1);$row['assigned_to']=self::responsible($assigned,(int)$d['client_id']);}
    else{$stage=DB::one('SELECT * FROM stages WHERE id=? AND active=1',[integer($p['stage_id']??0,1)]);if(!$stage)fail('Etapa inválida.');$row['stage_id']=$stage['id'];$row['completed_at']=$stage['kind']==='completed'?($d['completed_at']??now()):null;if($stage['kind']==='completed')$row['first_completed_at']=$d['first_completed_at']??now();DB::insert('transitions',['demand_id'=>$id,'from_stage'=>$d['stage_id'],'to_stage'=>$stage['id'],'actor_id'=>Auth::$user['id'],'happened_at'=>now()]);}
    DB::update('demands',$id,$row);audit('demand',$id,'bulk.'.$action,$d,$row);$fresh=DB::one('SELECT * FROM demands WHERE id=?',[$id])?:array_merge($d,$row);
    if(empty($fresh['draft'])){if($action==='assigned')Notify::demand($fresh,'Responsável atualizado',$fresh['title'],true);elseif($action==='stage')Notify::demand($fresh,'Etapa atualizada',$fresh['title'],true);elseif($action==='priority')Notify::demand($fresh,'Prioridade atualizada',$fresh['title'],true);}
    $updated++;
   }return ['updated'=>$updated];
  }
- public static function delete(array $p): array {Auth::admin();$d=Auth::demand(integer($p['id']??0,1),true);Notify::demand($d,'Task excluída',$d['title']);DB::update('demands',$d['id'],['deleted_at'=>now(),'version'=>(int)$d['version']+1,'updated_at'=>now()]);audit('demand',$d['id'],'deleted',$d,['deleted_at'=>now()]);return ['deleted'=>true,'id'=>$d['id']];}
+ public static function delete(array $p): array {Auth::requireAbility('tasks.delete');$d=Auth::demand(integer($p['id']??0,1),true);Notify::demand($d,'Task excluída',$d['title']);DB::update('demands',$d['id'],['deleted_at'=>now(),'version'=>(int)$d['version']+1,'updated_at'=>now()]);audit('demand',$d['id'],'deleted',$d,['deleted_at'=>now()]);return ['deleted'=>true,'id'=>$d['id']];}
  public static function comment(array $p): array {$d=Auth::demand(integer($p['demand_id']??0,1));$internal=Auth::$user['role']!=='client'&&(bool)($p['internal']??false);$version=!empty($p['version_id'])?(int)$p['version_id']:null;if($version&&!DB::one('SELECT id FROM files WHERE id=? AND demand_id=?'.(Auth::$user['role']==='client'?' AND shared=1':''),[$version,$d['id']]))fail('Versão inválida.');$body=required($p,'body',10000);$id=DB::insert('comments',['demand_id'=>$d['id'],'author_id'=>Auth::$user['id'],'body'=>$body,'internal'=>(int)$internal,'version_id'=>$version,'created_at'=>now()]);Notify::demand($d,'Novo comentário',mb_substr($body,0,250),$internal);return ['id'=>$id];}
  public static function checklist(array $p): array {Auth::staff();$d=Auth::demand(integer($p['demand_id'],1));$id=(int)($p['id']??0);if($id){if(!DB::one('SELECT id FROM checklists WHERE id=? AND demand_id=?',[$id,$d['id']]))fail('Item inválido.',404);DB::update('checklists',$id,['done'=>(int)(bool)$p['done']]);}else $id=DB::insert('checklists',['demand_id'=>$d['id'],'label'=>required($p,'label',255),'done'=>0]);return ['id'=>$id];}
  public static function time(array $p): array {Auth::staff();$d=Auth::demand(integer($p['demand_id'],1));return ['id'=>DB::insert('time_entries',['demand_id'=>$d['id'],'user_id'=>Auth::$user['id'],'minutes'=>integer($p['minutes']??0,1,1440),'description'=>mb_substr($p['description']??'',0,255),'worked_on'=>datev($p['worked_on']??'',false),'created_at'=>now()])];}

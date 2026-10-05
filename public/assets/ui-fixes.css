@@ -2283,3 +2283,11 @@ input[type="time"]::-webkit-calendar-picker-indicator{
 .user-client-search-wrap .input{padding-left:40px;width:100%}
 .user-client-link.client-search-hidden{display:none!important}
 #user-client-count{display:block;margin-top:8px}
+
+
+/* v3.21 — ativação de push após login */
+.push-activation-modal{max-width:470px;text-align:left}
+.push-activation-icon{width:54px;height:54px;border-radius:16px;display:grid;place-items:center;margin:2px 0 14px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)}
+.push-activation-icon .ui-icon{width:26px;height:26px}
+.push-activation-modal .modal-head{padding:0;border:0}
+.push-activation-modal .form-actions{margin-top:22px}

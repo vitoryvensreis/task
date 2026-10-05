@@ -255,7 +255,7 @@ Uma mesma conta Google pode ser autorizada separadamente para as duas finalidade
 
 Em **Clientes**, cada cliente pode ter seu próprio Google Drive. No cadastro/edição, escolha uma conta de Drive já conectada ou clique em **Conectar novo Drive** para autorizar outra conta Google naquele momento. Essa conexão não importa agendas. Para clientes com Drive dedicado, o TaskEsc cria uma pasta `TaskEsc - Nome do cliente` e, dentro dela, uma pasta por job. Se o cliente estiver configurado para **Usar Drive padrão**, o sistema usa como fallback a conta escolhida em **Configurações > Google Drive**. Alterar o Drive do cliente afeta os próximos uploads; arquivos antigos continuam vinculados à conta onde foram enviados.
 
-A partir da **v3.20**, novos uploads são enviados em **blocos de 1 MB** por uma sessão resumível: o navegador envia um bloco por vez ao TaskEsc e o servidor repassa esse bloco ao Google Drive. O arquivo completo não é salvo permanentemente na VPS. Esse tamanho de bloco reduz a chance de bloqueio por limites de requisição do Apache/Nginx/PHP e permite trabalhar com arquivos muito grandes sem exigir que o servidor receba o arquivo inteiro de uma vez. O envio possui progresso, retentativas para falhas transitórias, recuperação do último offset confirmado e sessão prolongada.
+A partir da **v3.21**, novos uploads usam blocos adaptativos de **até 16 MB** em uma sessão resumível. O navegador começa com blocos menores e aumenta automaticamente quando a conexão/servidor suportam; se o proxy responder com `413` ou um bloco expirar, o TaskEsc reduz o bloco e continua sem impor limite ao tamanho total do arquivo. Isso reduz bastante o número de requisições em vídeos e projetos grandes sem exigir que o servidor receba o arquivo completo de uma vez. O progresso também exibe a velocidade aproximada em MB/s.
 
 Os anexos de tasks não usam mais lista fechada de extensões: **SVG e qualquer outro formato de arquivo** podem ser enviados ao Google Drive, inclusive arquivos de projeto e formatos sem extensão. Imagens, PDFs, vídeo, áudio e texto compatíveis podem ser visualizados quando o navegador suportar; os demais arquivos podem ser abertos pelo Google Drive ou baixados pelo endpoint autenticado do TaskEsc.
 
@@ -291,6 +291,8 @@ Em **Configurações > Usuários e responsáveis**, crie usuários do tipo **Equ
 A partir da **v3.19**, toda task precisa ter um responsável antes de ser salva. Usuários podem ser vinculados a **mais de um cliente**. O perfil **Equipe** enxerga, edita, move e exclui as tasks de todos os clientes aos quais estiver vinculado, independentemente de ser o responsável direto daquela task. Um membro da Equipe só pode ser definido como responsável de um cliente ao qual esteja vinculado.
 
 Na **v3.20**, o seletor de clientes vinculados ganhou busca por nome em tempo real, mantendo os vínculos já marcados mesmo quando a lista está filtrada.
+
+Na **v3.21**, ao entrar no TaskEsc sem uma assinatura push ativa neste dispositivo, o sistema abre um aviso para ativar notificações. A permissão nativa continua sendo solicitada somente após o clique do usuário, como exigido pelos navegadores. Assinaturas existentes são sincronizadas novamente com o backend ao entrar.
 
 ## Clientes e regra comercial
 

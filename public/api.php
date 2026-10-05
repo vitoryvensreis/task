@@ -96,6 +96,7 @@ try {
   'finance.monthly_status'=>Finance::monthlyBillingStatus($p),
   'files.add'=>Files::add($p),
   'files.upload_start'=>Files::uploadStart($p),
+  'files.upload_status'=>Files::uploadStatus($p),
   'files.delete'=>Files::delete($p),
   'files.review'=>Files::review($p),
   'agenda.list'=>Agenda::list($p),

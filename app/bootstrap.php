@@ -9,7 +9,7 @@ ini_set('log_errors','1');
 ini_set('error_log',ROOT.'/storage/logs/php.log');
 if(PHP_SAPI!=='cli'){
  header('X-Content-Type-Options: nosniff'); header('Referrer-Policy: same-origin'); header('X-Frame-Options: DENY');
- header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; media-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'self'");
+ header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://www.googleapis.com https://*.googleapis.com; media-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'self'");
  header('Cache-Control: no-store');
  if(session_status()!==PHP_SESSION_ACTIVE){
   $sessionDir=ROOT.'/storage/sessions';if(!is_dir($sessionDir))@mkdir($sessionDir,0700,true);if(is_dir($sessionDir))ini_set('session.save_path',$sessionDir);

@@ -290,6 +290,8 @@ Em **Configurações > Usuários e responsáveis**, crie usuários do tipo **Equ
 
 A partir da **v3.19**, toda task precisa ter um responsável antes de ser salva. Usuários podem ser vinculados a **mais de um cliente**. O perfil **Equipe** enxerga, edita, move e exclui as tasks de todos os clientes aos quais estiver vinculado, independentemente de ser o responsável direto daquela task. Um membro da Equipe só pode ser definido como responsável de um cliente ao qual esteja vinculado.
 
+Na **v3.23**, o formulário de **Nova solicitação** do acesso Cliente também exibe o campo obrigatório **Responsável**. O cliente pode escolher um Administrador ativo ou um membro da Equipe vinculado ao cliente da solicitação. Em tasks já existentes, o cliente continua sem poder trocar o responsável.
+
 Na **v3.20**, o seletor de clientes vinculados ganhou busca por nome em tempo real, mantendo os vínculos já marcados mesmo quando a lista está filtrada.
 
 Na **v3.21**, ao entrar no TaskEsc sem uma assinatura push ativa neste dispositivo, o sistema abre um aviso para ativar notificações. A permissão nativa continua sendo solicitada somente após o clique do usuário, como exigido pelos navegadores. Assinaturas existentes são sincronizadas novamente com o backend ao entrar.

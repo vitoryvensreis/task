@@ -2275,3 +2275,11 @@ input[type="time"]::-webkit-calendar-picker-indicator{
 .user-client-main{margin:0;min-width:0}.user-client-main span{font-weight:600;overflow-wrap:anywhere}
 .user-client-perms{display:flex;flex-wrap:wrap;gap:12px;justify-content:flex-end}.user-client-perms .check{margin:0;font-size:12px}
 @media(max-width:680px){.user-client-link{align-items:flex-start;flex-direction:column}.user-client-perms{justify-content:flex-start}}
+
+
+/* v3.20 — busca de clientes no vínculo de usuários */
+.user-client-search-wrap{position:relative;margin-top:8px}
+.user-client-search-wrap>span{position:absolute;left:12px;top:50%;transform:translateY(-50%);display:grid;place-items:center;pointer-events:none;opacity:.72}
+.user-client-search-wrap .input{padding-left:40px;width:100%}
+.user-client-link.client-search-hidden{display:none!important}
+#user-client-count{display:block;margin-top:8px}

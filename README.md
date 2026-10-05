@@ -28,7 +28,7 @@ O instalador aplica `database/schema.sql`, cria o administrador e grava as chave
 
 Substitua os arquivos da aplicação pelo conteúdo desta versão sem apagar `config/config.php`, `storage/installed.lock` ou seus dados. Na primeira requisição autenticada, o TaskEsc executa a migração compatível em `app/Migrations.php` e atualiza a estrutura necessária sem recriar o banco.
 
-A atualização mantém todas as migrações anteriores e inclui todas as migrações até o **schema 18**. Ela preserva clientes, tasks, arquivos, histórico e integrações existentes. O schema 8 acrescenta apenas metadados de tentativa/conclusão na fila de e-mails para alimentar o log administrativo. Os SQLs de referência ficam em `database/migrations/`, incluindo `005_taskesc_finance_routes_upload.sql`, `006_taskesc_api_notifications.sql`, `007_client_drive_routing.sql` e `008_email_delivery_log.sql`.
+A atualização mantém todas as migrações anteriores e inclui todas as migrações até o **schema 19**. Ela preserva clientes, tasks, arquivos, histórico e integrações existentes. O schema 8 acrescenta apenas metadados de tentativa/conclusão na fila de e-mails para alimentar o log administrativo. Os SQLs de referência ficam em `database/migrations/`, incluindo `005_taskesc_finance_routes_upload.sql`, `006_taskesc_api_notifications.sql`, `007_client_drive_routing.sql` e `008_email_delivery_log.sql`.
 
 Faça backup do banco antes de qualquer atualização em produção.
 
@@ -255,11 +255,11 @@ Uma mesma conta Google pode ser autorizada separadamente para as duas finalidade
 
 Em **Clientes**, cada cliente pode ter seu próprio Google Drive. No cadastro/edição, escolha uma conta de Drive já conectada ou clique em **Conectar novo Drive** para autorizar outra conta Google naquele momento. Essa conexão não importa agendas. Para clientes com Drive dedicado, o TaskEsc cria uma pasta `TaskEsc - Nome do cliente` e, dentro dela, uma pasta por job. Se o cliente estiver configurado para **Usar Drive padrão**, o sistema usa como fallback a conta escolhida em **Configurações > Google Drive**. Alterar o Drive do cliente afeta os próximos uploads; arquivos antigos continuam vinculados à conta onde foram enviados.
 
-Novos uploads são enviados em **blocos de 1 MB** por uma sessão resumível: o navegador envia um bloco por vez ao TaskEsc e o servidor repassa esse bloco ao Google Drive. O arquivo completo não é salvo permanentemente na VPS. O envio possui progresso, retentativas para falhas transitórias, recuperação do último offset confirmado e sessão prolongada, reduzindo travamentos em arquivos grandes e em conexões instáveis. Arquivos antigos que já estavam na VPS continuam compatíveis e podem ser baixados normalmente.
+A partir da **v3.20**, novos uploads são enviados em **blocos de 1 MB** por uma sessão resumível: o navegador envia um bloco por vez ao TaskEsc e o servidor repassa esse bloco ao Google Drive. O arquivo completo não é salvo permanentemente na VPS. Esse tamanho de bloco reduz a chance de bloqueio por limites de requisição do Apache/Nginx/PHP e permite trabalhar com arquivos muito grandes sem exigir que o servidor receba o arquivo inteiro de uma vez. O envio possui progresso, retentativas para falhas transitórias, recuperação do último offset confirmado e sessão prolongada.
 
-Imagens, PDFs, vídeo, áudio e texto compatíveis podem ser visualizados no card do job. Demais documentos podem ser abertos pelo Google Drive e todos os arquivos podem ser baixados pelo endpoint autenticado do TaskEsc.
+Os anexos de tasks não usam mais lista fechada de extensões: **SVG e qualquer outro formato de arquivo** podem ser enviados ao Google Drive, inclusive arquivos de projeto e formatos sem extensão. Imagens, PDFs, vídeo, áudio e texto compatíveis podem ser visualizados quando o navegador suportar; os demais arquivos podem ser abertos pelo Google Drive ou baixados pelo endpoint autenticado do TaskEsc.
 
-Em **Configurações > Limite por upload**, o valor `0` significa **sem limite total imposto pelo TaskEsc**. Nesse modo, o tamanho possível passa a depender do navegador, da conexão, da disponibilidade da conta e dos limites do Google Drive, em vez do `upload_max_filesize`/`post_max_size` precisar comportar o arquivo inteiro. Se desejar uma política interna, informe um limite em MB diferente de zero.
+Na atualização para a **v3.20**, o limite interno de upload é redefinido para `0`, ou seja, **sem limite total imposto pelo TaskEsc**. O tamanho possível passa a depender do navegador, da conexão, do espaço disponível e dos limites da conta Google Drive. Em **Configurações > Limite por upload** ainda é possível definir posteriormente uma política interna em MB, se desejado.
 
 
 ## Financeiro e relatórios
@@ -289,6 +289,8 @@ Toda task nova entra automaticamente na **primeira coluna ativa do Kanban**. Dep
 Em **Configurações > Usuários e responsáveis**, crie usuários do tipo **Equipe** ou **Administrador**. Esses usuários aparecem no campo **Responsável** da task e podem receber jobs. Perfis de cliente continuam disponíveis para acesso do cliente e aprovações conforme permissões.
 
 A partir da **v3.19**, toda task precisa ter um responsável antes de ser salva. Usuários podem ser vinculados a **mais de um cliente**. O perfil **Equipe** enxerga, edita, move e exclui as tasks de todos os clientes aos quais estiver vinculado, independentemente de ser o responsável direto daquela task. Um membro da Equipe só pode ser definido como responsável de um cliente ao qual esteja vinculado.
+
+Na **v3.20**, o seletor de clientes vinculados ganhou busca por nome em tempo real, mantendo os vínculos já marcados mesmo quando a lista está filtrada.
 
 ## Clientes e regra comercial
 
@@ -331,7 +333,7 @@ Configure em **Configurações > Credenciais das integrações**: host, porta, c
 - Permissões são verificadas no backend por perfil e vínculo.
 - Credenciais e tokens ficam no arquivo privado `config/config.php`/banco criptografado, não no JavaScript.
 - Downloads do Drive passam pela autorização do TaskEsc; o ID do arquivo não concede acesso por si só.
-- Uploads validam extensão, MIME e tamanho antes de serem enviados ao Drive.
+- Uploads aceitam qualquer extensão, validam o nome do arquivo e usam metadados MIME sem executar o conteúdo no servidor; o envio grande é feito por sessão resumível diretamente para o Drive.
 
 ## Estrutura principal
 

@@ -256,6 +256,10 @@ final class Migrations {
    DB::run("INSERT IGNORE INTO user_clients (user_id,client_id,can_approve,can_finance) SELECT DISTINCT d.assigned_to,d.client_id,1,0 FROM demands d JOIN users u ON u.id=d.assigned_to WHERE d.assigned_to IS NOT NULL AND d.deleted_at IS NULL AND u.role='staff'");
    DB::run("INSERT INTO settings (`key`,value) VALUES ('schema_version','18') ON DUPLICATE KEY UPDATE value='18'");$version=18;
   }
+  if($version<19){
+   DB::run("INSERT INTO settings (`key`,value) VALUES ('upload_mb','0') ON DUPLICATE KEY UPDATE value='0'");
+   DB::run("INSERT INTO settings (`key`,value) VALUES ('schema_version','19') ON DUPLICATE KEY UPDATE value='19'");$version=19;
+  }
  }
  private static function hasColumn(string $table,string $column): bool {return (bool)DB::one('SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?',[$table,$column]);}
  private static function column(string $table,string $column,string $sql): void {if(!self::hasColumn($table,$column))DB::run($sql);}

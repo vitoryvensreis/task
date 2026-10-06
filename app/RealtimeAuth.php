@@ -38,11 +38,23 @@ final class RealtimeAuth
 
     public function bootstrapChannels(array $user): array
     {
-        // Preview impersonates client visibility but must not inherit admin personal/global realtime.
-        if (Auth::isPreview()) return [];
+        // Preview receives only the selected client's collection channel. It never
+        // inherits the administrator personal/global channels.
+        if (Auth::isPreview()) {
+            return Auth::$previewClientId ? ['client:'.(int)Auth::$previewClientId] : [];
+        }
+
         $channels = ['user:'.(int)$user['id']];
-        if (($user['role'] ?? '') === 'admin') $channels[] = 'kanban/global';
-        return $channels;
+        if (($user['role'] ?? '') === 'admin') {
+            $channels[] = 'kanban/global';
+            return $channels;
+        }
+
+        foreach (DB::all('SELECT client_id FROM user_clients WHERE user_id=? ORDER BY client_id', [(int)$user['id']]) as $link) {
+            $clientId = (int)($link['client_id'] ?? 0);
+            if ($clientId > 0) $channels[] = 'client:'.$clientId;
+        }
+        return array_values(array_unique($channels));
     }
 
     public function authorizeChannel(string $channel, array $user): void
@@ -54,6 +66,11 @@ final class RealtimeAuth
 
         if (preg_match('/^user:([1-9][0-9]{0,9})$/D', $channel, $m)) {
             if (Auth::isPreview() || (int)$m[1] !== (int)$user['id']) fail('Sem permissão para este canal realtime.', 403);
+            return;
+        }
+
+        if (preg_match('/^client:([1-9][0-9]{0,9})$/D', $channel, $m)) {
+            Auth::client((int)$m[1], 'read');
             return;
         }
 

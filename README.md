@@ -443,3 +443,12 @@ O Passo 5 conecta as alterações reais de tasks ao Outbox transacional. Criaç�
 Os eventos são distribuídos para `kanban/global`, `demand:{id}` e, quando aplicável, `project:{id}`; uma troca de projeto também invalida o projeto anterior. Rascunhos permanecem somente no canal global de administrador. O payload não carrega briefing, notas internas nem valores financeiros.
 
 O worker do Passo 3 continua fazendo publicação idempotente/retry no Centrifugo. O frontend ainda não move nem recarrega cards a partir desses eventos neste passo. Consulte `docs/realtime-step5.md`.
+
+
+## Realtime — Passo 6
+
+O Passo 6 faz o frontend reagir às publicações WebSocket das tasks. Foi adicionado o canal `client:{id}`, autorizado pelas mesmas regras de acesso já usadas pelo HTTP, para que Equipe, Cliente e modo de visualização recebam mudanças dos clientes que realmente podem enxergar; administradores continuam usando `kanban/global`.
+
+Eventos `demand.*` agora invalidam Dashboard, Kanban, Tasks, Financeiro e Relatórios com debounce, preservando scroll e filtros do Kanban. Modais de task em detalhe também são atualizados; exclusões remotas fecham o modal e edições em andamento não são sobrescritas. O backend inclui um `operation_id` compartilhado no fanout para o navegador deduplicar publicações sobrepostas.
+
+O WebSocket continua sendo apenas o gatilho: os dados completos são relidos pelos endpoints HTTP autorizados. O refresh periódico de 30 segundos permanece como fallback. Consulte `docs/realtime-step6.md`.

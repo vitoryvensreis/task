@@ -57,18 +57,22 @@ $ids=EventOutbox::transaction(fn()=>DemandRealtime::emit(
     12,
     [8,9]
 ));
-check(array_keys($ids)===['kanban/global','demand:41','project:9','project:8'],'Published demand must fan out once per authorized channel.');
+check(array_keys($ids)===['kanban/global','client:7','demand:41','project:9','project:8'],'Published demand must fan out once per authorized collection/entity channel.');
 
 $rows=DB::all('SELECT * FROM event_outbox ORDER BY id');
-check(count($rows)===4,'Expected four outbox rows for global, demand, current project and previous project.');
+check(count($rows)===5,'Expected five outbox rows for global, client, demand, current project and previous project.');
+$operationIds=[];
 foreach($rows as $row){
     check($row['event_type']==='demand.updated'&&$row['entity_type']==='demand'&&(int)$row['entity_id']===41,'Outbox envelope must identify the demand.');
     check((int)$row['created_by']===12,'Outbox actor must be preserved.');
     $payload=json_decode($row['payload_json'],true,32,JSON_THROW_ON_ERROR);
     check($payload['demand_id']===41&&$payload['client_id']===7&&$payload['project_id']===9&&$payload['version']===6,'Payload must carry refresh identifiers.');
+    check(is_string($payload['operation_id']??null)&&preg_match('/\\A[a-f0-9]{32}\\z/D',$payload['operation_id'])===1,'Payload must carry a safe fanout operation id.');
+    $operationIds[]=$payload['operation_id'];
     check($payload['change']==='save.updated'&&$payload['previous_project_id']===8&&$payload['priority']==='high','Allowed change metadata must be preserved.');
     foreach(['title','brief','internal_notes','amount_cents'] as $forbidden) check(!array_key_exists($forbidden,$payload),'Sensitive/heavy demand fields must not be published.');
 }
+check(count(array_unique($operationIds))===1,'All channel fanout rows from one mutation must share one operation id.');
 
 $before=(int)(DB::one('SELECT COUNT(*) AS n FROM event_outbox')['n']??0);
 try {

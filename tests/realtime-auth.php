@@ -102,7 +102,7 @@ try {
 
     $service = new RealtimeAuth(new Realtime($configFile));
     $connection = $service->connection([]);
-    rtCheck($connection['channels']===['user:'.$staff],'Staff bootstrap channels must be personal only');
+    rtCheck($connection['channels']===['user:'.$staff,'client:'.$c1],'Staff bootstrap channels must include authorized client collections');
     $claims = rtDecodeJwt($connection['token'],$secret);
     rtCheck(($claims['sub']??null)===(string)$staff,'Connection JWT sub must be authenticated user string');
     rtCheck((int)$claims['exp']-(int)$claims['iat']===Realtime::TOKEN_TTL_SECONDS,'Connection JWT TTL mismatch');
@@ -111,9 +111,11 @@ try {
     $subClaims = rtDecodeJwt($subscription['token'],$secret);
     rtCheck(($subClaims['sub']??null)===(string)$staff && ($subClaims['channel']??null)==='demand:'.$d1,'Subscription JWT must bind sub and exact channel');
     $service->subscription(['channel'=>'project:'.$p1]);
+    $service->subscription(['channel'=>'client:'.$c1]);
     $service->subscription(['channel'=>'user:'.$staff]);
     rtStatus(fn()=> $service->subscription(['channel'=>'demand:'.$d2]),403);
     rtStatus(fn()=> $service->subscription(['channel'=>'project:'.$p2]),403);
+    rtStatus(fn()=> $service->subscription(['channel'=>'client:'.$c2]),403);
     rtStatus(fn()=> $service->subscription(['channel'=>'user:'.$admin]),403);
     rtStatus(fn()=> $service->subscription(['channel'=>'kanban/global']),403);
     rtStatus(fn()=> $service->connection(['user_id'=>$admin]),400);
@@ -128,17 +130,21 @@ try {
 
     $clientUser=rtReset($client);
     $clientService=new RealtimeAuth(new Realtime($configFile));
-    rtCheck($clientService->connection([])['channels']===['user:'.$client],'Client bootstrap channels must be personal only');
+    rtCheck($clientService->connection([])['channels']===['user:'.$client,'client:'.$c1],'Client bootstrap must include linked client collection');
+    $clientService->subscription(['channel'=>'client:'.$c1]);
     $clientService->subscription(['channel'=>'demand:'.$d1]);
     $clientService->subscription(['channel'=>'project:'.$p1]);
+    rtStatus(fn()=> $clientService->subscription(['channel'=>'client:'.$c2]),403);
     rtStatus(fn()=> $clientService->subscription(['channel'=>'demand:'.$d2]),403);
     rtStatus(fn()=> $clientService->subscription(['channel'=>'kanban/global']),403);
 
     $previewUser=rtReset($admin,$c1);
     $previewService=new RealtimeAuth(new Realtime($configFile));
-    rtCheck($previewUser['role']==='client' && $previewService->connection([])['channels']===[],'Preview must not inherit admin realtime channels');
+    rtCheck($previewUser['role']==='client' && $previewService->connection([])['channels']===['client:'.$c1],'Preview must receive only its selected client collection');
+    $previewService->subscription(['channel'=>'client:'.$c1]);
     $previewService->subscription(['channel'=>'demand:'.$d1]);
     $previewService->subscription(['channel'=>'project:'.$p1]);
+    rtStatus(fn()=> $previewService->subscription(['channel'=>'client:'.$c2]),403);
     rtStatus(fn()=> $previewService->subscription(['channel'=>'demand:'.$d2]),403);
     rtStatus(fn()=> $previewService->subscription(['channel'=>'project:'.$p2]),403);
     rtStatus(fn()=> $previewService->subscription(['channel'=>'user:'.$admin]),403);

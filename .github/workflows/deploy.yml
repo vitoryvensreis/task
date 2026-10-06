@@ -102,9 +102,8 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -p "$VPS_PORT" -H "$VPS_HOST" >> ~/.ssh/known_hosts
 
-      - name: Criar snapshot oficial pré-SaaS
-        id: restore
-        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[pre-saas-restore-point]')
+      - name: Backup obrigatório pré-deploy
+        id: backup
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_PORT: ${{ secrets.VPS_PORT }}
@@ -112,7 +111,7 @@ jobs:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
           set -euo pipefail
-          mkdir -p restore-point
+          mkdir -p predeploy-backup
 
           RESULT="$(ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
             set -euo pipefail
@@ -128,7 +127,7 @@ jobs:
             mkdir -p "$BACKUP_DIR"
             chmod 700 "$BACKUP_DIR"
 
-            BASENAME="taskesc-pre-saas-v3.25-${TS}-${PROD_SHORT}"
+            BASENAME="taskesc-predeploy-${TS}-${PROD_SHORT}"
             BACKUP_FILE="$BACKUP_DIR/${BASENAME}.sql.gz"
             SHA_FILE="$BACKUP_FILE.sha256"
             MANIFEST_FILE="$BACKUP_DIR/${BASENAME}.txt"
@@ -165,11 +164,8 @@ jobs:
             [ -n "$DUMP_BIN" ] || { echo "ERRO: mysqldump/mariadb-dump não encontrado." >&2; exit 1; }
 
             rm -f "$BACKUP_FILE"
-            if ! "$DUMP_BIN" --defaults-extra-file="$CNF" --no-tablespaces --single-transaction --quick --routines --triggers --events --hex-blob --default-character-set=utf8mb4 "$DB_NAME" | gzip -9 > "$BACKUP_FILE"; then
-              echo "Aviso: dump com rotinas/eventos falhou; repetindo sem rotinas/eventos." >&2
-              rm -f "$BACKUP_FILE"
-              "$DUMP_BIN" --defaults-extra-file="$CNF" --no-tablespaces --single-transaction --quick --triggers --hex-blob --default-character-set=utf8mb4 "$DB_NAME" | gzip -9 > "$BACKUP_FILE"
-            fi
+            echo "Criando dump completo antes do deploy..."
+            "$DUMP_BIN" --defaults-extra-file="$CNF" --no-tablespaces --single-transaction --quick --routines --triggers --events --hex-blob --default-character-set=utf8mb4 "$DB_NAME" | gzip -9 > "$BACKUP_FILE"
 
             gzip -t "$BACKUP_FILE"
             [ -s "$BACKUP_FILE" ] || { echo "ERRO: backup vazio." >&2; exit 1; }
@@ -184,6 +180,9 @@ jobs:
               echo "ERRO: conteúdo do dump não parece válido." >&2
               exit 1
             fi
+            gzip -cd "$BACKUP_FILE" | tail -n 20 | grep -Eq '^-- Dump completed on |^-- Dump completed ' || { echo "ERRO: dump sem marcador de conclusão." >&2; exit 1; }
+            TABLE_COUNT="$(gzip -cd "$BACKUP_FILE" | grep -c '^CREATE TABLE' || true)"
+            [ "$TABLE_COUNT" -gt 0 ] || { echo "ERRO: nenhuma tabela encontrada no dump." >&2; exit 1; }
 
             SCHEMA_VERSION="$(php -r '
               $c=require $argv[1];$d=$c["db"]??[];
@@ -194,17 +193,19 @@ jobs:
               }catch(Throwable $e){echo "unknown";}
             ' "$DEPLOY_PATH/config/config.php")"
 
-            sha256sum "$BACKUP_FILE" > "$SHA_FILE"
+            (cd "$BACKUP_DIR" && sha256sum "$(basename "$BACKUP_FILE")" > "$(basename "$SHA_FILE")")
             {
-              echo "TaskEsc — ponto de restauração oficial pré-SaaS"
-              echo "Label: v3.25-stable-pre-saas"
+              echo "TaskEsc — backup obrigatório pré-deploy"
               echo "Criado em UTC: $TS"
-              echo "Commit em produção: $PROD_COMMIT"
+              echo "Commit em produção antes do deploy: $PROD_COMMIT"
               echo "Schema do banco: $SCHEMA_VERSION"
+              echo "Tabelas encontradas: $TABLE_COUNT"
+              echo "Inclui: estrutura, dados, triggers, routines e events"
               echo "Arquivo do banco: $(basename "$BACKUP_FILE")"
               echo "SHA256: $(cut -d' ' -f1 "$SHA_FILE")"
             } > "$MANIFEST_FILE"
             chmod 600 "$BACKUP_FILE" "$SHA_FILE" "$MANIFEST_FILE"
+            find "$BACKUP_DIR" -maxdepth 1 -type f -name 'taskesc-predeploy-*' -mtime +30 -delete || true
 
             printf '%s|%s|%s|%s\n' "$BACKUP_FILE" "$SHA_FILE" "$MANIFEST_FILE" "$PROD_COMMIT"
           REMOTE
@@ -213,47 +214,23 @@ jobs:
           IFS='|' read -r REMOTE_BACKUP REMOTE_SHA REMOTE_MANIFEST PROD_COMMIT <<< "$RESULT"
           [ -n "$REMOTE_BACKUP" ] && [ -n "$REMOTE_MANIFEST" ] && [ -n "$PROD_COMMIT" ]
 
-          scp -P "$VPS_PORT" "$VPS_USER@$VPS_HOST:$REMOTE_BACKUP" restore-point/
-          scp -P "$VPS_PORT" "$VPS_USER@$VPS_HOST:$REMOTE_SHA" restore-point/
-          scp -P "$VPS_PORT" "$VPS_USER@$VPS_HOST:$REMOTE_MANIFEST" restore-point/
+          scp -P "$VPS_PORT" "$VPS_USER@$VPS_HOST:$REMOTE_BACKUP" predeploy-backup/
+          scp -P "$VPS_PORT" "$VPS_USER@$VPS_HOST:$REMOTE_SHA" predeploy-backup/
+          scp -P "$VPS_PORT" "$VPS_USER@$VPS_HOST:$REMOTE_MANIFEST" predeploy-backup/
 
-          git archive --format=zip --output=restore-point/taskesc-v3.25-stable-pre-saas.zip "$PROD_COMMIT"
-          sha256sum restore-point/taskesc-v3.25-stable-pre-saas.zip > restore-point/taskesc-v3.25-stable-pre-saas.zip.sha256
-
+          (cd predeploy-backup && sha256sum -c *.sql.gz.sha256)
+          git archive --format=zip --output=predeploy-backup/taskesc-code-predeploy.zip "$PROD_COMMIT"
+          sha256sum predeploy-backup/taskesc-code-predeploy.zip > predeploy-backup/taskesc-code-predeploy.zip.sha256
           echo "prod_commit=$PROD_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "Backup validado e copiado para fora da VPS."
 
-      - name: Guardar snapshot pré-SaaS por 90 dias
-        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[pre-saas-restore-point]')
+      - name: Guardar backup pré-deploy fora da VPS
         uses: actions/upload-artifact@v4
         with:
-          name: taskesc-restore-point-v3.25-pre-saas
-          path: restore-point/
+          name: taskesc-predeploy-${{ github.run_id }}
+          path: predeploy-backup/
           if-no-files-found: error
-          retention-days: 90
-
-      - name: Tentar criar tag oficial do ponto de restauração
-        continue-on-error: true
-        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[pre-saas-restore-point]')
-        env:
-          PROD_COMMIT: ${{ steps.restore.outputs.prod_commit }}
-        run: |
-          set -euo pipefail
-          TAG="v3.25-stable-pre-saas"
-          git fetch --tags --force
-
-          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
-            EXISTING="$(git rev-list -n1 "$TAG")"
-            if [ "$EXISTING" != "$PROD_COMMIT" ]; then
-              echo "ERRO: a tag $TAG já existe apontando para $EXISTING, esperado $PROD_COMMIT."
-              exit 1
-            fi
-            echo "Tag $TAG já existe e está correta."
-          else
-            git config user.name "TaskEsc Release Bot"
-            git config user.email "actions@users.noreply.github.com"
-            git tag -a "$TAG" "$PROD_COMMIT" -m "Ponto de restauração oficial antes da migração SaaS"
-            git push origin "$TAG"
-          fi
+          retention-days: 30
 
       - name: Atualizar TaskEsc na VPS
         env:
@@ -289,6 +266,35 @@ jobs:
             echo "Validando arquivos principais..."
             php -l public/index.php
             php -l public/api.php
+            php -l public/health.php
 
-            echo "Deploy concluído com sucesso."
+            echo "Deploy concluído."
+          REMOTE
+
+      - name: Health check pós-deploy
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
+            set -euo pipefail
+            HEALTH_URL="$(php -r '$c=require $argv[1]; echo rtrim((string)($c["base_url"]??""),"/")."/health.php";' "$DEPLOY_PATH/config/config.php")"
+            [ -n "$HEALTH_URL" ] || { echo "ERRO: health URL vazia."; exit 1; }
+
+            for attempt in 1 2 3 4 5; do
+              RESPONSE="$(curl --fail --silent --show-error --max-time 20 "$HEALTH_URL" 2>/dev/null || true)"
+              if [ -n "$RESPONSE" ] && php -r '$j=json_decode($argv[1],true); exit(is_array($j) && ($j["status"]??null)==="ok" && ($j["database"]??false)===true && ($j["installed"]??false)===true ? 0 : 1);' "$RESPONSE"; then
+                echo "Health check OK na tentativa $attempt."
+                echo "$RESPONSE"
+                exit 0
+              fi
+              echo "Tentativa $attempt/5 falhou. Aguardando 3 segundos..."
+              sleep 3
+            done
+
+            echo "ERRO: health check pós-deploy falhou."
+            exit 1
           REMOTE

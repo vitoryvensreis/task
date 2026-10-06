@@ -106,7 +106,7 @@ try{
    $ch=curl_init($url);curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>20,CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_HTTPHEADER=>['Authorization: Bearer '.$token,'Accept: application/json']]);
    $body=curl_exec($ch);$code=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);$err=curl_error($ch);curl_close($ch);
    if($code!==200)$add($warnings,'google_drive_test_'.$a['id'],'Teste real do Drive falhou.',['email'=>$a['email'],'http'=>$code,'error'=>$err,'body'=>mb_substr((string)$body,0,300)]);
-   else $info[]=['key'=>'google_drive_'.$a['id'],'message'=>'Google Drive acessível para '.$a['email'].','meta'=>['http'=>200,'sample_file_id'=>$sample['id']]];
+   else $info[]=['key'=>'google_drive_'.$a['id'],'message'=>'Google Drive acessível para '.$a['email'],'meta'=>['http'=>200,'sample_file_id'=>$sample['id']]];
   }catch(Throwable $e){$add($warnings,'google_token_'.$a['id'],'Falha ao testar token do Google Drive.',['email'=>$a['email'],'error'=>$e->getMessage()]);}
  }
 

@@ -1,6 +1,7 @@
 # TaskEsc — gestão de jobs, tarefas, agenda e arquivos
 
 Preparação opcional de Redis/Centrifugo, com feature flag desligada: [Realtime — Passo 1](docs/realtime-step1.md).
+Infraestrutura transacional de eventos, sem publisher/frontend: [Realtime — Passo 2](docs/realtime-step2.md).
 
 TaskEsc é um sistema PHP 8.1+ para equipes de produção audiovisual, preparado para Apache + MySQL/MariaDB. Ele reúne Kanban, demandas/jobs, responsáveis, clientes, calendário unificado, arquivos, aprovações, financeiro, relatórios e integrações Google em uma única aplicação.
 
@@ -30,7 +31,7 @@ O instalador aplica `database/schema.sql`, cria o administrador e grava as chave
 
 Substitua os arquivos da aplicação pelo conteúdo desta versão sem apagar `config/config.php`, `storage/installed.lock` ou seus dados. Na primeira requisição autenticada, o TaskEsc executa a migração compatível em `app/Migrations.php` e atualiza a estrutura necessária sem recriar o banco.
 
-A atualização mantém todas as migrações anteriores e inclui todas as migrações até o **schema 19**. Ela preserva clientes, tasks, arquivos, histórico e integrações existentes. O schema 8 acrescenta apenas metadados de tentativa/conclusão na fila de e-mails para alimentar o log administrativo. Os SQLs de referência ficam em `database/migrations/`, incluindo `005_taskesc_finance_routes_upload.sql`, `006_taskesc_api_notifications.sql`, `007_client_drive_routing.sql` e `008_email_delivery_log.sql`.
+A atualização mantém as migrações anteriores e chega ao **schema 21**, criando somente `event_outbox` a partir do schema 19. O schema 20 permanece reservado ao SaaS removido e não é reexecutado. Clientes, tasks, arquivos, histórico e integrações são preservados. O DDL novo está em `database/migrations/021_event_outbox.sql`; o marcador só avança após validação da estrutura. Faça backup completo antes da atualização.
 
 Faça backup do banco antes de qualquer atualização em produção.
 

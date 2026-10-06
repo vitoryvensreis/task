@@ -6,6 +6,9 @@ if(PHP_SAPI!=='cli'){http_response_code(404);exit;}
 
 $cleanup=in_array('--cleanup-saas',$argv,true);
 $strict=in_array('--strict',$argv,true);
+$offline=in_array('--offline',$argv,true);
+$expectedSchema=(string)Migrations::CURRENT_VERSION;
+foreach($argv as $arg)if(str_starts_with($arg,'--expect-schema='))$expectedSchema=substr($arg,16);
 $critical=[];$warnings=[];$info=[];
 
 $add=function(array &$bucket,string $key,string $message,mixed $meta=null): void {
@@ -23,7 +26,12 @@ try{
  $schema=setting('schema_version','unknown');
  $info[]=['key'=>'schema','message'=>'Schema atual: '.$schema,'meta'=>$schema];
 
- if($schema!=='19')$add($critical,'schema_mismatch','O rollback pré-SaaS espera schema 19.',['actual'=>$schema,'expected'=>'19']);
+ if(!in_array($expectedSchema,['19','21'],true)||$schema!==$expectedSchema)$add($critical,'schema_mismatch','Schema diferente da versão esperada.',['actual'=>$schema,'expected'=>$expectedSchema]);
+ if($schema==='21'){
+  $outboxIssues=Migrations::outboxIssues();
+  foreach($outboxIssues as $issue)$add($critical,'outbox_'.$issue,'Estrutura Outbox incompatível: '.$issue);
+  if(!$outboxIssues)$info[]=['key'=>'event_outbox','message'=>'Outbox InnoDB, JSON e índices validados.','meta'=>['valid'=>true]];
+ }
 
  $saasTables=['workspace_settings','workspace_members','workspaces'];
  $saasFlags=['saas_enabled','workspace_context_enabled','workspace_permissions_enabled','workspace_settings_enabled','signup_enabled','billing_enabled'];
@@ -50,6 +58,7 @@ try{
 
  $workspaceColumns=DB::all("SELECT TABLE_NAME,COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND COLUMN_NAME='workspace_id' ORDER BY TABLE_NAME");
  if($workspaceColumns)$add($warnings,'workspace_columns','Foram encontradas colunas workspace_id. Elas não são usadas pelo TaskEsc v3.25 e não foram removidas automaticamente.',$workspaceColumns);
+ if($schema==='21'&&($presentTables||$presentFlags||$workspaceColumns))$add($critical,'removed_saas_present','A Outbox não admite estruturas do SaaS removido.');
 
  $essential=['users','clients','stages','categories','projects','demands','files','comments','invoices','payments','google_accounts','calendars','events','settings'];
  foreach($essential as $table)if(!$tableExists($table))$add($critical,'missing_table_'.$table,'Tabela essencial ausente: '.$table);
@@ -97,6 +106,7 @@ try{
   if((int)$a['file_count']<1)continue;
   if($a['status']!=='connected'){$add($warnings,'google_account_'.$a['id'],'Conta com arquivos não está conectada.',['email'=>$a['email'],'status'=>$a['status']]);continue;}
   if(!(bool)$a['drive_enabled']||!str_contains((string)$a['scopes'],'https://www.googleapis.com/auth/drive.file'))$add($warnings,'google_scope_'.$a['id'],'Conta com arquivos não declara o escopo drive.file.',['email'=>$a['email'],'scopes'=>$a['scopes']]);
+  if($offline)continue; // Auditoria estrutural sem chamadas externas ou renovação de tokens.
 
   $sample=DB::one("SELECT id,drive_file_id,original_name FROM files WHERE storage_provider='drive' AND drive_account_id=? AND drive_file_id IS NOT NULL AND drive_file_id<>'' ORDER BY id LIMIT 1",[$a['id']]);
   if(!$sample)continue;
@@ -118,7 +128,7 @@ try{
   if(!is_dir($path)||!is_writable($path))$add($critical,'storage_'.$dir,'Diretório necessário ausente ou sem escrita: '.$dir);
  }
 
- $result=['ok'=>!$critical,'cleanup_saas'=>$cleanup,'schema'=>$schema,'critical'=>$critical,'warnings'=>$warnings,'info'=>$info,'checked_at'=>gmdate('c')];
+ $result=['ok'=>!$critical,'cleanup_saas'=>$cleanup,'offline'=>$offline,'schema'=>$schema,'critical'=>$critical,'warnings'=>$warnings,'info'=>$info,'checked_at'=>gmdate('c')];
  echo json($result).PHP_EOL;
  if($strict&&$critical)exit(1);
  exit(0);

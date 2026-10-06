@@ -74,27 +74,66 @@ jobs:
       - name: Gerar ZIP completo
         run: |
           set -e
-          rm -f "/tmp/taskesc-realtime-step1.zip" "taskesc-realtime-step1.zip"
-          zip -qr "/tmp/taskesc-realtime-step1.zip" . \
+          rm -f "/tmp/taskesc-realtime-step2.zip" "taskesc-realtime-step2.zip"
+          zip -qr "/tmp/taskesc-realtime-step2.zip" . \
             -x '.git/*' \
                'config/config.php' \
                'storage/sessions/*' \
                'storage/logs/*'
-          cp "/tmp/taskesc-realtime-step1.zip" "taskesc-realtime-step1.zip"
+          cp "/tmp/taskesc-realtime-step2.zip" "taskesc-realtime-step2.zip"
 
       - name: Publicar ZIP da versão
         uses: actions/upload-artifact@v4
         with:
-          name: taskesc-realtime-step1
-          path: taskesc-realtime-step1.zip
+          name: taskesc-realtime-step2
+          path: taskesc-realtime-step2.zip
           if-no-files-found: error
           retention-days: 7
+
+  outbox-tests:
+    name: Outbox (${{ matrix.database }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - database: MySQL 8
+            image: mysql:8.0
+          - database: MariaDB 10.11
+            image: mariadb:10.11
+    services:
+      database:
+        image: ${{ matrix.image }}
+        env:
+          MYSQL_ROOT_PASSWORD: taskesc-ci-only
+          MYSQL_ROOT_HOST: '%'
+          MYSQL_DATABASE: taskesc_test
+        ports:
+          - 3306/tcp
+        options: >-
+          --health-cmd="mysqladmin ping --silent -h localhost -ptaskesc-ci-only"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - name: Baixar repositório
+        uses: actions/checkout@v4
+      - name: Configurar PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_mysql
+          coverage: none
+      - name: Testar migração e transações Outbox
+        env:
+          OUTBOX_TEST_PORT: ${{ job.services.database.ports['3306'] }}
+        run: php tests/outbox.php
 
   deploy:
     name: Deploy na VPS
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    needs: validate
+    needs: [validate, outbox-tests]
 
     steps:
       - name: Baixar repositório para snapshot
@@ -246,6 +285,7 @@ jobs:
           git archive --format=zip --output=predeploy-backup/taskesc-code-predeploy.zip "$PROD_COMMIT"
           sha256sum predeploy-backup/taskesc-code-predeploy.zip > predeploy-backup/taskesc-code-predeploy.zip.sha256
           echo "prod_commit=$PROD_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "backup_manifest=$REMOTE_MANIFEST" >> "$GITHUB_OUTPUT"
           echo "Backup validado e copiado para fora da VPS."
 
       - name: Guardar backup pré-deploy fora da VPS
@@ -308,7 +348,7 @@ jobs:
             git merge --ff-only "$EXPECTED_COMMIT"
             [ "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT" ] || { echo "ERRO: commit de produção divergente."; exit 1; }
 
-            # Passo 1: nenhuma migration ou limpeza de banco/sessões.
+            # Migração Outbox executada na etapa seguinte, após backup validado.
 
             echo "Commit em produção:"
             git log -1 --oneline
@@ -319,6 +359,45 @@ jobs:
             php -l public/health.php
 
             echo "Deploy concluído."
+          REMOTE
+
+      - name: Aplicar somente migração Outbox (schema 21)
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          BACKUP_MANIFEST: ${{ steps.backup.outputs.backup_manifest }}
+        run: |
+          set -euo pipefail
+          printf -v REMOTE_COMMAND 'DEPLOY_PATH=%q BACKUP_MANIFEST=%q bash -s' "$DEPLOY_PATH" "$BACKUP_MANIFEST"
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "$REMOTE_COMMAND" <<'REMOTE'
+            set -euo pipefail
+            cd "$DEPLOY_PATH"
+            php bin/migrate-outbox.php "--backup-manifest=$BACKUP_MANIFEST"
+          REMOTE
+
+      - name: Auditoria de integridade sem alterações de dados
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          printf -v REMOTE_COMMAND 'DEPLOY_PATH=%q bash -s' "$DEPLOY_PATH"
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "$REMOTE_COMMAND" <<'REMOTE'
+            set -euo pipefail
+            cd "$DEPLOY_PATH"
+            umask 077
+            AUDIT_FILE="$DEPLOY_PATH/storage/backups/taskesc-outbox-audit-$(date -u +%Y%m%dT%H%M%SZ).json"
+            AUDIT_EXIT=0
+            php bin/system-audit.php --strict --offline --expect-schema=21 > "$AUDIT_FILE" || AUDIT_EXIT=$?
+            php -r '
+              $r=json_decode(file_get_contents($argv[1]),true,512,JSON_THROW_ON_ERROR);
+              echo json_encode(["audit"=>["ok"=>$r["ok"],"schema"=>$r["schema"],"critical_count"=>count($r["critical"]),"warning_count"=>count($r["warnings"]),"warning_keys"=>array_column($r["warnings"],"key"),"cleanup_saas"=>$r["cleanup_saas"],"offline"=>$r["offline"]]],JSON_UNESCAPED_SLASHES).PHP_EOL;
+            ' "$AUDIT_FILE"
+            exit "$AUDIT_EXIT"
           REMOTE
 
       - name: Health realtime interno pelo PHP-FPM
@@ -355,7 +434,7 @@ jobs:
 
             for attempt in 1 2 3 4 5; do
               RESPONSE="$(curl --fail --silent --show-error --max-time 20 "$HEALTH_URL" 2>/dev/null || true)"
-              if [ -n "$RESPONSE" ] && php -r '$j=json_decode($argv[1],true); exit(is_array($j) && ($j["status"]??null)==="ok" && ($j["database"]??false)===true && ($j["installed"]??false)===true ? 0 : 1);' "$RESPONSE"; then
+              if [ -n "$RESPONSE" ] && php -r '$j=json_decode($argv[1],true); exit(is_array($j) && ($j["status"]??null)==="ok" && ($j["database"]??false)===true && ($j["installed"]??false)===true && ($j["schema"]??null)==="21" ? 0 : 1);' "$RESPONSE"; then
                 echo "Health check OK na tentativa $attempt."
                 echo "$RESPONSE"
                 exit 0

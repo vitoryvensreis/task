@@ -1,7 +1,32 @@
--- TaskEsc 2.5 | MySQL 8+ / MariaDB 10.6+ | UTF-8
+-- TaskEsc schema 21 (Outbox; schema 20 retirado) | MySQL 8+ / MariaDB 10.6+ | UTF-8
 SET NAMES utf8mb4;
 SET time_zone = '+00:00';
 CREATE TABLE IF NOT EXISTS settings (`key` VARCHAR(100) PRIMARY KEY, value LONGTEXT NOT NULL) ENGINE=InnoDB;
+-- Schema 21: Outbox transacional. Schema 20 permanece reservado ao SaaS removido.
+-- DDL idempotente. Migrations::outbox() valida a estrutura antes de avançar o marcador.
+-- Não executar DDL dentro de uma transação de negócio (MySQL faz commit implícito).
+CREATE TABLE IF NOT EXISTS event_outbox (
+ id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+ event_key CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ event_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ event_type VARCHAR(100) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ entity_type VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ entity_id BIGINT UNSIGNED NOT NULL,
+ channel VARCHAR(190) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ payload_json JSON NOT NULL,
+ created_by INT NULL,
+ created_at DATETIME(6) NOT NULL,
+ available_at DATETIME(6) NOT NULL,
+ published_at DATETIME(6) NULL,
+ attempts INT UNSIGNED NOT NULL DEFAULT 0,
+ last_error VARCHAR(80) CHARACTER SET ascii COLLATE ascii_bin NULL,
+ PRIMARY KEY (id),
+ UNIQUE KEY uq_event_outbox_event_key (event_key),
+ KEY idx_event_outbox_ready (published_at,available_at,id),
+ KEY idx_event_outbox_entity (entity_type,entity_id,id),
+ KEY idx_event_outbox_published (published_at,id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+
 CREATE TABLE users (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(150) NOT NULL, email VARCHAR(190) NOT NULL UNIQUE, password_hash VARCHAR(255) NOT NULL, role VARCHAR(20) NOT NULL DEFAULT 'client', active TINYINT NOT NULL DEFAULT 1, email_notifications TINYINT NOT NULL DEFAULT 1, weekly_report TINYINT NOT NULL DEFAULT 0, twofa_secret VARCHAR(190) NULL, twofa_enabled TINYINT NOT NULL DEFAULT 0, twofa_recovery_json TEXT NULL, last_login_at DATETIME NULL, last_login_ip VARCHAR(45) NULL, created_at DATETIME NOT NULL) ENGINE=InnoDB;
 CREATE TABLE clients (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(190) NOT NULL, brand VARCHAR(190) NOT NULL DEFAULT '', commercial_type VARCHAR(20) NOT NULL DEFAULT 'one_off', monthly_amount_cents BIGINT NOT NULL DEFAULT 0, monthly_payment_day TINYINT UNSIGNED NOT NULL DEFAULT 10, drive_account_id INT NULL, drive_folder_id VARCHAR(255) NULL, email VARCHAR(190) NOT NULL DEFAULT '', phone VARCHAR(60) NOT NULL DEFAULT '', document VARCHAR(40) NOT NULL DEFAULT '', notes TEXT, brand_url TEXT, active TINYINT NOT NULL DEFAULT 1, created_at DATETIME NOT NULL, INDEX(drive_account_id)) ENGINE=InnoDB;
 CREATE TABLE user_clients (user_id INT NOT NULL, client_id INT NOT NULL, can_approve TINYINT NOT NULL DEFAULT 1, can_finance TINYINT NOT NULL DEFAULT 0, PRIMARY KEY(user_id,client_id), FOREIGN KEY(user_id) REFERENCES users(id), FOREIGN KEY(client_id) REFERENCES clients(id)) ENGINE=InnoDB;
@@ -47,4 +72,5 @@ CREATE TABLE templates (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(190) NOT
 INSERT INTO stages (id,name,kind,color,position) VALUES (1,'Recebidas','inbox','#666666',1),(2,'Em análise','analysis','#777777',2),(3,'Aguardando material','waiting','#8a8a8a',3),(4,'Planejadas','planned','#9a9a9a',4),(5,'Em produção','production','#b8b8b8',5),(6,'Em aprovação','approval','#d1d1d1',6),(7,'Ajustes','production','#a7a7a7',7),(8,'Concluídas','completed','#f0f0f0',8),(9,'Canceladas','cancelled','#5a5a5a',9),(10,'Arquivadas','archived','#444444',10);
 INSERT INTO categories (id,name,fields_json) VALUES (1,'Design gráfico','[]'),(2,'Edição de vídeo','[]'),(3,'Filmagem','[]'),(4,'Fotografia','[]'),(5,'Motion design','[]');
 INSERT INTO calendars(name) VALUES ('Produção');
-INSERT INTO settings (`key`,value) VALUES ('schema_version','19'),('brand_name','TaskEsc'),('brand_color','#ffffff'),('logo_url',''),('timezone','America/Fortaleza'),('upload_mb','0'),('retention_days','365'),('drive_account_id',''),('drive_root_folder_id',''),('min_delivery_business_hours','24'),('last_cron_at',''),('last_cron_error',''),('monitor_email',''),('browser_notifications','1'),('dashboard_default_period','month');
+INSERT INTO settings (`key`,value) VALUES ('schema_version','21'),('brand_name','TaskEsc'),('brand_color','#ffffff'),('logo_url',''),('timezone','America/Fortaleza'),('upload_mb','0'),('retention_days','365'),('drive_account_id',''),('drive_root_folder_id',''),('min_delivery_business_hours','24'),('last_cron_at',''),('last_cron_error',''),('monitor_email',''),('browser_notifications','1'),('dashboard_default_period','month');
+

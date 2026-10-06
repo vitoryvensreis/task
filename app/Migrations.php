@@ -1,8 +1,10 @@
 <?php
 final class Migrations {
+ public const CURRENT_VERSION=21;
  public static function run(): void {
   static $ran=false;if($ran)return;$ran=true;
   try{$version=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??1);}catch(Throwable){return;}
+  if($version===20)throw new RuntimeException('Schema 20 pertence ao SaaS removido; restaure a base 19 antes de atualizar.');
   if($version<2){
    self::column('demands','deleted_at','ALTER TABLE demands ADD COLUMN deleted_at DATETIME NULL AFTER updated_at');
    self::column('demands','drive_folder_id','ALTER TABLE demands ADD COLUMN drive_folder_id VARCHAR(255) NULL AFTER deleted_at');
@@ -260,6 +262,79 @@ final class Migrations {
    DB::run("INSERT INTO settings (`key`,value) VALUES ('upload_mb','0') ON DUPLICATE KEY UPDATE value='0'");
    DB::run("INSERT INTO settings (`key`,value) VALUES ('schema_version','19') ON DUPLICATE KEY UPDATE value='19'");$version=19;
   }
+  // 20 nunca será reexecutado: é o schema histórico do SaaS removido.
+  if($version<self::CURRENT_VERSION)self::outbox();
+ }
+
+ /** Scoped, idempotent migration; never runs historical business/SaaS migrations. */
+ public static function outbox(): array {
+  $db=DB::conn();
+  if($db->inTransaction())throw new LogicException('Execute a migração Outbox fora de transações de negócio.');
+  $lock=(string)(DB::one("SELECT CONCAT('taskesc-outbox-21:',SHA1(DATABASE())) AS name")['name']??'');
+  if((int)(DB::one('SELECT GET_LOCK(?,10) AS acquired',[$lock])['acquired']??0)!==1)throw new RuntimeException('Migração Outbox já está em execução.');
+  $timeout=null;
+  try{
+   $before=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);
+   if(!in_array($before,[19,self::CURRENT_VERSION],true))throw new RuntimeException('A migração Outbox requer schema 19 ou 21; schema 20 não é suportado.');
+   if($before===19){
+    $timeout=(int)(DB::one('SELECT @@SESSION.lock_wait_timeout AS timeout')['timeout']??0);
+    $db->exec('SET SESSION lock_wait_timeout=10');
+    $sql=file_get_contents(ROOT.'/database/migrations/021_event_outbox.sql');
+    if($sql===false)throw new RuntimeException('Arquivo de migração Outbox ausente.');
+    $db->exec($sql);
+   }
+   $issues=self::outboxIssues();
+   if($issues)throw new RuntimeException('Estrutura Outbox incompatível: '.implode(',',$issues));
+   if($before===19)DB::run("UPDATE settings SET value=? WHERE `key`='schema_version' AND value='19'",[(string)self::CURRENT_VERSION]);
+   $after=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);
+   if($after!==self::CURRENT_VERSION)throw new RuntimeException('Marcador de schema divergente após migração Outbox.');
+   return ['previous'=>$before,'current'=>$after,'table'=>'event_outbox','changed'=>$before!==$after];
+  }finally{
+   try{if($timeout!==null)$db->exec('SET SESSION lock_wait_timeout='.$timeout);}finally{DB::run('SELECT RELEASE_LOCK(?)',[$lock]);}
+  }
+ }
+
+ /** Read-only structural verification shared by migration and integrity audit. */
+ public static function outboxIssues(): array {
+  $table=DB::one("SELECT ENGINE FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='event_outbox'");
+  if(!$table)return ['missing_table'];
+  $issues=[];if(strcasecmp((string)$table['ENGINE'],'InnoDB')!==0)$issues[]='engine';
+  $columns=[];
+  foreach(DB::all("SELECT COLUMN_NAME,DATA_TYPE,COLUMN_TYPE,IS_NULLABLE,COLUMN_DEFAULT,CHARACTER_MAXIMUM_LENGTH,COLLATION_NAME,DATETIME_PRECISION,EXTRA FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='event_outbox'") as $column)$columns[$column['COLUMN_NAME']]=$column;
+  $expected=[
+   'id'=>['bigint',false,null], 'event_key'=>['char',false,64], 'event_hash'=>['char',false,64],
+   'event_type'=>['varchar',false,100], 'entity_type'=>['varchar',false,64], 'entity_id'=>['bigint',false,null],
+   'channel'=>['varchar',false,190], 'payload_json'=>['json',false,null], 'created_by'=>['int',true,null],
+   'created_at'=>['datetime',false,null], 'available_at'=>['datetime',false,null], 'published_at'=>['datetime',true,null],
+   'attempts'=>['int',false,null], 'last_error'=>['varchar',true,80]
+  ];
+  foreach($expected as $name=>[$type,$nullable,$length]){
+   $c=$columns[$name]??null;
+   if(!$c){$issues[]='column_'.$name;continue;}
+   if(($c['DATA_TYPE']!==$type&&!($type==='json'&&$c['DATA_TYPE']==='longtext'))
+    || ($c['IS_NULLABLE']==='YES')!==$nullable || ($length!==null&&(int)$c['CHARACTER_MAXIMUM_LENGTH']!==$length))$issues[]='definition_'.$name;
+   if($type==='datetime'&&(int)$c['DATETIME_PRECISION']!==6)$issues[]='precision_'.$name;
+   if($length!==null&&$c['COLLATION_NAME']!=='ascii_bin')$issues[]='collation_'.$name;
+  }
+  foreach(['id','entity_id','attempts'] as $name)if(!str_contains(strtolower((string)($columns[$name]['COLUMN_TYPE']??'')),'unsigned'))$issues[]='unsigned_'.$name;
+  if(!str_contains((string)($columns['id']['EXTRA']??''),'auto_increment'))$issues[]='auto_increment';
+  if((string)($columns['attempts']['COLUMN_DEFAULT']??'')!=='0')$issues[]='attempts_default';
+  if(($columns['payload_json']['DATA_TYPE']??'')==='longtext'){
+   $checks=DB::all("SELECT c.CHECK_CLAUSE FROM INFORMATION_SCHEMA.CHECK_CONSTRAINTS c JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS t ON t.CONSTRAINT_SCHEMA=c.CONSTRAINT_SCHEMA AND t.CONSTRAINT_NAME=c.CONSTRAINT_NAME WHERE t.TABLE_SCHEMA=DATABASE() AND t.TABLE_NAME='event_outbox' AND t.CONSTRAINT_TYPE='CHECK'");
+   if(!array_filter($checks,fn($c)=>(bool)preg_match('/json_valid\s*\(\s*`?payload_json`?\s*\)/i',(string)$c['CHECK_CLAUSE'])))$issues[]='payload_json_validation';
+  }
+  $indexes=[];
+  foreach(DB::all("SELECT INDEX_NAME,COLUMN_NAME,NON_UNIQUE,SUB_PART FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='event_outbox' ORDER BY INDEX_NAME,SEQ_IN_INDEX") as $i){
+   $indexes[$i['INDEX_NAME']]['columns'][]=$i['COLUMN_NAME'];$indexes[$i['INDEX_NAME']]['unique']=(int)$i['NON_UNIQUE']===0;
+   if($i['SUB_PART']!==null)$issues[]='prefix_index_'.$i['INDEX_NAME'];
+  }
+  foreach(['PRIMARY'=>[['id'],true],'uq_event_outbox_event_key'=>[['event_key'],true],
+   'idx_event_outbox_ready'=>[['published_at','available_at','id'],false],
+   'idx_event_outbox_entity'=>[['entity_type','entity_id','id'],false],
+   'idx_event_outbox_published'=>[['published_at','id'],false]] as $name=>[$fields,$unique]){
+   if(($indexes[$name]['columns']??[])!==$fields||($indexes[$name]['unique']??null)!==$unique)$issues[]='index_'.$name;
+  }
+  return array_values(array_unique($issues));
  }
  private static function hasColumn(string $table,string $column): bool {return (bool)DB::one('SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?',[$table,$column]);}
  private static function column(string $table,string $column,string $sql): void {if(!self::hasColumn($table,$column))DB::run($sql);}

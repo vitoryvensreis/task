@@ -222,7 +222,17 @@ jobs:
 
           echo "prod_commit=$PROD_COMMIT" >> "$GITHUB_OUTPUT"
 
-      - name: Criar tag oficial do ponto de restauração
+      - name: Guardar snapshot pré-SaaS por 90 dias
+        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[pre-saas-restore-point]')
+        uses: actions/upload-artifact@v4
+        with:
+          name: taskesc-restore-point-v3.25-pre-saas
+          path: restore-point/
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Tentar criar tag oficial do ponto de restauração
+        continue-on-error: true
         if: github.event_name == 'push' && contains(github.event.head_commit.message, '[pre-saas-restore-point]')
         env:
           PROD_COMMIT: ${{ steps.restore.outputs.prod_commit }}
@@ -244,15 +254,6 @@ jobs:
             git tag -a "$TAG" "$PROD_COMMIT" -m "Ponto de restauração oficial antes da migração SaaS"
             git push origin "$TAG"
           fi
-
-      - name: Guardar snapshot pré-SaaS por 90 dias
-        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[pre-saas-restore-point]')
-        uses: actions/upload-artifact@v4
-        with:
-          name: taskesc-restore-point-v3.25-pre-saas
-          path: restore-point/
-          if-no-files-found: error
-          retention-days: 90
 
       - name: Atualizar TaskEsc na VPS
         env:

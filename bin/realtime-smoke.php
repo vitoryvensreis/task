@@ -163,13 +163,16 @@ function smokeWebSocket(string $url, string $origin, string $connectionToken, st
 
 $tempUserId = 0;
 $sessionIds = [];
+$smokeStage = 'bootstrap';
 $rateBucket = hash('sha256', 'login|127.0.0.1');
 try {
+    $smokeStage = 'prerequisites';
     smokeNeed(function_exists('curl_init'), 'curl_missing');
     $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
     $suffix = bin2hex(random_bytes(8));
     $email = 'realtime-smoke-'.$suffix.'@taskesc.invalid';
     $password = 'Smoke!'.bin2hex(random_bytes(12));
+    $smokeStage = 'fixture_user';
     $tempUserId = DB::insert('users', [
         'name' => 'Realtime Smoke',
         'email' => $email,
@@ -180,6 +183,7 @@ try {
     ]);
     smokeNeed($tempUserId > 0, 'smoke_user_create_failed');
 
+    $smokeStage = 'session_start';
     $sessionDir = ROOT.'/storage/sessions';
     if (!is_dir($sessionDir)) mkdir($sessionDir, 0700, true);
     session_save_path($sessionDir);
@@ -189,6 +193,7 @@ try {
     $sessionIds[] = $initialSession;
     session_start();
 
+    $smokeStage = 'login';
     $login = Auth::login(['email' => $email, 'password' => $password]);
     smokeNeed((int)($login['user']['id'] ?? 0) === $tempUserId, 'login_failed');
     $csrf = (string)($login['csrf'] ?? '');
@@ -197,28 +202,35 @@ try {
     smokeNeed($csrf !== '' && $sessionId !== '', 'login_session_invalid');
     session_write_close();
 
+    $smokeStage = 'base_url';
     $base = rtrim((string)config('base_url', ''), '/');
     $baseParts = parse_url($base);
     smokeNeed(is_array($baseParts) && isset($baseParts['scheme'], $baseParts['host']), 'base_url_invalid');
     $origin = $baseParts['scheme'].'://'.$baseParts['host'].(isset($baseParts['port']) ? ':'.$baseParts['port'] : '');
 
+    $smokeStage = 'connection_token';
     [$status, $connection] = smokeHttp($base.'/realtime.auth', $sessionId, $csrf, $origin, []);
     smokeNeed($status === 200 && is_string($connection['token'] ?? null) && is_string($connection['websocket'] ?? null), 'realtime_connection_token_failed');
 
     $ownChannel = 'user:'.$tempUserId;
+    $smokeStage = 'subscription_token';
     [$status, $subscription] = smokeHttp($base.'/realtime.auth', $sessionId, $csrf, $origin, ['channel' => $ownChannel]);
     smokeNeed($status === 200 && ($subscription['channel'] ?? null) === $ownChannel && is_string($subscription['token'] ?? null), 'realtime_subscription_token_failed');
 
+    $smokeStage = 'permission_guard';
     [$deniedStatus, $deniedBody] = smokeHttp($base.'/realtime.auth', $sessionId, $csrf, $origin, ['channel' => 'user:2147483647']);
     smokeNeed($deniedStatus === 403 && isset($deniedBody['error']), 'realtime_permission_guard_failed');
 
+    $smokeStage = 'websocket';
     [$tokenlessDenied, $mismatchDenied] = smokeWebSocket(
         (string)$connection['websocket'], $origin, (string)$connection['token'],
         $ownChannel, (string)$subscription['token']
     );
+    $smokeStage = 'websocket_assertions';
     smokeNeed($tokenlessDenied, 'tokenless_subscribe_allowed');
     smokeNeed($mismatchDenied, 'channel_mismatch_allowed');
 
+    $smokeStage = 'complete';
     echo json_encode([
         'status' => 'ok',
         'login' => true,
@@ -232,8 +244,15 @@ try {
         'centrifugo_expected' => Realtime::CENTRIFUGO_VERSION,
     ], JSON_UNESCAPED_SLASHES).PHP_EOL;
 } catch (Throwable $e) {
-    $code = ($e instanceof RuntimeException && preg_match('/^[a-z0-9_]+$/', $e->getMessage()))
-        ? $e->getMessage() : 'realtime_smoke_failed';
+    if ($e instanceof RuntimeException && preg_match('/^[a-z0-9_]+$/', $e->getMessage())) {
+        $code = $e->getMessage();
+    } elseif ($e instanceof AppError) {
+        $code = 'stage_'.$smokeStage.'_app_'.$e->status;
+    } else {
+        $kind = strtolower((new ReflectionClass($e))->getShortName());
+        $kind = preg_replace('/[^a-z0-9_]+/', '_', $kind) ?: 'throwable';
+        $code = 'stage_'.$smokeStage.'_'.$kind;
+    }
     fwrite(STDERR, json_encode(['status' => 'error', 'code' => $code], JSON_UNESCAPED_SLASHES).PHP_EOL);
     exit(1);
 } finally {

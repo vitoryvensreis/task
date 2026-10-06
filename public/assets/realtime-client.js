@@ -125,7 +125,7 @@
         timeout: 5000,
         debug: false,
         name: 'taskesc-web',
-        version: 'step4'
+        version: 'step6'
       });
       next.on('connecting', function () { lastState = 'connecting'; technical('connecting'); });
       next.on('connected', function () { lastState = 'connected'; retryAttempt = 0; technical('connected'); });

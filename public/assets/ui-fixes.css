@@ -2348,17 +2348,3 @@ input[type="time"]::-webkit-calendar-picker-indicator{
     grid-column:1/-1;
   }
 }
-
-
-/* TaskEsc v4.0.0 — identificação de release e SaaS Foundation */
-.system-version-panel .panel-head{align-items:flex-start}
-.system-version-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:6px}
-.system-version-grid>div{display:flex;flex-direction:column;gap:3px;padding:12px;border:1px solid rgba(255,255,255,.08);border-radius:12px;background:rgba(255,255,255,.025);min-width:0}
-.system-version-grid span,.system-version-grid small{font-size:11px;color:var(--muted,#8f969f)}
-.system-version-grid b{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.code-inline{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
-.feature-flag-strip{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
-.feature-flag{font-size:10px;padding:5px 8px;border-radius:999px;border:1px solid rgba(255,255,255,.08);color:var(--muted,#8f969f)}
-.feature-flag.on{color:inherit;border-color:rgba(255,255,255,.2)}
-@media(max-width:760px){.system-version-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:420px){.system-version-grid{grid-template-columns:1fr}}

@@ -40,7 +40,6 @@ public static function clientSave(array $p): array {
    $userId=null;
    if($createAccess){
     $userId=DB::insert('users',['name'=>$accessName,'email'=>$accessEmail,'password_hash'=>$accessHash,'role'=>'client','active'=>1,'email_notifications'=>1,'created_at'=>now()]);
-    DB::run("INSERT INTO workspace_members (workspace_id,user_id,role,active,created_at) VALUES (1,?,'client',1,?) ON DUPLICATE KEY UPDATE role='client',active=1",[$userId,now()]);
     DB::insert('user_clients',['user_id'=>$userId,'client_id'=>$id,'can_approve'=>1,'can_finance'=>0]);
     audit('user',$userId,'client_access.created',null,['client_id'=>$id,'client_name'=>$row['name'],'email'=>$accessEmail]);
     audit('client',$id,'access.created',null,['user_id'=>$userId,'email'=>$accessEmail]);
@@ -83,8 +82,6 @@ public static function clientSave(array $p): array {
   if($role!=='admin')foreach($links as $link){$cid=integer($link['client_id']??0,1);Auth::client($cid);if(isset($cleanLinks[$cid]))continue;$cleanLinks[$cid]=['client_id'=>$cid,'can_approve'=>(int)(bool)($link['can_approve']??1),'can_finance'=>$role==='client'?(int)(bool)($link['can_finance']??0):0];}
   DB::tx(function() use(&$id,$old,$row,$cleanLinks): void {
    if($id)DB::update('users',$id,$row);else $id=DB::insert('users',$row+['created_at'=>now()]);
-   $workspaceRole=$row['role']==='admin'?'admin':($row['role']==='staff'?'staff':'client');
-   DB::run("INSERT INTO workspace_members (workspace_id,user_id,role,active,created_at) VALUES (1,?,?,?,?) ON DUPLICATE KEY UPDATE role=CASE WHEN role='owner' AND VALUES(role)='admin' THEN 'owner' ELSE VALUES(role) END,active=VALUES(active)",[$id,$workspaceRole,$row['active'],now()]);
    DB::run('DELETE FROM user_clients WHERE user_id=?',[$id]);
    foreach($cleanLinks as $link)DB::insert('user_clients',['user_id'=>$id,'client_id'=>$link['client_id'],'can_approve'=>$link['can_approve'],'can_finance'=>$link['can_finance']]);
    $auditRow=$row;unset($auditRow['password_hash']);$auditRow['clients']=array_values($cleanLinks);audit('user',$id,'save',$old,$auditRow);
@@ -92,7 +89,7 @@ public static function clientSave(array $p): array {
   return ['id'=>$id];
  }
 public static function settingsGet(): array {
-  Auth::admin();$s=[];foreach(DB::all('SELECT * FROM settings') as $r)$s[$r['key']]=$r['value'];$s['system_info']=SystemInfo::info();$s['feature_flags']=SystemInfo::flags();$s['workspace_foundation']=['workspaces'=>(int)(DB::one('SELECT COUNT(*) n FROM workspaces')['n']??0),'members'=>(int)(DB::one('SELECT COUNT(*) n FROM workspace_members')['n']??0),'primary'=>DB::one('SELECT id,name,slug,status FROM workspaces WHERE id=1')];$s['base_url']=config('base_url');$s['google_client_id']=config('google_client_id','');$s['google_secret_set']=config('google_client_secret','')!=='';$smtp=config('smtp',[]);unset($smtp['password']);$s['smtp']=$smtp;$s['smtp_password_set']=!empty(config('smtp',[])['password']);$s['drive_account_id']=(int)($s['drive_account_id']??0);$s['min_delivery_business_hours']=(int)($s['min_delivery_business_hours']??24);$s['cron_url']=base('cron.php?key='.config('cron_key'));$s['cron_command']='php '.ROOT.'/bin/cron.php';$s['mcp_url']=base('mcp.php');$s['api_url']=base('api/v1');$s['openapi_url']=base('openapi.json');$s['tokens']=DB::all('SELECT id,name,scopes,expires_at,revoked,created_at FROM api_tokens WHERE user_id=? ORDER BY id DESC',[Auth::$user['id']]);$s['mail_log']=Notify::log(100);return $s;
+  Auth::admin();$s=[];foreach(DB::all('SELECT * FROM settings') as $r)$s[$r['key']]=$r['value'];$s['base_url']=config('base_url');$s['google_client_id']=config('google_client_id','');$s['google_secret_set']=config('google_client_secret','')!=='';$smtp=config('smtp',[]);unset($smtp['password']);$s['smtp']=$smtp;$s['smtp_password_set']=!empty(config('smtp',[])['password']);$s['drive_account_id']=(int)($s['drive_account_id']??0);$s['min_delivery_business_hours']=(int)($s['min_delivery_business_hours']??24);$s['cron_url']=base('cron.php?key='.config('cron_key'));$s['cron_command']='php '.ROOT.'/bin/cron.php';$s['mcp_url']=base('mcp.php');$s['api_url']=base('api/v1');$s['openapi_url']=base('openapi.json');$s['tokens']=DB::all('SELECT id,name,scopes,expires_at,revoked,created_at FROM api_tokens WHERE user_id=? ORDER BY id DESC',[Auth::$user['id']]);$s['mail_log']=Notify::log(100);return $s;
  }
 public static function settingsSave(array $p): array {
   Auth::admin();$oldLogo=setting('logo_url','');$newLogo=$oldLogo;foreach(['brand_name','brand_color','logo_url','upload_mb','retention_days','min_delivery_business_hours'] as $k){if(!array_key_exists($k,$p))continue;$v=(string)$p[$k];if($k==='brand_color'&&!preg_match('/^#[a-fA-F0-9]{6}$/',$v))fail('Cor inválida.');if($k==='logo_url'){$v=urlv($v);$newLogo=$v;}if($k==='upload_mb')$v=(string)integer($v,0,5242880);if($k==='retention_days')$v=(string)integer($v,1,3650);if($k==='min_delivery_business_hours')$v=(string)integer($v,1,720);if(strlen($v)>1000)fail('Configuração longa demais.');DB::run('INSERT INTO settings (`key`,value) VALUES (?,?) ON DUPLICATE KEY UPDATE value=VALUES(value)',[$k,$v]);}

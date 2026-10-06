@@ -18,6 +18,20 @@ final class Google {
   return $decoded;
  }
 
+ private static function normalizeScopes(string $scope): string {
+  $parts=preg_split('/\s+/',trim($scope))?:[];
+  return implode(' ',array_values(array_unique(array_filter($parts,fn($v)=>$v!==''))));
+ }
+
+ private static function liveScopes(string $accessToken,string $fallback=''): string {
+  try{
+   $info=self::http('https://oauth2.googleapis.com/tokeninfo?'.http_build_query(['access_token'=>$accessToken]));
+   $scope=self::normalizeScopes((string)($info['scope']??''));
+   if($scope!=='')return $scope;
+  }catch(Throwable $e){error_log('TaskEsc Google tokeninfo: '.$e->getMessage());}
+  return self::normalizeScopes($fallback);
+ }
+
  public static function connect(array $p=[]): array {
   Auth::admin();
   if(!config('google_client_id')||!config('google_client_secret'))fail('Configure Client ID e Client Secret nas integrações.');
@@ -41,8 +55,8 @@ final class Google {
   $old=DB::one('SELECT * FROM google_accounts WHERE user_id=? AND google_sub=?',[Auth::$user['id'],$info['sub']]);
   $refresh=$tokens['refresh_token']??($old&&!empty($old['refresh_token'])?secretDecrypt($old['refresh_token']):'');
   if(!$refresh)fail('O Google não forneceu acesso offline. Revogue a conexão anterior e conecte novamente.');
-  $scopeParts=preg_split('/\s+/',trim((string)($tokens['scope']??'')))?:[];if($old&&!empty($old['scopes']))$scopeParts=array_merge($scopeParts,preg_split('/\s+/',trim((string)$old['scopes']))?:[]);$scopes=implode(' ',array_values(array_unique(array_filter($scopeParts))));
-  $row=['user_id'=>Auth::$user['id'],'google_sub'=>$info['sub'],'email'=>$info['email'],'access_token'=>secretEncrypt($tokens['access_token']),'refresh_token'=>secretEncrypt($refresh),'scopes'=>$scopes,'expires_at'=>gmdate('Y-m-d H:i:s',time()+(int)$tokens['expires_in']),'status'=>'connected','calendar_enabled'=>(int)(($purpose==='calendar')||($old&&$old['calendar_enabled'])),'drive_enabled'=>(int)(($purpose==='drive')||($old&&$old['drive_enabled'])||str_contains($scopes,self::DRIVE_SCOPE)),'last_error'=>null];
+  $scopes=self::liveScopes((string)$tokens['access_token'],(string)($tokens['scope']??''));
+  $row=['user_id'=>Auth::$user['id'],'google_sub'=>$info['sub'],'email'=>$info['email'],'access_token'=>secretEncrypt($tokens['access_token']),'refresh_token'=>secretEncrypt($refresh),'scopes'=>$scopes,'expires_at'=>gmdate('Y-m-d H:i:s',time()+(int)$tokens['expires_in']),'status'=>'connected','calendar_enabled'=>(int)str_contains($scopes,self::CALENDAR_SCOPE),'drive_enabled'=>(int)str_contains($scopes,self::DRIVE_SCOPE),'last_error'=>null];
   if($old){$id=(int)$old['id'];DB::update('google_accounts',$id,$row);}else $id=DB::insert('google_accounts',$row);
   if($purpose==='drive'&&$returnTo==='settings'&&(int)setting('drive_account_id','0')===0)DB::run("INSERT INTO settings (`key`,value) VALUES ('drive_account_id',?) ON DUPLICATE KEY UPDATE value=VALUES(value)",[(string)$id]);
   if($purpose==='calendar')self::discover($id);
@@ -53,7 +67,7 @@ final class Google {
   $a=DB::one('SELECT * FROM google_accounts WHERE id=?',[$id]);
   if(!$a||$a['status']==='disconnected')throw new RuntimeException('Conta Google desconectada.');
   if(strtotime($a['expires_at'].' UTC')>time()+60)return secretDecrypt($a['access_token']);
-  try{$r=self::http('https://oauth2.googleapis.com/token','POST',['client_id'=>config('google_client_id'),'client_secret'=>config('google_client_secret'),'refresh_token'=>secretDecrypt($a['refresh_token']),'grant_type'=>'refresh_token'],null,[],true);$update=['access_token'=>secretEncrypt($r['access_token']),'expires_at'=>gmdate('Y-m-d H:i:s',time()+(int)$r['expires_in']),'status'=>'connected','last_error'=>null];if(!empty($r['scope'])){$parts=array_merge(preg_split('/\s+/',trim((string)$a['scopes']))?:[],preg_split('/\s+/',trim((string)$r['scope']))?:[]);$update['scopes']=implode(' ',array_values(array_unique(array_filter($parts))));}DB::update('google_accounts',$id,$update);return $r['access_token'];}
+  try{$r=self::http('https://oauth2.googleapis.com/token','POST',['client_id'=>config('google_client_id'),'client_secret'=>config('google_client_secret'),'refresh_token'=>secretDecrypt($a['refresh_token']),'grant_type'=>'refresh_token'],null,[],true);$liveScopes=self::liveScopes((string)$r['access_token'],(string)($r['scope']??$a['scopes']??''));$update=['access_token'=>secretEncrypt($r['access_token']),'expires_at'=>gmdate('Y-m-d H:i:s',time()+(int)$r['expires_in']),'status'=>'connected','last_error'=>null,'scopes'=>$liveScopes,'calendar_enabled'=>(int)str_contains($liveScopes,self::CALENDAR_SCOPE),'drive_enabled'=>(int)str_contains($liveScopes,self::DRIVE_SCOPE)];DB::update('google_accounts',$id,$update);return $r['access_token'];}
   catch(Throwable $e){DB::update('google_accounts',$id,['status'=>'reconnect','last_error'=>$e->getMessage()]);throw $e;}
  }
 
@@ -139,16 +153,40 @@ final class Google {
   return 'https://drive.google.com/drive/folders/'.rawurlencode($folderId);
  }
 
- public static function finalDeliveryShareLink(array $d): ?string {
+ public static function finalDeliveryShareLink(array $d,?array $finalFile=null): ?string {
   try{
-   $root=self::ensureDemandFolder($d);
-   $folder=self::findDemandFinalFolder((int)$root['account_id'],(string)$root['folder_id']);
-   if(!$folder||empty($folder['id']))return null;
-   return self::ensurePublicFolderShare((int)$root['account_id'],(string)$folder['id']);
-  }catch(Throwable $e){
-   error_log('TaskEsc final share link: '.$e->getMessage());
-   return null;
-  }
+   $account=(int)($finalFile['drive_account_id']??0);
+   $fileId=trim((string)($finalFile['drive_file_id']??''));
+
+   // Prefer the actual parent of a final file. This survives client Drive routing changes
+   // and does not create/alter folders merely because someone opened a task.
+   if($account>0&&$fileId!==''){
+    $meta=self::driveApi($account,'files/'.rawurlencode($fileId).'?'.http_build_query(['fields'=>'id,parents,trashed','supportsAllDrives'=>'true']));
+    if(empty($meta['trashed'])){
+     foreach(($meta['parents']??[]) as $parentId){
+      if(!$parentId)continue;
+      try{
+       $parent=self::driveApi($account,'files/'.rawurlencode((string)$parentId).'?'.http_build_query(['fields'=>'id,name,mimeType,trashed','supportsAllDrives'=>'true']));
+       $name=mb_strtolower(trim((string)($parent['name']??'')));
+       if(empty($parent['trashed'])&&($parent['mimeType']??'')==='application/vnd.google-apps.folder'&&str_contains($name,'entrega')&&str_contains($name,'final')){
+        try{return self::ensurePublicFolderShare($account,(string)$parent['id']);}
+        catch(Throwable $e){error_log('TaskEsc final folder share fallback: '.$e->getMessage());return 'https://drive.google.com/drive/folders/'.rawurlencode((string)$parent['id']);}
+       }
+      }catch(Throwable $e){error_log('TaskEsc final parent lookup: '.$e->getMessage());}
+     }
+    }
+   }
+
+   // Compatibility fallback for older tasks that already store the job folder.
+   if(!empty($d['drive_folder_id'])){
+    if($account<1)$account=self::driveAccountId((int)$d['client_id']);
+    if(self::driveFolderValid($account,(string)$d['drive_folder_id'])){
+     $folder=self::findDemandFinalFolder($account,(string)$d['drive_folder_id']);
+     if($folder&&!empty($folder['id'])){try{return self::ensurePublicFolderShare($account,(string)$folder['id']);}catch(Throwable $e){error_log('TaskEsc final legacy share fallback: '.$e->getMessage());return 'https://drive.google.com/drive/folders/'.rawurlencode((string)$folder['id']);}}
+    }
+   }
+  }catch(Throwable $e){error_log('TaskEsc final share link: '.$e->getMessage());}
+  return null;
  }
 
  public static function startDriveUpload(int $account,string $name,string $mime,int $size,string $folderId): string {

@@ -51,7 +51,7 @@ final class Demands {
    $f['preview_url']=$inline&&!$f['url']?base('download.php?id='.$f['id'].'&inline=1'):null;$f['view_url']=$f['url']?:($f['drive_web_view_url']?:$f['preview_url']);$f['is_drive']=($f['storage_provider']??'local')==='drive';
   }
   unset($f);
-  $d['final_delivery_link']=null;foreach($d['files'] as $fileRow)if(($fileRow['kind']??'')==='final'&&($fileRow['storage_provider']??'')==='drive'){try{$d['final_delivery_link']=Google::finalDeliveryShareLink($d);}catch(Throwable $e){error_log('TaskEsc demand final link #'.$id.': '.$e->getMessage());$d['final_delivery_link']=null;}break;}
+  $d['final_delivery_link']=null;foreach($d['files'] as $fileRow)if(($fileRow['kind']??'')==='final'&&($fileRow['storage_provider']??'')==='drive'){try{$d['final_delivery_link']=Google::finalDeliveryShareLink($d,$fileRow);}catch(Throwable $e){error_log('TaskEsc demand final link #'.$id.': '.$e->getMessage());$d['final_delivery_link']=null;}if($d['final_delivery_link'])break;}
   $d['checklist']=DB::all('SELECT * FROM checklists WHERE demand_id=? ORDER BY id',[$id]);
   $d['changes']=DB::all('SELECT r.*,u.name AS author_name FROM change_requests r JOIN users u ON u.id=r.user_id WHERE demand_id=? ORDER BY r.id DESC',[$id]);
   if(!$client){

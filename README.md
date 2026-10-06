@@ -405,3 +405,13 @@ A Agenda abre em **Dia** na primeira entrada pelo smartphone. A visualização s
 
 No desktop, a interface recebe largura máxima de leitura, tipografia e controles ligeiramente maiores, melhor densidade dos painéis, login mais confortável e alvos de interação mais consistentes. Estados de foco visível, suporte a `prefers-reduced-motion` e áreas de toque maiores reforçam acessibilidade.
 \n
+
+### Ajustes v3.26 de visualização, Drive e auditoria
+
+A v3.26 corrige o fechamento do visualizador de arquivos: os botões **X**, **Fechar**, clique no fundo e tecla **Esc** encerram apenas a pré-visualização sem recarregar a task. O modal da task permanece aberto por baixo.
+
+A entrega final passa a reconstruir o link da pasta diretamente a partir da pasta-pai do arquivo final salvo no Google Drive, usando a conta realmente vinculada ao arquivo. Isso evita perder o botão **Abrir pasta** quando o roteamento de Drive do cliente muda ou quando a task é antiga. A abertura de uma task também deixa de criar ou alterar pastas do Drive apenas para descobrir o link de entrega.
+
+A autorização Google agora registra os **scopes efetivamente presentes no access token**, em vez de somar scopes antigos ao novo token. Isso evita a interface indicar `drive.file` quando o token real não possui a permissão.
+
+Foi adicionado `bin/system-audit.php`, executado no deploy após o backup. Ele valida schema, tabelas essenciais, referências órfãs, vínculos de arquivos no Drive, contas Google, storage gravável e restos conhecidos da primeira fundação SaaS. No deploy desta versão, `--cleanup-saas` remove somente as tabelas `workspaces`, `workspace_members`, `workspace_settings` e as seis feature flags SaaS, caso ainda existam. Dados normais do TaskEsc não são removidos.

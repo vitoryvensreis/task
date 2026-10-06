@@ -1,5 +1,7 @@
 # TaskEsc — gestão de jobs, tarefas, agenda e arquivos
 
+Preparação opcional de Redis/Centrifugo, com feature flag desligada: [Realtime — Passo 1](docs/realtime-step1.md).
+
 TaskEsc é um sistema PHP 8.1+ para equipes de produção audiovisual, preparado para Apache + MySQL/MariaDB. Ele reúne Kanban, demandas/jobs, responsáveis, clientes, calendário unificado, arquivos, aprovações, financeiro, relatórios e integrações Google em uma única aplicação.
 
 ## Requisitos

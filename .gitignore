@@ -1,4 +1,6 @@
 /config/config.php
+/config/realtime.json
+realtime-secrets.env
 /storage/installed.lock
 /storage/uploads/*
 /public/uploads/*

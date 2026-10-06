@@ -1,0 +1,9 @@
+{
+  "REALTIME_ENABLED": false,
+  "REDIS_HOST": "127.0.0.1",
+  "REDIS_PORT": 6379,
+  "CENTRIFUGO_API_URL": "http://127.0.0.1:8000/api",
+  "CENTRIFUGO_WS_URL": "wss://task.escotilhaprodutora.com/realtime/connection/websocket",
+  "CENTRIFUGO_HMAC_SECRET": "",
+  "CENTRIFUGO_API_KEY": ""
+}

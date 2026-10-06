@@ -116,15 +116,21 @@ final class Demands {
    if(!$old)DB::insert('transitions',['demand_id'=>$id,'from_stage'=>null,'to_stage'=>$fresh['stage_id'],'actor_id'=>Auth::$user['id'],'happened_at'=>now()]);
    audit('demand',$id,$old?'updated':'created',$old,$row);if(!$fresh['draft'])Notify::demand($fresh,$old?'Task atualizada':'Nova task',$fresh['title']);
    if(!$old){$labels=[];if(!empty($p['template_id']))$labels=decode(DB::one('SELECT checklist_json FROM templates WHERE id=?',[(int)$p['template_id']])['checklist_json']??'[]');elseif(!empty($categoryRow['checklist_json']))$labels=decode($categoryRow['checklist_json'],[]);foreach($labels as $label)if(trim((string)$label)!=='')DB::insert('checklists',['demand_id'=>$id,'label'=>mb_substr((string)$label,0,255),'done'=>0]);}
+   $oldProject=(int)($old['project_id']??0);$newProject=(int)($fresh['project_id']??0);$alsoProjects=$old&&$oldProject!==$newProject?[$oldProject]:[];
+   DemandRealtime::emit($old?'demand.updated':'demand.created',$fresh,['change'=>$old?'save.updated':'save.created','previous_project_id'=>$oldProject?:null],isset(Auth::$user['id'])?(int)Auth::$user['id']:null,$alsoProjects);
    return ['id'=>$id,'version'=>(int)$fresh['version'],'url'=>base('kanban/task/'.$id)];
   });
  }
 
  public static function stage(array $p): array {
-  Auth::staff();$d=Auth::demand(integer($p['id']??0,1),true);if((int)$d['version']!==integer($p['version']??0,1))fail('O cartão mudou. Atualize e tente novamente.',409);
-  $s=DB::one('SELECT * FROM stages WHERE id=? AND active=1',[integer($p['stage_id']??0,1)]);if(!$s)fail('Etapa inválida.');if($d['draft'])fail('Publique a task antes de mudar a etapa.');
-  $row=['stage_id'=>$s['id'],'version'=>(int)$d['version']+1,'updated_at'=>now(),'completed_at'=>$s['kind']==='completed'?($d['completed_at']??now()):null];if($s['kind']==='completed')$row['first_completed_at']=$d['first_completed_at']??now();if(in_array($s['kind'],['planned','production','approval','completed']))$row['accepted_at']=$d['accepted_at']??now();if(isset($p['sort_order']))$row['sort_order']=integer($p['sort_order'],0,100000);
-  DB::update('demands',$d['id'],$row);DB::insert('transitions',['demand_id'=>$d['id'],'from_stage'=>$d['stage_id'],'to_stage'=>$s['id'],'actor_id'=>Auth::$user['id'],'happened_at'=>now()]);audit('demand',$d['id'],'stage',['stage_id'=>$d['stage_id']],$row);Notify::demand($d,'Etapa atualizada',$d['title'].' • '.$s['name']);return ['id'=>$d['id'],'version'=>$row['version']];
+  return DB::tx(function() use($p): array {
+   Auth::staff();$d=Auth::demand(integer($p['id']??0,1),true);if((int)$d['version']!==integer($p['version']??0,1))fail('O cartão mudou. Atualize e tente novamente.',409);
+   $s=DB::one('SELECT * FROM stages WHERE id=? AND active=1',[integer($p['stage_id']??0,1)]);if(!$s)fail('Etapa inválida.');if($d['draft'])fail('Publique a task antes de mudar a etapa.');
+   $row=['stage_id'=>$s['id'],'version'=>(int)$d['version']+1,'updated_at'=>now(),'completed_at'=>$s['kind']==='completed'?($d['completed_at']??now()):null];if($s['kind']==='completed')$row['first_completed_at']=$d['first_completed_at']??now();if(in_array($s['kind'],['planned','production','approval','completed']))$row['accepted_at']=$d['accepted_at']??now();if(isset($p['sort_order']))$row['sort_order']=integer($p['sort_order'],0,100000);
+   DB::update('demands',$d['id'],$row);DB::insert('transitions',['demand_id'=>$d['id'],'from_stage'=>$d['stage_id'],'to_stage'=>$s['id'],'actor_id'=>Auth::$user['id'],'happened_at'=>now()]);audit('demand',$d['id'],'stage',['stage_id'=>$d['stage_id']],$row);Notify::demand($d,'Etapa atualizada',$d['title'].' • '.$s['name']);
+   $fresh=array_merge($d,$row);DemandRealtime::emit('demand.stage_changed',$fresh,['change'=>'stage','previous_stage_id'=>(int)$d['stage_id'],'sort_order'=>(int)($fresh['sort_order']??0)],(int)Auth::$user['id']);
+   return ['id'=>$d['id'],'version'=>$row['version']];
+  });
  }
 
  public static function reorder(array $p): array {
@@ -143,9 +149,11 @@ final class Demands {
     $row=['stage_id'=>(int)$stage['id'],'sort_order'=>$newSort,'version'=>(int)$d['version']+1,'updated_at'=>now(),'completed_at'=>$stage['kind']==='completed'?($d['completed_at']??now()):null];
     if($stage['kind']==='completed')$row['first_completed_at']=$d['first_completed_at']??now();if(in_array($stage['kind'],['planned','production','approval','completed'],true))$row['accepted_at']=$d['accepted_at']??now();
     DB::update('demands',$d['id'],$row);DB::insert('transitions',['demand_id'=>$d['id'],'from_stage'=>$d['stage_id'],'to_stage'=>$stage['id'],'actor_id'=>Auth::$user['id'],'happened_at'=>now()]);audit('demand',$d['id'],'stage',['stage_id'=>$d['stage_id'],'sort_order'=>$d['sort_order']],$row);Notify::demand($d,'Etapa atualizada',$d['title'].' • '.$stage['name']);
+    $fresh=array_merge($d,$row);DemandRealtime::emit('demand.reordered',$fresh,['change'=>'reorder.stage','previous_stage_id'=>(int)$d['stage_id'],'sort_order'=>$newSort],(int)Auth::$user['id']);
     return ['id'=>(int)$d['id'],'version'=>(int)$row['version'],'stage_id'=>(int)$stage['id'],'sort_order'=>$newSort];
    }
-   DB::update('demands',$d['id'],['sort_order'=>$newSort,'updated_at'=>now()]);audit('demand',$d['id'],'reordered',['sort_order'=>$d['sort_order']],['sort_order'=>$newSort]);
+   $updatedAt=now();DB::update('demands',$d['id'],['sort_order'=>$newSort,'updated_at'=>$updatedAt]);audit('demand',$d['id'],'reordered',['sort_order'=>$d['sort_order']],['sort_order'=>$newSort]);
+   $fresh=array_merge($d,['sort_order'=>$newSort,'updated_at'=>$updatedAt]);DemandRealtime::emit('demand.reordered',$fresh,['change'=>'reorder.position','sort_order'=>$newSort],isset(Auth::$user['id'])?(int)Auth::$user['id']:null);
    return ['id'=>(int)$d['id'],'version'=>(int)$d['version'],'stage_id'=>(int)$stage['id'],'sort_order'=>$newSort];
   });
  }
@@ -153,19 +161,35 @@ final class Demands {
  public static function bulk(array $p): array {
   Auth::requireAbility('tasks.edit');$ids=$p['ids']??[];if(!is_array($ids)||!$ids)fail('Selecione ao menos uma task.');$ids=array_values(array_unique(array_filter(array_map('intval',$ids),fn($v)=>$v>0)));if(count($ids)>100)fail('A ação em lote aceita até 100 tasks por vez.');
   $action=enumv((string)($p['bulk_action']??''),['stage','priority','assigned'],'ação em lote');$updated=0;
-  foreach($ids as $id){$d=Auth::demand($id,true);$row=['updated_at'=>now(),'version'=>(int)$d['version']+1];
-   if($action==='priority')$row['priority']=enumv((string)($p['priority']??''),['low','normal','high','urgent'],'prioridade');
-   elseif($action==='assigned'){$assigned=integer($p['assigned_to']??0,1);$row['assigned_to']=self::responsible($assigned,(int)$d['client_id']);}
-   else{$stage=DB::one('SELECT * FROM stages WHERE id=? AND active=1',[integer($p['stage_id']??0,1)]);if(!$stage)fail('Etapa inválida.');$row['stage_id']=$stage['id'];$row['completed_at']=$stage['kind']==='completed'?($d['completed_at']??now()):null;if($stage['kind']==='completed')$row['first_completed_at']=$d['first_completed_at']??now();DB::insert('transitions',['demand_id'=>$id,'from_stage'=>$d['stage_id'],'to_stage'=>$stage['id'],'actor_id'=>Auth::$user['id'],'happened_at'=>now()]);}
-   DB::update('demands',$id,$row);audit('demand',$id,'bulk.'.$action,$d,$row);$fresh=DB::one('SELECT * FROM demands WHERE id=?',[$id])?:array_merge($d,$row);
-   if(empty($fresh['draft'])){if($action==='assigned')Notify::demand($fresh,'Responsável atualizado',$fresh['title'],true);elseif($action==='stage')Notify::demand($fresh,'Etapa atualizada',$fresh['title'],true);elseif($action==='priority')Notify::demand($fresh,'Prioridade atualizada',$fresh['title'],true);}
+  foreach($ids as $id){
+   DB::tx(function() use($id,$action,$p): void {
+    $d=Auth::demand($id,true);$row=['updated_at'=>now(),'version'=>(int)$d['version']+1];$previousStage=(int)$d['stage_id'];
+    if($action==='priority')$row['priority']=enumv((string)($p['priority']??''),['low','normal','high','urgent'],'prioridade');
+    elseif($action==='assigned'){$assigned=integer($p['assigned_to']??0,1);$row['assigned_to']=self::responsible($assigned,(int)$d['client_id']);}
+    else{$stage=DB::one('SELECT * FROM stages WHERE id=? AND active=1',[integer($p['stage_id']??0,1)]);if(!$stage)fail('Etapa inválida.');$row['stage_id']=$stage['id'];$row['completed_at']=$stage['kind']==='completed'?($d['completed_at']??now()):null;if($stage['kind']==='completed')$row['first_completed_at']=$d['first_completed_at']??now();DB::insert('transitions',['demand_id'=>$id,'from_stage'=>$d['stage_id'],'to_stage'=>$stage['id'],'actor_id'=>Auth::$user['id'],'happened_at'=>now()]);}
+    DB::update('demands',$id,$row);audit('demand',$id,'bulk.'.$action,$d,$row);$fresh=DB::one('SELECT * FROM demands WHERE id=?',[$id])?:array_merge($d,$row);
+    if(empty($fresh['draft'])){if($action==='assigned')Notify::demand($fresh,'Responsável atualizado',$fresh['title'],true);elseif($action==='stage')Notify::demand($fresh,'Etapa atualizada',$fresh['title'],true);elseif($action==='priority')Notify::demand($fresh,'Prioridade atualizada',$fresh['title'],true);}
+    $extra=['change'=>'bulk.'.$action];if($action==='stage')$extra['previous_stage_id']=$previousStage;if($action==='priority')$extra['priority']=$fresh['priority']??null;if($action==='assigned')$extra['assigned_to']=isset($fresh['assigned_to'])?(int)$fresh['assigned_to']:null;
+    DemandRealtime::emit($action==='stage'?'demand.stage_changed':'demand.updated',$fresh,$extra,(int)Auth::$user['id']);
+   });
    $updated++;
-  }return ['updated'=>$updated];
+  }
+  return ['updated'=>$updated];
  }
- public static function delete(array $p): array {Auth::requireAbility('tasks.delete');$d=Auth::demand(integer($p['id']??0,1),true);Notify::demand($d,'Task excluída',$d['title']);DB::update('demands',$d['id'],['deleted_at'=>now(),'version'=>(int)$d['version']+1,'updated_at'=>now()]);audit('demand',$d['id'],'deleted',$d,['deleted_at'=>now()]);return ['deleted'=>true,'id'=>$d['id']];}
+ public static function delete(array $p): array {
+  return DB::tx(function() use($p): array {
+   Auth::requireAbility('tasks.delete');$d=Auth::demand(integer($p['id']??0,1),true);$deletedAt=now();Notify::demand($d,'Task excluída',$d['title']);$row=['deleted_at'=>$deletedAt,'version'=>(int)$d['version']+1,'updated_at'=>$deletedAt];DB::update('demands',$d['id'],$row);audit('demand',$d['id'],'deleted',$d,['deleted_at'=>$deletedAt]);
+   $fresh=array_merge($d,$row);DemandRealtime::emit('demand.deleted',$fresh,['change'=>'delete','deleted_at'=>$deletedAt],(int)Auth::$user['id']);
+   return ['deleted'=>true,'id'=>$d['id']];
+  });
+ }
  public static function comment(array $p): array {$d=Auth::demand(integer($p['demand_id']??0,1));$internal=Auth::$user['role']!=='client'&&(bool)($p['internal']??false);$version=!empty($p['version_id'])?(int)$p['version_id']:null;if($version&&!DB::one('SELECT id FROM files WHERE id=? AND demand_id=?'.(Auth::$user['role']==='client'?' AND shared=1':''),[$version,$d['id']]))fail('Versão inválida.');$body=required($p,'body',10000);$id=DB::insert('comments',['demand_id'=>$d['id'],'author_id'=>Auth::$user['id'],'body'=>$body,'internal'=>(int)$internal,'version_id'=>$version,'created_at'=>now()]);Notify::demand($d,'Novo comentário',mb_substr($body,0,250),$internal);return ['id'=>$id];}
  public static function checklist(array $p): array {Auth::staff();$d=Auth::demand(integer($p['demand_id'],1));$id=(int)($p['id']??0);if($id){if(!DB::one('SELECT id FROM checklists WHERE id=? AND demand_id=?',[$id,$d['id']]))fail('Item inválido.',404);DB::update('checklists',$id,['done'=>(int)(bool)$p['done']]);}else $id=DB::insert('checklists',['demand_id'=>$d['id'],'label'=>required($p,'label',255),'done'=>0]);return ['id'=>$id];}
  public static function time(array $p): array {Auth::staff();$d=Auth::demand(integer($p['demand_id'],1));return ['id'=>DB::insert('time_entries',['demand_id'=>$d['id'],'user_id'=>Auth::$user['id'],'minutes'=>integer($p['minutes']??0,1,1440),'description'=>mb_substr($p['description']??'',0,255),'worked_on'=>datev($p['worked_on']??'',false),'created_at'=>now()])];}
  public static function change(array $p): array {$d=Auth::demand(integer($p['demand_id'],1));if(!empty($p['id'])){Auth::admin();if(!DB::one('SELECT id FROM change_requests WHERE id=? AND demand_id=?',[$p['id'],$d['id']]))fail('Solicitação inválida.');DB::update('change_requests',(int)$p['id'],['status'=>enumv($p['status'],['accepted','rejected'],'situação'),'response'=>$p['response']??'']);$id=(int)$p['id'];}else $id=DB::insert('change_requests',['demand_id'=>$d['id'],'user_id'=>Auth::$user['id'],'description'=>required($p,'description'),'created_at'=>now()]);Notify::demand($d,'Alteração de escopo',$d['title']);return ['id'=>$id];}
- public static function quote(array $p): array {$d=Auth::demand(integer($p['id'],1),true);Auth::client((int)$d['client_id'],'approve');if($d['billing_mode']!=='one_off')fail('Esta task está incluída no pacote mensal.');$decision=enumv($p['decision']??'',['approved','rejected'],'decisão');DB::update('demands',$d['id'],['commercial_status'=>$decision,'version'=>$d['version']+1,'updated_at'=>now()]);audit('demand',$d['id'],'quote.'.$decision);Notify::demand($d,'Resposta ao orçamento',$d['title']);return ['saved'=>true];}
+ public static function quote(array $p): array {
+  return DB::tx(function() use($p): array {
+   $d=Auth::demand(integer($p['id'],1),true);Auth::client((int)$d['client_id'],'approve');if($d['billing_mode']!=='one_off')fail('Esta task está incluída no pacote mensal.');$decision=enumv($p['decision']??'',['approved','rejected'],'decisão');$row=['commercial_status'=>$decision,'version'=>$d['version']+1,'updated_at'=>now()];DB::update('demands',$d['id'],$row);audit('demand',$d['id'],'quote.'.$decision);Notify::demand($d,'Resposta ao orçamento',$d['title']);$fresh=array_merge($d,$row);DemandRealtime::emit('demand.updated',$fresh,['change'=>'quote.'.$decision],(int)Auth::$user['id']);return ['saved'=>true];
+  });
+ }
 }

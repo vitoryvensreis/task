@@ -164,7 +164,7 @@ jobs:
             [ -n "$DUMP_BIN" ] || { echo "ERRO: mysqldump/mariadb-dump não encontrado." >&2; exit 1; }
 
             rm -f "$BACKUP_FILE"
-            echo "Criando dump completo antes do deploy..."
+            echo "Criando dump completo antes do deploy..." >&2
             "$DUMP_BIN" --defaults-extra-file="$CNF" --no-tablespaces --single-transaction --quick --routines --triggers --events --hex-blob --default-character-set=utf8mb4 "$DB_NAME" | gzip -9 > "$BACKUP_FILE"
 
             gzip -t "$BACKUP_FILE"

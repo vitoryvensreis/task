@@ -1,5 +1,8 @@
 name: Deploy TaskEsc
 
+permissions:
+  contents: write
+
 on:
   push:
     branches:
@@ -81,6 +84,11 @@ jobs:
     needs: validate
 
     steps:
+      - name: Baixar repositório para snapshot
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Configurar acesso SSH
         env:
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
@@ -93,6 +101,151 @@ jobs:
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -p "$VPS_PORT" -H "$VPS_HOST" >> ~/.ssh/known_hosts
+
+      - name: Criar snapshot oficial pré-SaaS
+        id: restore
+        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[pre-saas-restore-point]')
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          mkdir -p restore-point
+
+          RESULT="$(ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
+            set -euo pipefail
+
+            cd "$DEPLOY_PATH"
+            [ -d .git ] || { echo "ERRO: DEPLOY_PATH não aponta para um repositório Git." >&2; exit 1; }
+            [ -f config/config.php ] || { echo "ERRO: config/config.php não encontrado." >&2; exit 1; }
+
+            PROD_COMMIT="$(git rev-parse HEAD)"
+            PROD_SHORT="$(git rev-parse --short=12 HEAD)"
+            TS="$(date -u +%Y%m%dT%H%M%SZ)"
+            BACKUP_DIR="$DEPLOY_PATH/storage/backups"
+            mkdir -p "$BACKUP_DIR"
+            chmod 700 "$BACKUP_DIR"
+
+            BASENAME="taskesc-pre-saas-v3.25-${TS}-${PROD_SHORT}"
+            BACKUP_FILE="$BACKUP_DIR/${BASENAME}.sql.gz"
+            SHA_FILE="$BACKUP_FILE.sha256"
+            MANIFEST_FILE="$BACKUP_DIR/${BASENAME}.txt"
+
+            CNF="$(mktemp)"
+            DBNAME_FILE="$(mktemp)"
+            PHP_HELPER="$(mktemp --suffix=.php)"
+            cleanup(){ rm -f "$CNF" "$DBNAME_FILE" "$PHP_HELPER"; }
+            trap cleanup EXIT
+
+            cat > "$PHP_HELPER" <<'PHP'
+<?php
+$c=require $argv[1];
+$db=$c['db']??[];
+$quote=function($v){
+    $v=str_replace(["\\","\"","\n","\r"],["\\\\","\\\"","\\n","\\r"],(string)$v);
+    return "\"".$v."\"";
+};
+file_put_contents($argv[2],
+    "[client]\n".
+    "host=".$quote($db['host']??'localhost')."\n".
+    "port=".(int)($db['port']??3306)."\n".
+    "user=".$quote($db['user']??'')."\n".
+    "password=".$quote($db['password']??'')."\n"
+);
+file_put_contents($argv[3],(string)($db['name']??''));
+PHP
+            php "$PHP_HELPER" "$DEPLOY_PATH/config/config.php" "$CNF" "$DBNAME_FILE"
+            chmod 600 "$CNF"
+            DB_NAME="$(cat "$DBNAME_FILE")"
+            [ -n "$DB_NAME" ] || { echo "ERRO: nome do banco vazio." >&2; exit 1; }
+
+            DUMP_BIN="$(command -v mysqldump || command -v mariadb-dump || true)"
+            [ -n "$DUMP_BIN" ] || { echo "ERRO: mysqldump/mariadb-dump não encontrado." >&2; exit 1; }
+
+            rm -f "$BACKUP_FILE"
+            if ! "$DUMP_BIN" --defaults-extra-file="$CNF" --single-transaction --quick --routines --triggers --events --hex-blob --default-character-set=utf8mb4 "$DB_NAME" | gzip -9 > "$BACKUP_FILE"; then
+              echo "Aviso: dump com rotinas/eventos falhou; repetindo sem rotinas/eventos." >&2
+              rm -f "$BACKUP_FILE"
+              "$DUMP_BIN" --defaults-extra-file="$CNF" --single-transaction --quick --triggers --hex-blob --default-character-set=utf8mb4 "$DB_NAME" | gzip -9 > "$BACKUP_FILE"
+            fi
+
+            gzip -t "$BACKUP_FILE"
+            [ -s "$BACKUP_FILE" ] || { echo "ERRO: backup vazio." >&2; exit 1; }
+            if ! gzip -cd "$BACKUP_FILE" | grep -m1 -Eq '^(CREATE TABLE|INSERT INTO|-- MySQL dump|-- MariaDB dump)'; then
+              echo "ERRO: conteúdo do dump não parece válido." >&2
+              exit 1
+            fi
+
+            SCHEMA_VERSION="$(php -r '
+              $c=require $argv[1];$d=$c["db"]??[];
+              try{
+                $pdo=new PDO("mysql:host=".($d["host"]??"localhost").";port=".($d["port"]??3306).";dbname=".$d["name"].";charset=utf8mb4",$d["user"]??"",$d["password"]??"",[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);
+                $q=$pdo->query("SELECT value FROM settings WHERE `key`=\"schema_version\" LIMIT 1");
+                echo (string)($q->fetchColumn()?:"unknown");
+              }catch(Throwable $e){echo "unknown";}
+            ' "$DEPLOY_PATH/config/config.php")"
+
+            sha256sum "$BACKUP_FILE" > "$SHA_FILE"
+            {
+              echo "TaskEsc — ponto de restauração oficial pré-SaaS"
+              echo "Label: v3.25-stable-pre-saas"
+              echo "Criado em UTC: $TS"
+              echo "Commit em produção: $PROD_COMMIT"
+              echo "Schema do banco: $SCHEMA_VERSION"
+              echo "Arquivo do banco: $(basename "$BACKUP_FILE")"
+              echo "SHA256: $(cut -d' ' -f1 "$SHA_FILE")"
+            } > "$MANIFEST_FILE"
+            chmod 600 "$BACKUP_FILE" "$SHA_FILE" "$MANIFEST_FILE"
+
+            printf '%s|%s|%s|%s\n' "$BACKUP_FILE" "$SHA_FILE" "$MANIFEST_FILE" "$PROD_COMMIT"
+REMOTE
+          )"
+
+          IFS='|' read -r REMOTE_BACKUP REMOTE_SHA REMOTE_MANIFEST PROD_COMMIT <<< "$RESULT"
+          [ -n "$REMOTE_BACKUP" ] && [ -n "$REMOTE_MANIFEST" ] && [ -n "$PROD_COMMIT" ]
+
+          scp -P "$VPS_PORT" "$VPS_USER@$VPS_HOST:$REMOTE_BACKUP" restore-point/
+          scp -P "$VPS_PORT" "$VPS_USER@$VPS_HOST:$REMOTE_SHA" restore-point/
+          scp -P "$VPS_PORT" "$VPS_USER@$VPS_HOST:$REMOTE_MANIFEST" restore-point/
+
+          git archive --format=zip --output=restore-point/taskesc-v3.25-stable-pre-saas.zip "$PROD_COMMIT"
+          sha256sum restore-point/taskesc-v3.25-stable-pre-saas.zip > restore-point/taskesc-v3.25-stable-pre-saas.zip.sha256
+
+          echo "prod_commit=$PROD_COMMIT" >> "$GITHUB_OUTPUT"
+
+      - name: Criar tag oficial do ponto de restauração
+        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[pre-saas-restore-point]')
+        env:
+          PROD_COMMIT: ${{ steps.restore.outputs.prod_commit }}
+        run: |
+          set -euo pipefail
+          TAG="v3.25-stable-pre-saas"
+          git fetch --tags --force
+
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            EXISTING="$(git rev-list -n1 "$TAG")"
+            if [ "$EXISTING" != "$PROD_COMMIT" ]; then
+              echo "ERRO: a tag $TAG já existe apontando para $EXISTING, esperado $PROD_COMMIT."
+              exit 1
+            fi
+            echo "Tag $TAG já existe e está correta."
+          else
+            git config user.name "TaskEsc Release Bot"
+            git config user.email "actions@users.noreply.github.com"
+            git tag -a "$TAG" "$PROD_COMMIT" -m "Ponto de restauração oficial antes da migração SaaS"
+            git push origin "$TAG"
+          fi
+
+      - name: Guardar snapshot pré-SaaS por 90 dias
+        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[pre-saas-restore-point]')
+        uses: actions/upload-artifact@v4
+        with:
+          name: taskesc-restore-point-v3.25-pre-saas
+          path: restore-point/
+          if-no-files-found: error
+          retention-days: 90
 
       - name: Atualizar TaskEsc na VPS
         env:

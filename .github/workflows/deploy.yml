@@ -164,16 +164,11 @@ jobs:
             DUMP_BIN="$(command -v mysqldump || command -v mariadb-dump || true)"
             [ -n "$DUMP_BIN" ] || { echo "ERRO: mysqldump/mariadb-dump não encontrado." >&2; exit 1; }
 
-            DUMP_EXTRA=()
-            if "$DUMP_BIN" --help 2>/dev/null | grep -q -- '--no-tablespaces'; then
-              DUMP_EXTRA+=(--no-tablespaces)
-            fi
-
             rm -f "$BACKUP_FILE"
-            if ! "$DUMP_BIN" --defaults-extra-file="$CNF" "${DUMP_EXTRA[@]}" --single-transaction --quick --routines --triggers --events --hex-blob --default-character-set=utf8mb4 "$DB_NAME" | gzip -9 > "$BACKUP_FILE"; then
+            if ! "$DUMP_BIN" --defaults-extra-file="$CNF" --no-tablespaces --single-transaction --quick --routines --triggers --events --hex-blob --default-character-set=utf8mb4 "$DB_NAME" | gzip -9 > "$BACKUP_FILE"; then
               echo "Aviso: dump com rotinas/eventos falhou; repetindo sem rotinas/eventos." >&2
               rm -f "$BACKUP_FILE"
-              "$DUMP_BIN" --defaults-extra-file="$CNF" "${DUMP_EXTRA[@]}" --single-transaction --quick --triggers --hex-blob --default-character-set=utf8mb4 "$DB_NAME" | gzip -9 > "$BACKUP_FILE"
+              "$DUMP_BIN" --defaults-extra-file="$CNF" --no-tablespaces --single-transaction --quick --triggers --hex-blob --default-character-set=utf8mb4 "$DB_NAME" | gzip -9 > "$BACKUP_FILE"
             fi
 
             gzip -t "$BACKUP_FILE"

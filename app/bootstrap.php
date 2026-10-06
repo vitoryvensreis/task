@@ -9,10 +9,11 @@ ini_set('log_errors','1');
 ini_set('error_log',ROOT.'/storage/logs/php.log');
 if(PHP_SAPI!=='cli'){
  header('X-Content-Type-Options: nosniff'); header('Referrer-Policy: same-origin'); header('X-Frame-Options: DENY');
- header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://www.googleapis.com https://*.googleapis.com; media-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'self'");
+ header("Content-Security-Policy: default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://www.googleapis.com https://*.googleapis.com wss://task.escotilhaprodutora.com; media-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'self'");
  header('Cache-Control: no-store');
  if(session_status()!==PHP_SESSION_ACTIVE){
-  $sessionDir=ROOT.'/storage/sessions';if(!is_dir($sessionDir))@mkdir($sessionDir,0700,true);if(is_dir($sessionDir))ini_set('session.save_path',$sessionDir);
+  try{Infra::configureSession();}catch(Throwable $e){error_log('TaskEsc session infra: '.$e->getMessage());}
+  if((string)ini_get('session.save_handler')==='files'){$sessionDir=ROOT.'/storage/sessions';if(!is_dir($sessionDir))@mkdir($sessionDir,0700,true);if(is_dir($sessionDir))ini_set('session.save_path',$sessionDir);}
   $sessionLifetime=max(86400,(int)config('session_lifetime_seconds',2592000));
   ini_set('session.gc_maxlifetime',(string)$sessionLifetime);
   session_name('taskesc');
@@ -47,7 +48,7 @@ function validateDelivery(string $utc, ?string $oldUtc=null): void {
 function urlv(mixed $v): string {$v=trim((string)$v);if($v!==''&&(!filter_var($v,FILTER_VALIDATE_URL)||!in_array(parse_url($v,PHP_URL_SCHEME),['https','http'],true)))fail('Informe um link HTTP ou HTTPS válido.');return $v;}
 function csrf(): string {return $_SESSION['csrf']??=bin2hex(random_bytes(24));}
 function checkCsrf(): void {if(!hash_equals(csrf(),(string)($_SERVER['HTTP_X_CSRF_TOKEN']??$_POST['csrf']??'')))fail('Sessão expirada. Atualize a página.',419);}
-function audit(string $entity,int $id,string $action,mixed $before=null,mixed $after=null): void {DB::insert('audit_log',['user_id'=>Auth::$user['id']??null,'entity'=>$entity,'entity_id'=>$id,'action'=>$action,'before_json'=>$before===null?null:json($before),'after_json'=>$after===null?null:json($after),'origin'=>Auth::$origin,'created_at'=>now()]);}
+function audit(string $entity,int $id,string $action,mixed $before=null,mixed $after=null): void {$auditId=DB::insert('audit_log',['user_id'=>Auth::$user['id']??null,'entity'=>$entity,'entity_id'=>$id,'action'=>$action,'before_json'=>$before===null?null:json($before),'after_json'=>$after===null?null:json($after),'origin'=>Auth::$origin,'created_at'=>now()]);try{Realtime::fromAudit($entity,$id,$action,$before,$after);}catch(Throwable $e){error_log('TaskEsc realtime audit #'.$auditId.': '.$e->getMessage());}}
 function setting(string $key,string $default=''): string {return (string)(DB::one('SELECT value FROM settings WHERE `key`=?',[$key])['value']??$default);}
 function installed(): void {if(!config()||!is_file(ROOT.'/storage/installed.lock'))fail('Instale o sistema em install.php.',503);Migrations::run();}
 function secretEncrypt(string $plain): string {$iv=random_bytes(12);$tag='';$cipher=openssl_encrypt($plain,'aes-256-gcm',hex2bin(config('app_key')),OPENSSL_RAW_DATA,$iv,$tag);if($cipher===false)throw new RuntimeException('Encryption failed');return base64_encode($iv.$tag.$cipher);}

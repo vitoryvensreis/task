@@ -23,7 +23,7 @@ try{
  $schema=setting('schema_version','unknown');
  $info[]=['key'=>'schema','message'=>'Schema atual: '.$schema,'meta'=>$schema];
 
- if($schema!=='19')$add($critical,'schema_mismatch','O rollback pré-SaaS espera schema 19.',['actual'=>$schema,'expected'=>'19']);
+ if($schema!=='20')$add($critical,'schema_mismatch','O TaskEsc realtime espera schema 20.',['actual'=>$schema,'expected'=>'20']);
 
  $saasTables=['workspace_settings','workspace_members','workspaces'];
  $saasFlags=['saas_enabled','workspace_context_enabled','workspace_permissions_enabled','workspace_settings_enabled','signup_enabled','billing_enabled'];
@@ -49,9 +49,9 @@ try{
  if($presentFlags)$add($warnings,'saas_flags','Ainda existem feature flags da fundação SaaS.',$presentFlags);
 
  $workspaceColumns=DB::all("SELECT TABLE_NAME,COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND COLUMN_NAME='workspace_id' ORDER BY TABLE_NAME");
- if($workspaceColumns)$add($warnings,'workspace_columns','Foram encontradas colunas workspace_id. Elas não são usadas pelo TaskEsc v3.25 e não foram removidas automaticamente.',$workspaceColumns);
+ if($workspaceColumns)$add($warnings,'workspace_columns','Foram encontradas colunas workspace_id. Elas não são usadas pelo TaskEsc v3.27 e não foram removidas automaticamente.',$workspaceColumns);
 
- $essential=['users','clients','stages','categories','projects','demands','files','comments','invoices','payments','google_accounts','calendars','events','settings'];
+ $essential=['users','clients','stages','categories','projects','demands','files','comments','invoices','payments','google_accounts','calendars','events','settings','event_outbox'];
  foreach($essential as $table)if(!$tableExists($table))$add($critical,'missing_table_'.$table,'Tabela essencial ausente: '.$table);
 
  $relations=[
@@ -109,6 +109,17 @@ try{
    else $info[]=['key'=>'google_drive_'.$a['id'],'message'=>'Google Drive acessível para '.$a['email'],'meta'=>['http'=>200,'sample_file_id'=>$sample['id']]];
   }catch(Throwable $e){$add($warnings,'google_token_'.$a['id'],'Falha ao testar token do Google Drive.',['email'=>$a['email'],'error'=>$e->getMessage()]);}
  }
+
+ $infra=Infra::status();
+ $info[]=['key'=>'redis','message'=>'Redis '.(!empty($infra['redis'])?'acessível':'indisponível').'.','meta'=>$infra];
+ if(empty($infra['redis']))$add($critical,'redis_unavailable','Redis não está acessível pelo PHP.');
+ if(empty($infra['realtime_config']))$add($critical,'realtime_config','Configuração privada do Centrifugo não está acessível pelo PHP.');
+ try{
+  $pending=$count("SELECT COUNT(*) n FROM event_outbox WHERE status IN ('pending','processing')");
+  $failed=$count("SELECT COUNT(*) n FROM event_outbox WHERE status='failed'");
+  $info[]=['key'=>'realtime_outbox','message'=>'Fila realtime: '.$pending.' pendente(s), '.$failed.' falha(s).','meta'=>['pending'=>$pending,'failed'=>$failed,'worker_age_seconds'=>Infra::heartbeatAge('realtime-worker')]];
+  if($failed>0)$add($warnings,'realtime_failed','Há eventos realtime em estado failed.',$failed);
+ }catch(Throwable $e){$add($critical,'realtime_outbox_check','Não foi possível validar a fila realtime.',['error'=>$e->getMessage()]);}
 
  $defaultDrive=(int)setting('drive_account_id','0');
  if($defaultDrive>0&&!DB::one('SELECT id FROM google_accounts WHERE id=?',[$defaultDrive]))$add($warnings,'default_drive_missing','drive_account_id padrão aponta para uma conta inexistente.',$defaultDrive);

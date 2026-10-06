@@ -277,7 +277,7 @@ final class Google {
  }
 
  public static function sync(?int $only=null): array {
-  $ok=0;$errors=[];$rows=DB::all("SELECT c.* FROM calendars c JOIN google_accounts a ON a.id=c.account_id WHERE c.selected=1 AND a.status<>'disconnected' AND a.calendar_enabled=1".($only?' AND c.id=?':''),$only?[$only]:[]);foreach($rows as $c){try{self::push($c);self::pull($c);self::watch($c);DB::update('calendars',$c['id'],['synced_at'=>now(),'last_error'=>null,'dirty'=>0]);$ok++;}catch(Throwable $e){$message=mb_substr($e->getMessage(),0,1000);DB::update('calendars',$c['id'],['last_error'=>$message]);$errors[]=['calendar_id'=>$c['id'],'message'=>$message];}}return ['synced'=>$ok,'errors'=>$errors,'updated_at'=>now()];
+  $ok=0;$errors=[];$rows=DB::all("SELECT c.* FROM calendars c JOIN google_accounts a ON a.id=c.account_id WHERE c.selected=1 AND a.status<>'disconnected' AND a.calendar_enabled=1".($only?' AND c.id=?':''),$only?[$only]:[]);foreach($rows as $c){try{self::push($c);self::pull($c);self::watch($c);DB::update('calendars',$c['id'],['synced_at'=>now(),'last_error'=>null,'dirty'=>0]);$ok++;}catch(Throwable $e){$message=mb_substr($e->getMessage(),0,1000);DB::update('calendars',$c['id'],['last_error'=>$message]);$errors[]=['calendar_id'=>$c['id'],'message'=>$message];}}if($ok>0)try{Realtime::signal('agenda','google.sync',$only??0);}catch(Throwable $e){error_log('TaskEsc realtime calendar sync: '.$e->getMessage());}return ['synced'=>$ok,'errors'=>$errors,'updated_at'=>now()];
  }
 
  private static function push(array $c): void {

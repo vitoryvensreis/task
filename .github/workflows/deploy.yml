@@ -60,24 +60,31 @@ jobs:
             console.error('ERRO: fechamento do preview de arquivos regrediu.');
             process.exit(1);
           }
+          for(const required of ['startRealtime()','handleRealtimePublication','realtime.token','kanbanRealtimeApply']){
+            if(!src.includes(required)){console.error('ERRO: integração realtime incompleta:',required);process.exit(1)}
+          }
+          if(!html.includes('centrifuge@5.4.0/dist/centrifuge.js')){
+            console.error('ERRO: SDK Centrifuge não está carregado.');
+            process.exit(1);
+          }
           NODE
 
       - name: Gerar ZIP completo
         run: |
           set -e
-          rm -f "/tmp/taskesc-v3.26.zip" "taskesc-v3.26.zip"
-          zip -qr "/tmp/taskesc-v3.26.zip" . \
+          rm -f "/tmp/taskesc-v3.27.zip" "taskesc-v3.27.zip"
+          zip -qr "/tmp/taskesc-v3.27.zip" . \
             -x '.git/*' \
                'config/config.php' \
                'storage/sessions/*' \
                'storage/logs/*'
-          cp "/tmp/taskesc-v3.26.zip" "taskesc-v3.26.zip"
+          cp "/tmp/taskesc-v3.27.zip" "taskesc-v3.27.zip"
 
       - name: Publicar ZIP da versão
         uses: actions/upload-artifact@v4
         with:
-          name: taskesc-v3.26
-          path: taskesc-v3.26.zip
+          name: taskesc-v3.27
+          path: taskesc-v3.27.zip
           if-no-files-found: error
           retention-days: 7
 
@@ -248,21 +255,153 @@ jobs:
             set -euo pipefail
 
             cd "$DEPLOY_PATH"
+            [ -d .git ] || { echo "ERRO: DEPLOY_PATH não aponta para um repositório Git."; exit 1; }
 
-            if [ ! -d .git ]; then
-              echo "ERRO: DEPLOY_PATH não aponta para um repositório Git."
+            if [ "$(id -u)" -eq 0 ]; then
+              ROOT_CMD=""
+            elif command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
+              ROOT_CMD="sudo"
+            else
+              echo "ERRO: deploy precisa de root ou sudo sem prompt para configurar o realtime."
               exit 1
             fi
+            as_root(){ if [ -n "$ROOT_CMD" ]; then sudo -n "$@"; else "$@"; fi; }
 
             echo "Branch atual:"
             git branch --show-current
-
             echo "Buscando alterações..."
             git fetch origin main
-
             echo "Atualizando main..."
             git checkout main
             git pull --ff-only origin main
+
+            echo "Descobrindo usuário da aplicação..."
+            APP_USER="$(stat -c '%U' "$DEPLOY_PATH")"
+            if [ "$APP_USER" = "root" ] && [ -f "$DEPLOY_PATH/config/config.php" ]; then
+              OWNER="$(stat -c '%U' "$DEPLOY_PATH/config/config.php")"
+              [ "$OWNER" != "root" ] && APP_USER="$OWNER" || true
+            fi
+            if [ "$APP_USER" = "root" ]; then
+              FPM_USER="$(ps -eo user=,comm= | awk '$2 ~ /php-fpm/ && $1 != "root" {print $1; exit}')"
+              [ -n "$FPM_USER" ] && APP_USER="$FPM_USER" || true
+            fi
+            id "$APP_USER" >/dev/null 2>&1 || { echo "ERRO: usuário da aplicação inválido: $APP_USER"; exit 1; }
+            APP_GROUP="$(id -gn "$APP_USER")"
+            echo "Aplicação: $APP_USER:$APP_GROUP"
+
+            echo "Configurando credenciais privadas do realtime..."
+            SECRET_SOURCE="/root/taskesc-realtime-secrets.env"
+            as_root test -r "$SECRET_SOURCE" || { echo "ERRO: $SECRET_SOURCE não existe ou não está legível."; exit 1; }
+            TMP_ENV="/tmp/taskesc-realtime-env.$RANDOM"
+            as_root sh -c "grep -v '^CENTRIFUGO_PUBLIC_WS=' '$SECRET_SOURCE' > '$TMP_ENV' && printf '%s\n' 'CENTRIFUGO_PUBLIC_WS=wss://task.escotilhaprodutora.com/realtime/connection/websocket' >> '$TMP_ENV'"
+            as_root install -o root -g "$APP_GROUP" -m 0640 "$TMP_ENV" /etc/taskesc-realtime.env
+            as_root rm -f "$TMP_ENV"
+
+            echo "Configurando namespace realtime do Centrifugo..."
+            CENT_CFG="/etc/centrifugo/config.json"
+            as_root test -f "$CENT_CFG" || { echo "ERRO: configuração do Centrifugo não encontrada."; exit 1; }
+            CENT_BAK="/etc/centrifugo/config.json.pre-taskesc-v3.27"
+            as_root cp -a "$CENT_CFG" "$CENT_BAK"
+            TMP_CENT="/tmp/taskesc-centrifugo.$RANDOM"
+            as_root cp "$CENT_CFG" "$TMP_CENT"
+            as_root python3 - "$TMP_CENT" <<'PY'
+          import json,sys
+          p=sys.argv[1]
+          with open(p,'r',encoding='utf-8') as f: data=json.load(f)
+          channel=data.setdefault('channel',{})
+          namespaces=[x for x in channel.get('namespaces',[]) if x.get('name') not in ('workspace','app')]
+          namespaces.append({
+              'name':'app',
+              'history_size':200,
+              'history_ttl':'300s',
+              'force_recovery':True
+          })
+          channel['namespaces']=namespaces
+          with open(p,'w',encoding='utf-8') as f: json.dump(data,f,ensure_ascii=False,indent=2)
+          PY
+            as_root install -o root -g centrifugo -m 0640 "$TMP_CENT" "$CENT_CFG"
+            as_root rm -f "$TMP_CENT"
+            if ! as_root systemctl restart centrifugo; then
+              echo "ERRO: Centrifugo não reiniciou; restaurando configuração."
+              as_root cp "$CENT_BAK" "$CENT_CFG"
+              as_root systemctl restart centrifugo || true
+              exit 1
+            fi
+            sleep 1
+            curl -fsS --max-time 5 http://127.0.0.1:8000/health >/dev/null || { echo "ERRO: health do Centrifugo falhou."; exit 1; }
+            redis-cli ping | grep -q PONG || { echo "ERRO: Redis indisponível."; exit 1; }
+
+            echo "Aplicando migrações do TaskEsc..."
+            php -r "require 'app/bootstrap.php'; Migrations::run(); echo 'schema='.setting('schema_version','unknown').PHP_EOL;"
+            test "$(php -r "require 'app/bootstrap.php'; echo setting('schema_version','unknown');")" = "20" || { echo "ERRO: schema 20 não aplicado."; exit 1; }
+
+            echo "Instalando worker realtime..."
+            WORKER_UNIT="/tmp/taskesc-realtime-worker.service.$RANDOM"
+            cat > "$WORKER_UNIT" <<UNIT
+          [Unit]
+          Description=TaskEsc Realtime Outbox Worker
+          After=network-online.target redis-server.service centrifugo.service
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          User=$APP_USER
+          Group=$APP_GROUP
+          WorkingDirectory=$DEPLOY_PATH
+          ExecStart=/usr/bin/php $DEPLOY_PATH/bin/realtime-worker.php
+          Restart=always
+          RestartSec=1
+          TimeoutStopSec=10
+          KillSignal=SIGTERM
+          LimitNOFILE=65536
+          MemoryMax=256M
+          NoNewPrivileges=true
+          PrivateTmp=true
+
+          [Install]
+          WantedBy=multi-user.target
+          UNIT
+            as_root install -o root -g root -m 0644 "$WORKER_UNIT" /etc/systemd/system/taskesc-realtime-worker.service
+            rm -f "$WORKER_UNIT"
+            as_root systemctl daemon-reload
+            as_root systemctl enable taskesc-realtime-worker.service >/dev/null
+            as_root systemctl restart taskesc-realtime-worker.service
+
+            echo "Aguardando heartbeat do worker..."
+            WORKER_OK=0
+            for n in 1 2 3 4 5 6 7 8 9 10; do
+              if redis-cli GET taskesc:heartbeat:realtime-worker | grep -Eq '^[0-9]+
+      - name: Health check pós-deploy
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
+            set -euo pipefail
+            HEALTH_URL="$(php -r '$c=require $argv[1]; echo rtrim((string)($c["base_url"]??""),"/")."/health.php";' "$DEPLOY_PATH/config/config.php")"
+            [ -n "$HEALTH_URL" ] || { echo "ERRO: health URL vazia."; exit 1; }
+
+            for attempt in 1 2 3 4 5; do
+              RESPONSE="$(curl --fail --silent --show-error --max-time 20 "$HEALTH_URL" 2>/dev/null || true)"
+              if [ -n "$RESPONSE" ] && php -r '$j=json_decode($argv[1],true); exit(is_array($j) && ($j["status"]??null)==="ok" && ($j["database"]??false)===true && ($j["installed"]??false)===true ? 0 : 1);' "$RESPONSE"; then
+                echo "Health check OK na tentativa $attempt."
+                echo "$RESPONSE"
+                exit 0
+              fi
+              echo "Tentativa $attempt/5 falhou. Aguardando 3 segundos..."
+              sleep 3
+            done
+
+            echo "ERRO: health check pós-deploy falhou."
+            exit 1
+          REMOTE
+; then WORKER_OK=1; break; fi
+              sleep 1
+            done
+            [ "$WORKER_OK" -eq 1 ] || { as_root systemctl --no-pager status taskesc-realtime-worker.service || true; echo "ERRO: worker realtime sem heartbeat."; exit 1; }
 
             echo "Executando auditoria de integridade e limpeza segura de restos SaaS..."
             php bin/system-audit.php --cleanup-saas --strict
@@ -274,7 +413,13 @@ jobs:
             php -l public/index.php
             php -l public/api.php
             php -l public/health.php
+            php -l app/Realtime.php
+            php -l app/Infra.php
 
+            echo "Realtime:"
+            echo "Redis: $(redis-cli ping)"
+            echo "Centrifugo: OK"
+            echo "Worker: OK"
             echo "Deploy concluído."
           REMOTE
 

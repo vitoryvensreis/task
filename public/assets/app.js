@@ -96,7 +96,7 @@
   const ROUTE_PAGES=Object.fromEntries(Object.entries(ROUTES).map(([k,v])=>[v,k]));
   function readRoute(){let path=location.pathname;if(BASE&&path.startsWith(BASE))path=path.slice(BASE.length);path=path.replace(/^\/+|\/+$/g,'');const parts=path.split('/').filter(Boolean);let page=ROUTE_PAGES[parts[0]]||'';let taskId=0;if(parts[0]==='kanban'&&parts[1]==='task'&&/^\d+$/.test(parts[2]||'')){page='kanban';taskId=Number(parts[2])}if(!page&&location.hash){const legacy=location.hash.replace(/^#/,'').split('/');page=['dashboard','kanban','demands','agenda','clients','services','finance','reports','logs','settings'].includes(legacy[0])?legacy[0]:'';if(legacy[0]==='demands'&&/^\d+$/.test(legacy[1]||'')){page='kanban';taskId=Number(legacy[1])}}return {page:page||'dashboard',taskId}}
   const initialRoute=readRoute();
-  const S={user:null,meta:null,csrf:'',page:initialRoute.page,pendingTaskId:initialRoute.taskId,demands:[],dashboard:null,timer:null};
+  const S={user:null,meta:null,csrf:'',page:initialRoute.page,pendingTaskId:initialRoute.taskId,demands:[],dashboard:null,timer:null,realtime:null,realtimeConnected:false,realtimeSeen:new Set(),realtimeDirty:new Set(),realtimeTimers:{},kanbanRealtimeApply:null,openDemandId:0,openDemandEditing:false,lastSafetyRefresh:0};
   const routeUrl=page=>appPath(ROUTES[page]||ROUTES.dashboard);
   const taskShareUrl=id=>new URL(appPath(`kanban/task/${Number(id)}`),location.origin).href;
   const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
@@ -307,9 +307,87 @@
   async function api(action,data={},method='GET',csrf=true){let url=appPath('api.php')+'?action='+encodeURIComponent(action),opts={method,headers:{'Accept':'application/json'}};if(method==='GET'){for(const [k,v] of Object.entries(data))if(v!==undefined&&v!==null&&v!=='')url+='&'+encodeURIComponent(k)+'='+encodeURIComponent(v)}else{opts.headers['Content-Type']='application/json';if(csrf&&S.csrf)opts.headers['X-CSRF-Token']=S.csrf;opts.body=JSON.stringify(data)}const r=await fetch(url,opts),j=await r.json().catch(()=>({error:'Resposta inválida do servidor.'}));if(!r.ok||j.error){if(r.status===401&&action!=='auth.me')showLogin();throw new Error(j.error||'Não foi possível concluir.')}return j}
   async function squarePngFromLogo(file,size,maskable=false){try{const bitmap=await createImageBitmap(file),canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');canvas.width=size;canvas.height=size;ctx.fillStyle='#050607';ctx.fillRect(0,0,size,size);const pad=Math.round(size*(maskable?.19:.11)),max=size-pad*2,scale=Math.min(max/bitmap.width,max/bitmap.height),w=Math.max(1,Math.round(bitmap.width*scale)),h=Math.max(1,Math.round(bitmap.height*scale));ctx.drawImage(bitmap,Math.round((size-w)/2),Math.round((size-h)/2),w,h);bitmap.close?.();return await new Promise(resolve=>canvas.toBlob(resolve,'image/png',.96))}catch(_){return null}}
   async function uploadLogoFile(file){const fd=new FormData();fd.append('logo',file);const icons=await Promise.all([[180,false,'icon_180'],[192,false,'icon_192'],[512,false,'icon_512'],[512,true,'icon_maskable_512']].map(async ([size,mask,key])=>[key,await squarePngFromLogo(file,size,mask)]));for(const [key,blob] of icons)if(blob)fd.append(key,blob,key+'.png');const r=await fetch(appPath('api.php')+'?action=settings.logo_upload',{method:'POST',headers:{'Accept':'application/json',...(S.csrf?{'X-CSRF-Token':S.csrf}:{})},body:fd}),j=await r.json().catch(()=>({error:'Resposta inválida do servidor.'}));if(!r.ok||j.error)throw new Error(j.error||'Não foi possível enviar a logo.');return j}
-  function showLogin(){closeNotifications();S.user=null;if(S.timer)clearInterval(S.timer);S.timer=null;$('#app').classList.add('hidden');$('#login').classList.remove('hidden');$('#login-form').reset();$('#login-form').classList.remove('hidden');$('#twofa-form')?.classList.add('hidden');$('#twofa-form')?.reset();$('#login-error').textContent='';if($('#twofa-error'))$('#twofa-error').textContent='';}
-  function showApp(){S.user=S.meta.user;$('#login').classList.add('hidden');$('#app').classList.remove('hidden');applyBranding();const preview=!!S.user.is_preview;$('#user-chip').textContent=preview?`Visualizando: ${S.user.preview_client_name}`:S.user.name+' · '+({admin:'Administrador',staff:'Equipe',client:'Cliente'}[S.user.role]||S.user.role);$('#preview-exit')?.classList.toggle('hidden',!preview);$('#new-demand')?.classList.toggle('hidden',preview||!can('tasks.create'));buildNav();startAutoRefresh();refreshNotificationBadge();setTimeout(promptPushAfterLogin,650);{const cleanPath=location.pathname.replace(/\/+$/,'');const baseClean=(BASE||'').replace(/\/+$/,'');if(location.hash||/\/index\.php$/i.test(location.pathname)||cleanPath===baseClean||cleanPath===baseClean+'/public')history.replaceState({},'',S.pendingTaskId?appPath(`kanban/task/${S.pendingTaskId}`):routeUrl(S.page||'dashboard'));}go(S.page||'dashboard',false);const flash=sessionStorage.getItem('taskesc-flash');if(flash){sessionStorage.removeItem('taskesc-flash');setTimeout(()=>toast(flash),350)}}
-  function startAutoRefresh(){if(S.timer)clearInterval(S.timer);S.timer=setInterval(async()=>{const notificationOpen=$('#notification-popover')&&!$('#notification-popover').classList.contains('hidden');if(!S.user||document.visibilityState==='hidden'||$('#modal-root').innerHTML.trim()||notificationOpen)return;refreshNotificationBadge();if(userIsInteracting())return;if(['dashboard','kanban','demands','agenda','finance','reports','logs'].includes(S.page)){await refresh();const i=$('#sync-indicator');if(i)i.innerHTML='<i></i> Atualizado às '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:S.meta.timezone||'America/Fortaleza'})}},30000)}
+  function realtimeIndicator(text,ok=true){
+    const i=$('#sync-indicator');if(!i)return;i.innerHTML='<i></i> '+text;i.classList.toggle('offline',!ok);
+  }
+  function stopRealtime(){
+    if(S.realtime){try{S.realtime.disconnect()}catch{}}
+    S.realtime=null;S.realtimeConnected=false;S.realtimeSeen.clear();S.realtimeDirty.clear();
+  }
+  function realtimeRemember(id){
+    id=Number(id||0);if(!id)return false;if(S.realtimeSeen.has(id))return true;S.realtimeSeen.add(id);
+    if(S.realtimeSeen.size>800){const first=S.realtimeSeen.values().next().value;S.realtimeSeen.delete(first)}
+    return false;
+  }
+  function scheduleRealtimeRefresh(scope,delay=180){
+    if(!S.user)return;
+    if(document.visibilityState==='hidden'||userIsInteracting()||($('#modal-root').innerHTML.trim()&&!(scope==='tasks'&&S.openDemandId))){
+      S.realtimeDirty.add(scope);return;
+    }
+    clearTimeout(S.realtimeTimers[scope]);
+    S.realtimeTimers[scope]=setTimeout(async()=>{
+      try{
+        if(scope==='notifications'){await refreshNotificationBadge();return}
+        if(scope==='catalog'){
+          S.meta=await api('meta');applyBranding();buildNav();
+          if(['kanban','demands','clients','services','settings'].includes(S.page))await refresh();
+          return;
+        }
+        if(scope==='agenda'&&['agenda','dashboard'].includes(S.page)){await refresh();return}
+        if(scope==='finance'&&['finance','dashboard','reports'].includes(S.page)){await refresh();return}
+        if(scope==='tasks'&&['demands','dashboard','reports'].includes(S.page)){await refresh();return}
+        if(scope==='admin'&&['logs','settings'].includes(S.page))await refresh();
+      }catch(e){console.warn('TaskEsc realtime refresh:',e)}
+    },delay);
+  }
+  async function flushRealtimeDirty(){
+    if(!S.user||document.visibilityState==='hidden'||$('#modal-root').innerHTML.trim())return;
+    const scopes=[...S.realtimeDirty];S.realtimeDirty.clear();
+    for(const scope of scopes)scheduleRealtimeRefresh(scope,50);
+  }
+  async function handleRealtimePublication(ctx){
+    const ev=ctx?.data||{};if(!ev||typeof ev!=='object')return;
+    if(realtimeRemember(ev.outbox_id))return;
+    const scope=String(ev.scope||'');const actor=Number(ev.actor_id||0);const own=actor>0&&actor===Number(S.user?.id||0);
+    if(scope==='notifications'){scheduleRealtimeRefresh('notifications',20);return}
+    if(own)return;
+    if(scope==='tasks'){
+      const taskId=Number(ev.demand_id||ev.entity_id||0);
+      if(S.page==='kanban'&&typeof S.kanbanRealtimeApply==='function'){
+        S.kanbanRealtimeApply(ev);
+      }else scheduleRealtimeRefresh('tasks');
+      if(taskId&&taskId===Number(S.openDemandId||0)&&!S.openDemandEditing&&!document.querySelector('.file-preview-layer')){
+        clearTimeout(S.realtimeTimers.taskModal);
+        S.realtimeTimers.taskModal=setTimeout(()=>{if(S.openDemandId===taskId&&!S.openDemandEditing)openDemand(taskId)},220);
+      }
+      return;
+    }
+    if(scope==='catalog'){scheduleRealtimeRefresh('catalog');return}
+    if(scope==='agenda'){scheduleRealtimeRefresh('agenda');return}
+    if(scope==='finance'){scheduleRealtimeRefresh('finance');return}
+    scheduleRealtimeRefresh('admin');
+  }
+  async function realtimeToken(){
+    const info=await api('realtime.token');return info?.enabled?info:null;
+  }
+  async function startRealtime(){
+    stopRealtime();
+    if(!S.user||typeof window.Centrifuge!=='function'){realtimeIndicator('Sincronização automática',false);return}
+    try{
+      const info=await realtimeToken();if(!info)return;
+      const client=new window.Centrifuge(info.endpoint,{token:info.token,getToken:async()=>{const fresh=await realtimeToken();return fresh?.token||''}});
+      client.on('publication',handleRealtimePublication);
+      client.on('connected',()=>{S.realtimeConnected=true;realtimeIndicator('Tempo real ativo',true);flushRealtimeDirty()});
+      client.on('disconnected',()=>{S.realtimeConnected=false;realtimeIndicator('Reconectando tempo real…',false)});
+      client.on('error',ctx=>console.warn('TaskEsc realtime:',ctx));
+      S.realtime=client;client.connect();
+    }catch(e){S.realtimeConnected=false;console.warn('TaskEsc realtime indisponível:',e);realtimeIndicator('Sincronização automática',false)}
+  }
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){flushRealtimeDirty();if(S.user&&!S.realtimeConnected&&S.realtime)try{S.realtime.connect()}catch{}}});
+
+  function showLogin(){closeNotifications();stopRealtime();S.user=null;if(S.timer)clearInterval(S.timer);S.timer=null;$('#app').classList.add('hidden');$('#login').classList.remove('hidden');$('#login-form').reset();$('#login-form').classList.remove('hidden');$('#twofa-form')?.classList.add('hidden');$('#twofa-form')?.reset();$('#login-error').textContent='';if($('#twofa-error'))$('#twofa-error').textContent='';}
+  function showApp(){S.user=S.meta.user;$('#login').classList.add('hidden');$('#app').classList.remove('hidden');applyBranding();const preview=!!S.user.is_preview;$('#user-chip').textContent=preview?`Visualizando: ${S.user.preview_client_name}`:S.user.name+' · '+({admin:'Administrador',staff:'Equipe',client:'Cliente'}[S.user.role]||S.user.role);$('#preview-exit')?.classList.toggle('hidden',!preview);$('#new-demand')?.classList.toggle('hidden',preview||!can('tasks.create'));buildNav();startAutoRefresh();startRealtime();refreshNotificationBadge();setTimeout(promptPushAfterLogin,650);{const cleanPath=location.pathname.replace(/\/+$/,'');const baseClean=(BASE||'').replace(/\/+$/,'');if(location.hash||/\/index\.php$/i.test(location.pathname)||cleanPath===baseClean||cleanPath===baseClean+'/public')history.replaceState({},'',S.pendingTaskId?appPath(`kanban/task/${S.pendingTaskId}`):routeUrl(S.page||'dashboard'));}go(S.page||'dashboard',false);const flash=sessionStorage.getItem('taskesc-flash');if(flash){sessionStorage.removeItem('taskesc-flash');setTimeout(()=>toast(flash),350)}}
+  function startAutoRefresh(){if(S.timer)clearInterval(S.timer);S.lastSafetyRefresh=Date.now();S.timer=setInterval(async()=>{const notificationOpen=$('#notification-popover')&&!$('#notification-popover').classList.contains('hidden');if(!S.user||document.visibilityState==='hidden'||$('#modal-root').innerHTML.trim()||notificationOpen)return;if(userIsInteracting())return;const safetyDue=!S.realtimeConnected||Date.now()-S.lastSafetyRefresh>=300000;if(!safetyDue)return;try{await refreshNotificationBadge();if(['dashboard','kanban','demands','agenda','finance','reports','logs'].includes(S.page))await refresh();S.lastSafetyRefresh=Date.now();if(!S.realtimeConnected)realtimeIndicator('Sincronizado · aguardando tempo real',false)}catch{}},30000)}
   async function refreshNotificationBadge(){
     if(!S.user||S.user.is_preview)return;try{const rows=await api('notifications'),unread=rows.filter(x=>!Number(x.seen)).length,b=$('#notification-badge');if(b){b.textContent=unread>99?'99+':String(unread);b.classList.toggle('hidden',unread===0);$('#notifications-btn')?.classList.toggle('has-unread',unread>0)}try{if(unread>0&&navigator.setAppBadge)await navigator.setAppBadge(unread);else if(navigator.clearAppBadge)await navigator.clearAppBadge()}catch{}}catch{}
   }
@@ -361,7 +439,7 @@
   document.addEventListener('click',e=>{if(!e.target.closest('.notification-shell'))closeNotifications()});
   document.addEventListener('keydown',e=>{if(e.key==='Escape')closeNotifications()});
   $('#logout').onclick=async()=>{try{await api('auth.logout',{},'POST',false)}finally{showLogin()}};$('#preview-exit').onclick=async()=>{try{showPageLoader();await api('preview.stop',{},'POST');location.href=routeUrl('dashboard')}catch(x){hidePageLoader();toast(x.message,true)}};$('#menu').onclick=()=>{const open=!$('.sidebar').classList.contains('open');$('.sidebar').classList.toggle('open',open);document.body.classList.toggle('nav-open',open)};$('#nav-backdrop')?.addEventListener('click',closeMobileNav);$('#new-demand').onclick=()=>openDemand();
-  async function go(page,push=false,visualLoad=false,preserveView=null){const previousPage=S.page,keepView=preserveView===null?(page===previousPage&&!push):!!preserveView,viewState=keepView?captureViewState():null;if(page==='agenda'&&previousPage!=='agenda'){window.taskescAgendaView=window.matchMedia&&window.matchMedia('(max-width:760px)').matches?'day':'week';window.taskescAgendaDate=null}if(visualLoad)showPageLoader();if(push&&page!==S.page)history.pushState({},'',routeUrl(page));S.page=page;closeNotifications();document.body.classList.toggle('kanban-page',page==='kanban');document.querySelectorAll('.nav-btn').forEach(b=>{const active=b.dataset.page===page;b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});const names={dashboard:['VISÃO GERAL','Dashboard'],kanban:['PRODUÇÃO','Kanban'],demands:['PRODUÇÃO','Tasks'],agenda:['PLANEJAMENTO','Agenda'],clients:['RELACIONAMENTO','Clientes'],services:['PRODUÇÃO','Serviços'],finance:['COMERCIAL','Financeiro'],reports:['INDICADORES','Relatórios'],logs:['SISTEMA','Saúde & Logs'],settings:['SISTEMA','Configurações']};if(page==='settings'&&S.user.role!=='admin')names.settings=['CONTA','Minha conta'];$('#page-kicker').textContent=names[page]?.[0]||'';$('#page-title').textContent=names[page]?.[1]||page;closeMobileNav();try{await (({dashboard:renderDashboard,kanban:renderKanban,demands:renderDemandList,agenda:renderAgenda,clients:renderClients,services:renderServices,finance:renderFinance,reports:renderReports,logs:renderSystemLogs,settings:renderSettings}[page]||renderDashboard)());if(page==='kanban'&&S.pendingTaskId){const id=S.pendingTaskId;S.pendingTaskId=0;await openDemand(id)}}catch(e){toast(e.message,true);$('#content').innerHTML=`<div class="empty">${esc(e.message)}</div>`}finally{if(viewState)restoreViewState(viewState);else if(page!==previousPage)requestAnimationFrame(()=>window.scrollTo({left:0,top:0,behavior:'auto'}));if(page==='kanban'&&page!==previousPage)requestAnimationFrame(()=>requestAnimationFrame(()=>{const board=$('.kanban');if(board)board.scrollLeft=0}));if(visualLoad)hidePageLoader()}}
+  async function go(page,push=false,visualLoad=false,preserveView=null){const previousPage=S.page;if(page!=='kanban')S.kanbanRealtimeApply=null;const keepView=preserveView===null?(page===previousPage&&!push):!!preserveView,viewState=keepView?captureViewState():null;if(page==='agenda'&&previousPage!=='agenda'){window.taskescAgendaView=window.matchMedia&&window.matchMedia('(max-width:760px)').matches?'day':'week';window.taskescAgendaDate=null}if(visualLoad)showPageLoader();if(push&&page!==S.page)history.pushState({},'',routeUrl(page));S.page=page;closeNotifications();document.body.classList.toggle('kanban-page',page==='kanban');document.querySelectorAll('.nav-btn').forEach(b=>{const active=b.dataset.page===page;b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});const names={dashboard:['VISÃO GERAL','Dashboard'],kanban:['PRODUÇÃO','Kanban'],demands:['PRODUÇÃO','Tasks'],agenda:['PLANEJAMENTO','Agenda'],clients:['RELACIONAMENTO','Clientes'],services:['PRODUÇÃO','Serviços'],finance:['COMERCIAL','Financeiro'],reports:['INDICADORES','Relatórios'],logs:['SISTEMA','Saúde & Logs'],settings:['SISTEMA','Configurações']};if(page==='settings'&&S.user.role!=='admin')names.settings=['CONTA','Minha conta'];$('#page-kicker').textContent=names[page]?.[0]||'';$('#page-title').textContent=names[page]?.[1]||page;closeMobileNav();try{await (({dashboard:renderDashboard,kanban:renderKanban,demands:renderDemandList,agenda:renderAgenda,clients:renderClients,services:renderServices,finance:renderFinance,reports:renderReports,logs:renderSystemLogs,settings:renderSettings}[page]||renderDashboard)());if(page==='kanban'&&S.pendingTaskId){const id=S.pendingTaskId;S.pendingTaskId=0;await openDemand(id)}}catch(e){toast(e.message,true);$('#content').innerHTML=`<div class="empty">${esc(e.message)}</div>`}finally{if(viewState)restoreViewState(viewState);else if(page!==previousPage)requestAnimationFrame(()=>window.scrollTo({left:0,top:0,behavior:'auto'}));if(page==='kanban'&&page!==previousPage)requestAnimationFrame(()=>requestAnimationFrame(()=>{const board=$('.kanban');if(board)board.scrollLeft=0}));if(visualLoad)hidePageLoader()}}
   function refresh(){return go(S.page,false,false,true)};
   window.addEventListener('popstate',()=>{const r=readRoute();S.pendingTaskId=r.taskId;go(r.page,false,true)});
   function dashboardDelta(current,previous){current=Number(current||0);previous=Number(previous||0);if(previous===0)return current===0?{text:'0%',cls:'neutral'}:{text:'+100%',cls:'positive'};const pct=Math.round(((current-previous)/previous)*100);return {text:(pct>0?'+':'')+pct+'%',cls:pct>0?'positive':pct<0?'negative':'neutral'}}
@@ -428,7 +506,21 @@
         x.ondrop=async e=>{const raw=e.dataTransfer.getData('text/taskesc-demand'),card=document.querySelector('.task-card.dragging');if(!raw&&!card)return;e.preventDefault();e.stopPropagation();x.classList.remove('drag-over');dragAutoScroller?.stop();dragAutoScroller=null;document.body.classList.remove('kanban-task-dragging');const id=Number(raw||card?.dataset.demand),d=rows.find(r=>Number(r.id)===id),toStage=Number(x.dataset.stage);if(!d||!card)return;const fromStage=Number(d.stage_id),previousVersion=Number(d.version),beforeId=Number(card.nextElementSibling?.dataset?.demand||0);try{const moved=await api('demands.reorder',{id,stage_id:toStage,version:previousVersion,before_id:beforeId},'POST');d.stage_id=Number(moved.stage_id||toStage);d.version=Number(moved.version||previousVersion);d.sort_order=Number(moved.sort_order||d.sort_order||0);toast(fromStage!==toStage?'Task movida e posicionada':'Ordem dos cards atualizada');await stableRender(renderKanban)}catch(err){toast(err.message,true);paint()}};
       });
     }
-    paint();$('#demand-search').oninput=paint;['#demand-filter','#kanban-client','#kanban-assigned','#kanban-priority','#kanban-overdue'].forEach(sel=>{const el=$(sel);if(el)el.onchange=paint});$('#refresh-kanban').onclick=refresh;
+    paint();
+    S.kanbanRealtimeApply=ev=>{
+      const apply=()=>{
+        const id=Number(ev.demand_id||ev.entity_id||ev.task?.id||0);if(!id)return;
+        const idx=rows.findIndex(r=>Number(r.id)===id);
+        if(ev.deleted||!ev.task){if(idx>=0)rows.splice(idx,1)}
+        else if(idx>=0)rows[idx]={...rows[idx],...ev.task};
+        else rows.push(ev.task);
+        rows.sort((a,b)=>Number(a.stage_id)-Number(b.stage_id)||Number(a.sort_order||0)-Number(b.sort_order||0)||Number(a.id)-Number(b.id));
+        paint();
+        const i=$('#sync-indicator');if(i)i.innerHTML='<i></i> Atualizado em tempo real';
+      };
+      if(document.body.classList.contains('kanban-task-dragging')){clearTimeout(S.realtimeTimers.kanbanApply);S.realtimeTimers.kanbanApply=setTimeout(apply,450)}else apply();
+    };
+    $('#demand-search').oninput=paint;['#demand-filter','#kanban-client','#kanban-assigned','#kanban-priority','#kanban-overdue'].forEach(sel=>{const el=$(sel);if(el)el.onchange=paint});$('#refresh-kanban').onclick=refresh;
     $('#add-stage')?.addEventListener('click',()=>stageModal());$$('.edit-stage').forEach(b=>b.onclick=()=>stageModal(stages.find(s=>s.id==b.dataset.id)));$$('.delete-stage').forEach(b=>b.onclick=()=>stageDeleteModal(Number(b.dataset.id),rows,stages));
     $$('.stage-drag').forEach(h=>h.ondragstart=e=>{e.stopPropagation();e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/taskesc-stage',h.dataset.stageDrag)});
     $$('.kanban-col').forEach(col=>{col.ondragover=e=>{if(e.dataTransfer.types.includes('text/taskesc-stage'))e.preventDefault()};col.ondrop=async e=>{const raw=e.dataTransfer.getData('text/taskesc-stage');if(!raw)return;e.preventDefault();const from=Number(raw),to=Number(col.dataset.stageCol);if(from===to)return;const ids=stages.map(s=>Number(s.id)),a=ids.indexOf(from),b=ids.indexOf(to);ids.splice(a,1);ids.splice(b,0,from);try{await api('stages.reorder',{stage_ids:ids},'POST');S.meta=await api('meta');toast('Coluna movida');stableRender(renderKanban)}catch(x){toast(x.message,true)}}});
@@ -475,6 +567,7 @@
 
   async function openDemand(id=0,edit=false,initialStage=0){
     let d=null;if(id){try{d=await api('demands.get',{id})}catch(e){toast(e.message,true);return}}
+    S.openDemandId=Number(id||0);S.openDemandEditing=!!edit;
     if(d&&!edit){const html=`<div class="modal-backdrop task-backdrop"><button class="task-screen-close" data-close aria-label="Fechar task" title="Fechar"><span class="icon-slot"><i data-lucide="x" class="ui-icon" aria-hidden="true"></i><span class="icon-fallback" aria-hidden="true">×</span></span></button><div class="modal wide task-detail-modal"><div class="modal-head"><div><span class="eyebrow">TASK #${d.id}</span><h3>${esc(d.title)}</h3><div class="help">Detalhes, arquivos, aprovações e histórico do job.</div></div></div>${detailHtml(d)}</div></div>`;$('#modal-root').innerHTML=html;$$('[data-close]').forEach(x=>x.onclick=closeModal);const backdrop=$('#modal-root .task-backdrop');if(backdrop)backdrop.onclick=e=>{if(e.target===backdrop)closeModal()};wireDetail(d);return}
     const admin=S.user.role==='admin',client=S.user.role==='client';const fallbackClient=client&&S.meta.clients.length===1?S.meta.clients[0].id:'';const clientId=d?.client_id||fallbackClient||S.meta.clients[0]?.id||'';const cat=d?.category_id||S.meta.categories[0]?.id||'';
     const html=`<div class="modal-backdrop task-backdrop"><button class="task-screen-close" data-close aria-label="Fechar task" title="Fechar"><span class="icon-slot"><i data-lucide="x" class="ui-icon" aria-hidden="true"></i><span class="icon-fallback" aria-hidden="true">×</span></span></button><div class="modal wide task-modal"><div class="modal-head"><div><span class="eyebrow">${d?'EDIÇÃO':'NOVA TASK'}</span><h3>${d?'Editar task #'+d.id:client?'Nova solicitação':'Nova task'}</h3><div class="help">Briefing enxuto, prazo de entrega e arquivos no Drive em um único fluxo.</div></div></div>${demandFormHtml(d,client,clientId,cat)}</div></div>`;
@@ -548,7 +641,7 @@
   function uploadFileModal(d){const admin=S.user.role!=='client',drive=clientDriveInfo(d.client_id),uploadBatch=newUploadBatchId();if(!drive?.drive_ready){toast('Defina ou reconecte o Google Drive deste cliente antes de enviar arquivos.',true);return}const html=`<div class="modal-backdrop"><div class="modal upload-modal"><div class="modal-head"><div><h3>Enviar para o Google Drive</h3><div class="help">Selecione um ou vários arquivos. Cada item é enviado em blocos e vinculado à mesma task.</div></div><button class="close" data-close><span class="icon-slot"><i data-lucide="x" class="ui-icon" aria-hidden="true"></i><span class="icon-fallback" aria-hidden="true">×</span></span></button></div><form id="upload-form" class="upload-modal-form"><div class="upload-form-grid"><div class="field"><label>Nome da entrega (opcional)</label><input class="input" name="label" maxlength="255" placeholder="Para vários arquivos, o nome de cada arquivo será usado"></div><div class="field"><label>Arquivos</label><input class="input file-picker-input" name="files" type="file" multiple required></div>${admin?'<div class="field"><label>Tipo</label><select class="select" name="kind"><option value="input">Material recebido</option><option value="reference">Referência</option><option value="review">Versão para aprovação</option><option value="final">Entrega final</option></select></div>':''}</div>${admin?'<label class="check upload-shared"><input type="checkbox" name="shared" value="1" checked> Visível para o cliente</label>':''}<div class="drive-note"><b>Google Drive</b> · upload direto para o Google Drive, com retomada automática, sem limite total no TaskEsc, com progresso, retomada e proteção contra duplicidade.<div class="upload-progress hidden" id="upload-progress"><i></i></div><div id="upload-file-status" class="field-help"></div></div><div class="form-actions"><button type="button" class="ghost" data-close>Cancelar</button><button class="primary" id="upload-submit">Enviar ao Drive</button></div></form></div></div>`;$('#modal-root').innerHTML=html;$$('[data-close]').forEach(x=>x.onclick=closeModal);$('#upload-form').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget;if(form.dataset.submitting==='1')return;form.dataset.submitting='1';const btn=$('#upload-submit'),fd=new FormData(form),files=[...(form.elements.files.files||[])];if(!files.length){form.dataset.submitting='0';return}btn.disabled=true;const progress=$('#upload-progress'),status=$('#upload-file-status');progress?.classList.remove('hidden');try{for(let i=0;i<files.length;i++){const file=files[i],custom=String(fd.get('label')||'').trim(),label=files.length===1&&custom?custom:file.name;if(status)status.textContent=`Arquivo ${i+1} de ${files.length}: ${file.name}`;await uploadDemandFile(d.id,file,{label,kind:String(fd.get('kind')||'input'),shared:fd.get('shared')?1:(admin?0:1),uploadId:`${uploadBatch}-${i}`},(pct,stats)=>{const speed=stats?.bps>0?` · ${(stats.bps/1048576).toFixed(1)} MB/s${stats?.mode==='fallback'?' · modo compatível':' · direto'}`:'';btn.textContent=`${i+1}/${files.length} · ${Math.round(pct*100)}%${speed}`;const bar=progress?.querySelector('i');if(bar)bar.style.width=`${Math.round(((i+pct)/files.length)*100)}%`})}toast(`${files.length} arquivo(s) salvo(s) no Google Drive`);closeModal();openDemand(d.id)}catch(x){toast(x.message,true);form.dataset.submitting='0';btn.disabled=false;btn.textContent='Tentar novamente'}}}
 
   async function invoiceDemand(d){const due=prompt('Vencimento (AAAA-MM-DD):',new Date().toISOString().slice(0,10));if(!due)return;try{await api('invoices.from_demand',{demand_id:d.id,due_on:due,installments:1},'POST');toast('Cobrança gerada');openDemand(d.id)}catch(x){toast(x.message,true)}}
-  function closeModal(){$('#modal-root').innerHTML='';if(/\/kanban\/task\/\d+\/?$/.test(location.pathname))history.replaceState({},'',routeUrl('kanban'))}
+  function closeModal(){$('#modal-root').innerHTML='';S.openDemandId=0;S.openDemandEditing=false;if(/\/kanban\/task\/\d+\/?$/.test(location.pathname))history.replaceState({},'',routeUrl('kanban'));setTimeout(flushRealtimeDirty,30)}
   async function renderServices(){
     if(S.user.role!=='admin')throw new Error('Acesso restrito ao administrador.');
     const rows=await api('services.list');

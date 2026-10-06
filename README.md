@@ -415,3 +415,24 @@ A entrega final passa a reconstruir o link da pasta diretamente a partir da past
 A autorização Google agora registra os **scopes efetivamente presentes no access token**, em vez de somar scopes antigos ao novo token. Isso evita a interface indicar `drive.file` quando o token real não possui a permissão.
 
 Foi adicionado `bin/system-audit.php`, executado no deploy após o backup. Ele valida schema, tabelas essenciais, referências órfãs, vínculos de arquivos no Drive, contas Google, storage gravável e restos conhecidos da primeira fundação SaaS. No deploy desta versão, `--cleanup-saas` remove somente as tabelas `workspaces`, `workspace_members`, `workspace_settings` e as seis feature flags SaaS, caso ainda existam. Dados normais do TaskEsc não são removidos.
+
+
+### TaskEsc v3.27 — realtime e fundação de alta carga
+
+A v3.27 adiciona uma camada realtime sem transformar a aplicação PHP em servidor de WebSocket. O TaskEsc continua usando PHP + Nginx/PHP-FPM + MySQL como fonte de verdade, enquanto Redis e Centrifugo cuidam de estado efêmero, fan-out e conexões persistentes.
+
+As gravações relevantes geram eventos em uma **transactional outbox** (`event_outbox`). Um worker PHP independente publica esses eventos no Centrifugo somente depois de a transação do banco estar confirmada. O frontend recebe atualizações por WebSocket e mantém fallback de sincronização HTTP caso o realtime esteja indisponível.
+
+Áreas conectadas à camada realtime:
+- Kanban e cards de tasks, incluindo criação, edição, movimentação, ordenação, exclusão, arquivos, aprovações, comentários e checklist;
+- Agenda e sincronizações vindas do Google Calendar;
+- Financeiro, pagamentos, cobranças, custos e despesas;
+- Clientes, projetos, serviços, colunas, usuários e configurações compartilhadas;
+- Notificações internas, com atualização imediata do badge;
+- Dashboard e relatórios, que invalidam/atualizam somente quando um evento relacionado acontece.
+
+A infraestrutura usa canais segmentados por usuário e cliente, evitando broadcast global de conteúdo operacional. Eventos de task carregam apenas o snapshot necessário ao card do Kanban; briefing, notas internas e dados financeiros não são publicados nesse payload.
+
+O schema 20 cria a outbox e índices voltados aos fluxos de leitura mais frequentes. Redis passa a atender sessões compartilhadas, rate limiting, cache de catálogo e heartbeat do worker, com fallback seguro quando aplicável. Sessões antigas em arquivo são migradas de forma transparente para Redis no primeiro acesso.
+
+Em produção, o deploy configura o arquivo privado `/etc/taskesc-realtime.env`, mantém Redis e a API do Centrifugo somente em localhost, atualiza o namespace `app`, instala o serviço `taskesc-realtime-worker`, executa a migração, valida o heartbeat e só então conclui o health check.

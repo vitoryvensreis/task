@@ -19,6 +19,15 @@ function rejects(callable $operation,string $message): void {
 }
 
 $db=DB::conn();
+// Previous realtime tests intentionally share the same CI database in this job.
+// Reset it here so this test owns a clean schema on both MySQL and MariaDB.
+$db->exec('SET FOREIGN_KEY_CHECKS=0');
+foreach(DB::all('SHOW TABLES') as $tableRow){
+    $table=(string)array_values($tableRow)[0];
+    if(!preg_match('/\\A[A-Za-z0-9_]+\\z/D',$table)) throw new RuntimeException('Unexpected table name in CI database.');
+    $db->exec('DROP TABLE `'.$table.'`');
+}
+$db->exec('SET FOREIGN_KEY_CHECKS=1');
 $db->exec(file_get_contents(ROOT.'/database/schema.sql'));
 
 $demand=[

@@ -52,7 +52,9 @@ final class DemandRealtime
             throw new InvalidArgumentException('Invalid demand realtime identity.');
         }
 
+        $operationId = bin2hex(random_bytes(16));
         $payload = [
+            'operation_id' => $operationId,
             'demand_id' => $id,
             'client_id' => $clientId,
             'project_id' => $projectId > 0 ? $projectId : null,
@@ -75,6 +77,7 @@ final class DemandRealtime
         // Once published, demand/project channels inherit the existing HTTP ACL.
         $channels = ['kanban/global'];
         if (empty($demand['draft'])) {
+            $channels[] = 'client:'.$clientId;
             $channels[] = 'demand:'.$id;
             if ($projectId > 0) $channels[] = 'project:'.$projectId;
             foreach ($alsoProjectIds as $oldProjectId) {
@@ -86,7 +89,7 @@ final class DemandRealtime
 
         // One random operation ID identifies this committed business mutation.
         // Each channel gets its own stable event_key; worker retries reuse that row.
-        $operation = 'demand:'.$id.':'.bin2hex(random_bytes(16));
+        $operation = 'demand:'.$id.':'.$operationId;
         $ids = [];
         foreach ($channels as $channel) {
             $ids[$channel] = EventOutbox::enqueue(

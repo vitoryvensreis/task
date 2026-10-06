@@ -1,0 +1,97 @@
+name: Diagnosticar arquivos Google Drive
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: taskesc-drive-diagnostic
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    name: Diagnostico Drive antigo
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configurar SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "$VPS_PORT" -H "$VPS_HOST" >> ~/.ssh/known_hosts
+
+      - name: Verificar registros e acesso ao Drive
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
+            set -euo pipefail
+            cd "$DEPLOY_PATH"
+            php <<'PHP'
+          <?php
+          declare(strict_types=1);
+          require 'app/bootstrap.php';
+
+          echo "=== TaskEsc / Google Drive diagnostic ===\n";
+          echo "Commit VPS: ".trim((string)shell_exec('git rev-parse HEAD'))."\n";
+          echo "Schema: ".setting('schema_version','unknown')."\n\n";
+
+          $summary=DB::one("SELECT
+            COUNT(*) total,
+            SUM(storage_provider='drive') drive_total,
+            SUM(storage_provider='drive' AND (drive_file_id IS NULL OR drive_file_id='')) missing_file_id,
+            SUM(storage_provider='drive' AND (drive_account_id IS NULL OR drive_account_id=0)) missing_account_id,
+            SUM(storage_provider='drive' AND (drive_web_view_url IS NULL OR drive_web_view_url='')) missing_web_view
+            FROM files");
+          echo "Arquivos: ".json($summary)."\n\n";
+
+          $orphans=DB::one("SELECT COUNT(*) n FROM files f LEFT JOIN google_accounts g ON g.id=f.drive_account_id WHERE f.storage_provider='drive' AND f.drive_account_id IS NOT NULL AND g.id IS NULL");
+          echo "Arquivos Drive apontando para conta inexistente: ".(int)($orphans['n']??0)."\n\n";
+
+          $accounts=DB::all("SELECT g.id,g.email,g.status,g.drive_enabled,g.calendar_enabled,g.scopes,g.expires_at,g.last_error,
+            (SELECT COUNT(*) FROM files f WHERE f.storage_provider='drive' AND f.drive_account_id=g.id) file_count
+            FROM google_accounts g
+            ORDER BY g.id");
+          foreach($accounts as $a){
+            $id=(int)$a['id'];
+            echo "--- Conta #$id ".$a['email']." ---\n";
+            echo "status=".$a['status']." drive_enabled=".$a['drive_enabled']." files=".$a['file_count']." expires_at=".$a['expires_at']."\n";
+            echo "scopes=".$a['scopes']."\n";
+            if(!empty($a['last_error']))echo "last_error=".$a['last_error']."\n";
+
+            $sample=DB::one("SELECT id,drive_file_id,original_name,drive_web_view_url FROM files WHERE storage_provider='drive' AND drive_account_id=? AND drive_file_id IS NOT NULL AND drive_file_id<>'' ORDER BY id LIMIT 1",[$id]);
+            if(!$sample){echo "sample=nenhum arquivo\n\n";continue;}
+
+            try{
+              $token=Google::token($id);
+              $url='https://www.googleapis.com/drive/v3/files/'.rawurlencode((string)$sample['drive_file_id']).'?fields=id,name,mimeType,trashed';
+              $ch=curl_init($url);
+              curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>20,CURLOPT_HTTPHEADER=>['Authorization: Bearer '.$token,'Accept: application/json']]);
+              $body=curl_exec($ch);$code=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);$err=curl_error($ch);curl_close($ch);
+              $decoded=is_string($body)?(json_decode($body,true)?:[]):[];
+              $msg=$decoded['error']['message']??$err??'';
+              echo "sample_file_db_id=".$sample['id']." name=".$sample['original_name']."\n";
+              echo "drive_test_http=".$code." message=".$msg."\n";
+              echo "has_web_view=".(!empty($sample['drive_web_view_url'])?'yes':'no')."\n";
+            }catch(Throwable $e){
+              echo "token_or_test_error=".$e->getMessage()."\n";
+            }
+            echo "\n";
+          }
+
+          $groups=DB::all("SELECT COALESCE(drive_account_id,0) account_id,COUNT(*) n FROM files WHERE storage_provider='drive' GROUP BY drive_account_id ORDER BY n DESC");
+          echo "Arquivos por conta: ".json($groups)."\n";
+          PHP
+          REMOTE

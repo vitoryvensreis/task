@@ -87,19 +87,19 @@ jobs:
       - name: Gerar ZIP completo
         run: |
           set -e
-          rm -f "/tmp/taskesc-realtime-step4.zip" "taskesc-realtime-step4.zip"
-          zip -qr "/tmp/taskesc-realtime-step4.zip" . \
+          rm -f "/tmp/taskesc-realtime-step5.zip" "taskesc-realtime-step5.zip"
+          zip -qr "/tmp/taskesc-realtime-step5.zip" . \
             -x '.git/*' \
                'config/config.php' \
                'storage/sessions/*' \
                'storage/logs/*'
-          cp "/tmp/taskesc-realtime-step4.zip" "taskesc-realtime-step4.zip"
+          cp "/tmp/taskesc-realtime-step5.zip" "taskesc-realtime-step5.zip"
 
       - name: Publicar ZIP da versão
         uses: actions/upload-artifact@v4
         with:
-          name: taskesc-realtime-step4
-          path: taskesc-realtime-step4.zip
+          name: taskesc-realtime-step5
+          path: taskesc-realtime-step5.zip
           if-no-files-found: error
           retention-days: 7
 
@@ -144,6 +144,7 @@ jobs:
           php tests/outbox.php
           php tests/realtime-worker.php
           php tests/realtime-auth.php
+          php tests/realtime-business-events.php
 
   deploy:
     name: Deploy na VPS

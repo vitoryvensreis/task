@@ -13,7 +13,7 @@ with tempfile.TemporaryDirectory() as directory:
     source.write_text('CENTRIFUGO_TOKEN_HMAC_SECRET_KEY="fixture-hmac"\nCENTRIFUGO_API_KEY=fixture-api\n')
     ops.SOURCE = source
     values = ops.source_values()
-    assert values['REALTIME_ENABLED'] is False
+    assert values['REALTIME_ENABLED'] is True
     assert values['CENTRIFUGO_HMAC_SECRET'] == 'fixture-hmac'
     source.write_text(source.read_text() + 'HMAC_SECRET=conflict\n')
     try:

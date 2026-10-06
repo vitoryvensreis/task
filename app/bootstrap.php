@@ -9,7 +9,9 @@ ini_set('log_errors','1');
 ini_set('error_log',ROOT.'/storage/logs/php.log');
 if(PHP_SAPI!=='cli'){
  header('X-Content-Type-Options: nosniff'); header('Referrer-Policy: same-origin'); header('X-Frame-Options: DENY');
- header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://www.googleapis.com https://*.googleapis.com; media-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'self'");
+ $baseUrl=(string)config('base_url','');$host=(string)(parse_url($baseUrl,PHP_URL_HOST)??'');$port=parse_url($baseUrl,PHP_URL_PORT);$scheme=(string)(parse_url($baseUrl,PHP_URL_SCHEME)??'https');$wsOrigin='';
+ if($host!==''&&preg_match('/\\A[A-Za-z0-9.-]+\\z/D',$host))$wsOrigin=' '.($scheme==='http'?'ws':'wss').'://'.$host.($port?':'.(int)$port:'');
+ header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'".$wsOrigin." https://www.googleapis.com https://*.googleapis.com; media-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'self'");
  header('Cache-Control: no-store');
  if(session_status()!==PHP_SESSION_ACTIVE){
   $sessionDir=ROOT.'/storage/sessions';if(!is_dir($sessionDir))@mkdir($sessionDir,0700,true);if(is_dir($sessionDir))ini_set('session.save_path',$sessionDir);

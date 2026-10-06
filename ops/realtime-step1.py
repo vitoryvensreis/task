@@ -138,7 +138,7 @@ def source_values():
         return value
 
     return {
-        'REALTIME_ENABLED': False,
+        'REALTIME_ENABLED': True,
         'REDIS_HOST': '127.0.0.1', 'REDIS_PORT': 6379,
         'CENTRIFUGO_API_URL': 'http://127.0.0.1:8000/api',
         'CENTRIFUGO_WS_URL': 'wss://task.escotilhaprodutora.com/realtime/connection/websocket',
@@ -262,9 +262,10 @@ def fcgi_probe(identity, deploy_path):
     need(b'\r\n\r\n' in output, 'fpm_probe_no_headers')
     response = json.loads(output.split(b'\r\n\r\n', 1)[1])
     # Strict allowlist: do not forward arbitrary backend response fields.
-    result = {key: response.get(key) for key in ['status', 'enabled', 'config', 'redis', 'centrifugo']}
-    need(result['enabled'] is False, 'realtime_must_remain_disabled')
+    result = {key: response.get(key) for key in ['status', 'enabled', 'config', 'redis', 'centrifugo', 'centrifugo_version', 'centrifugo_expected']}
+    need(result['enabled'] is True, 'realtime_must_be_enabled')
     need(all(result[k] in ['ok', 'degraded', 'unavailable', 'invalid'] for k in ['status', 'config', 'redis', 'centrifugo']), 'fpm_probe_invalid_health')
+    need(result['centrifugo_expected'] == '6.9.7' and result['centrifugo_version'] == '6.9.7', 'centrifugo_version_mismatch')
     print(json.dumps({'fpm_health': result}))
     need(result['status'] == 'ok', 'realtime_health_failed')
 
@@ -282,7 +283,7 @@ def main():
         backup = provision(identity)
         print(json.dumps({'private_config': str(PRIVATE_CONFIG), 'owner': 'root:root',
                           'access': 'root rw, detected PHP-FPM user r via POSIX ACL; all other users denied',
-                          'enabled': False, 'backup': backup}))
+                          'enabled': True, 'backup': backup}))
     else:
         fcgi_probe(identity, deploy_path)
 

@@ -1,5 +1,5 @@
 {
-  "REALTIME_ENABLED": false,
+  "REALTIME_ENABLED": true,
   "REDIS_HOST": "127.0.0.1",
   "REDIS_PORT": 6379,
   "CENTRIFUGO_API_URL": "http://127.0.0.1:8000/api",

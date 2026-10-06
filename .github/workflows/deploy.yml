@@ -32,6 +32,9 @@ jobs:
           extensions: pdo_mysql, curl, openssl, fileinfo, mbstring, zip, redis
           coverage: none
 
+      - name: Vendorizar SDK oficial Centrifugo
+        run: bash bin/vendor-centrifuge-js.sh
+
       - name: Validar sintaxe PHP
         run: |
           set -e
@@ -41,7 +44,7 @@ jobs:
         run: |
           set -e
           php tests/realtime.php
-          python3 -m py_compile ops/realtime-step1.py ops/realtime-step3.py
+          python3 -m py_compile ops/realtime-step1.py ops/realtime-step3.py ops/realtime-step4.py
           python3 tests/realtime-ops.py
           rm -rf ops/__pycache__
 
@@ -51,6 +54,8 @@ jobs:
           node --check public/assets/app.js
           node --check public/assets/ux-v3.js
           node --check public/assets/taskesc-icons.js
+          node --check public/assets/realtime-client.js
+          node --check public/assets/vendor/centrifuge-5.7.4.js
           node --check public/service-worker.js
           node - <<'NODE'
           const fs=require('fs');
@@ -69,24 +74,32 @@ jobs:
             console.error('ERRO: fechamento do preview de arquivos regrediu.');
             process.exit(1);
           }
+          if(!html.includes('/assets/vendor/centrifuge-5.7.4.js') || !html.includes('/assets/realtime-client.js')){
+            console.error('ERRO: cliente realtime local não está carregado.');
+            process.exit(1);
+          }
+          if(/unpkg\.com\/centrifuge|cdn\.jsdelivr\.net.*centrifuge/i.test(html)){
+            console.error('ERRO: CDN externo de Centrifugo não permitido.');
+            process.exit(1);
+          }
           NODE
 
       - name: Gerar ZIP completo
         run: |
           set -e
-          rm -f "/tmp/taskesc-realtime-step3.zip" "taskesc-realtime-step3.zip"
-          zip -qr "/tmp/taskesc-realtime-step3.zip" . \
+          rm -f "/tmp/taskesc-realtime-step4.zip" "taskesc-realtime-step4.zip"
+          zip -qr "/tmp/taskesc-realtime-step4.zip" . \
             -x '.git/*' \
                'config/config.php' \
                'storage/sessions/*' \
                'storage/logs/*'
-          cp "/tmp/taskesc-realtime-step3.zip" "taskesc-realtime-step3.zip"
+          cp "/tmp/taskesc-realtime-step4.zip" "taskesc-realtime-step4.zip"
 
       - name: Publicar ZIP da versão
         uses: actions/upload-artifact@v4
         with:
-          name: taskesc-realtime-step3
-          path: taskesc-realtime-step3.zip
+          name: taskesc-realtime-step4
+          path: taskesc-realtime-step4.zip
           if-no-files-found: error
           retention-days: 7
 
@@ -130,6 +143,7 @@ jobs:
         run: |
           php tests/outbox.php
           php tests/realtime-worker.php
+          php tests/realtime-auth.php
 
   deploy:
     name: Deploy na VPS
@@ -142,6 +156,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Preparar SDK oficial Centrifugo local
+        run: bash bin/vendor-centrifuge-js.sh
 
       - name: Configurar acesso SSH
         env:
@@ -363,6 +380,18 @@ jobs:
             echo "Deploy concluído."
           REMOTE
 
+      - name: Instalar SDK oficial Centrifugo local
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "mkdir -p '$DEPLOY_PATH/public/assets/vendor'"
+          scp -P "$VPS_PORT"             public/assets/vendor/centrifuge-5.7.4.js             public/assets/vendor/centrifuge-5.7.4.sha256             public/assets/vendor/centrifuge-js.LICENSE             "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/public/assets/vendor/"
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "cd '$DEPLOY_PATH/public/assets/vendor' && sha256sum -c centrifuge-5.7.4.sha256 && test -s centrifuge-js.LICENSE"
+
       - name: Aplicar somente migração Outbox (schema 21)
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
@@ -471,6 +500,24 @@ jobs:
               python3 "$DEPLOY_PATH/ops/realtime-step1.py" check --deploy-path "$DEPLOY_PATH"
             else
               sudo -n python3 "$DEPLOY_PATH/ops/realtime-step1.py" check --deploy-path "$DEPLOY_PATH"
+            fi
+          REMOTE
+
+      - name: Smoke login token WebSocket autenticado (Passo 4)
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          printf -v REMOTE_COMMAND 'DEPLOY_PATH=%q bash -s' "$DEPLOY_PATH"
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "$REMOTE_COMMAND" <<'REMOTE'
+            set -euo pipefail
+            if [ "$(id -u)" -eq 0 ]; then
+              python3 "$DEPLOY_PATH/ops/realtime-step4.py" smoke --deploy-path "$DEPLOY_PATH"
+            else
+              sudo -n python3 "$DEPLOY_PATH/ops/realtime-step4.py" smoke --deploy-path "$DEPLOY_PATH"
             fi
           REMOTE
 

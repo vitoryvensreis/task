@@ -425,3 +425,12 @@ Foi adicionado `bin/system-audit.php`, executado no deploy após o backup. Ele v
 O Passo 3 adiciona o worker CLI `bin/realtime-worker.php` para consumir `event_outbox` em lotes pequenos e publicar no Centrifugo pela API HTTP local. O worker usa lock MySQL por evento, `event_key` como `idempotency_key`, retry com backoff exponencial, limite de 8 tentativas, heartbeat e health sem expor API key/HMAC.
 
 O deploy instala e habilita `taskesc-realtime-worker.service` com restart automático, executa um evento de diagnóstico real e valida serviço, heartbeat, Centrifugo e fila. A configuração sensível continua exclusivamente em `/etc/taskesc/realtime.json`. Nenhuma integração WebSocket/frontend é ativada neste passo. Consulte `docs/realtime-step3.md`.
+
+
+## Realtime — Passo 4
+
+O Passo 4 habilita a autenticação segura navegador → Centrifugo para usuários já autenticados no TaskEsc. O endpoint `/realtime.auth` usa somente a identidade da sessão, exige CSRF/same-origin e emite JWTs HS256 de conexão e de assinatura compatíveis com Centrifugo 6.9.7.
+
+Canais preparados: `user:{id}`, `demand:{id}`, `project:{id}` e `kanban/global`, sempre reutilizando as regras atuais de admin/equipe/cliente/preview do TaskEsc. O cliente oficial `centrifuge-js 5.7.4` é vendorado localmente no build/deploy, sem CDN em runtime. Falhas realtime não interrompem a aplicação HTTP e nenhum card do Kanban é alterado neste passo.
+
+O deploy executa um smoke real de login → connection JWT → subscription JWT → handshake WSS, além de confirmar que assinatura sem token, canal não autorizado e reutilização do token em outro canal são negados. Consulte `docs/realtime-step4.md`.

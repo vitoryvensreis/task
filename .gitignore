@@ -24,3 +24,8 @@ client_secret*.json
 .idea/
 .DS_Store
 Thumbs.db
+
+# SDK oficial Centrifugo vendorado no build/deploy
+/public/assets/vendor/centrifuge-*.js
+/public/assets/vendor/centrifuge-*.sha256
+/public/assets/vendor/centrifuge-js.LICENSE

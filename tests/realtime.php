@@ -35,6 +35,21 @@ try {
     $values['REALTIME_ENABLED'] = true;
     file_put_contents($path, json_encode($values));
     $unavailable = new Realtime($path);
+    $token = $unavailable->connectionToken(42, 1700000000);
+    $parts = explode('.', $token);
+    check(count($parts) === 3, 'Connection JWT must have three segments');
+    $decode = static function(string $value): array {
+        $value = strtr($value, '-_', '+/');
+        $value .= str_repeat('=', (4 - strlen($value) % 4) % 4);
+        return json_decode((string)base64_decode($value, true), true, 8, JSON_THROW_ON_ERROR);
+    };
+    $header = $decode($parts[0]); $claims = $decode($parts[1]);
+    check(($header['alg'] ?? null) === 'HS256' && ($claims['sub'] ?? null) === '42', 'Connection JWT must use HS256 and string sub');
+    check(($claims['iat'] ?? null) === 1700000000 && ($claims['exp'] ?? null) === 1700000300, 'Connection JWT TTL must be 300 seconds');
+    $sub = $unavailable->subscriptionToken(42, 'user:42', 1700000000);
+    $subParts = explode('.', $sub); $subClaims = $decode($subParts[1]);
+    check(($subClaims['sub'] ?? null) === '42' && ($subClaims['channel'] ?? null) === 'user:42', 'Subscription JWT must bind exact channel');
+    check(hash_equals(hash_hmac('sha256', $parts[0].'.'.$parts[1], $secret, true), (function(string $v): string {$v=strtr($v,'-_','+/');$v.=str_repeat('=',(4-strlen($v)%4)%4);return (string)base64_decode($v,true);})($parts[2])), 'Connection JWT signature must use private HMAC secret');
     $start = microtime(true);
     check($unavailable->redis() === null, 'Unavailable Redis must fail open for the application');
     $health = $unavailable->health();

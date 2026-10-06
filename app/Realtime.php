@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-/** Optional backend infrastructure. Never loaded by ordinary requests in step 1. */
+/** Optional realtime backend infrastructure backed by private VPS configuration. */
 final class Realtime implements JsonSerializable
 {
     public const PRIVATE_CONFIG = '/etc/taskesc/realtime.json';
@@ -54,6 +54,7 @@ final class Realtime implements JsonSerializable
     public function apiUrl(): string { return $this->values['CENTRIFUGO_API_URL'] ?? 'http://127.0.0.1:8000/api'; }
     public function websocketUrl(): string { return $this->values['CENTRIFUGO_WS_URL'] ?? ''; }
     public function hmacKey(): ?string { return $this->values['CENTRIFUGO_HMAC_SECRET'] ?? null; }
+    public function apiKey(): ?string { return $this->values['CENTRIFUGO_API_KEY'] ?? null; }
 
     /** Returns null on any failure; no persistent connection or session change. */
     public function redis(): ?Redis

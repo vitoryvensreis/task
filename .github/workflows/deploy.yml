@@ -41,7 +41,7 @@ jobs:
         run: |
           set -e
           php tests/realtime.php
-          python3 -m py_compile ops/realtime-step1.py
+          python3 -m py_compile ops/realtime-step1.py ops/realtime-step3.py
           python3 tests/realtime-ops.py
           rm -rf ops/__pycache__
 
@@ -74,19 +74,19 @@ jobs:
       - name: Gerar ZIP completo
         run: |
           set -e
-          rm -f "/tmp/taskesc-realtime-step2.zip" "taskesc-realtime-step2.zip"
-          zip -qr "/tmp/taskesc-realtime-step2.zip" . \
+          rm -f "/tmp/taskesc-realtime-step3.zip" "taskesc-realtime-step3.zip"
+          zip -qr "/tmp/taskesc-realtime-step3.zip" . \
             -x '.git/*' \
                'config/config.php' \
                'storage/sessions/*' \
                'storage/logs/*'
-          cp "/tmp/taskesc-realtime-step2.zip" "taskesc-realtime-step2.zip"
+          cp "/tmp/taskesc-realtime-step3.zip" "taskesc-realtime-step3.zip"
 
       - name: Publicar ZIP da versão
         uses: actions/upload-artifact@v4
         with:
-          name: taskesc-realtime-step2
-          path: taskesc-realtime-step2.zip
+          name: taskesc-realtime-step3
+          path: taskesc-realtime-step3.zip
           if-no-files-found: error
           retention-days: 7
 
@@ -122,12 +122,14 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
-          extensions: pdo_mysql
+          extensions: pdo_mysql, curl
           coverage: none
       - name: Testar migração e transações Outbox
         env:
           OUTBOX_TEST_PORT: ${{ job.services.database.ports['3306'] }}
-        run: php tests/outbox.php
+        run: |
+          php tests/outbox.php
+          php tests/realtime-worker.php
 
   deploy:
     name: Deploy na VPS
@@ -398,6 +400,60 @@ jobs:
               echo json_encode(["audit"=>["ok"=>$r["ok"],"schema"=>$r["schema"],"critical_count"=>count($r["critical"]),"warning_count"=>count($r["warnings"]),"warning_keys"=>array_column($r["warnings"],"key"),"cleanup_saas"=>$r["cleanup_saas"],"offline"=>$r["offline"]]],JSON_UNESCAPED_SLASHES).PHP_EOL;
             ' "$AUDIT_FILE"
             exit "$AUDIT_EXIT"
+          REMOTE
+
+      - name: Instalar worker realtime (Passo 3)
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          printf -v REMOTE_COMMAND 'DEPLOY_PATH=%q bash -s' "$DEPLOY_PATH"
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "$REMOTE_COMMAND" <<'REMOTE'
+            set -euo pipefail
+            if [ "$(id -u)" -eq 0 ]; then
+              python3 "$DEPLOY_PATH/ops/realtime-step3.py" install --deploy-path "$DEPLOY_PATH"
+            else
+              sudo -n python3 "$DEPLOY_PATH/ops/realtime-step3.py" install --deploy-path "$DEPLOY_PATH"
+            fi
+          REMOTE
+
+      - name: Testar publicação diagnóstica no Centrifugo
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          printf -v REMOTE_COMMAND 'DEPLOY_PATH=%q bash -s' "$DEPLOY_PATH"
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "$REMOTE_COMMAND" <<'REMOTE'
+            set -euo pipefail
+            if [ "$(id -u)" -eq 0 ]; then
+              python3 "$DEPLOY_PATH/ops/realtime-step3.py" diagnostic --deploy-path "$DEPLOY_PATH"
+            else
+              sudo -n python3 "$DEPLOY_PATH/ops/realtime-step3.py" diagnostic --deploy-path "$DEPLOY_PATH"
+            fi
+          REMOTE
+
+      - name: Health do worker realtime
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          printf -v REMOTE_COMMAND 'DEPLOY_PATH=%q bash -s' "$DEPLOY_PATH"
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "$REMOTE_COMMAND" <<'REMOTE'
+            set -euo pipefail
+            if [ "$(id -u)" -eq 0 ]; then
+              python3 "$DEPLOY_PATH/ops/realtime-step3.py" check --deploy-path "$DEPLOY_PATH"
+            else
+              sudo -n python3 "$DEPLOY_PATH/ops/realtime-step3.py" check --deploy-path "$DEPLOY_PATH"
+            fi
           REMOTE
 
       - name: Health realtime interno pelo PHP-FPM

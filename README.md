@@ -418,3 +418,10 @@ A entrega final passa a reconstruir o link da pasta diretamente a partir da past
 A autorização Google agora registra os **scopes efetivamente presentes no access token**, em vez de somar scopes antigos ao novo token. Isso evita a interface indicar `drive.file` quando o token real não possui a permissão.
 
 Foi adicionado `bin/system-audit.php`, executado no deploy após o backup. Ele valida schema, tabelas essenciais, referências órfãs, vínculos de arquivos no Drive, contas Google, storage gravável e restos conhecidos da primeira fundação SaaS. No deploy desta versão, `--cleanup-saas` remove somente as tabelas `workspaces`, `workspace_members`, `workspace_settings` e as seis feature flags SaaS, caso ainda existam. Dados normais do TaskEsc não são removidos.
+
+
+## Realtime — Passo 3
+
+O Passo 3 adiciona o worker CLI `bin/realtime-worker.php` para consumir `event_outbox` em lotes pequenos e publicar no Centrifugo pela API HTTP local. O worker usa lock MySQL por evento, `event_key` como `idempotency_key`, retry com backoff exponencial, limite de 8 tentativas, heartbeat e health sem expor API key/HMAC.
+
+O deploy instala e habilita `taskesc-realtime-worker.service` com restart automático, executa um evento de diagnóstico real e valida serviço, heartbeat, Centrifugo e fila. A configuração sensível continua exclusivamente em `/etc/taskesc/realtime.json`. Nenhuma integração WebSocket/frontend é ativada neste passo. Consulte `docs/realtime-step3.md`.

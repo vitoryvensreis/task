@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-/** MySQL-only infrastructure. No publishers, frontend hooks or background jobs. */
+/** MySQL outbox infrastructure shared by business transactions and the realtime worker. */
 final class EventOutbox
 {
     private static int $savepoint = 0;
@@ -76,6 +76,54 @@ final class EventOutbox
         return $q->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /** Due worker rows, excluding events which reached the retry limit. */
+    public static function due(int $limit = 20, int $maxAttempts = 8): array
+    {
+        if ($limit < 1 || $limit > 100 || $maxAttempts < 1 || $maxAttempts > 100) throw new InvalidArgumentException('Invalid worker batch parameters.');
+        $q = DB::conn()->prepare('SELECT * FROM event_outbox WHERE published_at IS NULL AND attempts<? AND available_at<=? ORDER BY available_at,id LIMIT '.$limit);
+        $q->execute([$maxAttempts, self::utc()]);
+        return $q->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Re-read after acquiring the named lock so stale selections cannot be published. */
+    public static function processable(int $id, int $maxAttempts = 8): ?array
+    {
+        if ($id < 1 || $maxAttempts < 1 || $maxAttempts > 100) throw new InvalidArgumentException('Invalid worker event parameters.');
+        $q = DB::conn()->prepare('SELECT * FROM event_outbox WHERE id=? AND published_at IS NULL AND attempts<? AND available_at<=? LIMIT 1');
+        $q->execute([$id, $maxAttempts, self::utc()]);
+        $row = $q->fetch(PDO::FETCH_ASSOC);
+        return $row === false ? null : $row;
+    }
+
+    /** Session-scoped MySQL lock; released automatically if the worker connection dies. */
+    public static function withLock(int $id, callable $operation): mixed
+    {
+        if ($id < 1) throw new InvalidArgumentException('Invalid outbox lock ID.');
+        $db = DB::conn();
+        $name = 'taskesc:outbox:'.$id;
+        $q = $db->prepare('SELECT GET_LOCK(?,0)');
+        $q->execute([$name]);
+        if ((int)$q->fetchColumn() !== 1) return null;
+        try {
+            return $operation();
+        } finally {
+            try {
+                $q = $db->prepare('SELECT RELEASE_LOCK(?)');
+                $q->execute([$name]);
+            } catch (Throwable) {}
+        }
+    }
+
+    /** Compare-and-swap success marker. */
+    public static function markPublished(int $id, int $expectedAttempts): bool
+    {
+        $db = self::transactionConnection();
+        if ($id < 1 || $expectedAttempts < 0 || $expectedAttempts >= 4294967295) throw new InvalidArgumentException('Invalid outbox publish parameters.');
+        $q = $db->prepare('UPDATE event_outbox SET published_at=?,last_error=NULL WHERE id=? AND attempts=? AND published_at IS NULL');
+        $q->execute([self::utc(), $id, $expectedAttempts]);
+        return $q->rowCount() === 1;
+    }
+
     /** Compare-and-swap: the same failure cannot increment attempts twice. */
     public static function retry(int $id, int $expectedAttempts, string $errorCode, int $delaySeconds = 30): bool
     {
@@ -87,6 +135,28 @@ final class EventOutbox
         $q = $db->prepare('UPDATE event_outbox SET attempts=attempts+1,last_error=?,available_at=? WHERE id=? AND attempts=? AND published_at IS NULL');
         $q->execute([$errorCode, $available, $id, $expectedAttempts]);
         return $q->rowCount() === 1;
+    }
+
+    public static function stats(int $maxAttempts = 8): array
+    {
+        if ($maxAttempts < 1 || $maxAttempts > 100) throw new InvalidArgumentException('Invalid retry limit.');
+        $now = self::utc();
+        $row = DB::one('SELECT
+            COUNT(*) AS total,
+            SUM(published_at IS NULL) AS unpublished,
+            SUM(published_at IS NOT NULL) AS published,
+            SUM(published_at IS NULL AND attempts<? AND available_at<=?) AS due,
+            SUM(published_at IS NULL AND attempts>=?) AS exhausted,
+            MIN(CASE WHEN published_at IS NULL THEN created_at ELSE NULL END) AS oldest_unpublished_at
+            FROM event_outbox', [$maxAttempts, $now, $maxAttempts]) ?? [];
+        return [
+            'total' => (int)($row['total'] ?? 0),
+            'unpublished' => (int)($row['unpublished'] ?? 0),
+            'published' => (int)($row['published'] ?? 0),
+            'due' => (int)($row['due'] ?? 0),
+            'exhausted' => (int)($row['exhausted'] ?? 0),
+            'oldest_unpublished_at' => $row['oldest_unpublished_at'] ?? null,
+        ];
     }
 
     private static function transactionConnection(): PDO

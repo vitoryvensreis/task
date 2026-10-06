@@ -81,6 +81,16 @@ def smoke(identity, deploy_path):
     env = os.environ.copy()
     env['TASKESC_REALTIME_SMOKE'] = '1'
     probe = run_as(identity, [php, str(script)], env=env)
+    if probe.returncode != 0:
+        try:
+            failure = parse_last_json(probe.stderr)
+            code = failure.get('code')
+            if isinstance(code, str) and re.fullmatch(r'[a-z0-9_]+', code):
+                raise RuntimeError(code)
+        except RuntimeError as error:
+            if str(error) not in ('realtime_smoke_empty', 'realtime_smoke_invalid'):
+                raise
+        raise RuntimeError('realtime_smoke_failed')
     data = parse_last_json(probe.stdout)
     safe = {
         'status': data.get('status'),

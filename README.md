@@ -405,3 +405,18 @@ A Agenda abre em **Dia** na primeira entrada pelo smartphone. A visualização s
 
 No desktop, a interface recebe largura máxima de leitura, tipografia e controles ligeiramente maiores, melhor densidade dos painéis, login mais confortável e alvos de interação mais consistentes. Estados de foco visível, suporte a `prefers-reduced-motion` e áreas de toque maiores reforçam acessibilidade.
 \n
+
+## TaskEsc 4.0.0 — SaaS Foundation
+
+A fundação multi-tenant foi introduzida de forma **somente aditiva**, mantendo o comportamento atual do TaskEsc enquanto as flags SaaS permanecem desligadas.
+
+- Schema 20 cria `workspaces`, `workspace_members` e `workspace_settings`.
+- O Workspace #1 é `Escotilha Produtora` (`escotilha`).
+- Todos os usuários existentes são vinculados automaticamente ao Workspace #1; o primeiro administrador vira `owner`, os demais administradores permanecem `admin`, Equipe vira `staff` e Cliente permanece `client`.
+- `users.role` continua intacto para compatibilidade e rollback.
+- As feature flags `saas_enabled`, `workspace_context_enabled`, `workspace_permissions_enabled`, `workspace_settings_enabled`, `signup_enabled` e `billing_enabled` começam em `0`.
+- `workspace_settings` já possui helper com fallback para a tabela global `settings`; nenhuma configuração foi migrada ou removida nesta etapa.
+- O CI rejeita migrations SaaS (>=20) contendo operações destrutivas como DROP, TRUNCATE, RENAME, CHANGE/MODIFY COLUMN ou DELETE.
+- Em Configurações do Admin, o painel mostra versão da aplicação, schema, commit implantado, Workspace base e estado das flags.
+- `/health` valida PHP, MySQL, schema esperado, leitura básica, instalação e leitura/escrita em `storage/`.
+

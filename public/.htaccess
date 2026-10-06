@@ -7,6 +7,7 @@ RewriteEngine On
 RewriteRule ^\.well-known/oauth-protected-resource$ .well-known/oauth-protected-resource.php [L]
 RewriteRule ^\. - [F,L]
 RewriteRule ^api/v1(?:/.*)?$ api-v1.php [L,QSA]
+RewriteRule ^health/?$ health.php [L,QSA]
 
 # Rotas amigáveis do painel. Arquivos e endpoints físicos continuam sendo servidos normalmente.
 RewriteCond %{REQUEST_FILENAME} !-f

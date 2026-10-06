@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 define('ROOT', dirname(__DIR__));
+define('TASKESC_VERSION','4.0.0');
+define('TASKESC_SCHEMA_VERSION',20);
 spl_autoload_register(function(string $name): void { $file=__DIR__.'/'.str_replace('\\','/',$name).'.php'; if(is_file($file)) require $file; });
 function config(?string $key=null, mixed $default=null): mixed { static $c; if($c===null) $c=is_file(ROOT.'/config/config.php')?require ROOT.'/config/config.php':[]; return $key===null?$c:($c[$key]??$default); }
 date_default_timezone_set('UTC');

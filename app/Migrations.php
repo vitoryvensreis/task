@@ -260,6 +260,17 @@ final class Migrations {
    DB::run("INSERT INTO settings (`key`,value) VALUES ('upload_mb','0') ON DUPLICATE KEY UPDATE value='0'");
    DB::run("INSERT INTO settings (`key`,value) VALUES ('schema_version','19') ON DUPLICATE KEY UPDATE value='19'");$version=19;
   }
+  // SAAS_ADDITIVE_MIGRATIONS_START
+  if($version<20){
+   DB::run("CREATE TABLE IF NOT EXISTS workspaces (id INT AUTO_INCREMENT PRIMARY KEY,name VARCHAR(190) NOT NULL,slug VARCHAR(120) NOT NULL,status VARCHAR(20) NOT NULL DEFAULT 'active',created_at DATETIME NOT NULL,updated_at DATETIME NOT NULL,UNIQUE KEY uq_workspaces_slug(slug),KEY idx_workspaces_status(status)) ENGINE=InnoDB");
+   DB::run("CREATE TABLE IF NOT EXISTS workspace_members (id BIGINT AUTO_INCREMENT PRIMARY KEY,workspace_id INT NOT NULL,user_id INT NOT NULL,role VARCHAR(20) NOT NULL DEFAULT 'client',active TINYINT NOT NULL DEFAULT 1,created_at DATETIME NOT NULL,UNIQUE KEY uq_workspace_members_workspace_user(workspace_id,user_id),KEY idx_workspace_members_user(user_id,active),KEY idx_workspace_members_workspace(workspace_id,active),FOREIGN KEY(workspace_id) REFERENCES workspaces(id),FOREIGN KEY(user_id) REFERENCES users(id)) ENGINE=InnoDB");
+   DB::run("CREATE TABLE IF NOT EXISTS workspace_settings (workspace_id INT NOT NULL,`key` VARCHAR(120) NOT NULL,value LONGTEXT NOT NULL,updated_at DATETIME NOT NULL,PRIMARY KEY(workspace_id,`key`),FOREIGN KEY(workspace_id) REFERENCES workspaces(id)) ENGINE=InnoDB");
+   DB::run("INSERT INTO workspaces (id,name,slug,status,created_at,updated_at) VALUES (1,'Escotilha Produtora','escotilha','active',UTC_TIMESTAMP(),UTC_TIMESTAMP()) ON DUPLICATE KEY UPDATE name=VALUES(name),status='active',updated_at=VALUES(updated_at)");
+   DB::run("INSERT INTO workspace_members (workspace_id,user_id,role,active,created_at) SELECT 1,u.id,CASE WHEN u.role='admin' THEN 'admin' WHEN u.role='staff' THEN 'staff' ELSE 'client' END,u.active,COALESCE(u.created_at,UTC_TIMESTAMP()) FROM users u ON DUPLICATE KEY UPDATE role=VALUES(role),active=VALUES(active)");
+   DB::run("UPDATE workspace_members wm JOIN (SELECT COALESCE((SELECT MIN(id) FROM users WHERE role='admin'),MIN(id)) AS owner_id FROM users) seed ON seed.owner_id=wm.user_id SET wm.role='owner' WHERE wm.workspace_id=1");
+   foreach(['saas_enabled','workspace_context_enabled','workspace_permissions_enabled','workspace_settings_enabled','signup_enabled','billing_enabled'] as $flag)DB::run("INSERT INTO settings (`key`,value) VALUES (?,'0') ON DUPLICATE KEY UPDATE value=value",[$flag]);
+   DB::run("INSERT INTO settings (`key`,value) VALUES ('schema_version','20') ON DUPLICATE KEY UPDATE value='20'");$version=20;
+  }
  }
  private static function hasColumn(string $table,string $column): bool {return (bool)DB::one('SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?',[$table,$column]);}
  private static function column(string $table,string $column,string $sql): void {if(!self::hasColumn($table,$column))DB::run($sql);}

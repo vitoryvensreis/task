@@ -37,6 +37,11 @@ jobs:
           set -e
           find app bin public -type f -name '*.php' -print0 | xargs -0 -n1 php -l
 
+      - name: Garantir migrations SaaS somente aditivas
+        run: |
+          set -e
+          php bin/check-saas-migrations.php
+
       - name: Validar JavaScript
         run: |
           set -e
@@ -61,19 +66,19 @@ jobs:
       - name: Gerar ZIP completo
         run: |
           set -e
-          rm -f "/tmp/taskesc-v3.25.zip" "taskesc-v3.25.zip"
-          zip -qr "/tmp/taskesc-v3.25.zip" . \
+          rm -f "/tmp/taskesc-v4.0.0.zip" "taskesc-v4.0.0.zip"
+          zip -qr "/tmp/taskesc-v4.0.0.zip" . \
             -x '.git/*' \
                'config/config.php' \
                'storage/sessions/*' \
                'storage/logs/*'
-          cp "/tmp/taskesc-v3.25.zip" "taskesc-v3.25.zip"
+          cp "/tmp/taskesc-v4.0.0.zip" "taskesc-v4.0.0.zip"
 
       - name: Publicar ZIP da versão
         uses: actions/upload-artifact@v4
         with:
-          name: taskesc-v3.25
-          path: taskesc-v3.25.zip
+          name: taskesc-v4.0.0
+          path: taskesc-v4.0.0.zip
           if-no-files-found: error
           retention-days: 7
 
@@ -268,6 +273,15 @@ jobs:
             php -l public/api.php
             php -l public/health.php
 
+            echo "Executando migrations aditivas..."
+            php -r 'require "app/bootstrap.php"; Migrations::run(); $schema=(int)setting("schema_version","0"); if($schema<TASKESC_SCHEMA_VERSION){fwrite(STDERR,"Schema abaixo do esperado: ".$schema." < ".TASKESC_SCHEMA_VERSION.PHP_EOL); exit(1);} echo "Schema ".$schema." OK".PHP_EOL;'
+
+            COMMIT="$(git rev-parse HEAD)"
+            DEPLOYED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            mkdir -p storage
+            printf '{"version":"4.0.0","commit":"%s","deployed_at":"%s"}\n' "$COMMIT" "$DEPLOYED_AT" > storage/release.json
+            chmod 600 storage/release.json
+
             echo "Deploy concluído."
           REMOTE
 
@@ -281,7 +295,7 @@ jobs:
           set -euo pipefail
           ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
             set -euo pipefail
-            HEALTH_URL="$(php -r '$c=require $argv[1]; echo rtrim((string)($c["base_url"]??""),"/")."/health.php";' "$DEPLOY_PATH/config/config.php")"
+            HEALTH_URL="$(php -r '$c=require $argv[1]; echo rtrim((string)($c["base_url"]??""),"/")."/health";' "$DEPLOY_PATH/config/config.php")"
             [ -n "$HEALTH_URL" ] || { echo "ERRO: health URL vazia."; exit 1; }
 
             for attempt in 1 2 3 4 5; do

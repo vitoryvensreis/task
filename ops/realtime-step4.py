@@ -72,7 +72,7 @@ def smoke(identity, deploy_path):
     need(Path(centrifugo).is_file(), 'centrifugo_binary_missing')
     version_probe = subprocess.run([centrifugo, 'version'], capture_output=True, text=True, timeout=10)
     version_text = (version_probe.stdout + '\n' + version_probe.stderr).strip()
-    need(version_probe.returncode == 0 and re.search(r'(?<![0-9])v?6\\.9\\.7(?![0-9])', version_text) is not None,
+    need(version_probe.returncode == 0 and re.search(r'(?<![0-9])v?6\.9\.7(?![0-9])', version_text) is not None,
          'centrifugo_binary_version_mismatch')
     php = subprocess.run(['bash', '-lc', 'command -v php'], capture_output=True, text=True, timeout=5).stdout.strip()
     need(php, 'php_cli_missing')

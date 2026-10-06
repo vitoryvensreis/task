@@ -140,9 +140,15 @@ final class Google {
  }
 
  public static function finalDeliveryShareLink(array $d): ?string {
-  $root=self::ensureDemandFolder($d);$folder=self::findDemandFinalFolder((int)$root['account_id'],(string)$root['folder_id']);if(!$folder||empty($folder['id']))return null;
-  try{return self::ensurePublicFolderShare((int)$root['account_id'],(string)$folder['id']);}
-  catch(Throwable $e){error_log('TaskEsc final share link: '.$e->getMessage());return null;}
+  try{
+   $root=self::ensureDemandFolder($d);
+   $folder=self::findDemandFinalFolder((int)$root['account_id'],(string)$root['folder_id']);
+   if(!$folder||empty($folder['id']))return null;
+   return self::ensurePublicFolderShare((int)$root['account_id'],(string)$folder['id']);
+  }catch(Throwable $e){
+   error_log('TaskEsc final share link: '.$e->getMessage());
+   return null;
+  }
  }
 
  public static function startDriveUpload(int $account,string $name,string $mime,int $size,string $folderId): string {

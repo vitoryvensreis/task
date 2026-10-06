@@ -1,0 +1,224 @@
+name: Executar rollback TaskEsc pre-SaaS
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Digite EXECUTAR-ROLLBACK-PRE-SAAS'
+        required: true
+        type: string
+
+concurrency:
+  group: taskesc-production
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    name: Rollback v3.25 + Schema 19
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Confirmar rollback
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = "EXECUTAR-ROLLBACK-PRE-SAAS" || {
+            echo "Confirmacao invalida. Digite exatamente EXECUTAR-ROLLBACK-PRE-SAAS"
+            exit 1
+          }
+
+      - name: Baixar repositorio
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "$VPS_PORT" -H "$VPS_HOST" >> ~/.ssh/known_hosts
+
+      - name: Backup final antes da alteracao
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          mkdir -p rollback-final-backup
+
+          RESULT="$(ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
+            set -euo pipefail
+            cd "$DEPLOY_PATH"
+            TS="$(date -u +%Y%m%dT%H%M%SZ)"
+            PROD_COMMIT="$(git rev-parse HEAD)"
+            PROD_SHORT="$(git rev-parse --short=12 HEAD)"
+            BACKUP_DIR="$DEPLOY_PATH/storage/backups"
+            mkdir -p "$BACKUP_DIR"
+            FILE="$BACKUP_DIR/taskesc-final-pre-rollback-${TS}-${PROD_SHORT}.sql.gz"
+            SHA="$FILE.sha256"
+
+            CNF="$(mktemp)"
+            DBNAME="$(mktemp)"
+            HELPER="$(mktemp --suffix=.php)"
+            trap 'rm -f "$CNF" "$DBNAME" "$HELPER"' EXIT
+
+            cat > "$HELPER" <<'PHP'
+          <?php
+          $c=require $argv[1];$d=$c['db']??[];
+          $q=function($v){$v=str_replace(["\\","\"","\n","\r"],["\\\\","\\\"","\\n","\\r"],(string)$v);return "\"".$v."\"";};
+          file_put_contents($argv[2],"[client]\n"."host=".$q($d['host']??'localhost')."\n"."port=".(int)($d['port']??3306)."\n"."user=".$q($d['user']??'')."\n"."password=".$q($d['password']??'')."\n");
+          file_put_contents($argv[3],(string)($d['name']??''));
+          PHP
+
+            php "$HELPER" "$DEPLOY_PATH/config/config.php" "$CNF" "$DBNAME"
+            chmod 600 "$CNF"
+            DUMP_BIN="$(command -v mysqldump || command -v mariadb-dump)"
+            "$DUMP_BIN" --defaults-extra-file="$CNF" --no-tablespaces --single-transaction --quick --routines --triggers --events --hex-blob --default-character-set=utf8mb4 "$(cat "$DBNAME")" | gzip -9 > "$FILE"
+            gzip -t "$FILE"
+            [ -s "$FILE" ]
+            (cd "$BACKUP_DIR" && sha256sum "$(basename "$FILE")" > "$(basename "$SHA")")
+            printf '%s|%s|%s\n' "$FILE" "$SHA" "$PROD_COMMIT"
+          REMOTE
+          )"
+
+          IFS='|' read -r REMOTE_FILE REMOTE_SHA PROD_COMMIT <<< "$RESULT"
+          scp -P "$VPS_PORT" "$VPS_USER@$VPS_HOST:$REMOTE_FILE" rollback-final-backup/
+          scp -P "$VPS_PORT" "$VPS_USER@$VPS_HOST:$REMOTE_SHA" rollback-final-backup/
+          (cd rollback-final-backup && sha256sum -c *.sql.gz.sha256)
+          printf 'Commit antes do rollback: %s\n' "$PROD_COMMIT" > rollback-final-backup/manifest.txt
+
+      - name: Guardar backup final fora da VPS
+        uses: actions/upload-artifact@v4
+        with:
+          name: taskesc-final-pre-rollback-${{ github.run_id }}
+          path: rollback-final-backup/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Restaurar producao para v3.25
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          TARGET_COMMIT: 7201c9b8628e4657e20ca04024e8c3bc8db92a30
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "DEPLOY_PATH='$DEPLOY_PATH' TARGET_COMMIT='$TARGET_COMMIT' bash -s" <<'REMOTE'
+            set -euo pipefail
+            cd "$DEPLOY_PATH"
+
+            git fetch origin --prune
+            git cat-file -e "$TARGET_COMMIT^{commit}"
+
+            echo "Restaurando codigo TaskEsc v3.25..."
+            git reset --hard "$TARGET_COMMIT"
+
+            echo "Desativando a fundacao SaaS no banco, sem apagar dados..."
+            php -r '
+              $c=require $argv[1];$d=$c["db"]??[];
+              $pdo=new PDO(
+                "mysql:host=".($d["host"]??"localhost").";port=".($d["port"]??3306).";dbname=".$d["name"].";charset=utf8mb4",
+                $d["user"]??"",
+                $d["password"]??"",
+                [PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]
+              );
+              $flags=["saas_enabled","workspace_context_enabled","workspace_permissions_enabled","workspace_settings_enabled","signup_enabled","billing_enabled"];
+              $q=$pdo->prepare("UPDATE settings SET value=\"0\" WHERE `key`=?");
+              foreach($flags as $flag){$q->execute([$flag]);}
+              $pdo->exec("INSERT INTO settings (`key`,value) VALUES (\"schema_version\",\"19\") ON DUPLICATE KEY UPDATE value=\"19\"");
+            ' "$DEPLOY_PATH/config/config.php"
+
+            rm -f storage/release.json
+
+            echo "Validando codigo..."
+            php -l app/bootstrap.php
+            php -l public/index.php
+            php -l public/api.php
+            php -l public/health.php
+            node --check public/assets/app.js
+            node --check public/service-worker.js
+
+            echo "Validando banco e health..."
+            php -r '
+              $c=require $argv[1];$d=$c["db"]??[];
+              $pdo=new PDO(
+                "mysql:host=".($d["host"]??"localhost").";port=".($d["port"]??3306).";dbname=".$d["name"].";charset=utf8mb4",
+                $d["user"]??"",
+                $d["password"]??"",
+                [PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]
+              );
+              $schema=(string)$pdo->query("SELECT value FROM settings WHERE `key`=\"schema_version\" LIMIT 1")->fetchColumn();
+              if($schema!=="19")throw new RuntimeException("Schema esperado 19; encontrado ".$schema);
+              foreach(["users","clients","demands","files","invoices","payments"] as $table){
+                $n=(int)$pdo->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=".$pdo->quote($table))->fetchColumn();
+                if($n!==1)throw new RuntimeException("Tabela essencial ausente: ".$table);
+              }
+              echo "Schema 19 e tabelas essenciais OK.\n";
+            ' "$DEPLOY_PATH/config/config.php"
+
+            HEALTH_URL="$(php -r '$c=require $argv[1]; echo rtrim((string)($c["base_url"]??""),"/")."/health.php";' "$DEPLOY_PATH/config/config.php")"
+            for attempt in 1 2 3 4 5; do
+              RESPONSE="$(curl --fail --silent --show-error --max-time 20 "$HEALTH_URL" 2>/dev/null || true)"
+              if [ -n "$RESPONSE" ] && php -r '$j=json_decode($argv[1],true); exit(is_array($j) && ($j["status"]??null)==="ok" && ($j["database"]??false)===true && ($j["installed"]??false)===true && (string)($j["schema"]??"")==="19" ? 0 : 1);' "$RESPONSE"; then
+                echo "Health check OK."
+                echo "$RESPONSE"
+                exit 0
+              fi
+              sleep 3
+            done
+            echo "ERRO: health check nao confirmou o rollback."
+            exit 1
+          REMOTE
+
+      - name: Alinhar main com v3.25
+        env:
+          TARGET_COMMIT: 7201c9b8628e4657e20ca04024e8c3bc8db92a30
+        run: |
+          set -euo pipefail
+          CURRENT_MAIN="$(git rev-parse HEAD)"
+          cp .github/workflows/rollback-pre-saas.yml /tmp/rollback-pre-saas.yml
+          cp .github/workflows/rollback-pre-saas-execute.yml /tmp/rollback-pre-saas-execute.yml
+
+          git read-tree --reset -u "$TARGET_COMMIT"
+          mkdir -p .github/workflows
+          cp /tmp/rollback-pre-saas.yml .github/workflows/rollback-pre-saas.yml
+          cp /tmp/rollback-pre-saas-execute.yml .github/workflows/rollback-pre-saas-execute.yml
+          git add -A
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "rollback: restaurar TaskEsc v3.25 pre-SaaS [skip ci]"
+          ROLLBACK_COMMIT="$(git rev-parse HEAD)"
+
+          git fetch origin main
+          REMOTE_MAIN="$(git rev-parse origin/main)"
+          if [ "$REMOTE_MAIN" != "$CURRENT_MAIN" ]; then
+            echo "ERRO: main mudou durante a operacao."
+            exit 1
+          fi
+
+          git push origin "$CURRENT_MAIN:refs/heads/safety/pre-saas-rollback-${GITHUB_RUN_ID}"
+          git push origin "$ROLLBACK_COMMIT:refs/heads/main"
+
+          echo "Main alinhado ao codigo v3.25."
+
+      - name: Resumo
+        run: |
+          echo "Rollback concluido."
+          echo "TaskEsc v3.25"
+          echo "Schema 19"
+          echo "As tabelas SaaS foram preservadas como dados inativos para seguranca."

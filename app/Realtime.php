@@ -1,10 +1,13 @@
 <?php
 declare(strict_types=1);
 
-/** Optional backend infrastructure. Never loaded by ordinary requests in step 1. */
+/** Optional realtime infrastructure. Credentials are read only from the private root-owned config. */
 final class Realtime implements JsonSerializable
 {
     public const PRIVATE_CONFIG = '/etc/taskesc/realtime.json';
+    public const CENTRIFUGO_VERSION = '6.9.7';
+    public const TOKEN_TTL_SECONDS = 300;
+
     private array $values = [];
     private string $configStatus = 'unavailable';
 
@@ -29,7 +32,6 @@ final class Realtime implements JsonSerializable
     private static function valid(array $v): bool
     {
         if (!is_bool($v['REALTIME_ENABLED'] ?? null)) return false;
-        // Credentials must never be sent to a remote host or through redirects.
         if (!in_array($v['REDIS_HOST'] ?? null, ['127.0.0.1', '::1'], true)) return false;
         if (!is_int($v['REDIS_PORT'] ?? null) || $v['REDIS_PORT'] < 1 || $v['REDIS_PORT'] > 65535) return false;
         $api = parse_url((string)($v['CENTRIFUGO_API_URL'] ?? ''));
@@ -55,7 +57,50 @@ final class Realtime implements JsonSerializable
     public function websocketUrl(): string { return $this->values['CENTRIFUGO_WS_URL'] ?? ''; }
     public function hmacKey(): ?string { return $this->values['CENTRIFUGO_HMAC_SECRET'] ?? null; }
 
-    /** Returns null on any failure; no persistent connection or session change. */
+    /** Centrifugo 6.9.7 connection JWT: sub must be the authenticated application user ID as a string. */
+    public function connectionToken(int $userId, ?int $issuedAt = null): string
+    {
+        if (!$this->enabled() || $userId < 1) throw new RuntimeException('realtime_unavailable');
+        $now = $issuedAt ?? time();
+        return $this->jwt([
+            'sub' => (string)$userId,
+            'iat' => $now,
+            'exp' => $now + self::TOKEN_TTL_SECONDS,
+        ]);
+    }
+
+    /** Centrifugo 6.9.7 subscription JWT: sub + exact channel are signed by the backend. */
+    public function subscriptionToken(int $userId, string $channel, ?int $issuedAt = null): string
+    {
+        if (!$this->enabled() || $userId < 1 || $channel === '' || strlen($channel) > 190) {
+            throw new RuntimeException('realtime_unavailable');
+        }
+        $now = $issuedAt ?? time();
+        return $this->jwt([
+            'sub' => (string)$userId,
+            'channel' => $channel,
+            'iat' => $now,
+            'exp' => $now + self::TOKEN_TTL_SECONDS,
+        ]);
+    }
+
+    private function jwt(array $claims): string
+    {
+        $secret = $this->hmacKey();
+        if (!is_string($secret) || $secret === '') throw new RuntimeException('realtime_unavailable');
+        $header = self::base64Url(json_encode(['alg' => 'HS256', 'typ' => 'JWT'], JSON_THROW_ON_ERROR));
+        $payload = self::base64Url(json_encode($claims, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+        $input = $header.'.'.$payload;
+        $signature = hash_hmac('sha256', $input, $secret, true);
+        return $input.'.'.self::base64Url($signature);
+    }
+
+    private static function base64Url(string $value): string
+    {
+        return rtrim(strtr(base64_encode($value), '+/', '-_'), '=');
+    }
+
+    /** Returns null on any failure; ordinary application flows remain usable without realtime. */
     public function redis(): ?Redis
     {
         return $this->enabled() ? $this->connectRedis() : null;
@@ -73,7 +118,7 @@ final class Realtime implements JsonSerializable
         return null;
     }
 
-    /** Explicit internal probe, also usable while REALTIME_ENABLED=false. */
+    /** Explicit internal probe. No secrets are returned. */
     public function health(): array
     {
         $redisStatus = 'unavailable';
@@ -85,23 +130,28 @@ final class Realtime implements JsonSerializable
             } catch (Throwable) {} finally { try { @$redis->close(); } catch (Throwable) {} }
         }
         $centrifugo = $this->centrifugoHealth();
+        $versionOk = $centrifugo['status'] === 'ok'
+            && ltrim((string)$centrifugo['version'], 'v') === self::CENTRIFUGO_VERSION;
         return [
-            'status' => $this->configStatus === 'ok' && $redisStatus === 'ok' && $centrifugo === 'ok' ? 'ok' : 'degraded',
+            'status' => $this->configStatus === 'ok' && $redisStatus === 'ok' && $versionOk ? 'ok' : 'degraded',
             'enabled' => $this->enabled(),
             'config' => $this->configStatus,
             'redis' => $redisStatus,
-            'centrifugo' => $centrifugo,
+            'centrifugo' => $centrifugo['status'],
+            'centrifugo_version' => $centrifugo['version'],
+            'centrifugo_expected' => self::CENTRIFUGO_VERSION,
             'checked_at' => gmdate('c'),
         ];
     }
 
-    private function centrifugoHealth(): string
+    private function centrifugoHealth(): array
     {
-        if ($this->configStatus !== 'ok' || !function_exists('curl_init')) return 'unavailable';
+        $unavailable = ['status' => 'unavailable', 'version' => null];
+        if ($this->configStatus !== 'ok' || !function_exists('curl_init')) return $unavailable;
         $ch = null;
         try {
             $ch = curl_init($this->apiUrl().'/info');
-            if ($ch === false) return 'unavailable';
+            if ($ch === false) return $unavailable;
             curl_setopt_array($ch, [
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_POST => true,
@@ -114,19 +164,26 @@ final class Realtime implements JsonSerializable
                 CURLOPT_PROTOCOLS => CURLPROTO_HTTP,
             ]);
             $body = curl_exec($ch);
-            if (curl_getinfo($ch, CURLINFO_HTTP_CODE) !== 200 || !is_string($body)) return 'unavailable';
+            if (curl_getinfo($ch, CURLINFO_HTTP_CODE) !== 200 || !is_string($body)) return $unavailable;
             $response = json_decode($body, true, 32, JSON_THROW_ON_ERROR);
-            return is_array($response) && !isset($response['error'])
-                && is_array($response['result']['nodes'] ?? null)
-                && count($response['result']['nodes']) > 0 ? 'ok' : 'unavailable';
+            $nodes = $response['result']['nodes'] ?? null;
+            if (!is_array($response) || isset($response['error']) || !is_array($nodes) || count($nodes) < 1) return $unavailable;
+            $versions = [];
+            foreach ($nodes as $node) {
+                if (is_array($node) && is_string($node['version'] ?? null) && $node['version'] !== '') {
+                    $versions[] = ltrim($node['version'], 'v');
+                }
+            }
+            $versions = array_values(array_unique($versions));
+            $version = count($versions) === 1 ? $versions[0] : null;
+            return ['status' => 'ok', 'version' => $version];
         } catch (Throwable) {
-            return 'unavailable';
+            return $unavailable;
         } finally {
             if ($ch !== null && $ch !== false) curl_close($ch);
         }
     }
 
-    // Accidental dumps/JSON are redacted and never trigger network probes.
     public function __debugInfo(): array { return ['enabled' => $this->enabled(), 'config' => $this->configStatus]; }
     public function jsonSerialize(): array { return $this->__debugInfo(); }
 }

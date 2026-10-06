@@ -12,11 +12,11 @@ if (in_array('--fake-server', $argv, true)) {
     $raw = '';
     while (!str_contains($raw, "\r\n\r\n") && !feof($conn)) $raw .= (string)fgets($conn);
     [$head, $body] = array_pad(explode("\r\n\r\n", $raw, 2), 2, '');
-    preg_match('/^Content-Length:\s*(\d+)$/mi', $head, $lengthMatch);
+    preg_match('/^Content-Length:\s*(\d+)\r?$/mi', $head, $lengthMatch);
     $length = (int)($lengthMatch[1] ?? 0);
     while (strlen($body) < $length && !feof($conn)) $body .= (string)fread($conn, $length - strlen($body));
     $ok = str_starts_with($head, 'POST /api/publish HTTP/1.')
-        && preg_match('/^X-API-Key:\s*ci-api-key$/mi', $head)
+        && preg_match('/^X-API-Key:\s*ci-api-key\r?$/mi', $head)
         && is_array(json_decode($body, true));
     @file_put_contents($capture, json_encode(['ok'=>(bool)$ok,'body'=>json_decode($body,true)], JSON_UNESCAPED_SLASHES));
     $response = $ok ? '{"result":{}}' : '{"error":{}}';

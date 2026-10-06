@@ -1,0 +1,147 @@
+name: Rollback TaskEsc pre-SaaS - Preparacao
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Digite PREPARAR-ROLLBACK para validar e gerar o snapshot'
+        required: true
+        type: string
+
+concurrency:
+  group: taskesc-production
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Validar e criar snapshot
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Confirmar operacao
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = "PREPARAR-ROLLBACK" || {
+            echo "Digite exatamente PREPARAR-ROLLBACK"
+            exit 1
+          }
+
+      - name: Baixar repositorio
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar acesso SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "$VPS_PORT" -H "$VPS_HOST" >> ~/.ssh/known_hosts
+
+      - name: Inspecionar producao e criar backup
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          mkdir -p rollback-snapshot
+
+          RESULT="$(ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
+            set -euo pipefail
+            cd "$DEPLOY_PATH"
+
+            PROD_COMMIT="$(git rev-parse HEAD)"
+            PROD_SHORT="$(git rev-parse --short=12 HEAD)"
+            TS="$(date -u +%Y%m%dT%H%M%SZ)"
+            BACKUP_DIR="$DEPLOY_PATH/storage/backups"
+            mkdir -p "$BACKUP_DIR"
+
+            BASENAME="taskesc-rollback-snapshot-${TS}-${PROD_SHORT}"
+            BACKUP_FILE="$BACKUP_DIR/${BASENAME}.sql.gz"
+            SHA_FILE="$BACKUP_FILE.sha256"
+            MANIFEST_FILE="$BACKUP_DIR/${BASENAME}.txt"
+
+            CNF="$(mktemp)"
+            DBNAME_FILE="$(mktemp)"
+            PHP_HELPER="$(mktemp --suffix=.php)"
+            cleanup(){ rm -f "$CNF" "$DBNAME_FILE" "$PHP_HELPER"; }
+            trap cleanup EXIT
+
+            cat > "$PHP_HELPER" <<'PHP'
+          <?php
+          $c=require $argv[1];
+          $db=$c['db']??[];
+          $q=function($v){
+              $v=str_replace(["\\","\"","\n","\r"],["\\\\","\\\"","\\n","\\r"],(string)$v);
+              return "\"".$v."\"";
+          };
+          file_put_contents($argv[2],
+              "[client]\n".
+              "host=".$q($db['host']??'localhost')."\n".
+              "port=".(int)($db['port']??3306)."\n".
+              "user=".$q($db['user']??'')."\n".
+              "password=".$q($db['password']??'')."\n"
+          );
+          file_put_contents($argv[3],(string)($db['name']??''));
+          PHP
+
+            php "$PHP_HELPER" "$DEPLOY_PATH/config/config.php" "$CNF" "$DBNAME_FILE"
+            chmod 600 "$CNF"
+            DB_NAME="$(cat "$DBNAME_FILE")"
+            DUMP_BIN="$(command -v mysqldump || command -v mariadb-dump || true)"
+            [ -n "$DUMP_BIN" ]
+
+            "$DUMP_BIN" --defaults-extra-file="$CNF" --no-tablespaces --single-transaction --quick --routines --triggers --events --hex-blob --default-character-set=utf8mb4 "$DB_NAME" | gzip -9 > "$BACKUP_FILE"
+            gzip -t "$BACKUP_FILE"
+            [ -s "$BACKUP_FILE" ]
+
+            SCHEMA_VERSION="$(php -r '
+              $c=require $argv[1];$d=$c["db"]??[];
+              $pdo=new PDO("mysql:host=".($d["host"]??"localhost").";port=".($d["port"]??3306).";dbname=".$d["name"].";charset=utf8mb4",$d["user"]??"",$d["password"]??"",[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION]);
+              echo (string)($pdo->query("SELECT value FROM settings WHERE `key`=\"schema_version\" LIMIT 1")->fetchColumn()?:"unknown");
+            ' "$DEPLOY_PATH/config/config.php")"
+
+            (cd "$BACKUP_DIR" && sha256sum "$(basename "$BACKUP_FILE")" > "$(basename "$SHA_FILE")")
+            {
+              echo "TaskEsc - preparacao do rollback pre-SaaS"
+              echo "UTC: $TS"
+              echo "Commit atual: $PROD_COMMIT"
+              echo "Schema atual: $SCHEMA_VERSION"
+              echo "Destino planejado: 7201c9b8628e4657e20ca04024e8c3bc8db92a30"
+              echo "Schema planejado: 19"
+            } > "$MANIFEST_FILE"
+
+            printf '%s|%s|%s|%s|%s\n' "$BACKUP_FILE" "$SHA_FILE" "$MANIFEST_FILE" "$PROD_COMMIT" "$SCHEMA_VERSION"
+          REMOTE
+          )"
+
+          IFS='|' read -r REMOTE_BACKUP REMOTE_SHA REMOTE_MANIFEST PROD_COMMIT SCHEMA_VERSION <<< "$RESULT"
+          scp -P "$VPS_PORT" "$VPS_USER@$VPS_HOST:$REMOTE_BACKUP" rollback-snapshot/
+          scp -P "$VPS_PORT" "$VPS_USER@$VPS_HOST:$REMOTE_SHA" rollback-snapshot/
+          scp -P "$VPS_PORT" "$VPS_USER@$VPS_HOST:$REMOTE_MANIFEST" rollback-snapshot/
+          (cd rollback-snapshot && sha256sum -c *.sql.gz.sha256)
+
+          echo "Commit atual: $PROD_COMMIT"
+          echo "Schema atual: $SCHEMA_VERSION"
+          echo "Snapshot pronto. Nenhuma alteracao foi feita na producao."
+
+      - name: Guardar snapshot fora da VPS
+        uses: actions/upload-artifact@v4
+        with:
+          name: taskesc-rollback-snapshot-${{ github.run_id }}
+          path: rollback-snapshot/
+          if-no-files-found: error
+          retention-days: 30

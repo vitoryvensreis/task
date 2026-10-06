@@ -280,7 +280,7 @@ jobs:
             DEPLOYED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             mkdir -p storage
             printf '{"version":"4.0.0","commit":"%s","deployed_at":"%s"}\n' "$COMMIT" "$DEPLOYED_AT" > storage/release.json
-            chmod 600 storage/release.json
+            chmod 0644 storage/release.json
 
             echo "Deploy concluído."
           REMOTE

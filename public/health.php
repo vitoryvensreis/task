@@ -42,8 +42,9 @@ try{
  $checks['database']['ok']=false;
 }
 
-foreach($checks as $check){if(($check['ok']??false)!==true){$status=503;break;}}
 $info=SystemInfo::info();
+$checks['release']=['ok'=>$info['commit']!=='unknown','commit'=>$info['commit_short'],'version'=>$info['version']];
+foreach($checks as $check){if(($check['ok']??false)!==true){$status=503;break;}}
 $out=[
  'status'=>$status===200?'ok':'error',
  'version'=>$info['version'],

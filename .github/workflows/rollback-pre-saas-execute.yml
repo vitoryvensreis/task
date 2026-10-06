@@ -149,8 +149,12 @@ jobs:
             php -l public/index.php
             php -l public/api.php
             php -l public/health.php
-            node --check public/assets/app.js
-            node --check public/service-worker.js
+            if command -v node >/dev/null 2>&1; then
+              node --check public/assets/app.js
+              node --check public/service-worker.js
+            else
+              echo "Node.js nao esta instalado na VPS; validacao JS sera ignorada aqui."
+            fi
 
             echo "Validando banco e health..."
             php -r '

@@ -151,10 +151,21 @@ function smokeWebSocket(string $url, string $origin, string $connectionToken, st
         smokeWriteFrame($stream, json_encode(['id' => 4, 'subscribe' => [
             'channel' => $wrongChannel, 'token' => $subscriptionToken
         ]], JSON_THROW_ON_ERROR));
-        $reply = smokeReplyById($stream, 4);
-        $mismatchDenied = isset($reply['error']);
+        $connectionClosedOnMismatch = false;
+        try {
+            $reply = smokeReplyById($stream, 4);
+            $mismatchDenied = isset($reply['error']);
+        } catch (RuntimeException $e) {
+            if ($e->getMessage() !== 'websocket_closed') throw $e;
+            // Centrifugo may reject a subscription-token/channel mismatch
+            // by closing the client connection instead of returning an error reply.
+            $mismatchDenied = true;
+            $connectionClosedOnMismatch = true;
+        }
 
-        smokeWriteFrame($stream, '', 8);
+        if (!$connectionClosedOnMismatch) {
+            smokeWriteFrame($stream, '', 8);
+        }
         return [$tokenlessDenied, $mismatchDenied];
     } finally {
         fclose($stream);

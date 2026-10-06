@@ -2291,3 +2291,44 @@ input[type="time"]::-webkit-calendar-picker-indicator{
 .push-activation-icon .ui-icon{width:26px;height:26px}
 .push-activation-modal .modal-head{padding:0;border:0}
 .push-activation-modal .form-actions{margin-top:22px}
+
+
+/* v3.24 — ações financeiras alinhadas */
+@media(min-width:761px){
+  .finance-entry-panel .finance-table th:last-child,
+  .finance-entry-panel .finance-table td:last-child{
+    width:330px;
+    min-width:330px;
+  }
+  .finance-entry-panel .finance-invoice-actions{
+    display:grid;
+    grid-template-columns:92px 154px 72px;
+    align-items:center;
+    justify-content:end;
+    gap:6px;
+    flex-wrap:nowrap;
+    width:100%;
+  }
+  .finance-entry-panel .finance-invoice-actions>button{
+    width:100%;
+    min-width:0;
+    min-height:34px;
+    height:34px;
+    padding-inline:9px;
+    justify-content:center;
+    white-space:nowrap;
+  }
+  .finance-entry-panel .finance-invoice-actions .finance-action-spacer{
+    display:block;
+    width:100%;
+    min-height:34px;
+  }
+}
+@media(max-width:760px){
+  .finance-entry-panel .finance-invoice-actions{
+    display:flex;
+  }
+  .finance-entry-panel .finance-invoice-actions .finance-action-spacer{
+    display:none!important;
+  }
+}

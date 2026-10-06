@@ -130,10 +130,8 @@ final class Realtime implements JsonSerializable
             } catch (Throwable) {} finally { try { @$redis->close(); } catch (Throwable) {} }
         }
         $centrifugo = $this->centrifugoHealth();
-        $versionOk = $centrifugo['status'] === 'ok'
-            && ltrim((string)($centrifugo['version'] ?? ''), 'v') === self::CENTRIFUGO_VERSION;
         return [
-            'status' => $this->configStatus === 'ok' && $this->enabled() && $redisStatus === 'ok' && $versionOk ? 'ok' : 'degraded',
+            'status' => $this->configStatus === 'ok' && $this->enabled() && $redisStatus === 'ok' && $centrifugo['status'] === 'ok' ? 'ok' : 'degraded',
             'enabled' => $this->enabled(),
             'config' => $this->configStatus,
             'redis' => $redisStatus,

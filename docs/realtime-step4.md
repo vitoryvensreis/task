@@ -92,4 +92,4 @@ Após backup e deploy, `bin/realtime-smoke.php`:
 8. confirma que o mesmo token é rejeitado em outro canal;
 9. remove a fixture e a sessão.
 
-O health interno exige Redis OK, configuração ativa, Centrifugo OK e nó exatamente na versão 6.9.7.
+O health runtime exige Redis OK, configuração ativa e API do Centrifugo OK. Como o campo `version` de `/api/info` pode depender do build, o deploy valida a versão exigida diretamente com `centrifugo version` e só aceita 6.9.7.

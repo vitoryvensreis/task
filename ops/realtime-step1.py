@@ -265,7 +265,9 @@ def fcgi_probe(identity, deploy_path):
     result = {key: response.get(key) for key in ['status', 'enabled', 'config', 'redis', 'centrifugo', 'centrifugo_version', 'centrifugo_expected']}
     need(result['enabled'] is True, 'realtime_must_be_enabled')
     need(all(result[k] in ['ok', 'degraded', 'unavailable', 'invalid'] for k in ['status', 'config', 'redis', 'centrifugo']), 'fpm_probe_invalid_health')
-    need(result['centrifugo_expected'] == '6.9.7' and result['centrifugo_version'] == '6.9.7', 'centrifugo_version_mismatch')
+    need(result['centrifugo_expected'] == '6.9.7', 'centrifugo_expected_version_invalid')
+    if result['centrifugo_version'] not in (None, ''):
+        need(str(result['centrifugo_version']).lstrip('v') == '6.9.7', 'centrifugo_api_version_mismatch')
     print(json.dumps({'fpm_health': result}))
     need(result['status'] == 'ok', 'realtime_health_failed')
 

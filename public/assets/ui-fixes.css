@@ -2332,3 +2332,19 @@ input[type="time"]::-webkit-calendar-picker-indicator{
     display:none!important;
   }
 }
+
+
+/* v3.25 — privacidade dos valores financeiros */
+.finance-privacy-toggle{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+}
+.finance-privacy-toggle .ui-icon{width:16px;height:16px}
+.finance-title .top-actions{align-items:center}
+@media(max-width:760px){
+  .finance-title .finance-privacy-toggle{
+    grid-column:1/-1;
+  }
+}

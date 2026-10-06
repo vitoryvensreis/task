@@ -58,19 +58,19 @@ jobs:
       - name: Gerar ZIP completo
         run: |
           set -e
-          rm -f "/tmp/taskesc-v3.24.zip" "taskesc-v3.24.zip"
-          zip -qr "/tmp/taskesc-v3.24.zip" . \
+          rm -f "/tmp/taskesc-v3.25.zip" "taskesc-v3.25.zip"
+          zip -qr "/tmp/taskesc-v3.25.zip" . \
             -x '.git/*' \
                'config/config.php' \
                'storage/sessions/*' \
                'storage/logs/*'
-          cp "/tmp/taskesc-v3.24.zip" "taskesc-v3.24.zip"
+          cp "/tmp/taskesc-v3.25.zip" "taskesc-v3.25.zip"
 
       - name: Publicar ZIP da versão
         uses: actions/upload-artifact@v4
         with:
-          name: taskesc-v3.24
-          path: taskesc-v3.24.zip
+          name: taskesc-v3.25
+          path: taskesc-v3.25.zip
           if-no-files-found: error
           retention-days: 7
 

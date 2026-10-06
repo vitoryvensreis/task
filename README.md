@@ -294,6 +294,8 @@ Na **v3.23**, o formulário de **Nova solicitação** do acesso Cliente também 
 
 Na **v3.24**, a coluna **Ações** de Entradas / cobranças usa posições fixas para Detalhes, Registrar pagamento e Excluir no desktop. Cobranças já pagas preservam o espaço do botão de pagamento, mantendo os botões alinhados entre todas as linhas; no mobile o layout continua responsivo em cards.
 
+Na **v3.25**, a aba **Financeiro** ganhou um controle de privacidade com ícone de olho. Com o olho aberto, os valores monetários são exibidos normalmente; ao ocultar, valores de cards, fórmulas, tabelas, detalhamentos e demais resumos financeiros passam a aparecer como `••••••`. A preferência fica salva somente no navegador/dispositivo e pode ser alternada a qualquer momento pelo mesmo botão.
+
 Na **v3.20**, o seletor de clientes vinculados ganhou busca por nome em tempo real, mantendo os vínculos já marcados mesmo quando a lista está filtrada.
 
 Na **v3.21**, ao entrar no TaskEsc sem uma assinatura push ativa neste dispositivo, o sistema abre um aviso para ativar notificações. A permissão nativa continua sendo solicitada somente após o clique do usuário, como exigido pelos navegadores. Assinaturas existentes são sincronizadas novamente com o backend ao entrar.

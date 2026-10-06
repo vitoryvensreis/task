@@ -434,3 +434,12 @@ O Passo 4 habilita a autenticação segura navegador → Centrifugo para usuári
 Canais preparados: `user:{id}`, `demand:{id}`, `project:{id}` e `kanban/global`, sempre reutilizando as regras atuais de admin/equipe/cliente/preview do TaskEsc. O cliente oficial `centrifuge-js 5.7.4` é vendorado localmente no build/deploy, sem CDN em runtime. Falhas realtime não interrompem a aplicação HTTP e nenhum card do Kanban é alterado neste passo.
 
 O deploy executa um smoke real de login → connection JWT → subscription JWT → handshake WSS, além de confirmar que assinatura sem token, canal não autorizado e reutilização do token em outro canal são negados. Consulte `docs/realtime-step4.md`.
+
+
+## Realtime — Passo 5
+
+O Passo 5 conecta as alterações reais de tasks ao Outbox transacional. Criação, edição, mudança de etapa, reordenação/movimentação, ações em lote, exclusão e decisão de orçamento passam a gerar eventos mínimos em `event_outbox` dentro da mesma transação MySQL da alteração de negócio.
+
+Os eventos são distribuídos para `kanban/global`, `demand:{id}` e, quando aplicável, `project:{id}`; uma troca de projeto também invalida o projeto anterior. Rascunhos permanecem somente no canal global de administrador. O payload não carrega briefing, notas internas nem valores financeiros.
+
+O worker do Passo 3 continua fazendo publicação idempotente/retry no Centrifugo. O frontend ainda não move nem recarrega cards a partir desses eventos neste passo. Consulte `docs/realtime-step5.md`.

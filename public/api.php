@@ -14,6 +14,7 @@ try {
  if($action==='auth.me'){Auth::load();out(['user'=>Auth::$user,'csrf'=>csrf()]);}
  if($action==='meta'){Auth::load();out(Catalog::meta());}
  Auth::load();
+ $apiBurst=Infra::rate('api',1200,60,(string)(Auth::$user['id']??($_SERVER['REMOTE_ADDR']??'guest')));if($apiBurst!==null&&$apiBurst>1200)fail('Muitas requisições. Aguarde alguns segundos.',429);
  if($action==='preview.start'){checkCsrf();out(Auth::previewStart($p));}
  if($action==='preview.stop'){checkCsrf();out(Auth::previewStop());}
  if(($_SERVER['REQUEST_METHOD']??'GET')!=='GET'&&Auth::$origin!=='api'){checkCsrf();Auth::guardPreviewWrite();}
@@ -29,6 +30,8 @@ try {
   'push.subscribe'=>Push::subscribe($p),
   'push.unsubscribe'=>Push::unsubscribe($p),
   'push.test'=>Push::test(),
+  'realtime.token'=>Realtime::connection(),
+  'realtime.status'=>Realtime::status(),
   'system.health'=>SystemHealth::health(),
   'system.logs'=>SystemHealth::logs($p),
   'system.error_resolve'=>SystemHealth::resolve($p),

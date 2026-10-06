@@ -15,6 +15,7 @@ final class Notify {
   if(!$u)return null;
   if($key&&DB::one('SELECT id FROM notifications WHERE dedupe_key=?',[$key]))return null;
   $notificationId=DB::insert('notifications',['user_id'=>$id,'title'=>mb_substr($title,0,190),'body'=>$body,'demand_id'=>$demand,'dedupe_key'=>$key,'created_at'=>now()]);
+  try{Realtime::notification($notificationId,$id,$demand);}catch(Throwable $e){error_log('TaskEsc realtime notification #'.$notificationId.': '.$e->getMessage());}
   if($push){
    $unread=(int)(DB::one('SELECT COUNT(*) AS n FROM notifications WHERE user_id=? AND seen=0',[$id])['n']??0);
    Push::notifyUser($id,[

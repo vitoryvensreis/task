@@ -299,13 +299,17 @@ jobs:
             [ -n "$HEALTH_URL" ] || { echo "ERRO: health URL vazia."; exit 1; }
 
             for attempt in 1 2 3 4 5; do
-              RESPONSE="$(curl --fail --silent --show-error --max-time 20 "$HEALTH_URL" 2>/dev/null || true)"
-              if [ -n "$RESPONSE" ] && php -r '$j=json_decode($argv[1],true); exit(is_array($j) && ($j["status"]??null)==="ok" && ($j["database"]??false)===true && ($j["installed"]??false)===true ? 0 : 1);' "$RESPONSE"; then
+              TMP="$(mktemp)"
+              HTTP_CODE="$(curl --location --silent --show-error --max-time 20 --output "$TMP" --write-out '%{http_code}' "$HEALTH_URL" || true)"
+              RESPONSE="$(cat "$TMP" 2>/dev/null || true)"
+              rm -f "$TMP"
+              if [ "$HTTP_CODE" = "200" ] && [ -n "$RESPONSE" ] && php -r '$j=json_decode($argv[1],true); exit(is_array($j) && ($j["status"]??null)==="ok" && ($j["database"]??false)===true && ($j["storage"]??false)===true && ($j["installed"]??false)===true ? 0 : 1);' "$RESPONSE"; then
                 echo "Health check OK na tentativa $attempt."
                 echo "$RESPONSE"
                 exit 0
               fi
-              echo "Tentativa $attempt/5 falhou. Aguardando 3 segundos..."
+              echo "Tentativa $attempt/5 falhou (HTTP ${HTTP_CODE:-000})."
+              if [ -n "$RESPONSE" ]; then echo "$RESPONSE" | head -c 1200 || true; echo; fi
               sleep 3
             done
 

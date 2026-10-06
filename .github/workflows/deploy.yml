@@ -173,7 +173,14 @@ jobs:
 
             gzip -t "$BACKUP_FILE"
             [ -s "$BACKUP_FILE" ] || { echo "ERRO: backup vazio." >&2; exit 1; }
-            if ! gzip -cd "$BACKUP_FILE" | grep -m1 -Eq '^(CREATE TABLE|INSERT INTO|-- MySQL dump|-- MariaDB dump)'; then
+            set +o pipefail
+            if gzip -cd "$BACKUP_FILE" | grep -Eq '^(CREATE TABLE|INSERT INTO|-- MySQL dump|-- MariaDB dump)'; then
+              DUMP_VALID=1
+            else
+              DUMP_VALID=0
+            fi
+            set -o pipefail
+            if [ "$DUMP_VALID" -ne 1 ]; then
               echo "ERRO: conteúdo do dump não parece válido." >&2
               exit 1
             fi

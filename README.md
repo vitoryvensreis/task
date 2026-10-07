@@ -461,3 +461,12 @@ O TaskEsc possui chat privado 1:1 **somente entre Administradores** pela infraes
 As mensagens ficam persistidas no MySQL e a entrega em tempo real usa Outbox → worker → Centrifugo → canais pessoais `user:{id}`. O corpo das mensagens não trafega no evento WebSocket: o evento carrega somente identificadores e o navegador consulta o conteúdo pelo HTTP autenticado.
 
 Equipe, Clientes, modo preview e tokens de API/MCP não possuem acesso ao chat. Consulte `docs/chat-realtime.md`.
+
+
+## Realtime completo — Tasks, Chat e Agenda
+
+A camada realtime do TaskEsc cobre agora o ciclo completo das tasks: criar, editar, mover, reordenar, excluir, comentários públicos/internos, checklist, horas, alterações de escopo, uploads/links, exclusão de arquivos e aprovação de versões. Dados internos são separados pelo canal `staff/global`; conteúdos sensíveis não são enviados pelo WebSocket.
+
+A Agenda usa `agenda/global` para Administradores e Equipe e reage a criação, edição, cancelamento, resolução de conflitos e mudanças vindas do Google Calendar (webhook/cron/sync manual). O navegador recebe apenas uma invalidação mínima e relê os dados pelos endpoints HTTP autorizados.
+
+O chat administrativo continua em canais pessoais `user:{id}`. O polling de 30 segundos permanece somente como fallback. Detalhes em `docs/realtime-full.md`.

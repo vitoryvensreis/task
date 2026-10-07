@@ -26,8 +26,8 @@ try{
  $schema=setting('schema_version','unknown');
  $info[]=['key'=>'schema','message'=>'Schema atual: '.$schema,'meta'=>$schema];
 
- if(!in_array($expectedSchema,['19','21'],true)||$schema!==$expectedSchema)$add($critical,'schema_mismatch','Schema diferente da versão esperada.',['actual'=>$schema,'expected'=>$expectedSchema]);
- if($schema==='21'){
+ if(!in_array($expectedSchema,['19','21','22','23'],true)||$schema!==$expectedSchema)$add($critical,'schema_mismatch','Schema diferente da versão esperada.',['actual'=>$schema,'expected'=>$expectedSchema]);
+ if(in_array($schema,['21','22','23'],true)){
   $outboxIssues=Migrations::outboxIssues();
   foreach($outboxIssues as $issue)$add($critical,'outbox_'.$issue,'Estrutura Outbox incompatível: '.$issue);
   if(!$outboxIssues)$info[]=['key'=>'event_outbox','message'=>'Outbox InnoDB, JSON e índices validados.','meta'=>['valid'=>true]];
@@ -58,10 +58,17 @@ try{
 
  $workspaceColumns=DB::all("SELECT TABLE_NAME,COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND COLUMN_NAME='workspace_id' ORDER BY TABLE_NAME");
  if($workspaceColumns)$add($warnings,'workspace_columns','Foram encontradas colunas workspace_id. Elas não são usadas pelo TaskEsc v3.25 e não foram removidas automaticamente.',$workspaceColumns);
- if($schema==='21'&&($presentTables||$presentFlags||$workspaceColumns))$add($critical,'removed_saas_present','A Outbox não admite estruturas do SaaS removido.');
+ if(in_array($schema,['21','22','23'],true)&&($presentTables||$presentFlags||$workspaceColumns))$add($critical,'removed_saas_present','A Outbox não admite estruturas do SaaS removido.');
 
  $essential=['users','clients','stages','categories','projects','demands','files','comments','invoices','payments','google_accounts','calendars','events','settings'];
+ if(in_array($schema,['22','23'],true))array_push($essential,'chat_threads','chat_messages');
+ if($schema==='23')$essential[]='chat_message_tasks';
  foreach($essential as $table)if(!$tableExists($table))$add($critical,'missing_table_'.$table,'Tabela essencial ausente: '.$table);
+ if($schema==='23'){
+  $chatIssues=Migrations::chatIssues();
+  foreach($chatIssues as $issue)$add($critical,'chat_'.$issue,'Estrutura do chat incompatível: '.$issue);
+  if(!$chatIssues)$info[]=['key'=>'chat_schema','message'=>'Chat administrativo e referências de tasks validados.','meta'=>['valid'=>true]];
+ }
 
  $relations=[
   ['projects_client',"SELECT COUNT(*) n FROM projects p LEFT JOIN clients c ON c.id=p.client_id WHERE c.id IS NULL"],
@@ -81,6 +88,7 @@ try{
   ['events_calendar',"SELECT COUNT(*) n FROM events e LEFT JOIN calendars c ON c.id=e.calendar_id WHERE c.id IS NULL"],
   ['notifications_user',"SELECT COUNT(*) n FROM notifications n LEFT JOIN users u ON u.id=n.user_id WHERE u.id IS NULL"]
  ];
+ if($schema==='23')$relations[]=['chat_message_tasks_demand',"SELECT COUNT(*) n FROM chat_message_tasks x LEFT JOIN demands d ON d.id=x.demand_id WHERE d.id IS NULL"];
  foreach($relations as [$key,$sql]){
   try{$n=$count($sql);if($n>0)$add($warnings,'orphan_'.$key,$n.' registro(s) órfão(s) em '.$key,$n);}catch(Throwable $e){$add($warnings,'check_'.$key,'Não foi possível validar '.$key.': '.$e->getMessage());}
  }

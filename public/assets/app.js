@@ -92,11 +92,11 @@
     document.querySelectorAll('[data-push-test]').forEach(b=>b.onclick=()=>testPush(b));
     await updatePushControls();
   }
-    const ROUTES={dashboard:'dashboard',kanban:'kanban',demands:'tasks',agenda:'agenda',clients:'clientes',services:'servicos',finance:'financeiro',reports:'relatorios',logs:'saude-logs',settings:'configuracoes'};
+    const ROUTES={dashboard:'dashboard',kanban:'kanban',demands:'tasks',chat:'chat',agenda:'agenda',clients:'clientes',services:'servicos',finance:'financeiro',reports:'relatorios',logs:'saude-logs',settings:'configuracoes'};
   const ROUTE_PAGES=Object.fromEntries(Object.entries(ROUTES).map(([k,v])=>[v,k]));
   function readRoute(){let path=location.pathname;if(BASE&&path.startsWith(BASE))path=path.slice(BASE.length);path=path.replace(/^\/+|\/+$/g,'');const parts=path.split('/').filter(Boolean);let page=ROUTE_PAGES[parts[0]]||'';let taskId=0;if(parts[0]==='kanban'&&parts[1]==='task'&&/^\d+$/.test(parts[2]||'')){page='kanban';taskId=Number(parts[2])}if(!page&&location.hash){const legacy=location.hash.replace(/^#/,'').split('/');page=['dashboard','kanban','demands','agenda','clients','services','finance','reports','logs','settings'].includes(legacy[0])?legacy[0]:'';if(legacy[0]==='demands'&&/^\d+$/.test(legacy[1]||'')){page='kanban';taskId=Number(legacy[1])}}return {page:page||'dashboard',taskId}}
   const initialRoute=readRoute();
-  const S={user:null,meta:null,csrf:'',page:initialRoute.page,pendingTaskId:initialRoute.taskId,demands:[],dashboard:null,timer:null};
+  const S={user:null,meta:null,csrf:'',page:initialRoute.page,pendingTaskId:initialRoute.taskId,demands:[],dashboard:null,timer:null,chatPeerId:0,chatContacts:[],chatUnread:0};
   const realtimeOwnedChannels=new Set(),realtimeSeen=new Map(),realtimePending=new Map();
   let realtimeTimer=0,realtimeRefreshing=false,realtimeEditNoticeId=0;
   const routeUrl=page=>appPath(ROUTES[page]||ROUTES.dashboard);
@@ -375,17 +375,106 @@
     }
   }
   window.addEventListener('taskesc:realtime-publication',event=>{
+    const publication=event?.detail?.data;
+    if(publication&&String(publication.event_type||'').startsWith('chat.')){handleChatRealtime(publication);return}
     const data=realtimePayload(event);if(!data||!rememberRealtimeEvent(data))return;
     realtimePending.set(data.demandId,data);scheduleRealtimeRefresh();
   });
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&realtimePending.size)scheduleRealtimeRefresh(80)});
   function applyBranding(){const brand=S.meta?.brand||{},name=String(brand.name||'TaskEsc').trim()||'TaskEsc',logo=String(brand.logo||'').trim()||DEFAULT_LOGO;$('#brand-name')&&($('#brand-name').textContent=name);$('#login-brand-name')&&($('#login-brand-name').textContent=name);document.title=name;['#sidebar-logo','#login-logo'].forEach(sel=>{const img=$(sel);if(!img)return;img.dataset.fallback='0';img.onerror=()=>{if(img.dataset.fallback==='1')return;img.dataset.fallback='1';img.src=DEFAULT_LOGO};img.src=logo;img.alt=`Logo ${name}`})}
   async function api(action,data={},method='GET',csrf=true){let url=appPath('api.php')+'?action='+encodeURIComponent(action),opts={method,headers:{'Accept':'application/json'}};if(method==='GET'){for(const [k,v] of Object.entries(data))if(v!==undefined&&v!==null&&v!=='')url+='&'+encodeURIComponent(k)+'='+encodeURIComponent(v)}else{opts.headers['Content-Type']='application/json';if(csrf&&S.csrf)opts.headers['X-CSRF-Token']=S.csrf;opts.body=JSON.stringify(data)}const r=await fetch(url,opts),j=await r.json().catch(()=>({error:'Resposta inválida do servidor.'}));if(!r.ok||j.error){if(r.status===401&&action!=='auth.me')showLogin();throw new Error(j.error||'Não foi possível concluir.')}return j}
+  const chatRoleLabel=role=>({admin:'Administrador',staff:'Equipe',client:'Cliente'}[String(role||'')]||String(role||'Usuário'));
+  const chatNonce=()=>{if(window.crypto?.getRandomValues){const a=new Uint8Array(16);crypto.getRandomValues(a);return [...a].map(v=>v.toString(16).padStart(2,'0')).join('')}return (Date.now().toString(16)+Math.random().toString(16).slice(2)).padEnd(32,'0').slice(0,32)};
+  function updateChatBadge(count=S.chatUnread){
+    S.chatUnread=Math.max(0,Number(count)||0);
+    const badge=$('#chat-nav-badge');if(!badge)return;
+    badge.textContent=S.chatUnread>99?'99+':String(S.chatUnread);badge.classList.toggle('hidden',S.chatUnread===0);
+  }
+  async function refreshChatBadge(){
+    if(!S.user||S.user.is_preview){updateChatBadge(0);return}
+    try{const data=await api('chat.contacts');S.chatContacts=data.contacts||[];updateChatBadge(data.unread_total||0)}catch{}
+  }
+  function chatContactMarkup(contact){
+    const active=Number(contact.id)===Number(S.chatPeerId),unread=Number(contact.unread||0),snippet=String(contact.last_body||'').trim();
+    return `<button class="chat-contact ${active?'active':''} ${unread?'unread':''}" type="button" data-chat-peer="${Number(contact.id)}" data-chat-search="${esc((contact.name+' '+chatRoleLabel(contact.role)).toLowerCase())}"><span class="chat-avatar">${esc(String(contact.name||'?').trim().slice(0,1).toUpperCase())}</span><span class="chat-contact-copy"><span class="chat-contact-top"><b>${esc(contact.name)}</b><time>${contact.last_at?time(contact.last_at):''}</time></span><span class="chat-contact-bottom"><small>${esc(snippet||(contact.last_at?'Mensagem':'Iniciar conversa'))}</small>${unread?`<em>${unread>99?'99+':unread}</em>`:''}</span></span></button>`;
+  }
+  function paintChatContacts(){
+    const list=$('#chat-contacts');if(!list)return;
+    const q=String($('#chat-search')?.value||'').trim().toLowerCase();
+    const visible=(S.chatContacts||[]).filter(c=>!q||(c.name+' '+chatRoleLabel(c.role)).toLowerCase().includes(q));
+    list.innerHTML=visible.map(chatContactMarkup).join('')||'<div class="empty slim">Nenhum usuário encontrado.</div>';
+    list.querySelectorAll('[data-chat-peer]').forEach(btn=>btn.onclick=()=>openChatPeer(Number(btn.dataset.chatPeer)));
+  }
+  async function loadChatContacts(){
+    const data=await api('chat.contacts');S.chatContacts=data.contacts||[];updateChatBadge(data.unread_total||0);
+    if(S.chatPeerId&&!S.chatContacts.some(c=>Number(c.id)===Number(S.chatPeerId)))S.chatPeerId=0;
+    paintChatContacts();return data;
+  }
+  function chatMessageMarkup(message){
+    const mine=Number(message.sender_id)===Number(S.user?.id),read=!!message.read_at;
+    return `<div class="chat-message-row ${mine?'mine':'theirs'}" data-chat-message="${Number(message.id)}"><div class="chat-bubble"><div class="chat-message-body">${esc(message.body)}</div><div class="chat-message-meta"><time>${time(message.created_at)}</time>${mine?`<span title="${read?'Lida':'Enviada'}">${read?'✓✓':'✓'}</span>`:''}</div></div></div>`;
+  }
+  function paintChatMessages(peer,messages){
+    const panel=$('#chat-conversation');if(!panel)return;
+    const current=Number(panel.dataset.peerId||0),same=current===Number(peer.id),draft=same?String($('#chat-message-input')?.value||''):'';
+    if(!same){
+      panel.dataset.peerId=String(peer.id);
+      panel.innerHTML=`<div class="chat-thread-head"><div class="chat-avatar large">${esc(String(peer.name||'?').trim().slice(0,1).toUpperCase())}</div><div><b>${esc(peer.name)}</b><small>${esc(chatRoleLabel(peer.role))}</small></div></div><div id="chat-messages" class="chat-messages"></div><form id="chat-form" class="chat-composer"><textarea id="chat-message-input" class="input" rows="1" maxlength="4000" placeholder="Escreva uma mensagem…" autocomplete="off"></textarea><button class="primary" type="submit" aria-label="Enviar mensagem">${icon('send','➤')}<span>Enviar</span></button></form>`;
+      $('#chat-form').onsubmit=sendChatMessage;
+      $('#chat-message-input').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('#chat-form').requestSubmit()}});
+      paintIcons();
+    }
+    const list=$('#chat-messages');if(list){list.innerHTML=messages.map(chatMessageMarkup).join('')||'<div class="chat-empty-thread">Nenhuma mensagem ainda.<br><small>Comece a conversa por aqui.</small></div>';requestAnimationFrame(()=>{list.scrollTop=list.scrollHeight})}
+    if(draft&&$('#chat-message-input'))$('#chat-message-input').value=draft;
+  }
+  async function openChatPeer(id,{quiet=false}={}){
+    id=Number(id||0);if(id<1)return;S.chatPeerId=id;paintChatContacts();
+    const data=await api('chat.messages',{peer_id:id});if(Number(S.chatPeerId)!==id)return;
+    paintChatMessages(data.peer,data.messages||[]);
+    try{const read=await api('chat.read',{peer_id:id},'POST');if(Number(read.read||0)>0){const contact=S.chatContacts.find(c=>Number(c.id)===id);if(contact)contact.unread=0;await loadChatContacts()}}catch{}
+    if(!quiet)$('#chat-message-input')?.focus();
+  }
+  async function sendChatMessage(event){
+    event?.preventDefault();const input=$('#chat-message-input'),button=$('#chat-form button[type="submit"]'),body=String(input?.value||'').trim(),peerId=Number(S.chatPeerId||0);
+    if(!body||peerId<1)return;
+    const old=button?.innerHTML;if(button){button.disabled=true;button.textContent='Enviando…'}
+    try{
+      await api('chat.send',{peer_id:peerId,body,client_nonce:chatNonce()},'POST');
+      if(input)input.value='';
+      await Promise.all([openChatPeer(peerId,{quiet:true}),loadChatContacts()]);
+    }catch(error){toast(error.message||'Não foi possível enviar a mensagem.',true)}
+    finally{if(button){button.disabled=false;button.innerHTML=old;paintIcons()}input?.focus()}
+  }
+  async function renderChat(){
+    if(S.user.is_preview){$('#content').innerHTML='<div class="empty">O chat não fica disponível durante a visualização de cliente.</div>';return}
+    const data=await api('chat.contacts');S.chatContacts=data.contacts||[];updateChatBadge(data.unread_total||0);
+    const current=S.chatContacts.find(c=>Number(c.id)===Number(S.chatPeerId));
+    S.chatPeerId=current?Number(current.id):Number((S.chatContacts.find(c=>Number(c.unread)>0)||S.chatContacts[0])?.id||0);
+    $('#content').innerHTML=`<section class="chat-shell"><aside class="chat-sidebar"><div class="chat-sidebar-head"><div><span class="eyebrow">MENSAGENS</span><h3>Conversas</h3></div><span class="chat-total">${S.chatContacts.length}</span></div><div class="chat-search-wrap">${icon('search','⌕')}<input id="chat-search" class="input" type="search" placeholder="Buscar usuário" autocomplete="off"></div><div id="chat-contacts" class="chat-contacts"></div></aside><section id="chat-conversation" class="chat-conversation" data-peer-id="0"><div class="chat-placeholder">${icon('messages-square','✉')}<b>Chat do TaskEsc</b><span>Escolha um usuário para começar.</span></div></section></section>`;
+    $('#chat-search')?.addEventListener('input',paintChatContacts);paintChatContacts();paintIcons();
+    if(S.chatPeerId)await openChatPeer(S.chatPeerId,{quiet:true});
+  }
+  let chatRealtimeTimer=0;
+  function handleChatRealtime(publication){
+    const type=String(publication?.event_type||''),payload=publication?.payload&&typeof publication.payload==='object'?publication.payload:{};
+    const me=Number(S.user?.id||0);if(!me||!type.startsWith('chat.'))return;
+    const sender=Number(payload.sender_id||0),recipient=Number(payload.recipient_id||0),reader=Number(payload.reader_id||0),peerHint=type==='chat.message'?(sender===me?recipient:sender):(reader===me?Number(payload.peer_id||0):reader);
+    if(type==='chat.message'&&sender!==me&&S.page!=='chat')toast('Nova mensagem no chat');
+    clearTimeout(chatRealtimeTimer);chatRealtimeTimer=setTimeout(async()=>{
+      chatRealtimeTimer=0;await refreshChatBadge();
+      if(S.page==='chat'){
+        await loadChatContacts();
+        if(S.chatPeerId&&(!peerHint||Number(S.chatPeerId)===peerHint))await openChatPeer(S.chatPeerId,{quiet:true});
+      }
+      realtimeIndicator();
+    },120);
+  }
+
   async function squarePngFromLogo(file,size,maskable=false){try{const bitmap=await createImageBitmap(file),canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');canvas.width=size;canvas.height=size;ctx.fillStyle='#050607';ctx.fillRect(0,0,size,size);const pad=Math.round(size*(maskable?.19:.11)),max=size-pad*2,scale=Math.min(max/bitmap.width,max/bitmap.height),w=Math.max(1,Math.round(bitmap.width*scale)),h=Math.max(1,Math.round(bitmap.height*scale));ctx.drawImage(bitmap,Math.round((size-w)/2),Math.round((size-h)/2),w,h);bitmap.close?.();return await new Promise(resolve=>canvas.toBlob(resolve,'image/png',.96))}catch(_){return null}}
   async function uploadLogoFile(file){const fd=new FormData();fd.append('logo',file);const icons=await Promise.all([[180,false,'icon_180'],[192,false,'icon_192'],[512,false,'icon_512'],[512,true,'icon_maskable_512']].map(async ([size,mask,key])=>[key,await squarePngFromLogo(file,size,mask)]));for(const [key,blob] of icons)if(blob)fd.append(key,blob,key+'.png');const r=await fetch(appPath('api.php')+'?action=settings.logo_upload',{method:'POST',headers:{'Accept':'application/json',...(S.csrf?{'X-CSRF-Token':S.csrf}:{})},body:fd}),j=await r.json().catch(()=>({error:'Resposta inválida do servidor.'}));if(!r.ok||j.error)throw new Error(j.error||'Não foi possível enviar a logo.');return j}
-  function showLogin(){closeNotifications();S.user=null;window.TaskEscRealtime?.setCsrf?.('');realtimeOwnedChannels.clear();realtimePending.clear();realtimeSeen.clear();if(realtimeTimer)clearTimeout(realtimeTimer);realtimeTimer=0;if(S.timer)clearInterval(S.timer);S.timer=null;$('#app').classList.add('hidden');$('#login').classList.remove('hidden');$('#login-form').reset();$('#login-form').classList.remove('hidden');$('#twofa-form')?.classList.add('hidden');$('#twofa-form')?.reset();$('#login-error').textContent='';if($('#twofa-error'))$('#twofa-error').textContent='';}
-  function showApp(){S.user=S.meta.user;window.TaskEscRealtime?.setCsrf?.(S.csrf);syncRealtimeChannels();$('#login').classList.add('hidden');$('#app').classList.remove('hidden');applyBranding();const preview=!!S.user.is_preview;$('#user-chip').textContent=preview?`Visualizando: ${S.user.preview_client_name}`:S.user.name+' · '+({admin:'Administrador',staff:'Equipe',client:'Cliente'}[S.user.role]||S.user.role);$('#preview-exit')?.classList.toggle('hidden',!preview);$('#new-demand')?.classList.toggle('hidden',preview||!can('tasks.create'));buildNav();startAutoRefresh();refreshNotificationBadge();setTimeout(promptPushAfterLogin,650);{const cleanPath=location.pathname.replace(/\/+$/,'');const baseClean=(BASE||'').replace(/\/+$/,'');if(location.hash||/\/index\.php$/i.test(location.pathname)||cleanPath===baseClean||cleanPath===baseClean+'/public')history.replaceState({},'',S.pendingTaskId?appPath(`kanban/task/${S.pendingTaskId}`):routeUrl(S.page||'dashboard'));}go(S.page||'dashboard',false);const flash=sessionStorage.getItem('taskesc-flash');if(flash){sessionStorage.removeItem('taskesc-flash');setTimeout(()=>toast(flash),350)}}
-  function startAutoRefresh(){if(S.timer)clearInterval(S.timer);S.timer=setInterval(async()=>{const notificationOpen=$('#notification-popover')&&!$('#notification-popover').classList.contains('hidden');if(!S.user||document.visibilityState==='hidden'||$('#modal-root').innerHTML.trim()||notificationOpen)return;refreshNotificationBadge();if(userIsInteracting())return;if(['dashboard','kanban','demands','agenda','finance','reports','logs'].includes(S.page)){await refresh();const i=$('#sync-indicator');if(i)i.innerHTML='<i></i> Atualizado às '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:S.meta.timezone||'America/Fortaleza'})}},30000)}
+  function showLogin(){closeNotifications();S.user=null;window.TaskEscRealtime?.setCsrf?.('');realtimeOwnedChannels.clear();realtimePending.clear();realtimeSeen.clear();S.chatPeerId=0;S.chatContacts=[];S.chatUnread=0;if(realtimeTimer)clearTimeout(realtimeTimer);realtimeTimer=0;if(S.timer)clearInterval(S.timer);S.timer=null;$('#app').classList.add('hidden');$('#login').classList.remove('hidden');$('#login-form').reset();$('#login-form').classList.remove('hidden');$('#twofa-form')?.classList.add('hidden');$('#twofa-form')?.reset();$('#login-error').textContent='';if($('#twofa-error'))$('#twofa-error').textContent='';}
+  function showApp(){S.user=S.meta.user;window.TaskEscRealtime?.setCsrf?.(S.csrf);syncRealtimeChannels();$('#login').classList.add('hidden');$('#app').classList.remove('hidden');applyBranding();const preview=!!S.user.is_preview;$('#user-chip').textContent=preview?`Visualizando: ${S.user.preview_client_name}`:S.user.name+' · '+({admin:'Administrador',staff:'Equipe',client:'Cliente'}[S.user.role]||S.user.role);$('#preview-exit')?.classList.toggle('hidden',!preview);$('#new-demand')?.classList.toggle('hidden',preview||!can('tasks.create'));buildNav();startAutoRefresh();refreshNotificationBadge();refreshChatBadge();setTimeout(promptPushAfterLogin,650);{const cleanPath=location.pathname.replace(/\/+$/,'');const baseClean=(BASE||'').replace(/\/+$/,'');if(location.hash||/\/index\.php$/i.test(location.pathname)||cleanPath===baseClean||cleanPath===baseClean+'/public')history.replaceState({},'',S.pendingTaskId?appPath(`kanban/task/${S.pendingTaskId}`):routeUrl(S.page||'dashboard'));}go(S.page||'dashboard',false);const flash=sessionStorage.getItem('taskesc-flash');if(flash){sessionStorage.removeItem('taskesc-flash');setTimeout(()=>toast(flash),350)}}
+  function startAutoRefresh(){if(S.timer)clearInterval(S.timer);S.timer=setInterval(async()=>{const notificationOpen=$('#notification-popover')&&!$('#notification-popover').classList.contains('hidden');if(!S.user||document.visibilityState==='hidden'||$('#modal-root').innerHTML.trim()||notificationOpen)return;refreshNotificationBadge();refreshChatBadge();if(userIsInteracting())return;if(['dashboard','kanban','demands','chat','agenda','finance','reports','logs'].includes(S.page)){await refresh();const i=$('#sync-indicator');if(i)i.innerHTML='<i></i> Atualizado às '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:S.meta.timezone||'America/Fortaleza'})}},30000)}
   async function refreshNotificationBadge(){
     if(!S.user||S.user.is_preview)return;try{const rows=await api('notifications'),unread=rows.filter(x=>!Number(x.seen)).length,b=$('#notification-badge');if(b){b.textContent=unread>99?'99+':String(unread);b.classList.toggle('hidden',unread===0);$('#notifications-btn')?.classList.toggle('has-unread',unread>0)}try{if(unread>0&&navigator.setAppBadge)await navigator.setAppBadge(unread);else if(navigator.clearAppBadge)await navigator.clearAppBadge()}catch{}}catch{}
   }
@@ -413,6 +502,7 @@
       ['dashboard','layout-dashboard','Dashboard','⌂'],
       ['kanban','columns-3','Kanban','▦'],
       ['demands','list-checks','Tasks','✓'],
+      ...(!S.user.is_preview?[['chat','messages-square','Chat','✉']]:[]),
       ...(staff?[['agenda','calendar-days','Agenda','◷']]:[]),
       ...(admin?[
         ['clients','users','Clientes','♙'],
@@ -424,7 +514,7 @@
       ...(staff&&!admin?[['reports','chart-bar','Relatórios','▤']]:[]),
       ['settings','settings','Configurações','⚙']
     ];
-    $('#nav').innerHTML=items.map(i=>`<button class="nav-btn" type="button" data-page="${i[0]}"><span class="nav-icon">${icon(i[1],i[3])}</span><span>${i[0]==='settings'&&S.user.role!=='admin'?'Minha conta':i[2]}</span></button>`).join('');
+    $('#nav').innerHTML=items.map(i=>`<button class="nav-btn" type="button" data-page="${i[0]}"><span class="nav-icon">${icon(i[1],i[3])}</span><span>${i[0]==='settings'&&S.user.role!=='admin'?'Minha conta':i[2]}</span>${i[0]==='chat'?`<em id="chat-nav-badge" class="nav-badge ${S.chatUnread?'':'hidden'}">${S.chatUnread>99?'99+':S.chatUnread}</em>`:''}</button>`).join('');
     $$('.nav-btn').forEach(b=>b.onclick=()=>go(b.dataset.page,true,true));
     const label=S.user.role==='client'?'Nova solicitação':'Nova task';$('#new-demand').innerHTML=`${icon('plus','+')}<span class="button-label">${label}</span>`;
     $('#new-demand').classList.toggle('hidden',!!S.user.is_preview||!can('tasks.create'));paintIcons();
@@ -437,7 +527,7 @@
   document.addEventListener('click',e=>{if(!e.target.closest('.notification-shell'))closeNotifications()});
   document.addEventListener('keydown',e=>{if(e.key==='Escape')closeNotifications()});
   $('#logout').onclick=async()=>{try{await api('auth.logout',{},'POST',false)}finally{showLogin()}};$('#preview-exit').onclick=async()=>{try{showPageLoader();await api('preview.stop',{},'POST');location.href=routeUrl('dashboard')}catch(x){hidePageLoader();toast(x.message,true)}};$('#menu').onclick=()=>{const open=!$('.sidebar').classList.contains('open');$('.sidebar').classList.toggle('open',open);document.body.classList.toggle('nav-open',open)};$('#nav-backdrop')?.addEventListener('click',closeMobileNav);$('#new-demand').onclick=()=>openDemand();
-  async function go(page,push=false,visualLoad=false,preserveView=null){const previousPage=S.page,keepView=preserveView===null?(page===previousPage&&!push):!!preserveView,viewState=keepView?captureViewState():null;if(page==='agenda'&&previousPage!=='agenda'){window.taskescAgendaView=window.matchMedia&&window.matchMedia('(max-width:760px)').matches?'day':'week';window.taskescAgendaDate=null}if(visualLoad)showPageLoader();if(push&&page!==S.page)history.pushState({},'',routeUrl(page));S.page=page;syncRealtimeChannels();closeNotifications();document.body.classList.toggle('kanban-page',page==='kanban');document.querySelectorAll('.nav-btn').forEach(b=>{const active=b.dataset.page===page;b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});const names={dashboard:['VISÃO GERAL','Dashboard'],kanban:['PRODUÇÃO','Kanban'],demands:['PRODUÇÃO','Tasks'],agenda:['PLANEJAMENTO','Agenda'],clients:['RELACIONAMENTO','Clientes'],services:['PRODUÇÃO','Serviços'],finance:['COMERCIAL','Financeiro'],reports:['INDICADORES','Relatórios'],logs:['SISTEMA','Saúde & Logs'],settings:['SISTEMA','Configurações']};if(page==='settings'&&S.user.role!=='admin')names.settings=['CONTA','Minha conta'];$('#page-kicker').textContent=names[page]?.[0]||'';$('#page-title').textContent=names[page]?.[1]||page;closeMobileNav();try{await (({dashboard:renderDashboard,kanban:renderKanban,demands:renderDemandList,agenda:renderAgenda,clients:renderClients,services:renderServices,finance:renderFinance,reports:renderReports,logs:renderSystemLogs,settings:renderSettings}[page]||renderDashboard)());if(page==='kanban'&&S.pendingTaskId){const id=S.pendingTaskId;S.pendingTaskId=0;await openDemand(id)}}catch(e){toast(e.message,true);$('#content').innerHTML=`<div class="empty">${esc(e.message)}</div>`}finally{if(viewState)restoreViewState(viewState);else if(page!==previousPage)requestAnimationFrame(()=>window.scrollTo({left:0,top:0,behavior:'auto'}));if(page==='kanban'&&page!==previousPage)requestAnimationFrame(()=>requestAnimationFrame(()=>{const board=$('.kanban');if(board)board.scrollLeft=0}));if(visualLoad)hidePageLoader()}}
+  async function go(page,push=false,visualLoad=false,preserveView=null){const previousPage=S.page,keepView=preserveView===null?(page===previousPage&&!push):!!preserveView,viewState=keepView?captureViewState():null;if(page==='agenda'&&previousPage!=='agenda'){window.taskescAgendaView=window.matchMedia&&window.matchMedia('(max-width:760px)').matches?'day':'week';window.taskescAgendaDate=null}if(visualLoad)showPageLoader();if(push&&page!==S.page)history.pushState({},'',routeUrl(page));S.page=page;syncRealtimeChannels();closeNotifications();document.body.classList.toggle('kanban-page',page==='kanban');document.querySelectorAll('.nav-btn').forEach(b=>{const active=b.dataset.page===page;b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});const names={dashboard:['VISÃO GERAL','Dashboard'],kanban:['PRODUÇÃO','Kanban'],demands:['PRODUÇÃO','Tasks'],chat:['COMUNICAÇÃO','Chat'],agenda:['PLANEJAMENTO','Agenda'],clients:['RELACIONAMENTO','Clientes'],services:['PRODUÇÃO','Serviços'],finance:['COMERCIAL','Financeiro'],reports:['INDICADORES','Relatórios'],logs:['SISTEMA','Saúde & Logs'],settings:['SISTEMA','Configurações']};if(page==='settings'&&S.user.role!=='admin')names.settings=['CONTA','Minha conta'];$('#page-kicker').textContent=names[page]?.[0]||'';$('#page-title').textContent=names[page]?.[1]||page;closeMobileNav();try{await (({dashboard:renderDashboard,kanban:renderKanban,demands:renderDemandList,chat:renderChat,agenda:renderAgenda,clients:renderClients,services:renderServices,finance:renderFinance,reports:renderReports,logs:renderSystemLogs,settings:renderSettings}[page]||renderDashboard)());if(page==='kanban'&&S.pendingTaskId){const id=S.pendingTaskId;S.pendingTaskId=0;await openDemand(id)}}catch(e){toast(e.message,true);$('#content').innerHTML=`<div class="empty">${esc(e.message)}</div>`}finally{if(viewState)restoreViewState(viewState);else if(page!==previousPage)requestAnimationFrame(()=>window.scrollTo({left:0,top:0,behavior:'auto'}));if(page==='kanban'&&page!==previousPage)requestAnimationFrame(()=>requestAnimationFrame(()=>{const board=$('.kanban');if(board)board.scrollLeft=0}));if(visualLoad)hidePageLoader()}}
   function refresh(){return go(S.page,false,false,true)};
   window.addEventListener('popstate',()=>{const r=readRoute();S.pendingTaskId=r.taskId;go(r.page,false,true)});
   function dashboardDelta(current,previous){current=Number(current||0);previous=Number(previous||0);if(previous===0)return current===0?{text:'0%',cls:'neutral'}:{text:'+100%',cls:'positive'};const pct=Math.round(((current-previous)/previous)*100);return {text:(pct>0?'+':'')+pct+'%',cls:pct>0?'positive':pct<0?'negative':'neutral'}}

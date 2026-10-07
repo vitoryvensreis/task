@@ -74,6 +74,18 @@ foreach($rows as $row){
 }
 check(count(array_unique($operationIds))===1,'All channel fanout rows from one mutation must share one operation id.');
 
+$staffIds=EventOutbox::transaction(fn()=>DemandRealtime::emit(
+    'demand.comment_created',
+    $demand,
+    ['change'=>'comment.created','comment_id'=>77,'internal'=>1],
+    12,
+    [],
+    'staff'
+));
+check(array_keys($staffIds)===['kanban/global','staff/global'],'Staff-only demand details must never fan out to client/demand/project channels.');
+$staffPayload=json_decode((string)DB::one("SELECT payload_json FROM event_outbox WHERE event_type='demand.comment_created' ORDER BY id DESC LIMIT 1")['payload_json'],true,16,JSON_THROW_ON_ERROR);
+check((int)$staffPayload['internal']===1&&!array_key_exists('body',$staffPayload),'Internal realtime payload must stay metadata-only.');
+
 $before=(int)(DB::one('SELECT COUNT(*) AS n FROM event_outbox')['n']??0);
 try {
     EventOutbox::transaction(function() use($demand): void {
@@ -90,7 +102,7 @@ $draftIds=EventOutbox::transaction(fn()=>DemandRealtime::emit('demand.created',$
 check(array_keys($draftIds)===['kanban/global'],'Draft events must stay on the admin-only global channel.');
 
 $source=file_get_contents(ROOT.'/app/Demands.php');
-foreach(['demand.created','demand.updated','demand.stage_changed','demand.reordered','demand.deleted'] as $type){
+foreach(['demand.created','demand.updated','demand.stage_changed','demand.reordered','demand.deleted','demand.comment_created','demand.checklist_changed','demand.time_logged','demand.change_changed'] as $type){
     check(str_contains($source,$type),'Demands integration missing '.$type);
 }
 check(str_contains($source,"public static function stage(array \$p): array {\n  return DB::tx("),'Stage mutation must be transactional with its event.');

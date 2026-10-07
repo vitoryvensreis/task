@@ -83,7 +83,10 @@ final class Chat
 
         return DB::tx(function() use($me,$peer,$body,$nonce): array {
             $existing=DB::one('SELECT m.*,u.name AS sender_name FROM chat_messages m JOIN users u ON u.id=m.sender_id WHERE m.sender_id=? AND m.client_nonce=? LIMIT 1',[(int)$me['id'],$nonce]);
-            if($existing)return ['message'=>$existing,'duplicate'=>true];
+            if($existing){
+                if((int)$existing['recipient_id']!==(int)$peer['id'])fail('Identificador de mensagem já utilizado.',409);
+                return ['message'=>$existing,'duplicate'=>true];
+            }
 
             $thread=self::threadFor((int)$me['id'],(int)$peer['id'],true);
             $created=self::microNow();
@@ -168,6 +171,6 @@ final class Chat
 
     private static function microNow(): string
     {
-        return (new DateTimeImmutable('now',new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u');
+        return now();
     }
 }

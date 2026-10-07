@@ -4,6 +4,7 @@ const app=fs.readFileSync(new URL('../public/assets/app.js',import.meta.url),'ut
 const realtime=fs.readFileSync(new URL('../public/assets/realtime-client.js',import.meta.url),'utf8');
 const index=fs.readFileSync(new URL('../public/index.php',import.meta.url),'utf8');
 const sw=fs.readFileSync(new URL('../public/service-worker.js',import.meta.url),'utf8');
+const icons=fs.readFileSync(new URL('../public/assets/taskesc-icons.js',import.meta.url),'utf8');
 
 function check(condition,message){if(!condition)throw new Error(message)}
 
@@ -31,6 +32,11 @@ check(app.includes("Pesquisar administrador")&&app.includes("data-chat-peer"),'a
 check(app.includes("handleChatRealtime(publication)"),'admin chat realtime handler must be wired');
 check(index.includes('id="admin-chat-root"')&&index.includes('id="admin-chat-fab"')&&index.includes('id="admin-chat-popup"'),'floating admin chat root must exist');
 check(index.includes("$appCssVersion=is_file(ROOT.'/public/assets/app.css')?filemtime"),'chat CSS must use cache busting');
+check(index.includes('data-lucide="message-circle"'),'floating chat button must use a conversation bubble icon');
+check(icons.includes("'message-circle':")&&icons.includes("settings:'<path"),'custom icons must provide conversation bubble and gear settings icon');
+check(app.includes("event.target.closest('[data-chat-peer]')"),'mobile contact selection must use delegated click handling');
+check(app.includes('function showChatConversationView()')&&app.includes('function showChatContactsView()'),'mobile chat must switch explicitly between contacts and conversation');
+check(app.includes("(max-width:820px)"),'chat mobile behavior must cover phones and small tablets');
 
 
 console.log('Realtime frontend: client channels, fanout dedupe, debounced refresh, modal safety and HTTP fallback OK');

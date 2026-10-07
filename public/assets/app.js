@@ -411,6 +411,7 @@
     const root=$('#admin-chat-root'),fab=$('#admin-chat-fab');
     if(!root||!fab)return;
     const enabled=adminChatEnabled();
+    document.body.classList.toggle('admin-chat-enabled',enabled);
     root.classList.toggle('hidden',!enabled);
     if(!enabled){closeAdminChat();updateChatBadge(0);return}
     if(!adminChatBound){

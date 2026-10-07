@@ -31,6 +31,11 @@ check(app.includes("Pesquisar administrador")&&app.includes("data-chat-peer"),'a
 check(app.includes("handleChatRealtime(publication)"),'admin chat realtime handler must be wired');
 check(index.includes('id="admin-chat-root"')&&index.includes('id="admin-chat-fab"')&&index.includes('id="admin-chat-popup"'),'floating admin chat root must exist');
 check(index.includes("$appCssVersion=is_file(ROOT.'/public/assets/app.css')?filemtime"),'chat CSS must use cache busting');
+check(index.includes("$iconsJsVersion=is_file(ROOT.'/public/assets/taskesc-icons.js')?filemtime"),'icon bundle must use cache busting');
+check(index.includes('data-lucide="message-circle"'),'floating chat button must use a conversation bubble icon');
+const icons=fs.readFileSync(new URL('../public/assets/taskesc-icons.js',import.meta.url),'utf8');
+check(icons.includes("'message-circle':"),'icon bundle must include the conversation bubble');
+check(icons.includes("settings:'<path")&&icons.includes('<circle cx="12" cy="12" r="3"/>'),'settings icon must be a gear');
 
 
 console.log('Realtime frontend: client channels, fanout dedupe, debounced refresh, modal safety and HTTP fallback OK');

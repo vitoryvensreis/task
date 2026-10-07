@@ -37,6 +37,12 @@ check(icons.includes("'message-circle':")&&icons.includes("settings:'<path"),'cu
 check(app.includes("event.target.closest('[data-chat-peer]')"),'mobile contact selection must use delegated click handling');
 check(app.includes('function showChatConversationView()')&&app.includes('function showChatContactsView()'),'mobile chat must switch explicitly between contacts and conversation');
 check(app.includes("(max-width:820px)"),'chat mobile behavior must cover phones and small tablets');
+check(app.includes("api('chat.tasks'")&&app.includes('scheduleChatTaskSuggestions()'),'chat composer must autocomplete @task mentions over authenticated HTTP');
+check(app.includes('CHAT_EMOJIS')&&app.includes('chat-emoji-picker')&&app.includes('data-chat-emoji'),'chat composer must expose an emoji picker without an external CDN');
+check(app.includes('task_mentions:taskMentions'),'chat send must persist only selected task references still present in the message');
+check(app.includes('data-chat-demand')&&app.includes('openDemand(id)'),'linked tasks in chat messages must be clickable');
+check(app.includes("new URLSearchParams(location.search).get('chat')")&&app.includes('openAdminChat(requestedChatPeer)'),'push deep links must open the sender conversation');
+check(app.includes('appUnread=unread+(adminChatEnabled()?Number(S.chatUnread||0):0)'),'app badge must combine normal notifications with unread admin chat');
 check(app.includes("startsWith('agenda.')")&&app.includes('handleAgendaRealtime(publication)'),'frontend must route agenda realtime publications');
 check(app.includes('function flushAgendaRealtime()')&&app.includes('stableRender(renderAgenda)'),'agenda realtime must refresh the current calendar view with stable rendering');
 check(app.includes("api('agenda.detail',{id:detailId})"),'open calendar event details must refresh after realtime changes');

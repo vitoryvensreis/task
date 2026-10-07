@@ -34,6 +34,7 @@ try {
   'system.error_resolve'=>SystemHealth::resolve($p),
   'chat.contacts'=>Chat::contacts(),
   'chat.messages'=>Chat::messages($p),
+  'chat.tasks'=>Chat::tasks($p),
   'chat.send'=>Chat::send($p),
   'chat.read'=>Chat::read($p),
   'dashboard'=>Reports::dashboard($p),

@@ -44,6 +44,8 @@ try{
  chatCheck(!Migrations::chatIssues(),'Fresh schema 23 must contain a valid chat/task-reference structure.');
  $workerSource=file_get_contents(ROOT.'/bin/realtime-worker.php');
  chatCheck(is_string($workerSource)&&str_contains($workerSource,'Migrations::OUTBOX_VERSION')&&str_contains($workerSource,'Migrations::CURRENT_VERSION'),'Realtime worker must accept the current migrated schema range.');
+ $outboxMigratorSource=file_get_contents(ROOT.'/bin/migrate-outbox.php');
+ chatCheck(is_string($outboxMigratorSource)&&str_contains($outboxMigratorSource,'(19|21|22|23)'),'Outbox deploy migrator must accept a validated backup from current schema 23.');
 
  // Simulate a production schema 22 and prove the scoped migration is safe/idempotent.
  $db->exec('DROP TABLE chat_message_tasks');

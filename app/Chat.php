@@ -5,6 +5,8 @@ final class Chat
 {
     private const MESSAGE_LIMIT=80;
     private const MESSAGE_MAX=4000;
+    private const TASK_SUGGESTION_LIMIT=10;
+    private const TASK_MENTION_LIMIT=8;
 
     public static function contacts(): array
     {
@@ -65,7 +67,30 @@ final class Chat
           WHERE m.thread_id=?".($before>0?' AND m.id<?':'')." ORDER BY m.id DESC LIMIT ".self::MESSAGE_LIMIT;
         $args=[(int)$thread['id']];if($before>0)$args[]=$before;
         $rows=array_reverse(DB::all($sql,$args));
+        self::attachTaskRefs($rows);
         return ['peer'=>self::peerView($peer),'thread_id'=>(int)$thread['id'],'messages'=>$rows];
+    }
+
+    public static function tasks(array $p): array
+    {
+        self::guard();
+        $q=trim((string)($p['q']??''));
+        if(mb_strlen($q)>120)fail('Pesquisa de task muito longa.',422);
+        $like='%'.$q.'%';$prefix=$q.'%';
+        $rows=DB::all("SELECT d.id,d.title,d.due_at,d.updated_at,c.name AS client_name,s.name AS stage_name
+          FROM demands d
+          JOIN clients c ON c.id=d.client_id
+          JOIN stages s ON s.id=d.stage_id
+          WHERE d.deleted_at IS NULL AND (?='' OR d.title LIKE ? OR c.name LIKE ?)
+          ORDER BY CASE WHEN ?<>'' AND d.title LIKE ? THEN 0 ELSE 1 END,d.updated_at DESC,d.id DESC
+          LIMIT ".self::TASK_SUGGESTION_LIMIT,[$q,$like,$like,$q,$prefix]);
+        return ['tasks'=>array_map(static fn(array $row): array => [
+            'id'=>(int)$row['id'],
+            'title'=>(string)$row['title'],
+            'client_name'=>(string)$row['client_name'],
+            'stage_name'=>(string)$row['stage_name'],
+            'due_at'=>$row['due_at']??null,
+        ],$rows)];
     }
 
     public static function send(array $p): array
@@ -74,12 +99,14 @@ final class Chat
         $body=required($p,'body',self::MESSAGE_MAX);
         $nonce=strtolower(trim((string)($p['client_nonce']??'')));
         if(!preg_match('/\A[a-f0-9]{32}\z/D',$nonce))fail('Identificador da mensagem inválido.',422);
+        $mentions=self::validatedTaskMentions($p['task_mentions']??[],$body);
 
-        return DB::tx(function() use($me,$peer,$body,$nonce): array {
+        $result=DB::tx(function() use($me,$peer,$body,$nonce,$mentions): array {
             $existing=DB::one('SELECT m.*,u.name AS sender_name FROM chat_messages m JOIN users u ON u.id=m.sender_id WHERE m.sender_id=? AND m.client_nonce=? LIMIT 1',[(int)$me['id'],$nonce]);
             if($existing){
                 if((int)$existing['recipient_id']!==(int)$peer['id'])fail('Identificador de mensagem já utilizado.',409);
-                return ['message'=>$existing,'duplicate'=>true];
+                $rows=[$existing];self::attachTaskRefs($rows);
+                return ['message'=>$rows[0],'duplicate'=>true,'push_sent'=>0];
             }
 
             $thread=self::threadFor((int)$me['id'],(int)$peer['id'],true);
@@ -93,14 +120,41 @@ final class Chat
                 'created_at'=>$created,
                 'read_at'=>null,
             ]);
+            foreach($mentions as $mention)DB::insert('chat_message_tasks',[
+                'message_id'=>$id,
+                'demand_id'=>(int)$mention['id'],
+                'label'=>(string)$mention['label'],
+                'created_at'=>$created,
+            ]);
             DB::update('chat_threads',(int)$thread['id'],['last_message_id'=>$id,'updated_at'=>$created]);
             $message=[
                 'id'=>$id,'thread_id'=>(int)$thread['id'],'sender_id'=>(int)$me['id'],'recipient_id'=>(int)$peer['id'],
-                'body'=>$body,'created_at'=>$created,'read_at'=>null,'sender_name'=>(string)$me['name']
+                'body'=>$body,'created_at'=>$created,'read_at'=>null,'sender_name'=>(string)$me['name'],'task_refs'=>$mentions
             ];
             ChatRealtime::message($message);
-            return ['message'=>$message,'duplicate'=>false];
+            return ['message'=>$message,'duplicate'=>false,'push_sent'=>0];
         });
+
+        if(empty($result['duplicate'])){
+            try{
+                $preview=preg_replace('/\s+/u',' ',trim($body))??trim($body);
+                $unreadChat=(int)(DB::one('SELECT COUNT(*) AS n FROM chat_messages WHERE recipient_id=? AND read_at IS NULL',[(int)$peer['id']])['n']??0);
+                $unreadNotifications=(int)(DB::one('SELECT COUNT(*) AS n FROM notifications WHERE user_id=? AND seen=0',[(int)$peer['id']])['n']??0);
+                $result['push_sent']=Push::notifyUser((int)$peer['id'],[
+                    'title'=>'Mensagem de '.(string)$me['name'],
+                    'body'=>mb_substr($preview,0,300),
+                    'url'=>base('dashboard').'?chat='.(int)$me['id'],
+                    'tag'=>'taskesc-chat-message-'.(int)$result['message']['id'],
+                    'scope'=>'chat',
+                    'chat_peer_id'=>(int)$me['id'],
+                    'badge_count'=>$unreadChat+$unreadNotifications,
+                ]);
+            }catch(Throwable $e){
+                $result['push_sent']=0;
+                error_log('TaskEsc chat push: '.$e->getMessage());
+            }
+        }
+        return $result;
     }
 
     public static function read(array $p): array
@@ -117,6 +171,55 @@ final class Chat
             if($count>0)ChatRealtime::read((int)$thread['id'],(int)$me['id'],(int)$peer['id'],$lastId);
             return ['read'=>$count,'last_read_id'=>$lastId,'read_at'=>$when];
         });
+    }
+
+    private static function validatedTaskMentions(mixed $input,string $body): array
+    {
+        if($input===null||$input==='')return [];
+        if(!is_array($input))fail('Referências de task inválidas.',422);
+        if(count($input)>self::TASK_MENTION_LIMIT)fail('Use no máximo '.self::TASK_MENTION_LIMIT.' tasks por mensagem.',422);
+        $requested=[];$ids=[];
+        foreach($input as $item){
+            if(!is_array($item))fail('Referência de task inválida.',422);
+            $id=filter_var($item['id']??null,FILTER_VALIDATE_INT);
+            $label=trim((string)($item['label']??''));
+            if($id===false||(int)$id<1||$label===''||mb_strlen($label)>255)fail('Referência de task inválida.',422);
+            if(isset($requested[(int)$id]))continue;
+            $requested[(int)$id]=$label;$ids[]=(int)$id;
+        }
+        if(!$ids)return [];
+        $marks=implode(',',array_fill(0,count($ids),'?'));
+        $rows=DB::all("SELECT id,title FROM demands WHERE deleted_at IS NULL AND id IN ($marks)",$ids);
+        $byId=[];foreach($rows as $row)$byId[(int)$row['id']]=$row;
+        $out=[];
+        foreach($ids as $id){
+            $row=$byId[$id]??null;if(!$row)fail('Uma das tasks linkadas não está mais disponível.',409);
+            $title=(string)$row['title'];$label=$requested[$id];
+            if($label!==$title)fail('Uma task linkada mudou de nome. Selecione-a novamente.',409);
+            if(!str_contains($body,'@'.$title))fail('A mensagem não contém a task selecionada.',422);
+            $out[]=['id'=>$id,'label'=>$title,'available'=>true];
+        }
+        return $out;
+    }
+
+    private static function attachTaskRefs(array &$messages): void
+    {
+        $ids=array_values(array_filter(array_map(static fn(array $row): int => (int)($row['id']??0),$messages)));
+        if(!$ids){foreach($messages as &$message)$message['task_refs']=[];unset($message);return;}
+        $marks=implode(',',array_fill(0,count($ids),'?'));
+        $refs=DB::all("SELECT x.message_id,x.demand_id,x.label,d.deleted_at
+          FROM chat_message_tasks x
+          LEFT JOIN demands d ON d.id=x.demand_id
+          WHERE x.message_id IN ($marks)
+          ORDER BY x.message_id,x.demand_id",$ids);
+        $byMessage=[];
+        foreach($refs as $ref)$byMessage[(int)$ref['message_id']][]=[
+            'id'=>(int)$ref['demand_id'],
+            'label'=>(string)$ref['label'],
+            'available'=>$ref['deleted_at']===null,
+        ];
+        foreach($messages as &$message)$message['task_refs']=$byMessage[(int)$message['id']]??[];
+        unset($message);
     }
 
     private static function guard(): array

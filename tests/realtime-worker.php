@@ -95,6 +95,10 @@ DB::run('UPDATE event_outbox SET attempts=8,last_error=? WHERE id=?',['centrifug
 $stats=EventOutbox::stats(8);
 checkWorker((int)$stats['exhausted']>=1,'Retry limit must be visible in health stats');
 checkWorker(!in_array($exhaustedId,array_column(EventOutbox::due(100,8),'id'),true),'Exhausted event must not be consumed again');
+$workerSource=file_get_contents(ROOT.'/bin/realtime-worker.php');
+checkWorker(is_string($workerSource)&&str_contains($workerSource,"'alerts' => ['exhausted_events'")&&!str_contains($workerSource,"&& (int)\$queue['exhausted'] === 0"),'Exhausted dead-letter rows must remain observable without permanently failing worker liveness.');
+$step3Source=file_get_contents(ROOT.'/ops/realtime-step3.py');
+checkWorker(is_string($step3Source)&&str_contains($step3Source,'worker_install_probe'),'Worker installer must emit a safe liveness probe when startup verification fails.');
 
 @unlink($capture);@unlink($configPath);
 echo "Realtime worker: HTTP publish, idempotency key, CAS success/retry, exponential backoff, named lock and retry limit OK\n";

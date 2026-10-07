@@ -98,7 +98,7 @@
   const initialRoute=readRoute();
   const S={user:null,meta:null,csrf:'',page:initialRoute.page,pendingTaskId:initialRoute.taskId,demands:[],dashboard:null,timer:null,chatPeerId:0,chatContacts:[],chatUnread:0,chatOpen:false};
   const realtimeOwnedChannels=new Set(),realtimeSeen=new Map(),realtimePending=new Map();
-  let realtimeTimer=0,realtimeRefreshing=false,realtimeEditNoticeId=0;
+  let realtimeTimer=0,realtimeRefreshing=false,realtimeEditNoticeId=0,agendaRealtimeTimer=0,agendaRealtimeDirty=false;
   const routeUrl=page=>appPath(ROUTES[page]||ROUTES.dashboard);
   const taskShareUrl=id=>new URL(appPath(`kanban/task/${Number(id)}`),location.origin).href;
   const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
@@ -374,13 +374,50 @@
       if(realtimePending.size)scheduleRealtimeRefresh(220);
     }
   }
+  function rememberRealtimePublication(publication){
+    const payload=publication?.payload&&typeof publication.payload==='object'?publication.payload:{};
+    const key=String(payload.operation_id||[publication?.event_type||'',publication?.entity_type||'',publication?.entity_id||'',payload.version??'',payload.updated_at??'',payload.change??''].join('|'));
+    const nowMs=Date.now(),last=realtimeSeen.get(key)||0;if(last&&nowMs-last<120000)return false;
+    realtimeSeen.set(key,nowMs);
+    if(realtimeSeen.size>500)for(const [k,t] of realtimeSeen)if(nowMs-t>120000)realtimeSeen.delete(k);
+    return true;
+  }
+  async function flushAgendaRealtime(){
+    if(!agendaRealtimeDirty||!S.user)return;
+    if(document.visibilityState==='hidden')return;
+    if(S.page!=='agenda'){agendaRealtimeDirty=false;realtimeIndicator();return}
+    if(realtimeEditing()){clearTimeout(agendaRealtimeTimer);agendaRealtimeTimer=setTimeout(flushAgendaRealtime,700);return}
+    agendaRealtimeDirty=false;
+    const detail=$('[data-event-detail-id]'),detailId=Number(detail?.dataset?.eventDetailId||0);
+    try{
+      await stableRender(renderAgenda);
+      if(detailId){
+        try{const fresh=await api('agenda.detail',{id:detailId});if($(`[data-event-detail-id="${detailId}"]`))eventDetailModal(fresh,false)}
+        catch(error){if($(`[data-event-detail-id="${detailId}"]`)){closeModal();toast(error.message||'O compromisso foi alterado em outro acesso.',true)}}
+      }
+      realtimeIndicator();
+    }catch(error){console.debug?.('[TaskEsc agenda realtime] refresh fallback',error)}
+  }
+  function handleAgendaRealtime(publication){
+    if(!publication||!String(publication.event_type||'').startsWith('agenda.'))return;
+    if(!rememberRealtimePublication(publication))return;
+    agendaRealtimeDirty=true;
+    clearTimeout(agendaRealtimeTimer);
+    agendaRealtimeTimer=setTimeout(flushAgendaRealtime,140);
+  }
+
   window.addEventListener('taskesc:realtime-publication',event=>{
     const publication=event?.detail?.data;
     if(publication&&String(publication.event_type||'').startsWith('chat.')){handleChatRealtime(publication);return}
+    if(publication&&String(publication.event_type||'').startsWith('agenda.')){handleAgendaRealtime(publication);return}
     const data=realtimePayload(event);if(!data||!rememberRealtimeEvent(data))return;
     realtimePending.set(data.demandId,data);scheduleRealtimeRefresh();
   });
-  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&realtimePending.size)scheduleRealtimeRefresh(80)});
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState!=='visible')return;
+    if(realtimePending.size)scheduleRealtimeRefresh(80);
+    if(agendaRealtimeDirty){clearTimeout(agendaRealtimeTimer);agendaRealtimeTimer=setTimeout(flushAgendaRealtime,80)}
+  });
   function applyBranding(){const brand=S.meta?.brand||{},name=String(brand.name||'TaskEsc').trim()||'TaskEsc',logo=String(brand.logo||'').trim()||DEFAULT_LOGO;$('#brand-name')&&($('#brand-name').textContent=name);$('#login-brand-name')&&($('#login-brand-name').textContent=name);document.title=name;['#sidebar-logo','#login-logo'].forEach(sel=>{const img=$(sel);if(!img)return;img.dataset.fallback='0';img.onerror=()=>{if(img.dataset.fallback==='1')return;img.dataset.fallback='1';img.src=DEFAULT_LOGO};img.src=logo;img.alt=`Logo ${name}`})}
   async function api(action,data={},method='GET',csrf=true){let url=appPath('api.php')+'?action='+encodeURIComponent(action),opts={method,headers:{'Accept':'application/json'}};if(method==='GET'){for(const [k,v] of Object.entries(data))if(v!==undefined&&v!==null&&v!=='')url+='&'+encodeURIComponent(k)+'='+encodeURIComponent(v)}else{opts.headers['Content-Type']='application/json';if(csrf&&S.csrf)opts.headers['X-CSRF-Token']=S.csrf;opts.body=JSON.stringify(data)}const r=await fetch(url,opts),j=await r.json().catch(()=>({error:'Resposta inválida do servidor.'}));if(!r.ok||j.error){if(r.status===401&&action!=='auth.me')showLogin();throw new Error(j.error||'Não foi possível concluir.')}return j}
   const adminChatEnabled=()=>S.user?.role==='admin'&&!S.user?.is_preview;
@@ -581,7 +618,7 @@
 
   async function squarePngFromLogo(file,size,maskable=false){try{const bitmap=await createImageBitmap(file),canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');canvas.width=size;canvas.height=size;ctx.fillStyle='#050607';ctx.fillRect(0,0,size,size);const pad=Math.round(size*(maskable?.19:.11)),max=size-pad*2,scale=Math.min(max/bitmap.width,max/bitmap.height),w=Math.max(1,Math.round(bitmap.width*scale)),h=Math.max(1,Math.round(bitmap.height*scale));ctx.drawImage(bitmap,Math.round((size-w)/2),Math.round((size-h)/2),w,h);bitmap.close?.();return await new Promise(resolve=>canvas.toBlob(resolve,'image/png',.96))}catch(_){return null}}
   async function uploadLogoFile(file){const fd=new FormData();fd.append('logo',file);const icons=await Promise.all([[180,false,'icon_180'],[192,false,'icon_192'],[512,false,'icon_512'],[512,true,'icon_maskable_512']].map(async ([size,mask,key])=>[key,await squarePngFromLogo(file,size,mask)]));for(const [key,blob] of icons)if(blob)fd.append(key,blob,key+'.png');const r=await fetch(appPath('api.php')+'?action=settings.logo_upload',{method:'POST',headers:{'Accept':'application/json',...(S.csrf?{'X-CSRF-Token':S.csrf}:{})},body:fd}),j=await r.json().catch(()=>({error:'Resposta inválida do servidor.'}));if(!r.ok||j.error)throw new Error(j.error||'Não foi possível enviar a logo.');return j}
-  function showLogin(){closeNotifications();closeAdminChat();document.body.classList.remove('admin-chat-enabled');$('#admin-chat-root')?.classList.add('hidden');S.user=null;window.TaskEscRealtime?.setCsrf?.('');realtimeOwnedChannels.clear();realtimePending.clear();realtimeSeen.clear();S.chatPeerId=0;S.chatContacts=[];S.chatUnread=0;if(realtimeTimer)clearTimeout(realtimeTimer);realtimeTimer=0;if(S.timer)clearInterval(S.timer);S.timer=null;$('#app').classList.add('hidden');$('#login').classList.remove('hidden');$('#login-form').reset();$('#login-form').classList.remove('hidden');$('#twofa-form')?.classList.add('hidden');$('#twofa-form')?.reset();$('#login-error').textContent='';if($('#twofa-error'))$('#twofa-error').textContent='';}
+  function showLogin(){closeNotifications();closeAdminChat();document.body.classList.remove('admin-chat-enabled');$('#admin-chat-root')?.classList.add('hidden');S.user=null;window.TaskEscRealtime?.setCsrf?.('');realtimeOwnedChannels.clear();realtimePending.clear();realtimeSeen.clear();S.chatPeerId=0;S.chatContacts=[];S.chatUnread=0;agendaRealtimeDirty=false;if(realtimeTimer)clearTimeout(realtimeTimer);realtimeTimer=0;if(agendaRealtimeTimer)clearTimeout(agendaRealtimeTimer);agendaRealtimeTimer=0;if(S.timer)clearInterval(S.timer);S.timer=null;$('#app').classList.add('hidden');$('#login').classList.remove('hidden');$('#login-form').reset();$('#login-form').classList.remove('hidden');$('#twofa-form')?.classList.add('hidden');$('#twofa-form')?.reset();$('#login-error').textContent='';if($('#twofa-error'))$('#twofa-error').textContent='';}
   function showApp(){S.user=S.meta.user;window.TaskEscRealtime?.setCsrf?.(S.csrf);syncRealtimeChannels();$('#login').classList.add('hidden');$('#app').classList.remove('hidden');applyBranding();const preview=!!S.user.is_preview;$('#user-chip').textContent=preview?`Visualizando: ${S.user.preview_client_name}`:S.user.name+' · '+({admin:'Administrador',staff:'Equipe',client:'Cliente'}[S.user.role]||S.user.role);$('#preview-exit')?.classList.toggle('hidden',!preview);$('#new-demand')?.classList.toggle('hidden',preview||!can('tasks.create'));buildNav();setupAdminChat();startAutoRefresh();refreshNotificationBadge();refreshChatBadge();setTimeout(promptPushAfterLogin,650);{const cleanPath=location.pathname.replace(/\/+$/,'');const baseClean=(BASE||'').replace(/\/+$/,'');if(location.hash||/\/index\.php$/i.test(location.pathname)||cleanPath===baseClean||cleanPath===baseClean+'/public')history.replaceState({},'',S.pendingTaskId?appPath(`kanban/task/${S.pendingTaskId}`):routeUrl(S.page||'dashboard'));}go(S.page||'dashboard',false);const flash=sessionStorage.getItem('taskesc-flash');if(flash){sessionStorage.removeItem('taskesc-flash');setTimeout(()=>toast(flash),350)}}
   function startAutoRefresh(){if(S.timer)clearInterval(S.timer);S.timer=setInterval(async()=>{const notificationOpen=$('#notification-popover')&&!$('#notification-popover').classList.contains('hidden');if(!S.user||document.visibilityState==='hidden'||$('#modal-root').innerHTML.trim()||notificationOpen)return;refreshNotificationBadge();refreshChatBadge();if(userIsInteracting())return;if(['dashboard','kanban','demands','agenda','finance','reports','logs'].includes(S.page)){await refresh();const i=$('#sync-indicator');if(i)i.innerHTML='<i></i> Atualizado às '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:S.meta.timezone||'America/Fortaleza'})}},30000)}
   async function refreshNotificationBadge(){

@@ -43,7 +43,7 @@ final class Agenda {
   public static function calendarSave(array $p): array {
   Auth::admin();
   return DB::tx(function() use($p): array {
-   $id=(int)($p['id']??0);$row=['name'=>required($p,'name',190),'color'=>$p['color']??'#737373','selected'=>(int)(bool)($p['selected']??1),'write_enabled'=>(int)(bool)($p['write_enabled']??1)];if(!preg_match('/^#[a-f0-9]{6}$/i',$row['color']))fail('Cor inválida.');if($id){$c=DB::one('SELECT * FROM calendars WHERE id=? FOR UPDATE',[$id]);if(!$c)fail('Agenda não encontrada.');if(!in_array($c['access_role'],['owner','writer','writerWithoutPrivateAccess']))$row['write_enabled']=0;$row['dirty']=1;DB::update('calendars',$id,$row);}else $id=DB::insert('calendars',$row);AgendaRealtime::calendar('agenda.calendar_changed',$id,$p['id']??0?'calendar.updated':'calendar.created',(int)Auth::$user['id']);return ['id'=>$id];
+   $id=(int)($p['id']??0);$row=['name'=>required($p,'name',190),'color'=>$p['color']??'#737373','selected'=>(int)(bool)($p['selected']??1),'write_enabled'=>(int)(bool)($p['write_enabled']??1)];if(!preg_match('/^#[a-f0-9]{6}$/i',$row['color']))fail('Cor inválida.');$editing=$id>0;if($editing){$c=DB::one('SELECT * FROM calendars WHERE id=? FOR UPDATE',[$id]);if(!$c)fail('Agenda não encontrada.');if(!in_array($c['access_role'],['owner','writer','writerWithoutPrivateAccess']))$row['write_enabled']=0;$row['dirty']=1;DB::update('calendars',$id,$row);}else $id=DB::insert('calendars',$row);AgendaRealtime::calendar('agenda.calendar_changed',$id,$editing?'calendar.updated':'calendar.created',(int)Auth::$user['id']);return ['id'=>$id];
   });
  }
   public static function calendarSelect(array $p): array {

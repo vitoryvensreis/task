@@ -40,34 +40,75 @@ try{
  $db->exec('SET FOREIGN_KEY_CHECKS=1');
  $db->exec(file_get_contents(ROOT.'/database/schema.sql'));
 
- chatCheck(!Migrations::chatIssues(),'Fresh schema 22 must contain a valid chat structure.');
+ chatCheck((string)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??'')==='23','Fresh schema must be 23.');
+ chatCheck(!Migrations::chatIssues(),'Fresh schema 23 must contain a valid chat/task-reference structure.');
+
+ // Simulate a production schema 22 and prove the scoped migration is safe/idempotent.
+ $db->exec('DROP TABLE chat_message_tasks');
+ DB::run("UPDATE settings SET value='22' WHERE `key`='schema_version'");
+ $migration=Migrations::chat();
+ chatCheck((int)$migration['previous']===22&&(int)$migration['current']===23&&!empty($migration['changed']),'Schema 22 must upgrade to 23.');
+ chatCheck(!Migrations::chatIssues(),'Schema 22->23 migration must create valid task references.');
+ chatCheck(Migrations::chat()['changed']===false,'Repeated schema 23 chat migration must be a no-op.');
 
  $password=password_hash('Taskesc-chat-ci!',PASSWORD_DEFAULT);
  $adminA=DB::insert('users',['name'=>'Admin A','email'=>'admin-a-chat@ci.invalid','password_hash'=>$password,'role'=>'admin','active'=>1,'created_at'=>now()]);
  $adminB=DB::insert('users',['name'=>'Admin B','email'=>'admin-b-chat@ci.invalid','password_hash'=>$password,'role'=>'admin','active'=>1,'created_at'=>now()]);
  $staff=DB::insert('users',['name'=>'Staff Chat','email'=>'staff-chat@ci.invalid','password_hash'=>$password,'role'=>'staff','active'=>1,'created_at'=>now()]);
- $client=DB::insert('users',['name'=>'Cliente Chat','email'=>'client-chat@ci.invalid','password_hash'=>$password,'role'=>'client','active'=>1,'created_at'=>now()]);
+ $clientUser=DB::insert('users',['name'=>'Cliente Chat','email'=>'client-chat@ci.invalid','password_hash'=>$password,'role'=>'client','active'=>1,'created_at'=>now()]);
+
+ $client=DB::insert('clients',['name'=>'Cliente Aula','created_at'=>now()]);
+ $stage=DB::insert('stages',['name'=>'Chat Produção','kind'=>'production','position'=>980]);
+ $category=DB::insert('categories',['name'=>'Chat Vídeo','fields_json'=>'[]']);
+ $demand=DB::insert('demands',[
+  'client_id'=>$client,'category_id'=>$category,'stage_id'=>$stage,'title'=>'Aula Augusto',
+  'brief'=>'Fixture de link no chat','details_json'=>'{}','due_at'=>gmdate('Y-m-d H:i:s',time()+86400),
+  'created_by'=>$adminA,'created_at'=>now(),'updated_at'=>now()
+ ]);
 
  chatAs($staff);
  chatReject(fn()=>Chat::contacts(),403,'Staff must not access admin chat.');
+ chatReject(fn()=>Chat::tasks(['q'=>'Aula']),403,'Staff must not search admin chat task mentions.');
  chatReject(fn()=>Chat::send(['peer_id'=>$adminA,'body'=>'x','client_nonce'=>'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa']),403,'Staff must not send admin chat messages.');
 
- chatAs($client);
+ chatAs($clientUser);
  chatReject(fn()=>Chat::contacts(),403,'Client must not access admin chat.');
+ chatReject(fn()=>Chat::tasks(['q'=>'Aula']),403,'Client must not search admin chat task mentions.');
 
  chatAs($adminA);
  $contacts=Chat::contacts();
  chatCheck(array_column($contacts['contacts'],'id')===[$adminB],'Admin contacts must contain only other active admins.');
  chatReject(fn()=>Chat::messages(['peer_id'=>$staff]),404,'Admin must not open a staff conversation.');
- chatReject(fn()=>Chat::messages(['peer_id'=>$client]),404,'Admin must not open a client conversation.');
+ chatReject(fn()=>Chat::messages(['peer_id'=>$clientUser]),404,'Admin must not open a client conversation.');
+
+ $taskSearch=Chat::tasks(['q'=>'Augusto']);
+ chatCheck(count($taskSearch['tasks'])===1&&(int)$taskSearch['tasks'][0]['id']===$demand&&$taskSearch['tasks'][0]['title']==='Aula Augusto','@ autocomplete must find active tasks by title.');
+ chatCheck($taskSearch['tasks'][0]['client_name']==='Cliente Aula','Task autocomplete must expose a compact client hint.');
 
  $nonce='0123456789abcdef0123456789abcdef';
- $sent=Chat::send(['peer_id'=>$adminB,'body'=>'Mensagem privada entre admins','client_nonce'=>$nonce]);
+ $body="Mensagem privada 🎬 veja @Aula Augusto";
+ $sent=Chat::send([
+  'peer_id'=>$adminB,
+  'body'=>$body,
+  'client_nonce'=>$nonce,
+  'task_mentions'=>[['id'=>$demand,'label'=>'Aula Augusto']]
+ ]);
  $messageId=(int)$sent['message']['id'];$threadId=(int)$sent['message']['thread_id'];
  chatCheck($messageId>0&&$threadId>0&&!$sent['duplicate'],'First admin send must create one message.');
- $again=Chat::send(['peer_id'=>$adminB,'body'=>'Mensagem privada entre admins','client_nonce'=>$nonce]);
+ chatCheck(($sent['message']['task_refs'][0]['label']??'')==='Aula Augusto','Sent message must return its linked task.');
+ chatCheck((int)(DB::one('SELECT COUNT(*) n FROM chat_message_tasks WHERE message_id=? AND demand_id=?',[$messageId,$demand])['n']??0)===1,'Selected @task must be persisted exactly once.');
+
+ $push=DB::one("SELECT * FROM push_delivery_log WHERE user_id=? AND scope='chat' ORDER BY id DESC LIMIT 1",[$adminB]);
+ chatCheck((bool)$push,'Every new chat message must attempt a browser push for the recipient.');
+ chatCheck($push['status']==='no_subscription','CI recipient without a push subscription must be logged as no_subscription.');
+ chatCheck($push['title']==='Mensagem de Admin A'&&str_contains((string)$push['body'],'Aula Augusto'),'Chat push must identify sender and include a message preview.');
+ chatCheck(str_contains((string)$push['url'],'?chat='.$adminA),'Chat push must deep-link to the sender conversation.');
+ $pushCount=(int)(DB::one("SELECT COUNT(*) n FROM push_delivery_log WHERE user_id=? AND scope='chat'",[$adminB])['n']??0);
+
+ $again=Chat::send(['peer_id'=>$adminB,'body'=>$body,'client_nonce'=>$nonce]);
  chatCheck($again['duplicate']&&(int)$again['message']['id']===$messageId,'Client nonce must keep admin send idempotent.');
  chatCheck((int)(DB::one('SELECT COUNT(*) n FROM chat_messages')['n']??0)===1,'Idempotent retry must not duplicate admin message.');
+ chatCheck((int)(DB::one("SELECT COUNT(*) n FROM push_delivery_log WHERE user_id=? AND scope='chat'",[$adminB])['n']??0)===$pushCount,'Idempotent retry must not send a second push.');
 
  $events=DB::all("SELECT channel,event_type,payload_json FROM event_outbox WHERE entity_type='chat_message' AND entity_id=? ORDER BY id",[$messageId]);
  chatCheck(count($events)===2,'Admin message must fan out to both personal channels.');
@@ -86,18 +127,20 @@ try{
  $contact=$contacts['contacts'][0]??null;
  chatCheck($contact&&(int)$contact['id']===$adminA&&(int)$contact['unread']===1&&(int)$contacts['unread_total']===1,'Recipient admin must see unread count.');
  $history=Chat::messages(['peer_id'=>$adminA]);
- chatCheck(count($history['messages'])===1&&$history['messages'][0]['body']==='Mensagem privada entre admins','Admin participant must read history over HTTP.');
+ chatCheck(count($history['messages'])===1&&$history['messages'][0]['body']===$body,'Admin participant must read emoji message over HTTP.');
+ chatCheck((int)($history['messages'][0]['task_refs'][0]['id']??0)===$demand,'Recipient must receive linked task metadata over authorized HTTP.');
  $read=Chat::read(['peer_id'=>$adminA]);
  chatCheck((int)$read['read']===1,'Reading an admin conversation must mark unread message.');
  chatCheck((int)(DB::one('SELECT COUNT(*) n FROM chat_messages WHERE recipient_id=? AND read_at IS NULL',[$adminB])['n']??0)===0,'Unread admin row must be cleared.');
 
  Auth::$origin='api';
  chatReject(fn()=>Chat::contacts(),403,'API tokens must not expose admin chat.');
+ chatReject(fn()=>Chat::tasks(['q'=>'Aula']),403,'API tokens must not expose admin chat task search.');
 
  Auth::$origin='web';Auth::$previewClientId=1;Auth::$user=chatUser($adminB);Auth::$user['role']='client';Auth::$user['is_preview']=1;
  chatReject(fn()=>Chat::contacts(),403,'Preview mode must not expose admin chat.');
 
- echo "Chat admin-only: ACL, idempotency, unread/read state and realtime fanout OK\n";
+ echo "Chat admin-only: push, emoji body, @task links, ACL, idempotency, unread/read state and realtime fanout OK\n";
 }finally{
  Auth::$user=null;Auth::$actor=null;Auth::$previewClientId=null;
  @unlink($configPath);@unlink(ROOT.'/storage/installed.lock');

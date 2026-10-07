@@ -23,8 +23,12 @@ try {
         $queue = EventOutbox::stats(RealtimeOutboxWorker::DEFAULT_MAX_ATTEMPTS);
         $heartbeat = RealtimeWorkerHealth::read();
         $realtime = (new Realtime())->health();
-        $status = $heartbeat['status'] === 'ok' && $realtime['status'] === 'ok' && (int)$queue['exhausted'] === 0 ? 'ok' : 'degraded';
+        // Liveness must describe whether the worker and its dependencies are operating now.
+        // Exhausted rows are dead-letter/alert state: they remain visible in queue.exhausted,
+        // but must not permanently prevent a healthy worker from starting after one old failure.
+        $status = $heartbeat['status'] === 'ok' && $realtime['status'] === 'ok' ? 'ok' : 'degraded';
         echo json(['status' => $status, 'worker' => $heartbeat, 'queue' => $queue,
+            'alerts' => ['exhausted_events' => (int)$queue['exhausted']],
             'realtime' => ['config' => $realtime['config'], 'redis' => $realtime['redis'], 'centrifugo' => $realtime['centrifugo']]]).PHP_EOL;
         exit($status === 'ok' ? 0 : 1);
     }

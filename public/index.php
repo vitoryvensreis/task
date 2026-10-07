@@ -9,6 +9,7 @@ $pwa180Url=is_file($pwa180)?(($basePath?:'').'/uploads/branding/pwa-180.png?v='.
 $pwa192Url=is_file($pwa192)?(($basePath?:'').'/uploads/branding/pwa-192.png?v='.filemtime($pwa192)):(($basePath?:'').'/assets/taskesc-logo.svg');
 $appJsVersion=is_file(ROOT.'/public/assets/app.js')?filemtime(ROOT.'/public/assets/app.js'):1;
 $appCssVersion=is_file(ROOT.'/public/assets/app.css')?filemtime(ROOT.'/public/assets/app.css'):1;
+$iconsJsVersion=is_file(ROOT.'/public/assets/taskesc-icons.js')?filemtime(ROOT.'/public/assets/taskesc-icons.js'):1;
 $realtimeJsVersion=is_file(ROOT.'/public/assets/realtime-client.js')?filemtime(ROOT.'/public/assets/realtime-client.js'):1;
 ?>
 <!doctype html>
@@ -27,7 +28,7 @@ $realtimeJsVersion=is_file(ROOT.'/public/assets/realtime-client.js')?filemtime(R
   <link rel="stylesheet" href="<?=e($basePath)?>/assets/app.css?v=<?=e((string)$appCssVersion)?>">
   <link rel="stylesheet" href="<?=e($basePath)?>/assets/ui-fixes.css?v=3.25.0">
   <link rel="stylesheet" href="<?=e($basePath)?>/assets/ux-v3.css?v=3.18.0">
-  <script src="<?=e($basePath)?>/assets/taskesc-icons.js?v=3.4.0" defer></script>
+  <script src="<?=e($basePath)?>/assets/taskesc-icons.js?v=<?=e((string)$iconsJsVersion)?>" defer></script>
 </head>
 <body data-base-path="<?=e($basePath)?>">
   <div id="toast" class="toast"></div><div id="page-loader" class="page-loader hidden" aria-live="polite"><div class="page-loader-card"><span class="loader-ring"></span><b>Carregando</b></div></div>

@@ -277,7 +277,7 @@ final class Migrations {
   $timeout=null;
   try{
    $before=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);
-   if(!in_array($before,[19,self::OUTBOX_VERSION],true))throw new RuntimeException('A migração Outbox requer schema 19 ou 21; schema 20 não é suportado.');
+   if(!in_array($before,[19,self::OUTBOX_VERSION,self::CURRENT_VERSION],true))throw new RuntimeException('A migração Outbox requer schema 19, 21 ou 22; schema 20 não é suportado.');
    if($before===19){
     $timeout=(int)(DB::one('SELECT @@SESSION.lock_wait_timeout AS timeout')['timeout']??0);
     $db->exec('SET SESSION lock_wait_timeout=10');
@@ -289,7 +289,8 @@ final class Migrations {
    if($issues)throw new RuntimeException('Estrutura Outbox incompatível: '.implode(',',$issues));
    if($before===19)DB::run("UPDATE settings SET value=? WHERE `key`='schema_version' AND value='19'",[(string)self::OUTBOX_VERSION]);
    $after=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);
-   if($after!==self::OUTBOX_VERSION)throw new RuntimeException('Marcador de schema divergente após migração Outbox.');
+   $expected=$before===self::CURRENT_VERSION?self::CURRENT_VERSION:self::OUTBOX_VERSION;
+   if($after!==$expected)throw new RuntimeException('Marcador de schema divergente após migração Outbox.');
    return ['previous'=>$before,'current'=>$after,'table'=>'event_outbox','changed'=>$before!==$after];
   }finally{
    try{if($timeout!==null)$db->exec('SET SESSION lock_wait_timeout='.$timeout);}finally{DB::run('SELECT RELEASE_LOCK(?)',[$lock]);}

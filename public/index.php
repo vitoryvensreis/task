@@ -8,6 +8,7 @@ $pwa180=ROOT.'/public/uploads/branding/pwa-180.png';$pwa192=ROOT.'/public/upload
 $pwa180Url=is_file($pwa180)?(($basePath?:'').'/uploads/branding/pwa-180.png?v='.filemtime($pwa180)):(($basePath?:'').'/assets/taskesc-logo.svg');
 $pwa192Url=is_file($pwa192)?(($basePath?:'').'/uploads/branding/pwa-192.png?v='.filemtime($pwa192)):(($basePath?:'').'/assets/taskesc-logo.svg');
 $appJsVersion=is_file(ROOT.'/public/assets/app.js')?filemtime(ROOT.'/public/assets/app.js'):1;
+$appCssVersion=is_file(ROOT.'/public/assets/app.css')?filemtime(ROOT.'/public/assets/app.css'):1;
 $realtimeJsVersion=is_file(ROOT.'/public/assets/realtime-client.js')?filemtime(ROOT.'/public/assets/realtime-client.js'):1;
 ?>
 <!doctype html>
@@ -23,7 +24,7 @@ $realtimeJsVersion=is_file(ROOT.'/public/assets/realtime-client.js')?filemtime(R
   <link rel="manifest" href="<?=e($basePath)?>/manifest.php?v=<?=e((string)(is_file($pwa192)?filemtime($pwa192):1))?>">
   <link rel="icon" href="<?=e($pwa192Url)?>">
   <link rel="apple-touch-icon" href="<?=e($pwa180Url)?>">
-  <link rel="stylesheet" href="<?=e($basePath)?>/assets/app.css?v=3.4.0">
+  <link rel="stylesheet" href="<?=e($basePath)?>/assets/app.css?v=<?=e((string)$appCssVersion)?>">
   <link rel="stylesheet" href="<?=e($basePath)?>/assets/ui-fixes.css?v=3.25.0">
   <link rel="stylesheet" href="<?=e($basePath)?>/assets/ux-v3.css?v=3.18.0">
   <script src="<?=e($basePath)?>/assets/taskesc-icons.js?v=3.4.0" defer></script>

@@ -452,3 +452,12 @@ O Passo 6 faz o frontend reagir às publicações WebSocket das tasks. Foi adici
 Eventos `demand.*` agora invalidam Dashboard, Kanban, Tasks, Financeiro e Relatórios com debounce, preservando scroll e filtros do Kanban. Modais de task em detalhe também são atualizados; exclusões remotas fecham o modal e edições em andamento não são sobrescritas. O backend inclui um `operation_id` compartilhado no fanout para o navegador deduplicar publicações sobrepostas.
 
 O WebSocket continua sendo apenas o gatilho: os dados completos são relidos pelos endpoints HTTP autorizados. O refresh periódico de 30 segundos permanece como fallback. Consulte `docs/realtime-step6.md`.
+
+
+## Chat realtime entre usuários
+
+O TaskEsc agora possui chat privado 1:1 pela infraestrutura WebSocket já existente. As mensagens ficam persistidas no MySQL e a entrega em tempo real usa Outbox → worker → Centrifugo → canais pessoais `user:{id}`.
+
+O corpo das mensagens não trafega no evento WebSocket: o evento carrega somente identificadores e o navegador consulta o conteúdo pelo HTTP autenticado. O chat possui contador de não lidas, confirmação de leitura, envio idempotente e regras de acesso que evitam exposição entre clientes sem vínculo em comum.
+
+A funcionalidade usa o schema 22, aplicado por migration dedicada somente após backup pré-deploy validado. Consulte `docs/chat-realtime.md`.

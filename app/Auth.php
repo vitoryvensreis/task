@@ -35,9 +35,9 @@ final class Auth {
  public static function abilities(): array {
   self::load();$role=(string)self::$user['role'];
   $map=[
-   'admin'=>['dashboard.view','tasks.read','tasks.create','tasks.edit','tasks.move','tasks.delete','tasks.comment','tasks.files','agenda.read','agenda.write','clients.manage','services.manage','finance.read','finance.manage','reports.read','settings.manage','logs.read','users.manage'],
-   'staff'=>['dashboard.view','tasks.read','tasks.edit','tasks.move','tasks.delete','tasks.comment','tasks.files','agenda.read','agenda.write','reports.read'],
-   'client'=>['dashboard.view','tasks.read','tasks.create','tasks.edit','tasks.move','tasks.comment','tasks.files','agenda.read']
+   'admin'=>['chat.use','dashboard.view','tasks.read','tasks.create','tasks.edit','tasks.move','tasks.delete','tasks.comment','tasks.files','agenda.read','agenda.write','clients.manage','services.manage','finance.read','finance.manage','reports.read','settings.manage','logs.read','users.manage'],
+   'staff'=>['chat.use','dashboard.view','tasks.read','tasks.edit','tasks.move','tasks.delete','tasks.comment','tasks.files','agenda.read','agenda.write','reports.read'],
+   'client'=>['chat.use','dashboard.view','tasks.read','tasks.create','tasks.edit','tasks.move','tasks.comment','tasks.files','agenda.read']
   ];
   return $map[$role]??[];
  }

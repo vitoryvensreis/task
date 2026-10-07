@@ -43,7 +43,7 @@ $realtimeJsVersion=is_file(ROOT.'/public/assets/realtime-client.js')?filemtime(R
   </div>
   <div id="admin-chat-root" class="admin-chat-root hidden" aria-live="polite">
     <button id="admin-chat-fab" class="admin-chat-fab" type="button" aria-label="Abrir chat dos administradores" title="Chat dos administradores" aria-haspopup="dialog" aria-expanded="false">
-      <span class="icon-slot"><i data-lucide="messages-square" class="ui-icon" aria-hidden="true"></i><span class="icon-fallback" aria-hidden="true">✉</span></span>
+      <span class="icon-slot"><i data-lucide="message-circle" class="ui-icon" aria-hidden="true"></i><span class="icon-fallback" aria-hidden="true">◌</span></span>
       <span id="chat-fab-badge" class="admin-chat-badge hidden">0</span>
     </button>
     <section id="admin-chat-popup" class="admin-chat-popup hidden" role="dialog" aria-modal="false" aria-label="Chat dos administradores"></section>

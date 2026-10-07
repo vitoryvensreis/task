@@ -442,7 +442,6 @@
     const q=String($('#chat-search')?.value||'').trim().toLowerCase();
     const visible=(S.chatContacts||[]).filter(c=>!q||String(c.name||'').toLowerCase().includes(q));
     list.innerHTML=visible.map(chatContactMarkup).join('')||'<div class="empty slim">Nenhum outro administrador encontrado.</div>';
-    list.querySelectorAll('[data-chat-peer]').forEach(btn=>btn.onclick=()=>openChatPeer(Number(btn.dataset.chatPeer)));
     const total=$('#chat-total');if(total)total.textContent=String(S.chatContacts.length);
   }
 
@@ -463,10 +462,30 @@
 
   function renderAdminChatShell(){
     const popup=$('#admin-chat-popup');if(!popup)return;
-    popup.innerHTML=`<div class="admin-chat-head"><div><span class="eyebrow">ADMINISTRADORES</span><strong>Chat interno</strong></div><button id="admin-chat-close" class="icon-btn" type="button" aria-label="Fechar chat">${icon('x','×')}</button></div><div class="admin-chat-body"><aside class="chat-sidebar"><div class="chat-sidebar-head"><div><b>Conversas</b><small>Somente administradores</small></div><span id="chat-total" class="chat-total">0</span></div><div class="chat-search-wrap">${icon('search','⌕')}<input id="chat-search" class="input" type="search" placeholder="Pesquisar administrador" autocomplete="off"></div><div id="chat-contacts" class="chat-contacts"></div></aside><section id="chat-conversation" class="chat-conversation" data-peer-id="0"><div class="chat-placeholder">${icon('messages-square','✉')}<b>Chat dos administradores</b><span>Escolha um contato para conversar.</span></div></section></div>`;
+    popup.innerHTML=`<div class="admin-chat-head"><div><span class="eyebrow">ADMINISTRADORES</span><strong>Chat interno</strong></div><button id="admin-chat-close" class="icon-btn" type="button" aria-label="Fechar chat">${icon('x','×')}</button></div><div class="admin-chat-body"><aside class="chat-sidebar"><div class="chat-sidebar-head"><div><b>Conversas</b><small>Somente administradores</small></div><span id="chat-total" class="chat-total">0</span></div><div class="chat-search-wrap">${icon('search','⌕')}<input id="chat-search" class="input" type="search" placeholder="Pesquisar administrador" autocomplete="off"></div><div id="chat-contacts" class="chat-contacts"></div></aside><section id="chat-conversation" class="chat-conversation" data-peer-id="0"><div class="chat-placeholder">${icon('message-circle','◌')}<b>Chat dos administradores</b><span>Escolha um contato para conversar.</span></div></section></div>`;
     $('#admin-chat-close').onclick=closeAdminChat;
     $('#chat-search')?.addEventListener('input',paintChatContacts);
+    $('#chat-contacts')?.addEventListener('click',event=>{
+      const button=event.target.closest('[data-chat-peer]');if(!button)return;
+      event.preventDefault();event.stopPropagation();
+      openChatPeer(Number(button.dataset.chatPeer));
+    });
     paintIcons();
+  }
+
+  function showChatConversationView(){
+    const popup=$('#admin-chat-popup'),panel=$('#chat-conversation');
+    if(!popup||!panel)return false;
+    popup.classList.add('conversation-open');
+    panel.setAttribute('aria-hidden','false');
+    return true;
+  }
+
+  function showChatContactsView(){
+    const popup=$('#admin-chat-popup'),panel=$('#chat-conversation');
+    popup?.classList.remove('conversation-open');
+    panel?.setAttribute('aria-hidden','true');
+    requestAnimationFrame(()=>$('#chat-search')?.focus({preventScroll:true}));
   }
 
   function paintChatMessages(peer,messages){
@@ -477,7 +496,7 @@
       panel.innerHTML=`<div class="chat-thread-head"><button id="chat-mobile-back" class="icon-btn chat-mobile-back" type="button" aria-label="Voltar para contatos">${icon('arrow-left','←')}</button><div class="chat-avatar large">${esc(String(peer.name||'?').trim().slice(0,1).toUpperCase())}</div><div class="chat-thread-person"><b>${esc(peer.name)}</b><small>Administrador</small></div></div><div id="chat-messages" class="chat-messages"></div><form id="chat-form" class="chat-composer"><textarea id="chat-message-input" class="input" rows="1" maxlength="4000" placeholder="Escreva uma mensagem…" autocomplete="off"></textarea><button class="primary" type="submit" aria-label="Enviar mensagem">${icon('send','➤')}<span>Enviar</span></button></form>`;
       $('#chat-form').onsubmit=sendChatMessage;
       $('#chat-message-input').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('#chat-form').requestSubmit()}});
-      $('#chat-mobile-back').onclick=()=>$('#admin-chat-popup')?.classList.remove('conversation-open');
+      $('#chat-mobile-back').onclick=showChatContactsView;
       paintIcons();
     }
     const list=$('#chat-messages');
@@ -492,7 +511,7 @@
     id=Number(id||0);if(id<1||!adminChatEnabled())return;
     S.chatPeerId=id;
     paintChatContacts();
-    $('#admin-chat-popup')?.classList.add('conversation-open');
+    if(!showChatConversationView())return;
     const data=await api('chat.messages',{peer_id:id});
     if(Number(S.chatPeerId)!==id||!S.chatOpen)return;
     paintChatMessages(data.peer,data.messages||[]);
@@ -531,7 +550,7 @@
     renderAdminChatShell();
     try{
       await loadChatContacts();
-      const mobile=window.matchMedia?.('(max-width:720px)').matches;
+      const mobile=window.matchMedia?.('(max-width:820px)').matches;
       const preferred=S.chatContacts.find(c=>Number(c.id)===Number(S.chatPeerId))||S.chatContacts.find(c=>Number(c.unread)>0)||S.chatContacts[0];
       if(preferred&&!mobile)await openChatPeer(Number(preferred.id),{quiet:true});
       else paintChatContacts();

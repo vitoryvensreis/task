@@ -1896,21 +1896,22 @@ button.compact-row{cursor:pointer}.compact-row:hover{border-color:#3a4854}.compa
  .chat-bubble{max-width:84%}
 }
 
-@media(max-width:720px){
+@media(max-width:820px){
  .admin-chat-root{z-index:95}
  .admin-chat-popup{position:fixed;inset:max(8px,env(safe-area-inset-top)) max(8px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left));width:auto;height:auto;border-radius:16px;transform-origin:center}
  .admin-chat-root.open .admin-chat-fab{opacity:0;pointer-events:none;transform:scale(.88)}
  .admin-chat-head{min-height:58px;padding:11px 12px 10px 14px}
- .admin-chat-body{display:block;min-height:0;position:relative}
- .chat-sidebar{height:100%;border-right:0}
+ .admin-chat-body{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr);min-height:0;overflow:hidden;position:relative}
+ .chat-sidebar,.chat-conversation{grid-column:1;grid-row:1;width:100%;height:auto;min-height:0;transition:transform .18s ease,opacity .18s ease;will-change:transform}
+ .chat-sidebar{z-index:2;border-right:0;transform:translateX(0);opacity:1;visibility:visible;pointer-events:auto}
+ .chat-conversation{z-index:1;display:flex;transform:translateX(100%);opacity:0;visibility:hidden;pointer-events:none}
+ .admin-chat-popup.conversation-open .chat-sidebar{transform:translateX(-100%);opacity:0;visibility:hidden;pointer-events:none}
+ .admin-chat-popup.conversation-open .chat-conversation{transform:translateX(0);opacity:1;visibility:visible;pointer-events:auto}
  .chat-sidebar-head{padding:12px 11px 9px}
  .chat-search-wrap{padding:0 9px 9px}
  .chat-search-wrap>.icon-slot{left:19px}
  .chat-contacts{padding:1px 6px 12px}
- .chat-contact{padding:10px 9px}
- .chat-conversation{display:none;height:100%}
- .admin-chat-popup.conversation-open .chat-sidebar{display:none}
- .admin-chat-popup.conversation-open .chat-conversation{display:flex}
+ .chat-contact{padding:10px 9px;touch-action:manipulation}
  .chat-mobile-back{display:inline-grid;flex:0 0 auto}
  .chat-thread-head{min-height:58px;padding:9px 10px}
  .chat-messages{padding:13px 10px}

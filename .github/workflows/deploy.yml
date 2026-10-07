@@ -426,9 +426,9 @@ jobs:
             set -euo pipefail
             cd "$DEPLOY_PATH"
             umask 077
-            AUDIT_FILE="$DEPLOY_PATH/storage/backups/taskesc-schema22-audit-$(date -u +%Y%m%dT%H%M%SZ).json"
+            AUDIT_FILE="$DEPLOY_PATH/storage/backups/taskesc-schema23-audit-$(date -u +%Y%m%dT%H%M%SZ).json"
             AUDIT_EXIT=0
-            php bin/system-audit.php --strict --offline --expect-schema=22 > "$AUDIT_FILE" || AUDIT_EXIT=$?
+            php bin/system-audit.php --strict --offline --expect-schema=23 > "$AUDIT_FILE" || AUDIT_EXIT=$?
             php -r '
               $r=json_decode(file_get_contents($argv[1]),true,512,JSON_THROW_ON_ERROR);
               echo json_encode(["audit"=>["ok"=>$r["ok"],"schema"=>$r["schema"],"critical_count"=>count($r["critical"]),"warning_count"=>count($r["warnings"]),"warning_keys"=>array_column($r["warnings"],"key"),"cleanup_saas"=>$r["cleanup_saas"],"offline"=>$r["offline"]]],JSON_UNESCAPED_SLASHES).PHP_EOL;
@@ -542,7 +542,7 @@ jobs:
 
             for attempt in 1 2 3 4 5; do
               RESPONSE="$(curl --fail --silent --show-error --max-time 20 "$HEALTH_URL" 2>/dev/null || true)"
-              if [ -n "$RESPONSE" ] && php -r '$j=json_decode($argv[1],true); exit(is_array($j) && ($j["status"]??null)==="ok" && ($j["database"]??false)===true && ($j["installed"]??false)===true && ($j["schema"]??null)==="21" ? 0 : 1);' "$RESPONSE"; then
+              if [ -n "$RESPONSE" ] && php -r '$j=json_decode($argv[1],true); exit(is_array($j) && ($j["status"]??null)==="ok" && ($j["database"]??false)===true && ($j["installed"]??false)===true && ($j["schema"]??null)==="23" ? 0 : 1);' "$RESPONSE"; then
                 echo "Health check OK na tentativa $attempt."
                 echo "$RESPONSE"
                 exit 0

@@ -1,10 +1,10 @@
-const CACHE='taskesc-shell-v3.26.0';
+const CACHE='taskesc-shell-v3.27.0-realtime6';
 const scopeUrl=new URL('./',self.registration.scope);
 const assetUrl=path=>new URL(path,scopeUrl).toString();
 const SHELL=[
   assetUrl('offline.html'),
   assetUrl('assets/app.css?v=3.4.0'),
-  assetUrl('assets/app.js?v=3.26.0'),
+  assetUrl('assets/app.js?v=6.1.0'),
   assetUrl('assets/ui-fixes.css?v=3.25.0'),
   assetUrl('assets/ux-v3.css?v=3.18.0'),
   assetUrl('assets/ux-v3.js?v=3.18.0'),
@@ -34,6 +34,14 @@ self.addEventListener('fetch',event=>{
   }
 
   if(/\/(assets|icons)\//.test(url.pathname)){
+    const scriptOrStyle=/\.(?:js|css)$/i.test(url.pathname);
+    if(scriptOrStyle){
+      event.respondWith(fetch(request,{cache:'reload'}).then(response=>{
+        if(response&&response.ok){const copy=response.clone();caches.open(CACHE).then(cache=>cache.put(request,copy));}
+        return response;
+      }).catch(()=>caches.match(request)));
+      return;
+    }
     event.respondWith(caches.match(request).then(cached=>{
       const network=fetch(request).then(response=>{
         if(response&&response.ok){const copy=response.clone();caches.open(CACHE).then(cache=>cache.put(request,copy));}

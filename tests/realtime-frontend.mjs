@@ -2,6 +2,8 @@ import fs from 'node:fs';
 
 const app=fs.readFileSync(new URL('../public/assets/app.js',import.meta.url),'utf8');
 const realtime=fs.readFileSync(new URL('../public/assets/realtime-client.js',import.meta.url),'utf8');
+const index=fs.readFileSync(new URL('../public/index.php',import.meta.url),'utf8');
+const sw=fs.readFileSync(new URL('../public/service-worker.js',import.meta.url),'utf8');
 
 function check(condition,message){if(!condition)throw new Error(message)}
 
@@ -17,5 +19,9 @@ check(app.includes("modalEvent.eventType==='demand.deleted'"),'deleted open task
 check(app.includes("document.visibilityState==='hidden'"),'hidden tabs must defer realtime redraw');
 check(realtime.includes("version: 'step6'"),'Centrifugo client version marker must be step6');
 check(app.includes('setInterval(async()=>')&&app.includes('30000'),'HTTP polling fallback must remain active');
+check(index.includes("$appJsVersion=is_file(ROOT.'/public/assets/app.js')?filemtime"),'app.js must use filemtime cache busting');
+check(index.includes("$realtimeJsVersion=is_file(ROOT.'/public/assets/realtime-client.js')?filemtime"),'realtime client must use filemtime cache busting');
+check(sw.includes("cache:'reload'")&&sw.includes("scriptOrStyle"),'service worker must prefer network for JS/CSS while online');
+check(sw.includes("taskesc-shell-v3.27.0-realtime6"),'service worker cache generation must be bumped');
 
 console.log('Realtime frontend: client channels, fanout dedupe, debounced refresh, modal safety and HTTP fallback OK');

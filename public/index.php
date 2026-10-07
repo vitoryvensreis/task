@@ -7,6 +7,8 @@ if(config()&&is_file(ROOT.'/storage/installed.lock')){try{$savedName=trim(settin
 $pwa180=ROOT.'/public/uploads/branding/pwa-180.png';$pwa192=ROOT.'/public/uploads/branding/pwa-192.png';
 $pwa180Url=is_file($pwa180)?(($basePath?:'').'/uploads/branding/pwa-180.png?v='.filemtime($pwa180)):(($basePath?:'').'/assets/taskesc-logo.svg');
 $pwa192Url=is_file($pwa192)?(($basePath?:'').'/uploads/branding/pwa-192.png?v='.filemtime($pwa192)):(($basePath?:'').'/assets/taskesc-logo.svg');
+$appJsVersion=is_file(ROOT.'/public/assets/app.js')?filemtime(ROOT.'/public/assets/app.js'):1;
+$realtimeJsVersion=is_file(ROOT.'/public/assets/realtime-client.js')?filemtime(ROOT.'/public/assets/realtime-client.js'):1;
 ?>
 <!doctype html>
 <html lang="pt-BR">
@@ -40,8 +42,8 @@ $pwa192Url=is_file($pwa192)?(($basePath?:'').'/uploads/branding/pwa-192.png?v='.
   </div>
   <div id="modal-root"></div>
   <script src="<?=e($basePath)?>/assets/vendor/centrifuge-5.7.4.js?v=5.7.4" defer></script>
-  <script src="<?=e($basePath)?>/assets/realtime-client.js?v=4.0.0" defer></script>
-  <script src="<?=e($basePath)?>/assets/app.js?v=3.26.0" defer></script>
+  <script src="<?=e($basePath)?>/assets/realtime-client.js?v=<?=e((string)$realtimeJsVersion)?>" defer></script>
+  <script src="<?=e($basePath)?>/assets/app.js?v=<?=e((string)$appJsVersion)?>" defer></script>
   <script src="<?=e($basePath)?>/assets/ux-v3.js?v=3.18.0" defer></script>
 </body>
 </html>

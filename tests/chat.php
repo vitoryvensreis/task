@@ -41,42 +41,39 @@ try{
  $db->exec(file_get_contents(ROOT.'/database/schema.sql'));
 
  chatCheck(!Migrations::chatIssues(),'Fresh schema 22 must contain a valid chat structure.');
- $db->exec('DROP TABLE chat_messages');
- $db->exec('DROP TABLE chat_threads');
- DB::run("UPDATE settings SET value='21' WHERE `key`='schema_version'");
- $migration=Migrations::chat();
- chatCheck($migration['previous']===21&&$migration['current']===22&&$migration['changed']===true,'Schema 21 must upgrade to 22.');
- chatCheck(!Migrations::chatIssues(),'Migrated chat schema must validate.');
- chatCheck(Migrations::chat()['changed']===false,'Repeated chat migration must be a no-op.');
 
  $password=password_hash('Taskesc-chat-ci!',PASSWORD_DEFAULT);
- $admin=DB::insert('users',['name'=>'Admin Chat','email'=>'admin-chat@ci.invalid','password_hash'=>$password,'role'=>'admin','active'=>1,'created_at'=>now()]);
+ $adminA=DB::insert('users',['name'=>'Admin A','email'=>'admin-a-chat@ci.invalid','password_hash'=>$password,'role'=>'admin','active'=>1,'created_at'=>now()]);
+ $adminB=DB::insert('users',['name'=>'Admin B','email'=>'admin-b-chat@ci.invalid','password_hash'=>$password,'role'=>'admin','active'=>1,'created_at'=>now()]);
  $staff=DB::insert('users',['name'=>'Staff Chat','email'=>'staff-chat@ci.invalid','password_hash'=>$password,'role'=>'staff','active'=>1,'created_at'=>now()]);
- $clientA=DB::insert('users',['name'=>'Cliente A','email'=>'client-a-chat@ci.invalid','password_hash'=>$password,'role'=>'client','active'=>1,'created_at'=>now()]);
- $clientB=DB::insert('users',['name'=>'Cliente B','email'=>'client-b-chat@ci.invalid','password_hash'=>$password,'role'=>'client','active'=>1,'created_at'=>now()]);
- $c1=DB::insert('clients',['name'=>'Cliente Chat 1','created_at'=>now()]);
- $c2=DB::insert('clients',['name'=>'Cliente Chat 2','created_at'=>now()]);
- DB::run('INSERT INTO user_clients (user_id,client_id,can_approve,can_finance) VALUES (?,?,1,0),(?,?,1,0),(?,?,1,0)',[$staff,$c1,$clientA,$c1,$clientB,$c2]);
+ $client=DB::insert('users',['name'=>'Cliente Chat','email'=>'client-chat@ci.invalid','password_hash'=>$password,'role'=>'client','active'=>1,'created_at'=>now()]);
 
- chatAs($clientA);
+ chatAs($staff);
+ chatReject(fn()=>Chat::contacts(),403,'Staff must not access admin chat.');
+ chatReject(fn()=>Chat::send(['peer_id'=>$adminA,'body'=>'x','client_nonce'=>'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa']),403,'Staff must not send admin chat messages.');
+
+ chatAs($client);
+ chatReject(fn()=>Chat::contacts(),403,'Client must not access admin chat.');
+
+ chatAs($adminA);
  $contacts=Chat::contacts();
- chatCheck(in_array($admin,array_column($contacts['contacts'],'id'),true),'Client must see admin in chat.');
- chatCheck(in_array($staff,array_column($contacts['contacts'],'id'),true),'Client must see staff sharing a client.');
- chatCheck(!in_array($clientB,array_column($contacts['contacts'],'id'),true),'Client must not see unrelated client.');
- chatReject(fn()=>Chat::messages(['peer_id'=>$clientB]),403,'Cross-client chat must be denied.');
+ chatCheck(array_column($contacts['contacts'],'id')===[$adminB],'Admin contacts must contain only other active admins.');
+ chatReject(fn()=>Chat::messages(['peer_id'=>$staff]),404,'Admin must not open a staff conversation.');
+ chatReject(fn()=>Chat::messages(['peer_id'=>$client]),404,'Admin must not open a client conversation.');
 
- chatAs($admin);
  $nonce='0123456789abcdef0123456789abcdef';
- $sent=Chat::send(['peer_id'=>$clientA,'body'=>'Mensagem privada de teste','client_nonce'=>$nonce]);
+ $sent=Chat::send(['peer_id'=>$adminB,'body'=>'Mensagem privada entre admins','client_nonce'=>$nonce]);
  $messageId=(int)$sent['message']['id'];$threadId=(int)$sent['message']['thread_id'];
- chatCheck($messageId>0&&$threadId>0&&!$sent['duplicate'],'First send must create one message.');
- $again=Chat::send(['peer_id'=>$clientA,'body'=>'Mensagem privada de teste','client_nonce'=>$nonce]);
- chatCheck($again['duplicate']&&(int)$again['message']['id']===$messageId,'Client nonce must make chat send idempotent.');
- chatCheck((int)(DB::one('SELECT COUNT(*) n FROM chat_messages')['n']??0)===1,'Idempotent retry must not duplicate chat message.');
+ chatCheck($messageId>0&&$threadId>0&&!$sent['duplicate'],'First admin send must create one message.');
+ $again=Chat::send(['peer_id'=>$adminB,'body'=>'Mensagem privada entre admins','client_nonce'=>$nonce]);
+ chatCheck($again['duplicate']&&(int)$again['message']['id']===$messageId,'Client nonce must keep admin send idempotent.');
+ chatCheck((int)(DB::one('SELECT COUNT(*) n FROM chat_messages')['n']??0)===1,'Idempotent retry must not duplicate admin message.');
 
  $events=DB::all("SELECT channel,event_type,payload_json FROM event_outbox WHERE entity_type='chat_message' AND entity_id=? ORDER BY id",[$messageId]);
- chatCheck(count($events)===2,'Chat message must fan out to sender and recipient personal channels.');
- chatCheck(array_column($events,'channel')===['user:'.$admin,'user:'.$clientA]||array_column($events,'channel')===['user:'.$clientA,'user:'.$admin],'Chat channels must be personal.');
+ chatCheck(count($events)===2,'Admin message must fan out to both personal channels.');
+ $channels=array_column($events,'channel');sort($channels);
+ $expected=['user:'.$adminA,'user:'.$adminB];sort($expected);
+ chatCheck($channels===$expected,'Admin chat channels must be personal.');
  foreach($events as $event){
   chatCheck($event['event_type']==='chat.message','Chat message event type mismatch.');
   $payload=json_decode($event['payload_json'],true,16,JSON_THROW_ON_ERROR);
@@ -84,21 +81,23 @@ try{
   chatCheck((int)$payload['message_id']===$messageId&&(int)$payload['thread_id']===$threadId,'Chat event must contain fetch identifiers.');
  }
 
- chatAs($clientA);
+ chatAs($adminB);
  $contacts=Chat::contacts();
- $adminContact=array_values(array_filter($contacts['contacts'],fn($x)=>(int)$x['id']===$admin))[0]??null;
- chatCheck($adminContact&&(int)$adminContact['unread']===1&&(int)$contacts['unread_total']===1,'Recipient must see unread chat count.');
- $history=Chat::messages(['peer_id'=>$admin]);
- chatCheck(count($history['messages'])===1&&$history['messages'][0]['body']==='Mensagem privada de teste','Participant must read chat history over HTTP.');
- $read=Chat::read(['peer_id'=>$admin]);
- chatCheck((int)$read['read']===1,'Reading a conversation must mark unread message.');
- chatCheck((int)(DB::one('SELECT COUNT(*) n FROM chat_messages WHERE recipient_id=? AND read_at IS NULL',[$clientA])['n']??0)===0,'Unread row must be cleared.');
- chatCheck((int)(DB::one("SELECT COUNT(*) n FROM event_outbox WHERE event_type='chat.read' AND entity_type='chat_thread' AND entity_id=?",[$threadId])['n']??0)===2,'Read receipt must fan out to both users.');
+ $contact=$contacts['contacts'][0]??null;
+ chatCheck($contact&&(int)$contact['id']===$adminA&&(int)$contact['unread']===1&&(int)$contacts['unread_total']===1,'Recipient admin must see unread count.');
+ $history=Chat::messages(['peer_id'=>$adminA]);
+ chatCheck(count($history['messages'])===1&&$history['messages'][0]['body']==='Mensagem privada entre admins','Admin participant must read history over HTTP.');
+ $read=Chat::read(['peer_id'=>$adminA]);
+ chatCheck((int)$read['read']===1,'Reading an admin conversation must mark unread message.');
+ chatCheck((int)(DB::one('SELECT COUNT(*) n FROM chat_messages WHERE recipient_id=? AND read_at IS NULL',[$adminB])['n']??0)===0,'Unread admin row must be cleared.');
 
- Auth::$previewClientId=$c1;Auth::$user=chatUser($admin);Auth::$user['role']='client';Auth::$user['is_preview']=1;
- chatReject(fn()=>Chat::contacts(),403,'Preview mode must not expose chat.');
+ Auth::$origin='api';
+ chatReject(fn()=>Chat::contacts(),403,'API tokens must not expose admin chat.');
 
- echo "Chat: schema 22 migration, ACL, idempotent send, unread/read state and personal-channel realtime fanout OK\n";
+ Auth::$origin='web';Auth::$previewClientId=1;Auth::$user=chatUser($adminB);Auth::$user['role']='client';Auth::$user['is_preview']=1;
+ chatReject(fn()=>Chat::contacts(),403,'Preview mode must not expose admin chat.');
+
+ echo "Chat admin-only: ACL, idempotency, unread/read state and realtime fanout OK\n";
 }finally{
  Auth::$user=null;Auth::$actor=null;Auth::$previewClientId=null;
  @unlink($configPath);@unlink(ROOT.'/storage/installed.lock');

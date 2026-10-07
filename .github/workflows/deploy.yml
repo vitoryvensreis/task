@@ -88,19 +88,19 @@ jobs:
       - name: Gerar ZIP completo
         run: |
           set -e
-          rm -f "/tmp/taskesc-chat-realtime.zip" "taskesc-chat-realtime.zip"
-          zip -qr "/tmp/taskesc-chat-realtime.zip" . \
+          rm -f "/tmp/taskesc-realtime-full.zip" "taskesc-realtime-full.zip"
+          zip -qr "/tmp/taskesc-realtime-full.zip" . \
             -x '.git/*' \
                'config/config.php' \
                'storage/sessions/*' \
                'storage/logs/*'
-          cp "/tmp/taskesc-chat-realtime.zip" "taskesc-chat-realtime.zip"
+          cp "/tmp/taskesc-realtime-full.zip" "taskesc-realtime-full.zip"
 
       - name: Publicar ZIP da versão
         uses: actions/upload-artifact@v4
         with:
-          name: taskesc-chat-realtime
-          path: taskesc-chat-realtime.zip
+          name: taskesc-realtime-full
+          path: taskesc-realtime-full.zip
           if-no-files-found: error
           retention-days: 7
 
@@ -146,6 +146,7 @@ jobs:
           php tests/realtime-worker.php
           php tests/realtime-auth.php
           php tests/realtime-business-events.php
+          php tests/realtime-domain.php
           php tests/chat.php
 
   deploy:

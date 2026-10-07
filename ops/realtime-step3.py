@@ -67,13 +67,28 @@ def install(identity, deploy_path):
     subprocess.run(['systemctl', 'enable', SERVICE], check=True, timeout=20, capture_output=True)
     subprocess.run(['systemctl', 'restart', SERVICE], check=True, timeout=20)
     deadline = time.time() + 20
+    last_safe = {'active': 'unknown', 'health': 'unknown'}
     while time.time() < deadline:
         active = subprocess.run(['systemctl', 'is-active', SERVICE], capture_output=True, text=True).stdout.strip()
+        last_safe['active'] = active
         if active == 'active':
             probe = run_as(identity, [php, str(worker), '--health'], timeout=10)
+            try:
+                data = parse_single_json(probe.stdout)
+                last_safe = {
+                    'active': active,
+                    'health': data.get('status'),
+                    'worker': data.get('worker'),
+                    'queue': data.get('queue'),
+                    'alerts': data.get('alerts'),
+                    'realtime': data.get('realtime'),
+                }
+            except Exception:
+                last_safe = {'active': active, 'health': 'probe_invalid'}
             if probe.returncode == 0:
                 return
         time.sleep(1)
+    print(json.dumps({'worker_install_probe': last_safe}, separators=(',', ':')))
     raise RuntimeError('worker_start_failed')
 
 

@@ -1,6 +1,7 @@
 <?php
 final class Migrations {
- public const CURRENT_VERSION=21;
+ public const OUTBOX_VERSION=21;
+ public const CURRENT_VERSION=22;
  public static function run(): void {
   static $ran=false;if($ran)return;$ran=true;
   try{$version=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??1);}catch(Throwable){return;}
@@ -263,7 +264,8 @@ final class Migrations {
    DB::run("INSERT INTO settings (`key`,value) VALUES ('schema_version','19') ON DUPLICATE KEY UPDATE value='19'");$version=19;
   }
   // 20 nunca será reexecutado: é o schema histórico do SaaS removido.
-  if($version<self::CURRENT_VERSION)self::outbox();
+  if($version<self::OUTBOX_VERSION)self::outbox();
+  // Schema 22 é aplicado explicitamente após backup validado pelo deploy.
  }
 
  /** Scoped, idempotent migration; never runs historical business/SaaS migrations. */
@@ -275,7 +277,7 @@ final class Migrations {
   $timeout=null;
   try{
    $before=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);
-   if(!in_array($before,[19,self::CURRENT_VERSION],true))throw new RuntimeException('A migração Outbox requer schema 19 ou 21; schema 20 não é suportado.');
+   if(!in_array($before,[19,self::OUTBOX_VERSION],true))throw new RuntimeException('A migração Outbox requer schema 19 ou 21; schema 20 não é suportado.');
    if($before===19){
     $timeout=(int)(DB::one('SELECT @@SESSION.lock_wait_timeout AS timeout')['timeout']??0);
     $db->exec('SET SESSION lock_wait_timeout=10');
@@ -285,9 +287,9 @@ final class Migrations {
    }
    $issues=self::outboxIssues();
    if($issues)throw new RuntimeException('Estrutura Outbox incompatível: '.implode(',',$issues));
-   if($before===19)DB::run("UPDATE settings SET value=? WHERE `key`='schema_version' AND value='19'",[(string)self::CURRENT_VERSION]);
+   if($before===19)DB::run("UPDATE settings SET value=? WHERE `key`='schema_version' AND value='19'",[(string)self::OUTBOX_VERSION]);
    $after=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);
-   if($after!==self::CURRENT_VERSION)throw new RuntimeException('Marcador de schema divergente após migração Outbox.');
+   if($after!==self::OUTBOX_VERSION)throw new RuntimeException('Marcador de schema divergente após migração Outbox.');
    return ['previous'=>$before,'current'=>$after,'table'=>'event_outbox','changed'=>$before!==$after];
   }finally{
    try{if($timeout!==null)$db->exec('SET SESSION lock_wait_timeout='.$timeout);}finally{DB::run('SELECT RELEASE_LOCK(?)',[$lock]);}
@@ -336,6 +338,74 @@ final class Migrations {
   }
   return array_values(array_unique($issues));
  }
+ /** Scoped schema 22 migration for private user chat. Requires schema 21 or an already migrated schema 22. */
+ public static function chat(): array {
+  $db=DB::conn();
+  if($db->inTransaction())throw new LogicException('Execute a migração do chat fora de transações de negócio.');
+  $lock=(string)(DB::one("SELECT CONCAT('taskesc-chat-22:',SHA1(DATABASE())) AS name")['name']??'');
+  if((int)(DB::one('SELECT GET_LOCK(?,10) AS acquired',[$lock])['acquired']??0)!==1)throw new RuntimeException('Migração do chat já está em execução.');
+  $timeout=null;
+  try{
+   $before=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);
+   if(!in_array($before,[self::OUTBOX_VERSION,self::CURRENT_VERSION],true))throw new RuntimeException('A migração do chat requer schema 21 ou 22.');
+   if($before===self::OUTBOX_VERSION){
+    $timeout=(int)(DB::one('SELECT @@SESSION.lock_wait_timeout AS timeout')['timeout']??0);
+    $db->exec('SET SESSION lock_wait_timeout=10');
+    $sql=file_get_contents(ROOT.'/database/migrations/022_user_chat.sql');
+    if($sql===false)throw new RuntimeException('Arquivo de migração do chat ausente.');
+    $db->exec($sql);
+   }
+   $issues=self::chatIssues();
+   if($issues)throw new RuntimeException('Estrutura do chat incompatível: '.implode(',',$issues));
+   if($before===self::OUTBOX_VERSION)DB::run("UPDATE settings SET value=? WHERE `key`='schema_version' AND value='21'",[(string)self::CURRENT_VERSION]);
+   $after=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);
+   if($after!==self::CURRENT_VERSION)throw new RuntimeException('Marcador de schema divergente após migração do chat.');
+   return ['previous'=>$before,'current'=>$after,'tables'=>['chat_threads','chat_messages'],'changed'=>$before!==$after];
+  }finally{
+   try{if($timeout!==null)$db->exec('SET SESSION lock_wait_timeout='.$timeout);}finally{DB::run('SELECT RELEASE_LOCK(?)',[$lock]);}
+  }
+ }
+
+ public static function chatIssues(): array {
+  $issues=[];
+  foreach(['chat_threads','chat_messages'] as $table){
+   $meta=DB::one('SELECT ENGINE FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?',[$table]);
+   if(!$meta){$issues[]='missing_'.$table;continue;}
+   if(strcasecmp((string)$meta['ENGINE'],'InnoDB')!==0)$issues[]='engine_'.$table;
+  }
+  if($issues)return $issues;
+  $columns=[];
+  foreach(DB::all("SELECT TABLE_NAME,COLUMN_NAME,DATA_TYPE,COLUMN_TYPE,IS_NULLABLE,CHARACTER_MAXIMUM_LENGTH,DATETIME_PRECISION,EXTRA FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('chat_threads','chat_messages')") as $c)$columns[$c['TABLE_NAME']][$c['COLUMN_NAME']]=$c;
+  $expected=[
+   'chat_threads'=>['id'=>'bigint','user_low_id'=>'int','user_high_id'=>'int','last_message_id'=>'bigint','created_at'=>'datetime','updated_at'=>'datetime'],
+   'chat_messages'=>['id'=>'bigint','thread_id'=>'bigint','sender_id'=>'int','recipient_id'=>'int','client_nonce'=>'char','body'=>'text','created_at'=>'datetime','read_at'=>'datetime']
+  ];
+  foreach($expected as $table=>$fields)foreach($fields as $name=>$type){
+   $c=$columns[$table][$name]??null;if(!$c){$issues[]='column_'.$table.'_'.$name;continue;}
+   if((string)$c['DATA_TYPE']!==$type)$issues[]='definition_'.$table.'_'.$name;
+   if($type==='datetime'&&(int)$c['DATETIME_PRECISION']!==6)$issues[]='precision_'.$table.'_'.$name;
+  }
+  foreach([['chat_threads','id'],['chat_threads','last_message_id'],['chat_messages','id'],['chat_messages','thread_id']] as [$table,$name]){
+   if(!str_contains(strtolower((string)($columns[$table][$name]['COLUMN_TYPE']??'')),'unsigned'))$issues[]='unsigned_'.$table.'_'.$name;
+  }
+  if((int)($columns['chat_messages']['client_nonce']['CHARACTER_MAXIMUM_LENGTH']??0)!==32)$issues[]='client_nonce_length';
+  $indexes=[];
+  foreach(DB::all("SELECT TABLE_NAME,INDEX_NAME,COLUMN_NAME,NON_UNIQUE FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('chat_threads','chat_messages') ORDER BY TABLE_NAME,INDEX_NAME,SEQ_IN_INDEX") as $i){
+   $key=$i['TABLE_NAME'].'.'.$i['INDEX_NAME'];$indexes[$key]['columns'][]=$i['COLUMN_NAME'];$indexes[$key]['unique']=(int)$i['NON_UNIQUE']===0;
+  }
+  foreach([
+   'chat_threads.uq_chat_thread_pair'=>[['user_low_id','user_high_id'],true],
+   'chat_threads.idx_chat_thread_low_updated'=>[['user_low_id','updated_at','id'],false],
+   'chat_threads.idx_chat_thread_high_updated'=>[['user_high_id','updated_at','id'],false],
+   'chat_messages.uq_chat_sender_nonce'=>[['sender_id','client_nonce'],true],
+   'chat_messages.idx_chat_thread_messages'=>[['thread_id','id'],false],
+   'chat_messages.idx_chat_recipient_unread'=>[['recipient_id','read_at','id'],false]
+  ] as $name=>[$fields,$unique]){
+   if(($indexes[$name]['columns']??[])!==$fields||($indexes[$name]['unique']??null)!==$unique)$issues[]='index_'.str_replace('.','_',$name);
+  }
+  return array_values(array_unique($issues));
+ }
+
  private static function hasColumn(string $table,string $column): bool {return (bool)DB::one('SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?',[$table,$column]);}
  private static function column(string $table,string $column,string $sql): void {if(!self::hasColumn($table,$column))DB::run($sql);}
  private static function hasIndex(string $table,string $index): bool {return (bool)DB::one('SELECT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND INDEX_NAME=?',[$table,$index]);}

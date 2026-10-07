@@ -42,6 +42,8 @@ try{
 
  chatCheck((string)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??'')==='23','Fresh schema must be 23.');
  chatCheck(!Migrations::chatIssues(),'Fresh schema 23 must contain a valid chat/task-reference structure.');
+ $workerSource=file_get_contents(ROOT.'/bin/realtime-worker.php');
+ chatCheck(is_string($workerSource)&&str_contains($workerSource,'Migrations::OUTBOX_VERSION')&&str_contains($workerSource,'Migrations::CURRENT_VERSION'),'Realtime worker must accept the current migrated schema range.');
 
  // Simulate a production schema 22 and prove the scoped migration is safe/idempotent.
  $db->exec('DROP TABLE chat_message_tasks');

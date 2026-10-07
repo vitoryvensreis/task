@@ -14,7 +14,7 @@ final class Files {
   }else fail('Envie um arquivo ou um link.');
   if(in_array($kind,['review','final'],true)&&!$row['shared'])fail('Uma versão para aprovação precisa estar compartilhada.');
   return DB::tx(function() use($d,$kind,$row,$finalLink): array {
-   $save=$row;if(in_array($kind,['review','final'],true))$save['version_no']=(int)DB::one('SELECT COALESCE(MAX(version_no),0) AS n FROM files WHERE demand_id=? FOR UPDATE',[$d['id']])['n']+1;
+   Auth::demand((int)$d['id'],true);$save=$row;if(in_array($kind,['review','final'],true))$save['version_no']=(int)DB::one('SELECT COALESCE(MAX(version_no),0) AS n FROM files WHERE demand_id=?',[$d['id']])['n']+1;
    $id=DB::insert('files',$save);audit('demand',$d['id'],'file.added',null,['file_id'=>$id,'version'=>$save['version_no']??null,'storage'=>$save['storage_provider']??'local']);Notify::demand($d,$kind==='review'?'Versão para aprovação':'Novo arquivo',$save['label'],!$save['shared']);
    DemandRealtime::emit('demand.file_added',$d,['change'=>'file.added','file_id'=>$id,'version_no'=>$save['version_no']??null,'shared'=>(int)$save['shared']],(int)Auth::$user['id'],[],!$save['shared']?'staff':'all');
    return ['id'=>$id,'version_no'=>$save['version_no']??null,'storage'=>$save['storage_provider']??'local','final_delivery_link'=>$finalLink];
@@ -37,12 +37,13 @@ final class Files {
   }
   if(empty($drive['id']))fail('O Google Drive não confirmou o arquivo enviado.',502);
   $result=DB::tx(function() use($d,$state,$drive,$uploadKey): array {
+   Auth::demand((int)$d['id'],true);
    if($uploadKey){
     $existing=DB::one('SELECT id,version_no,storage_provider,drive_file_id FROM files WHERE demand_id=? AND upload_key=? LIMIT 1 FOR UPDATE',[$d['id'],$uploadKey]);
     if($existing)return ['existing'=>$existing];
    }
    $row=['demand_id'=>$d['id'],'author_id'=>Auth::$user['id'],'label'=>$state['label'],'shared'=>(int)$state['shared'],'kind'=>$state['kind'],'created_at'=>now(),'original_name'=>mb_substr((string)$state['name'],0,255),'disk_name'=>null,'storage_provider'=>'drive','drive_file_id'=>$drive['id'],'drive_account_id'=>(int)$state['account_id'],'drive_web_view_url'=>$drive['webViewLink']??null,'mime'=>$drive['mimeType']??$state['mime'],'size_bytes'=>(int)($drive['size']??$state['size']),'upload_key'=>$uploadKey];
-   if(in_array($state['kind'],['review','final'],true))$row['version_no']=(int)DB::one('SELECT COALESCE(MAX(version_no),0) AS n FROM files WHERE demand_id=? FOR UPDATE',[$d['id']])['n']+1;
+   if(in_array($state['kind'],['review','final'],true))$row['version_no']=(int)DB::one('SELECT COALESCE(MAX(version_no),0) AS n FROM files WHERE demand_id=?',[$d['id']])['n']+1;
    try{$id=DB::insert('files',$row);}
    catch(PDOException $e){
     if(!$uploadKey||!str_contains(strtolower($e->getMessage()),'duplicate'))throw $e;

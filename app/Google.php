@@ -264,12 +264,17 @@ final class Google {
  }
 
  public static function refreshEvent(int $eventId): void {
-  $e=DB::one("SELECT e.id,e.google_id,e.google_etag,e.version,e.updated_at,e.sync_status,c.account_id,c.google_id AS calendar_google_id,c.access_role FROM events e JOIN calendars c ON c.id=e.calendar_id WHERE e.id=?",[$eventId]);
+  $e=DB::one("SELECT e.id,e.calendar_id,e.demand_id,e.google_id,e.google_etag,e.version,e.status,e.updated_at,e.sync_status,c.account_id,c.google_id AS calendar_google_id,c.access_role FROM events e JOIN calendars c ON c.id=e.calendar_id WHERE e.id=?",[$eventId]);
   if(!$e||!$e['account_id']||!$e['google_id']||$e['access_role']==='freeBusyReader'||in_array($e['sync_status'],['pending','error','conflict'],true))return;
   $remote=self::api((int)$e['account_id'],'calendars/'.rawurlencode((string)$e['calendar_google_id']).'/events/'.rawurlencode((string)$e['google_id']));
-  if(($remote['status']??'')==='cancelled'){DB::update('events',$eventId,['status'=>'cancelled','updated_at'=>now()]);return;}
+  if(($remote['status']??'')==='cancelled'){
+   if(($e['status']??'')==='cancelled')return;
+   DB::tx(function() use($eventId,$e): void {$row=['status'=>'cancelled','version'=>(int)$e['version']+1,'updated_at'=>now()];DB::update('events',$eventId,$row);AgendaRealtime::event('agenda.google_changed',array_merge($e,$row),'google.refresh.cancelled',null);});
+   return;
+  }
   $fields=self::eventFields($remote);$changed=(($e['google_etag']??'')!==($remote['etag']??''));
-  DB::update('events',$eventId,$fields+['sync_status'=>'synced','remote_json'=>null,'version'=>$changed?(int)$e['version']+1:(int)$e['version'],'updated_at'=>$changed?now():$e['updated_at']]);
+  if(!$changed)return;
+  DB::tx(function() use($eventId,$e,$fields): void {$row=$fields+['sync_status'=>'synced','remote_json'=>null,'version'=>(int)$e['version']+1,'updated_at'=>now()];DB::update('events',$eventId,$row);AgendaRealtime::event('agenda.google_changed',array_merge($e,$row),'google.refresh.updated',null);});
  }
 
  public static function syncCalendarNow(int $calendarId): array {
@@ -290,10 +295,36 @@ final class Google {
 
  private static function pull(array $c): void {
   $account=(int)$c['account_id'];$path='calendars/'.rawurlencode($c['google_id']).'/events';$from=gmdate('Y-m-d\T00:00:00\Z',strtotime('-60 days'));$to=gmdate('Y-m-d\T00:00:00\Z',strtotime('+400 days'));
-  if($c['access_role']==='freeBusyReader'){$r=self::api($account,'freeBusy','POST',['timeMin'=>$from,'timeMax'=>$to,'items'=>[['id'=>$c['google_id']]]]);$busy=$r['calendars'][$c['google_id']]??[];if(!empty($busy['errors']))throw new RuntimeException('Sem acesso à disponibilidade dessa agenda.');DB::run("DELETE FROM events WHERE calendar_id=? AND origin='google'",[$c['id']]);foreach($busy['busy']??[] as $b)DB::insert('events',['calendar_id'=>$c['id'],'title'=>'Ocupado','starts_at'=>timestamp($b['start']),'ends_at'=>timestamp($b['end']),'private'=>1,'origin'=>'google','sync_status'=>'synced','created_at'=>now(),'updated_at'=>now()]);return;}
-  $params=['maxResults'=>2500,'showDeleted'=>'true','singleEvents'=>'false'];if($c['sync_token'])$params['syncToken']=$c['sync_token'];try{[$changes,$token]=self::pages($account,$path,$params);}catch(AppError $x){if(($x->details['google_status']??0)!==410)throw $x;unset($params['syncToken']);[$changes,$token]=self::pages($account,$path,$params);}foreach($changes as $g)if(($g['status']??'')==='cancelled')DB::run("UPDATE events SET status='cancelled',updated_at=? WHERE calendar_id=? AND (google_id=? OR recurring_id=?) AND sync_status='synced'",[now(),$c['id'],$g['id'],$g['id']]);
-  [$events]=self::pages($account,$path,['maxResults'=>2500,'singleEvents'=>'true','timeMin'=>$from,'timeMax'=>$to]);$seen=[];foreach($events as $g){if(($g['status']??'')==='cancelled')continue;$seen[]=$g['id'];$old=DB::one('SELECT * FROM events WHERE calendar_id=? AND google_id=?',[$c['id'],$g['id']]);$fields=self::eventFields($g);if($old){if(in_array($old['sync_status'],['pending','error','conflict']))continue;$changed=(($old['google_etag']??'')!==($g['etag']??''));DB::update('events',$old['id'],$fields+['sync_status'=>'synced','remote_json'=>null,'version'=>$changed?$old['version']+1:$old['version'],'updated_at'=>$changed?now():$old['updated_at']]);}else DB::insert('events',$fields+['calendar_id'=>$c['id'],'google_id'=>$g['id'],'origin'=>'google','sync_status'=>'synced','created_at'=>now(),'updated_at'=>now()]);}
-  $existing=DB::all("SELECT id,google_id FROM events WHERE calendar_id=? AND origin='google' AND sync_status='synced' AND starts_at>=? AND starts_at<?",[$c['id'],timestamp($from),timestamp($to)]);$lookup=array_flip($seen);foreach($existing as $e)if(!isset($lookup[$e['google_id']]))DB::update('events',$e['id'],['status'=>'cancelled']);DB::update('calendars',$c['id'],['sync_token'=>$token]);
+  if($c['access_role']==='freeBusyReader'){
+   $r=self::api($account,'freeBusy','POST',['timeMin'=>$from,'timeMax'=>$to,'items'=>[['id'=>$c['google_id']]]]);$busy=$r['calendars'][$c['google_id']]??[];if(!empty($busy['errors']))throw new RuntimeException('Sem acesso à disponibilidade dessa agenda.');
+   DB::tx(function() use($c,$busy): void {
+    $before=(int)(DB::one("SELECT COUNT(*) AS n FROM events WHERE calendar_id=? AND origin='google'",[$c['id']])['n']??0);DB::run("DELETE FROM events WHERE calendar_id=? AND origin='google'",[$c['id']]);$created=0;
+    foreach($busy['busy']??[] as $b){DB::insert('events',['calendar_id'=>$c['id'],'title'=>'Ocupado','starts_at'=>timestamp($b['start']),'ends_at'=>timestamp($b['end']),'private'=>1,'origin'=>'google','sync_status'=>'synced','created_at'=>now(),'updated_at'=>now()]);$created++;}
+    if($before||$created)AgendaRealtime::calendar('agenda.calendar_refreshed',(int)$c['id'],'google.freebusy',null,$before+$created);
+   });
+   return;
+  }
+  $params=['maxResults'=>2500,'showDeleted'=>'true','singleEvents'=>'false'];if($c['sync_token'])$params['syncToken']=$c['sync_token'];try{[$changes,$token]=self::pages($account,$path,$params);}catch(AppError $x){if(($x->details['google_status']??0)!==410)throw $x;unset($params['syncToken']);[$changes,$token]=self::pages($account,$path,$params);}
+  [$events]=self::pages($account,$path,['maxResults'=>2500,'singleEvents'=>'true','timeMin'=>$from,'timeMax'=>$to]);
+  DB::tx(function() use($c,$changes,$token,$events,$from,$to): void {
+   $changedCount=0;
+   foreach($changes as $g){
+    if(($g['status']??'')!=='cancelled')continue;
+    $rows=DB::all("SELECT id,version,status FROM events WHERE calendar_id=? AND (google_id=? OR recurring_id=?) AND sync_status='synced'",[$c['id'],$g['id'],$g['id']]);
+    foreach($rows as $row)if(($row['status']??'')!=='cancelled'){DB::update('events',(int)$row['id'],['status'=>'cancelled','version'=>(int)$row['version']+1,'updated_at'=>now()]);$changedCount++;}
+   }
+   $seen=[];
+   foreach($events as $g){
+    if(($g['status']??'')==='cancelled')continue;$seen[]=$g['id'];$old=DB::one('SELECT * FROM events WHERE calendar_id=? AND google_id=?',[$c['id'],$g['id']]);$fields=self::eventFields($g);
+    if($old){
+     if(in_array($old['sync_status'],['pending','error','conflict'],true))continue;$changed=(($old['google_etag']??'')!==($g['etag']??''));if(!$changed)continue;DB::update('events',$old['id'],$fields+['sync_status'=>'synced','remote_json'=>null,'version'=>$old['version']+1,'updated_at'=>now()]);$changedCount++;
+    }else{DB::insert('events',$fields+['calendar_id'=>$c['id'],'google_id'=>$g['id'],'origin'=>'google','sync_status'=>'synced','created_at'=>now(),'updated_at'=>now()]);$changedCount++;}
+   }
+   $existing=DB::all("SELECT id,google_id,version,status FROM events WHERE calendar_id=? AND origin='google' AND sync_status='synced' AND starts_at>=? AND starts_at<?",[$c['id'],timestamp($from),timestamp($to)]);$lookup=array_flip($seen);
+   foreach($existing as $e)if(!isset($lookup[$e['google_id']])&&($e['status']??'')!=='cancelled'){DB::update('events',$e['id'],['status'=>'cancelled','version'=>(int)$e['version']+1,'updated_at'=>now()]);$changedCount++;}
+   DB::update('calendars',$c['id'],['sync_token'=>$token]);
+   if($changedCount>0)AgendaRealtime::calendar('agenda.calendar_refreshed',(int)$c['id'],'google.pull',null,$changedCount);
+  });
  }
 
  private static function watch(array $c): void {

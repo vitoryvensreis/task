@@ -102,7 +102,7 @@ try {
 
     $service = new RealtimeAuth(new Realtime($configFile));
     $connection = $service->connection([]);
-    rtCheck($connection['channels']===['user:'.$staff,'client:'.$c1],'Staff bootstrap channels must include authorized client collections');
+    rtCheck($connection['channels']===['user:'.$staff,'staff/global','agenda/global','client:'.$c1],'Staff bootstrap channels must include staff, agenda and authorized client collections');
     $claims = rtDecodeJwt($connection['token'],$secret);
     rtCheck(($claims['sub']??null)===(string)$staff,'Connection JWT sub must be authenticated user string');
     rtCheck((int)$claims['exp']-(int)$claims['iat']===Realtime::TOKEN_TTL_SECONDS,'Connection JWT TTL mismatch');
@@ -113,6 +113,8 @@ try {
     $service->subscription(['channel'=>'project:'.$p1]);
     $service->subscription(['channel'=>'client:'.$c1]);
     $service->subscription(['channel'=>'user:'.$staff]);
+    $service->subscription(['channel'=>'staff/global']);
+    $service->subscription(['channel'=>'agenda/global']);
     rtStatus(fn()=> $service->subscription(['channel'=>'demand:'.$d2]),403);
     rtStatus(fn()=> $service->subscription(['channel'=>'project:'.$p2]),403);
     rtStatus(fn()=> $service->subscription(['channel'=>'client:'.$c2]),403);
@@ -123,8 +125,10 @@ try {
 
     $adminUser=rtReset($admin);
     $adminService=new RealtimeAuth(new Realtime($configFile));
-    rtCheck($adminService->connection([])['channels']===['user:'.$admin,'kanban/global'],'Admin bootstrap must include personal and global');
+    rtCheck($adminService->connection([])['channels']===['user:'.$admin,'staff/global','agenda/global','kanban/global'],'Admin bootstrap must include personal, staff, agenda and kanban globals');
     $adminService->subscription(['channel'=>'kanban/global']);
+    $adminService->subscription(['channel'=>'staff/global']);
+    $adminService->subscription(['channel'=>'agenda/global']);
     $adminService->subscription(['channel'=>'demand:'.$d2]);
     $adminService->subscription(['channel'=>'project:'.$p2]);
 
@@ -137,6 +141,8 @@ try {
     rtStatus(fn()=> $clientService->subscription(['channel'=>'client:'.$c2]),403);
     rtStatus(fn()=> $clientService->subscription(['channel'=>'demand:'.$d2]),403);
     rtStatus(fn()=> $clientService->subscription(['channel'=>'kanban/global']),403);
+    rtStatus(fn()=> $clientService->subscription(['channel'=>'staff/global']),403);
+    rtStatus(fn()=> $clientService->subscription(['channel'=>'agenda/global']),403);
 
     $previewUser=rtReset($admin,$c1);
     $previewService=new RealtimeAuth(new Realtime($configFile));
@@ -149,6 +155,8 @@ try {
     rtStatus(fn()=> $previewService->subscription(['channel'=>'project:'.$p2]),403);
     rtStatus(fn()=> $previewService->subscription(['channel'=>'user:'.$admin]),403);
     rtStatus(fn()=> $previewService->subscription(['channel'=>'kanban/global']),403);
+    rtStatus(fn()=> $previewService->subscription(['channel'=>'staff/global']),403);
+    rtStatus(fn()=> $previewService->subscription(['channel'=>'agenda/global']),403);
 
     Auth::$origin='api';Auth::$user=$adminUser;Auth::$actor=$adminUser;Auth::$previewClientId=null;
     rtStatus(fn()=> (new RealtimeAuth(new Realtime($configFile)))->connection([]),403);

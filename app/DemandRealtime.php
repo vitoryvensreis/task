@@ -16,6 +16,13 @@ final class DemandRealtime
         'demand.stage_changed',
         'demand.reordered',
         'demand.deleted',
+        'demand.comment_created',
+        'demand.checklist_changed',
+        'demand.time_logged',
+        'demand.change_changed',
+        'demand.file_added',
+        'demand.file_deleted',
+        'demand.file_reviewed',
     ];
 
     private const EXTRA_KEYS = [
@@ -26,6 +33,16 @@ final class DemandRealtime
         'priority',
         'assigned_to',
         'deleted_at',
+        'comment_id',
+        'checklist_id',
+        'time_entry_id',
+        'change_request_id',
+        'file_id',
+        'version_no',
+        'internal',
+        'shared',
+        'approval',
+        'decision',
     ];
 
     /**
@@ -37,10 +54,14 @@ final class DemandRealtime
         array $demand,
         array $extra = [],
         ?int $actorId = null,
-        array $alsoProjectIds = []
+        array $alsoProjectIds = [],
+        string $audience = 'all'
     ): array {
         if (!in_array($eventType, self::TYPES, true)) {
             throw new InvalidArgumentException('Unsupported demand realtime event.');
+        }
+        if (!in_array($audience, ['all','staff'], true)) {
+            throw new InvalidArgumentException('Unsupported demand realtime audience.');
         }
 
         $id = (int)($demand['id'] ?? 0);
@@ -77,12 +98,16 @@ final class DemandRealtime
         // Once published, demand/project channels inherit the existing HTTP ACL.
         $channels = ['kanban/global'];
         if (empty($demand['draft'])) {
-            $channels[] = 'client:'.$clientId;
-            $channels[] = 'demand:'.$id;
-            if ($projectId > 0) $channels[] = 'project:'.$projectId;
-            foreach ($alsoProjectIds as $oldProjectId) {
-                $oldProjectId = (int)$oldProjectId;
-                if ($oldProjectId > 0) $channels[] = 'project:'.$oldProjectId;
+            if ($audience === 'staff') {
+                $channels[] = 'staff/global';
+            } else {
+                $channels[] = 'client:'.$clientId;
+                $channels[] = 'demand:'.$id;
+                if ($projectId > 0) $channels[] = 'project:'.$projectId;
+                foreach ($alsoProjectIds as $oldProjectId) {
+                    $oldProjectId = (int)$oldProjectId;
+                    if ($oldProjectId > 0) $channels[] = 'project:'.$oldProjectId;
+                }
             }
         }
         $channels = array_values(array_unique($channels));

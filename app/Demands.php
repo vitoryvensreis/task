@@ -183,10 +183,26 @@ final class Demands {
    return ['deleted'=>true,'id'=>$d['id']];
   });
  }
- public static function comment(array $p): array {$d=Auth::demand(integer($p['demand_id']??0,1));$internal=Auth::$user['role']!=='client'&&(bool)($p['internal']??false);$version=!empty($p['version_id'])?(int)$p['version_id']:null;if($version&&!DB::one('SELECT id FROM files WHERE id=? AND demand_id=?'.(Auth::$user['role']==='client'?' AND shared=1':''),[$version,$d['id']]))fail('Versão inválida.');$body=required($p,'body',10000);$id=DB::insert('comments',['demand_id'=>$d['id'],'author_id'=>Auth::$user['id'],'body'=>$body,'internal'=>(int)$internal,'version_id'=>$version,'created_at'=>now()]);Notify::demand($d,'Novo comentário',mb_substr($body,0,250),$internal);return ['id'=>$id];}
- public static function checklist(array $p): array {Auth::staff();$d=Auth::demand(integer($p['demand_id'],1));$id=(int)($p['id']??0);if($id){if(!DB::one('SELECT id FROM checklists WHERE id=? AND demand_id=?',[$id,$d['id']]))fail('Item inválido.',404);DB::update('checklists',$id,['done'=>(int)(bool)$p['done']]);}else $id=DB::insert('checklists',['demand_id'=>$d['id'],'label'=>required($p,'label',255),'done'=>0]);return ['id'=>$id];}
- public static function time(array $p): array {Auth::staff();$d=Auth::demand(integer($p['demand_id'],1));return ['id'=>DB::insert('time_entries',['demand_id'=>$d['id'],'user_id'=>Auth::$user['id'],'minutes'=>integer($p['minutes']??0,1,1440),'description'=>mb_substr($p['description']??'',0,255),'worked_on'=>datev($p['worked_on']??'',false),'created_at'=>now()])];}
- public static function change(array $p): array {$d=Auth::demand(integer($p['demand_id'],1));if(!empty($p['id'])){Auth::admin();if(!DB::one('SELECT id FROM change_requests WHERE id=? AND demand_id=?',[$p['id'],$d['id']]))fail('Solicitação inválida.');DB::update('change_requests',(int)$p['id'],['status'=>enumv($p['status'],['accepted','rejected'],'situação'),'response'=>$p['response']??'']);$id=(int)$p['id'];}else $id=DB::insert('change_requests',['demand_id'=>$d['id'],'user_id'=>Auth::$user['id'],'description'=>required($p,'description'),'created_at'=>now()]);Notify::demand($d,'Alteração de escopo',$d['title']);return ['id'=>$id];}
+ public static function comment(array $p): array {
+  return DB::tx(function() use($p): array {
+   $d=Auth::demand(integer($p['demand_id']??0,1),true);$internal=Auth::$user['role']!=='client'&&(bool)($p['internal']??false);$version=!empty($p['version_id'])?(int)$p['version_id']:null;if($version&&!DB::one('SELECT id FROM files WHERE id=? AND demand_id=?'.(Auth::$user['role']==='client'?' AND shared=1':''),[$version,$d['id']]))fail('Versão inválida.');$body=required($p,'body',10000);$id=DB::insert('comments',['demand_id'=>$d['id'],'author_id'=>Auth::$user['id'],'body'=>$body,'internal'=>(int)$internal,'version_id'=>$version,'created_at'=>now()]);Notify::demand($d,'Novo comentário',mb_substr($body,0,250),$internal);DemandRealtime::emit('demand.comment_created',$d,['change'=>'comment.created','comment_id'=>$id,'internal'=>(int)$internal],(int)Auth::$user['id'],[],$internal?'staff':'all');return ['id'=>$id];
+  });
+ }
+ public static function checklist(array $p): array {
+  return DB::tx(function() use($p): array {
+   Auth::staff();$d=Auth::demand(integer($p['demand_id'],1),true);$id=(int)($p['id']??0);if($id){if(!DB::one('SELECT id FROM checklists WHERE id=? AND demand_id=?',[$id,$d['id']]))fail('Item inválido.',404);DB::update('checklists',$id,['done'=>(int)(bool)$p['done']]);$change='checklist.updated';}else{$id=DB::insert('checklists',['demand_id'=>$d['id'],'label'=>required($p,'label',255),'done'=>0]);$change='checklist.created';}DemandRealtime::emit('demand.checklist_changed',$d,['change'=>$change,'checklist_id'=>$id],(int)Auth::$user['id']);return ['id'=>$id];
+  });
+ }
+ public static function time(array $p): array {
+  return DB::tx(function() use($p): array {
+   Auth::staff();$d=Auth::demand(integer($p['demand_id'],1),true);$id=DB::insert('time_entries',['demand_id'=>$d['id'],'user_id'=>Auth::$user['id'],'minutes'=>integer($p['minutes']??0,1,1440),'description'=>mb_substr($p['description']??'',0,255),'worked_on'=>datev($p['worked_on']??'',false),'created_at'=>now()]);DemandRealtime::emit('demand.time_logged',$d,['change'=>'time.logged','time_entry_id'=>$id],(int)Auth::$user['id'],[],'staff');return ['id'=>$id];
+  });
+ }
+ public static function change(array $p): array {
+  return DB::tx(function() use($p): array {
+   $d=Auth::demand(integer($p['demand_id'],1),true);if(!empty($p['id'])){Auth::admin();if(!DB::one('SELECT id FROM change_requests WHERE id=? AND demand_id=?',[$p['id'],$d['id']]))fail('Solicitação inválida.');DB::update('change_requests',(int)$p['id'],['status'=>enumv($p['status'],['accepted','rejected'],'situação'),'response'=>$p['response']??'']);$id=(int)$p['id'];$change='change.updated';}else{$id=DB::insert('change_requests',['demand_id'=>$d['id'],'user_id'=>Auth::$user['id'],'description'=>required($p,'description'),'created_at'=>now()]);$change='change.created';}Notify::demand($d,'Alteração de escopo',$d['title']);DemandRealtime::emit('demand.change_changed',$d,['change'=>$change,'change_request_id'=>$id],(int)Auth::$user['id']);return ['id'=>$id];
+  });
+ }
  public static function quote(array $p): array {
   return DB::tx(function() use($p): array {
    $d=Auth::demand(integer($p['id'],1),true);Auth::client((int)$d['client_id'],'approve');if($d['billing_mode']!=='one_off')fail('Esta task está incluída no pacote mensal.');$decision=enumv($p['decision']??'',['approved','rejected'],'decisão');$row=['commercial_status'=>$decision,'version'=>$d['version']+1,'updated_at'=>now()];DB::update('demands',$d['id'],$row);audit('demand',$d['id'],'quote.'.$decision);Notify::demand($d,'Resposta ao orçamento',$d['title']);$fresh=array_merge($d,$row);DemandRealtime::emit('demand.updated',$fresh,['change'=>'quote.'.$decision],(int)Auth::$user['id']);return ['saved'=>true];

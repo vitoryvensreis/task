@@ -37,6 +37,11 @@ check(icons.includes("'message-circle':")&&icons.includes("settings:'<path"),'cu
 check(app.includes("event.target.closest('[data-chat-peer]')"),'mobile contact selection must use delegated click handling');
 check(app.includes('function showChatConversationView()')&&app.includes('function showChatContactsView()'),'mobile chat must switch explicitly between contacts and conversation');
 check(app.includes("(max-width:820px)"),'chat mobile behavior must cover phones and small tablets');
+check(app.includes("startsWith('agenda.')")&&app.includes('handleAgendaRealtime(publication)'),'frontend must route agenda realtime publications');
+check(app.includes('function flushAgendaRealtime()')&&app.includes('stableRender(renderAgenda)'),'agenda realtime must refresh the current calendar view with stable rendering');
+check(app.includes("api('agenda.detail',{id:detailId})"),'open calendar event details must refresh after realtime changes');
+check(app.includes('agendaRealtimeDirty')&&app.includes('agendaRealtimeTimer'),'agenda realtime must debounce and resume hidden-tab refreshes');
+check(app.includes("String(publication.event_type||'').startsWith('demand.')"),'all demand sub-resource events must share the demand invalidation path');
 
 
 console.log('Realtime frontend: client channels, fanout dedupe, debounced refresh, modal safety and HTTP fallback OK');

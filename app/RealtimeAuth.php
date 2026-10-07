@@ -45,9 +45,13 @@ final class RealtimeAuth
         }
 
         $channels = ['user:'.(int)$user['id']];
+        if (in_array(($user['role'] ?? ''), ['admin','staff'], true)) {
+            $channels[] = 'staff/global';
+            $channels[] = 'agenda/global';
+        }
         if (($user['role'] ?? '') === 'admin') {
             $channels[] = 'kanban/global';
-            return $channels;
+            return array_values(array_unique($channels));
         }
 
         foreach (DB::all('SELECT client_id FROM user_clients WHERE user_id=? ORDER BY client_id', [(int)$user['id']]) as $link) {
@@ -61,6 +65,11 @@ final class RealtimeAuth
     {
         if ($channel === 'kanban/global') {
             if (($user['role'] ?? '') !== 'admin' || Auth::isPreview()) fail('Sem permissão para este canal realtime.', 403);
+            return;
+        }
+
+        if ($channel === 'staff/global' || $channel === 'agenda/global') {
+            if (!in_array(($user['role'] ?? ''), ['admin','staff'], true) || Auth::isPreview()) fail('Sem permissão para este canal realtime.', 403);
             return;
         }
 

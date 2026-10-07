@@ -88,19 +88,19 @@ jobs:
       - name: Gerar ZIP completo
         run: |
           set -e
-          rm -f "/tmp/taskesc-realtime-step6.zip" "taskesc-realtime-step6.zip"
-          zip -qr "/tmp/taskesc-realtime-step6.zip" . \
+          rm -f "/tmp/taskesc-chat-realtime.zip" "taskesc-chat-realtime.zip"
+          zip -qr "/tmp/taskesc-chat-realtime.zip" . \
             -x '.git/*' \
                'config/config.php' \
                'storage/sessions/*' \
                'storage/logs/*'
-          cp "/tmp/taskesc-realtime-step6.zip" "taskesc-realtime-step6.zip"
+          cp "/tmp/taskesc-chat-realtime.zip" "taskesc-chat-realtime.zip"
 
       - name: Publicar ZIP da versão
         uses: actions/upload-artifact@v4
         with:
-          name: taskesc-realtime-step6
-          path: taskesc-realtime-step6.zip
+          name: taskesc-chat-realtime
+          path: taskesc-chat-realtime.zip
           if-no-files-found: error
           retention-days: 7
 
@@ -146,6 +146,7 @@ jobs:
           php tests/realtime-worker.php
           php tests/realtime-auth.php
           php tests/realtime-business-events.php
+          php tests/chat.php
 
   deploy:
     name: Deploy na VPS
@@ -394,7 +395,7 @@ jobs:
           scp -P "$VPS_PORT"             public/assets/vendor/centrifuge-5.7.4.js             public/assets/vendor/centrifuge-5.7.4.sha256             public/assets/vendor/centrifuge-js.LICENSE             "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/public/assets/vendor/"
           ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "cd '$DEPLOY_PATH/public/assets/vendor' && sha256sum -c centrifuge-5.7.4.sha256 && test -s centrifuge-js.LICENSE"
 
-      - name: Aplicar somente migração Outbox (schema 21)
+      - name: Aplicar migrações realtime e chat com backup validado
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_PORT: ${{ secrets.VPS_PORT }}
@@ -408,6 +409,7 @@ jobs:
             set -euo pipefail
             cd "$DEPLOY_PATH"
             php bin/migrate-outbox.php "--backup-manifest=$BACKUP_MANIFEST"
+            php bin/migrate-chat.php "--backup-manifest=$BACKUP_MANIFEST"
           REMOTE
 
       - name: Auditoria de integridade sem alterações de dados
@@ -423,9 +425,9 @@ jobs:
             set -euo pipefail
             cd "$DEPLOY_PATH"
             umask 077
-            AUDIT_FILE="$DEPLOY_PATH/storage/backups/taskesc-outbox-audit-$(date -u +%Y%m%dT%H%M%SZ).json"
+            AUDIT_FILE="$DEPLOY_PATH/storage/backups/taskesc-schema22-audit-$(date -u +%Y%m%dT%H%M%SZ).json"
             AUDIT_EXIT=0
-            php bin/system-audit.php --strict --offline --expect-schema=21 > "$AUDIT_FILE" || AUDIT_EXIT=$?
+            php bin/system-audit.php --strict --offline --expect-schema=22 > "$AUDIT_FILE" || AUDIT_EXIT=$?
             php -r '
               $r=json_decode(file_get_contents($argv[1]),true,512,JSON_THROW_ON_ERROR);
               echo json_encode(["audit"=>["ok"=>$r["ok"],"schema"=>$r["schema"],"critical_count"=>count($r["critical"]),"warning_count"=>count($r["warnings"]),"warning_keys"=>array_column($r["warnings"],"key"),"cleanup_saas"=>$r["cleanup_saas"],"offline"=>$r["offline"]]],JSON_UNESCAPED_SLASHES).PHP_EOL;

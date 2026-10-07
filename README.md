@@ -454,10 +454,10 @@ Eventos `demand.*` agora invalidam Dashboard, Kanban, Tasks, Financeiro e Relat�
 O WebSocket continua sendo apenas o gatilho: os dados completos são relidos pelos endpoints HTTP autorizados. O refresh periódico de 30 segundos permanece como fallback. Consulte `docs/realtime-step6.md`.
 
 
-## Chat realtime entre usuários
+## Chat administrativo realtime
 
-O TaskEsc agora possui chat privado 1:1 pela infraestrutura WebSocket já existente. As mensagens ficam persistidas no MySQL e a entrega em tempo real usa Outbox → worker → Centrifugo → canais pessoais `user:{id}`.
+O TaskEsc possui chat privado 1:1 **somente entre Administradores** pela infraestrutura WebSocket já existente. O acesso fica em um botão flutuante no canto inferior direito, que abre um popup responsivo com pesquisa de contatos, lista de administradores, conversa, não lidas e confirmação de leitura.
 
-O corpo das mensagens não trafega no evento WebSocket: o evento carrega somente identificadores e o navegador consulta o conteúdo pelo HTTP autenticado. O chat possui contador de não lidas, confirmação de leitura, envio idempotente e regras de acesso que evitam exposição entre clientes sem vínculo em comum.
+As mensagens ficam persistidas no MySQL e a entrega em tempo real usa Outbox → worker → Centrifugo → canais pessoais `user:{id}`. O corpo das mensagens não trafega no evento WebSocket: o evento carrega somente identificadores e o navegador consulta o conteúdo pelo HTTP autenticado.
 
-A funcionalidade usa o schema 22, aplicado por migration dedicada somente após backup pré-deploy validado. Consulte `docs/chat-realtime.md`.
+Equipe, Clientes, modo preview e tokens de API/MCP não possuem acesso ao chat. Consulte `docs/chat-realtime.md`.

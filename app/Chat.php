@@ -10,15 +10,10 @@ final class Chat
     {
         $me=self::guard();
         $myId=(int)$me['id'];
-        $rows=DB::all("SELECT u.id,u.name,u.role,u.last_login_at,
-          EXISTS(
-            SELECT 1 FROM user_clients mine
-            JOIN user_clients theirs ON theirs.client_id=mine.client_id
-            WHERE mine.user_id=? AND theirs.user_id=u.id
-          ) AS shared_client
+        $rows=DB::all("SELECT u.id,u.name,u.role,u.last_login_at
           FROM users u
-          WHERE u.active=1 AND u.id<>?
-          ORDER BY u.name,u.id",[$myId,$myId]);
+          WHERE u.active=1 AND u.role='admin' AND u.id<>?
+          ORDER BY u.name,u.id",[$myId]);
 
         $threads=DB::all("SELECT t.id,t.user_low_id,t.user_high_id,t.updated_at,m.id AS last_message_id,
           m.sender_id AS last_sender_id,m.body AS last_body,m.created_at AS last_at,
@@ -35,7 +30,6 @@ final class Chat
 
         $contacts=[];
         foreach($rows as $row){
-            if(!self::canPeer($me,$row))continue;
             $id=(int)$row['id'];$thread=$byPeer[$id]??null;
             $contacts[]=[
                 'id'=>$id,
@@ -130,26 +124,16 @@ final class Chat
         Auth::load();Auth::requireAbility('chat.use');
         if(Auth::$origin!=='web')fail('O chat fica disponível somente na sessão web autenticada.',403);
         if(Auth::isPreview())fail('O chat não fica disponível no modo de visualização do cliente.',403);
+        if((Auth::$user['role']??'')!=='admin')fail('O chat é exclusivo para administradores.',403);
         return Auth::$user;
     }
 
     private static function peer(int $id,array $me): array
     {
         if($id===(int)$me['id'])fail('Escolha outro usuário para conversar.',422);
-        $peer=DB::one('SELECT id,name,role,active,last_login_at FROM users WHERE id=? AND active=1',[$id]);
-        if(!$peer)fail('Usuário não encontrado ou inativo.',404);
-        $shared=(bool)DB::one('SELECT 1 ok FROM user_clients a JOIN user_clients b ON b.client_id=a.client_id WHERE a.user_id=? AND b.user_id=? LIMIT 1',[(int)$me['id'],$id]);
-        $peer['shared_client']=$shared?1:0;
-        if(!self::canPeer($me,$peer))fail('Você não possui acesso para conversar com este usuário.',403);
+        $peer=DB::one("SELECT id,name,role,active,last_login_at FROM users WHERE id=? AND active=1 AND role='admin'",[$id]);
+        if(!$peer)fail('Administrador não encontrado ou inativo.',404);
         return $peer;
-    }
-
-    private static function canPeer(array $me,array $peer): bool
-    {
-        $myRole=(string)($me['role']??'');$peerRole=(string)($peer['role']??'');
-        if($myRole==='admin'||$peerRole==='admin')return true;
-        if($myRole==='staff'&&$peerRole==='staff')return true;
-        return !empty($peer['shared_client']);
     }
 
     private static function threadFor(int $a,int $b,bool $create): ?array

@@ -1197,6 +1197,6 @@
   }
   async function generateToken(){const name=prompt('Nome do token:','ChatGPT TaskEsc');if(!name)return;const days=prompt('Validade em dias:','90');try{const r=await api('tokens.create',{name,days:Number(days),scopes:'api.read api.write tools.read tools.write'},'POST');alert('Copie agora — ele não será mostrado novamente:\n\n'+r.token);stableRender(renderSettings)}catch(x){toast(x.message,true)}}
   async function revokeToken(id){try{await api('tokens.revoke',{id:Number(id)},'POST');stableRender(renderSettings)}catch(x){toast(x.message,true)}}
-  if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register(appPath('service-worker.js')).catch(()=>{}));
+  if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register(appPath('service-worker.js?v=6.1.0')).catch(()=>{}));
   init();
 })();

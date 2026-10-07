@@ -14,7 +14,10 @@ foreach ($argv as $arg) {
 try {
     if (!config() || !is_file(ROOT.'/storage/installed.lock')) throw new RuntimeException('taskesc_not_installed');
     $schema = (string)(DB::one('SELECT value FROM settings WHERE `key`=? LIMIT 1', ['schema_version'])['value'] ?? '');
-    if (!in_array($schema, ['21','22'], true)) throw new RuntimeException('schema_21_or_22_required');
+    $schemaVersion = filter_var($schema, FILTER_VALIDATE_INT);
+    if ($schemaVersion === false || (int)$schemaVersion < Migrations::OUTBOX_VERSION || (int)$schemaVersion > Migrations::CURRENT_VERSION) {
+        throw new RuntimeException('realtime_schema_unsupported');
+    }
 
     if ($healthOnly) {
         $queue = EventOutbox::stats(RealtimeOutboxWorker::DEFAULT_MAX_ATTEMPTS);

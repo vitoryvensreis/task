@@ -28,7 +28,7 @@ contractCheck(str_contains($worker,'operation_id')&&str_contains($worker,'INSERT
 contractCheck(str_contains($worker,'whatsapp_delivery_ambiguous'),'Worker must avoid blind resend after an uncertain process interruption.');
 contractCheck(str_contains($worker,"status='retry'")&&str_contains($worker,'MAX_ATTEMPTS=4'),'Worker must use bounded retry.');
 contractCheck(str_contains($wpp,'sendAutomationMessage'),'WPPConnect must expose the internal automation send method.');
-contractCheck(str_contains($worker,"if($mode==='assigned_user')$mode='creator'")&&str_contains($worker,"$demand['created_by']")&&str_contains($worker,"'type'=>'creator'"),'Legacy assigned-user recipient must resolve to the task creator, never the responsible user.');
+contractCheck(str_contains($worker,"if(\$mode==='assigned_user')\$mode='creator'")&&str_contains($worker,"\$demand['created_by']")&&str_contains($worker,"'type'=>'creator'"),'Legacy assigned-user recipient must resolve to the task creator, never the responsible user.');
 contractCheck(str_contains($worker,"'{{creator.name}}'"),'Automation templates must expose the task creator name.');
 
 contractCheck(str_contains($unit,'TaskEsc Automation Worker')&&str_contains($unit,'NoNewPrivileges=true'),'Automation worker service definition missing.');

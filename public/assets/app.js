@@ -1690,6 +1690,25 @@
   const AUTO_RUN_LABELS={pending:'Pendente',retry:'Nova tentativa',running:'Executando',success:'Concluída',failed:'Falhou',skipped:'Ignorada'};
   const AUTO_RUN_CLASSES={pending:'warn',retry:'warn',running:'running',success:'ok',failed:'error',skipped:'muted'};
 
+  const automationWhatsappGroupsState={groups:null,loading:null,error:'',loadedAt:0};
+  async function automationLoadWhatsappGroups(force=false){
+    const state=automationWhatsappGroupsState;
+    if(state.loading)return state.loading;
+    if(!force&&state.groups&&Date.now()-state.loadedAt<60000)return state.groups;
+    state.error='';state.groups=null;
+    state.loading=(async()=>{
+      try{
+        const data=await api('wpp.groups');
+        state.groups=Array.isArray(data?.groups)?data.groups:[];
+        state.loadedAt=Date.now();return state.groups;
+      }catch(error){state.error=error.message||'Não foi possível consultar os grupos conectados.';return []}
+      finally{
+        state.loading=null;
+        if(automationEditorState?.definition?.nodes?.some(n=>n.id===automationEditorState.selectedNodeId&&n.type==='action.whatsapp'&&n.config?.recipient==='group'))paintAutomationInspector();
+      }
+    })();
+    return state.loading;
+  }
   async function automationCatalog(){return automationCatalogCache||(automationCatalogCache=await api('automation.catalog'))}
   function automationTriggerLabel(value){const rows=automationCatalogCache?.triggers||[];return rows.find(x=>x.value===value)?.label||value||'Gatilho'}
   function automationTriggerOptionsMarkup(){
@@ -1698,15 +1717,15 @@
   }
   function automationIsDemandTrigger(event=automationEditorState?.trigger_event||''){return String(event).startsWith('demand.')}
   function automationRecipientOptions(){
-    const common=[{value:'client',label:'Cliente'},{value:'custom',label:'Número específico'}];
+    const common=[{value:'client',label:'Cliente'},{value:'custom',label:'Número específico'},{value:'group',label:'Grupo do WhatsApp'}];
     if(!automationIsDemandTrigger())return common;
     return [{value:'task',label:'Usar seleção da própria task'},{value:'assigned_user',label:'Responsável pela task'},{value:'creator',label:'Quem criou a task'},...common]
   }
   function automationDefaultRecipient(){return automationIsDemandTrigger()?'task':'client'}
-  function automationRecipientLabel(value){return automationRecipientOptions().find(x=>x.value===value)?.label||({task:'Usar seleção da própria task',assigned_user:'Responsável pela task',creator:'Quem criou a task',client:'Cliente',custom:'Número específico'}[value]||value||'Destinatário')}
+  function automationRecipientLabel(value){return automationRecipientOptions().find(x=>x.value===value)?.label||({task:'Usar seleção da própria task',assigned_user:'Responsável pela task',creator:'Quem criou a task',client:'Cliente',custom:'Número específico',group:'Grupo do WhatsApp'}[value]||value||'Destinatário')}
   function automationNormalizeRecipientsForTrigger(){
     const allowed=new Set(automationRecipientOptions().map(x=>x.value));
-    for(const node of automationEditorState?.definition?.nodes||[])if(node.type==='action.whatsapp'&&!allowed.has(node.config?.recipient)){node.config.recipient=automationDefaultRecipient();delete node.config.custom_phone}
+    for(const node of automationEditorState?.definition?.nodes||[])if(node.type==='action.whatsapp'&&!allowed.has(node.config?.recipient)){node.config.recipient=automationDefaultRecipient();delete node.config.custom_phone;delete node.config.group_id}
   }
   function automationTriggerConfigMarkup(node){
     const event=automationEditorState?.trigger_event||node.config?.event||'';
@@ -1826,7 +1845,11 @@
       body=`<div class="field"><label>Cliente da nova task</label><select class="select" data-auto-action-field="client_mode"><option value="related" ${mode==='related'?'selected':''}>Mesmo cliente do gatilho</option><option value="specific" ${mode==='specific'?'selected':''}>Cliente específico</option></select></div>${mode==='specific'?`<div class="field"><label>Escolher cliente</label><select class="select" data-auto-action-field="client_id">${automationFieldOptions('client_id').map(x=>`<option value="${x.value}" ${String(x.value)===String(cfg.client_id)?'selected':''}>${esc(x.label)}</option>`).join('')}</select></div>`:''}<div class="field"><label>Serviço / categoria</label><select class="select" data-auto-action-field="category_id">${automationFieldOptions('category_id').map(x=>`<option value="${x.value}" ${String(x.value)===String(cfg.category_id)?'selected':''}>${esc(x.label)}</option>`).join('')}</select></div><div class="field"><label>Título</label><input class="input" maxlength="190" data-auto-action-field="title" value="${esc(cfg.title||'')}"></div><div class="field"><label>Briefing</label><textarea class="textarea automation-message-editor" maxlength="4000" data-auto-action-field="brief" data-auto-config="message">${esc(cfg.brief||'')}</textarea></div><div class="field"><label>Prazo em horas úteis</label><input type="number" min="1" max="720" class="input" data-auto-action-field="hours_due" value="${Number(cfg.hours_due||24)}"></div><div class="field"><label>Prioridade</label><select class="select" data-auto-action-field="priority">${automationFieldOptions('priority').map(x=>`<option value="${x.value}" ${x.value===(cfg.priority||'normal')?'selected':''}>${x.label}</option>`).join('')}</select></div><div class="automation-inspector-note">Cria apenas uma nova task por execução; automações geradas por outras automações não reiniciam novos fluxos.</div><div class="automation-variable-list">${automationVariableChips()}</div>`;
     }else if(node.type==='action.whatsapp'){
       const recipient=node.config?.recipient||automationDefaultRecipient(),recipientOptions=automationRecipientOptions();
-      body=`<div class="field"><label>Destinatário</label><select class="select" data-auto-config="recipient">${recipientOptions.map(x=>`<option value="${x.value}" ${x.value===recipient?'selected':''}>${esc(x.label)}</option>`).join('')}</select><small class="field-help">${automationIsDemandTrigger()?'Você pode respeitar a escolha da task ou sobrescrever com responsável, criador, cliente ou número específico.':'Para este gatilho, envie ao cliente relacionado ou a um número específico.'}</small></div>${recipient==='custom'?`<div class="field"><label>Número específico</label><input class="input" data-auto-config="custom_phone" inputmode="tel" maxlength="20" value="${esc(node.config?.custom_phone||'')}" placeholder="5585999999999"><small class="field-help">Use DDI + DDD + número.</small></div>`:''}<div class="automation-recipient-box"><span>DESTINATÁRIO ATUAL</span><b>${esc(automationRecipientLabel(recipient))}</b><small>${recipient==='task'?'A ação seguirá o campo “Disparos de WhatsApp” da própria task.':'Esta ação ignora o destinatário padrão da task e usa esta escolha.'}</small></div><div class="field"><label>Mensagem</label><textarea class="textarea automation-message-editor" data-auto-config="message" maxlength="4000" placeholder="Digite a mensagem...">${esc(node.config?.message||'')}</textarea><small class="field-help"><span id="automation-message-count">${String(node.config?.message||'').length}</span>/4000 caracteres</small></div><div class="automation-variable-list">${(automationCatalogCache?.variables||[]).map(v=>`<button type="button" class="automation-variable" data-auto-variable="${esc(v)}">${esc(v)}</button>`).join('')}</div>`;
+      if(recipient==='group'&&!automationWhatsappGroupsState.groups&&!automationWhatsappGroupsState.loading&&!automationWhatsappGroupsState.error)void automationLoadWhatsappGroups();
+      const state=automationWhatsappGroupsState,groupId=String(node.config?.group_id||''),groups=state.groups||[];
+      const groupExists=groups.some(g=>g.id===groupId);
+      const groupMarkup=recipient==='group'?`<div class="field"><label>Grupo de destino</label><select class="select" data-auto-config="group_id"><option value="">${state.loading?'Carregando grupos...':'Selecione um grupo'}</option>${groupId&&!groupExists?`<option value="${esc(groupId)}" selected>Grupo salvo (não encontrado na sessão)</option>`:''}${groups.map(g=>`<option value="${esc(g.id)}" ${g.id===groupId?'selected':''}>${esc(g.name)}</option>`).join('')}</select><button type="button" class="secondary automation-refresh-groups" data-auto-refresh-groups="1">${icon('refresh-cw','↻')} Atualizar grupos</button><small class="field-help">${esc(state.error||(!state.loading&&!groups.length?'Nenhum grupo disponível. Conecte o WhatsApp em Configurações → WhatsApp.':'A lista mostra apenas grupos da sessão conectada.'))}</small></div>`:'';
+      body=`<div class="field"><label>Destinatário</label><select class="select" data-auto-config="recipient">${recipientOptions.map(x=>`<option value="${x.value}" ${x.value===recipient?'selected':''}>${esc(x.label)}</option>`).join('')}</select><small class="field-help">${automationIsDemandTrigger()?'Use a seleção da task ou escolha responsável, criador, cliente, número específico ou grupo.':'Para este gatilho, envie ao cliente, a um número específico ou a um grupo.'}</small></div>${recipient==='custom'?`<div class="field"><label>Número específico</label><input class="input" data-auto-config="custom_phone" inputmode="tel" maxlength="20" value="${esc(node.config?.custom_phone||'')}" placeholder="5585999999999"><small class="field-help">Use DDI + DDD + número.</small></div>`:''}${groupMarkup}<div class="automation-recipient-box"><span>DESTINATÁRIO ATUAL</span><b>${esc(automationRecipientLabel(recipient))}</b><small>${recipient==='task'?'A ação seguirá o campo “Disparos de WhatsApp” da própria task.':'Esta ação ignora o destinatário padrão da task e usa esta escolha.'}</small></div><div class="field"><label>Mensagem</label><textarea class="textarea automation-message-editor" data-auto-config="message" maxlength="4000" placeholder="Digite a mensagem...">${esc(node.config?.message||'')}</textarea><small class="field-help"><span id="automation-message-count">${String(node.config?.message||'').length}</span>/4000 caracteres</small></div><div class="automation-variable-list">${(automationCatalogCache?.variables||[]).map(v=>`<button type="button" class="automation-variable" data-auto-variable="${esc(v)}">${esc(v)}</button>`).join('')}</div>`;
     }else body='<div class="automation-inspector-note">Este bloco encerra o ramo atual do fluxo.</div>';
     return `<div class="automation-inspector-head"><span class="automation-node-icon ${meta.tone}">${icon(meta.icon,'•')}</span><div><span class="eyebrow">${esc(meta.eyebrow)}</span><h3>${esc(meta.title)}</h3></div></div><div class="automation-inspector-body">${body}</div>${!['trigger','end'].includes(node.type)?`<button type="button" class="danger full automation-remove-node" data-auto-remove="${esc(node.id)}">${icon('trash-2','×')} Remover este bloco</button>`:''}`
   }
@@ -1846,7 +1869,16 @@
     panel.querySelector('[data-auto-config="operator"]')?.addEventListener('change',e=>{node.config.operator=e.target.value;if(['in','not_in'].includes(node.config.operator)&&!Array.isArray(node.config.value))node.config.value=String(node.config.value??'').trim()?[String(node.config.value)]:[];if(!['in','not_in'].includes(node.config.operator)&&Array.isArray(node.config.value))node.config.value=node.config.value[0]??'';automationMarkDirty();paintAutomationEditor()});
     panel.querySelector('[data-auto-config="value"]')?.addEventListener('change',e=>{node.config.value=e.target.value;automationMarkDirty();paintAutomationEditor()});
     panel.querySelector('[data-auto-config="value-list"]')?.addEventListener('change',e=>{node.config.value=String(e.target.value||'').split(',').map(x=>x.trim()).filter(Boolean).slice(0,50);automationMarkDirty();paintAutomationEditor()});
-    panel.querySelector('[data-auto-config="recipient"]')?.addEventListener('change',e=>{node.config.recipient=e.target.value;if(e.target.value!=='custom')delete node.config.custom_phone;else node.config.custom_phone=node.config.custom_phone||'';automationMarkDirty();paintAutomationEditor()});
+    panel.querySelector('[data-auto-config="recipient"]')?.addEventListener('change',e=>{
+      node.config.recipient=e.target.value;
+      if(e.target.value!=='custom')delete node.config.custom_phone;
+      else node.config.custom_phone=node.config.custom_phone||'';
+      if(e.target.value!=='group')delete node.config.group_id;
+      else{node.config.group_id=node.config.group_id||'';void automationLoadWhatsappGroups()}
+      automationMarkDirty();paintAutomationEditor();
+    });
+    panel.querySelector('[data-auto-config="group_id"]')?.addEventListener('change',e=>{node.config.group_id=e.target.value;automationMarkDirty();paintAutomationInspector()});
+    panel.querySelector('[data-auto-refresh-groups]')?.addEventListener('click',()=>{void automationLoadWhatsappGroups(true);paintAutomationInspector()});
     panel.querySelector('[data-auto-config="custom_phone"]')?.addEventListener('input',e=>{node.config.custom_phone=e.target.value;automationMarkDirty()});
     panel.querySelectorAll('[data-auto-action-field]').forEach(field=>field.addEventListener(field.matches('input,textarea')?'input':'change',e=>{
       const key=e.target.dataset.autoActionField;node.config[key]=e.target.value;

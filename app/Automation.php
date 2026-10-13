@@ -185,13 +185,16 @@ final class Automation
                 $config=['field'=>$field,'operator'=>$operator,'value'=>$value];
             }elseif($type==='action.whatsapp'){
                 $recipient=(string)($config['recipient']??'task');
-                if(!in_array($recipient,['task','custom','assigned_user','creator','client'],true))fail('Destinatário do WhatsApp inválido.',422);
+                if(!in_array($recipient,['task','custom','assigned_user','creator','client','group'],true))fail('Destinatário do WhatsApp inválido.',422);
                 if(!str_starts_with($trigger,'demand.')&&in_array($recipient,['task','assigned_user','creator'],true))fail('Este gatilho não possui uma task para usar esse destinatário.',422);
                 $message=trim((string)($config['message']??''));if($message===''||mb_strlen($message)>4000)fail('Informe a mensagem do WhatsApp com até 4000 caracteres.',422);
                 $clean=['recipient'=>$recipient,'message'=>$message];
                 if($recipient==='custom'){
                     try{$clean['custom_phone']=WppConnect::normalizePhone((string)($config['custom_phone']??''));}
                     catch(Throwable){fail('Informe um número específico de WhatsApp válido com DDI + DDD + número.',422);}
+                }
+                if($recipient==='group'){
+                    $clean['group_id']=WppConnect::normalizeGroupId((string)($config['group_id']??''));
                 }
                 $config=$clean;
             }elseif($type==='action.task'){

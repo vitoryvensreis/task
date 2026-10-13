@@ -30,6 +30,7 @@ try {
   'push.unsubscribe'=>Push::unsubscribe($p),
   'push.test'=>Push::test(),
   'wpp.status'=>WppConnect::status(),
+  'wpp.groups'=>WppConnect::groups(),
   'wpp.start'=>WppConnect::start(),
   'wpp.qr'=>WppConnect::qr(),
   'wpp.send_test'=>WppConnect::sendTest($p),

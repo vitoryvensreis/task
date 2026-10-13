@@ -38,8 +38,27 @@ try{
  $db->exec('SET FOREIGN_KEY_CHECKS=1');
  $db->exec(file_get_contents(ROOT.'/database/schema.sql'));
 
- autoCheck((int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0)===24,'Fresh schema must be 24.');
- autoCheck(Migrations::automationIssues()===[],'Fresh schema 24 automation structure must validate.');
+ autoCheck((int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0)===25,'Fresh schema must be 25.');
+ // Reproduce an existing schema 24 and verify a safe, repeatable 24 -> 25 upgrade.
+ $db->exec('ALTER TABLE whatsapp_messages MODIFY recipient_phone VARCHAR(20) CHARACTER SET ascii COLLATE ascii_bin NOT NULL');
+ DB::run("UPDATE settings SET value='24' WHERE `key`='schema_version'");
+ $upgrade=Migrations::automation();
+ autoCheck($upgrade['previous']===24&&$upgrade['current']===25&&$upgrade['changed'],'Schema 24 must upgrade to 25.');
+ autoCheck(!Migrations::automationIssues(),'Schema 25 must retain a valid automation structure.');
+ autoCheck(Migrations::automation()['changed']===false,'Schema 25 migration must be idempotent.');
+
+ $groupRows=WppConnect::normalizeGroupsResponse(['status'=>'success','response'=>[
+  ['id'=>['_serialized'=>'120363012345678901@g.us'],'name'=>'Produção Geral','participants'=>[['id'=>'private']]],
+  ['id'=>'123456789-123456789@g.us','subject'=>'Cliente A'],
+  ['id'=>'5585999990001@c.us','name'=>'Conversa privada']
+ ]]);
+ autoCheck(count($groupRows)===2,'Only valid WhatsApp groups may appear in the selection list.');
+ autoCheck(!array_key_exists('participants',$groupRows[0]),'Group endpoint must not expose participants.');
+ $badGroup=false;
+ try{WppConnect::normalizeGroupId('5585999990001@c.us');}catch(AppError $e){$badGroup=$e->status===422;}
+ autoCheck($badGroup,'Individual WhatsApp IDs must be rejected as groups.');
+
+ autoCheck(Migrations::automationIssues()===[],'Fresh schema 25 automation structure must validate.');
 
  $password=password_hash('Taskesc-automation-ci!',PASSWORD_DEFAULT);
  $admin=DB::insert('users',['name'=>'Admin Automation','email'=>'admin-auto@ci.invalid','whatsapp_phone'=>'5585999990001','password_hash'=>$password,'role'=>'admin','active'=>1,'email_notifications'=>0,'created_at'=>now()]);
@@ -65,6 +84,24 @@ try{
  try{Catalog::userSave(['name'=>'Bad Phone','email'=>'bad-phone@ci.invalid','whatsapp_phone'=>'123','role'=>'staff','active'=>1,'password'=>'Taskesc-automation-ci!','clients'=>[]]);}
  catch(AppError $e){$invalid=$e->status===422;}
  autoCheck($invalid,'Invalid WhatsApp must be rejected.');
+
+ $groupDefinition=[
+  'version'=>1,
+  'nodes'=>[
+   ['id'=>'trigger','type'=>'trigger','config'=>['event'=>'demand.created']],
+   ['id'=>'send','type'=>'action.whatsapp','config'=>['recipient'=>'group','group_id'=>'120363012345678901@g.us','message'=>'Nova task {{task.title}}']],
+   ['id'=>'end','type'=>'end','config'=>[]],
+  ],
+  'edges'=>[['from'=>'trigger','to'=>'send','branch'=>'next'],['from'=>'send','to'=>'end','branch'=>'next']],
+ ];
+ $groupSaved=Automation::save(['name'=>'Grupo WhatsApp','trigger_event'=>'demand.created','definition'=>$groupDefinition,'active'=>0]);
+ $groupNode=array_values(array_filter($groupSaved['definition']['nodes'],static fn($n)=>$n['type']==='action.whatsapp'))[0]??[];
+ autoCheck(($groupNode['config']['recipient']??'')==='group'&&($groupNode['config']['group_id']??'')==='120363012345678901@g.us','Group recipient and ID must be saved without truncation.');
+ $invalidGroup=$groupDefinition;
+ $invalidGroup['nodes'][1]['config']['group_id']='5585999990001@c.us';
+ $rejected=false;
+ try{Automation::save(['name'=>'Grupo inválido','trigger_event'=>'demand.created','definition'=>$invalidGroup,'active'=>0]);}catch(AppError $e){$rejected=$e->status===422;}
+ autoCheck($rejected,'Saving a non-group destination must fail.');
 
  $customDefinition=[
   'version'=>1,

@@ -4,7 +4,8 @@ final class Migrations {
  public const CHAT_VERSION=22;
  public const CHAT_TASK_VERSION=23;
  public const AUTOMATION_VERSION=24;
- public const CURRENT_VERSION=24;
+ public const WHATSAPP_GROUPS_VERSION=25;
+ public const CURRENT_VERSION=25;
  public static function run(): void {
   static $ran=false;if($ran)return;$ran=true;
   try{$version=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??1);}catch(Throwable){return;}
@@ -280,7 +281,7 @@ final class Migrations {
   $timeout=null;
   try{
    $before=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);
-   if(!in_array($before,[19,self::OUTBOX_VERSION,self::CHAT_VERSION,self::CHAT_TASK_VERSION,self::AUTOMATION_VERSION],true))throw new RuntimeException('A migração Outbox requer schema 19, 21, 22, 23 ou 24; schema 20 não é suportado.');
+   if(!in_array($before,[19,self::OUTBOX_VERSION,self::CHAT_VERSION,self::CHAT_TASK_VERSION,self::AUTOMATION_VERSION,self::WHATSAPP_GROUPS_VERSION],true))throw new RuntimeException('A migração Outbox requer schema 19, 21, 22, 23, 24 ou 25; schema 20 não é suportado.');
    if($before===19){
     $timeout=(int)(DB::one('SELECT @@SESSION.lock_wait_timeout AS timeout')['timeout']??0);
     $db->exec('SET SESSION lock_wait_timeout=10');
@@ -351,7 +352,7 @@ final class Migrations {
   $timeout=null;
   try{
    $before=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);
-   if(!in_array($before,[self::OUTBOX_VERSION,self::CHAT_VERSION,self::CHAT_TASK_VERSION,self::AUTOMATION_VERSION],true))throw new RuntimeException('A migração do chat requer schema 21, 22, 23 ou 24.');
+   if(!in_array($before,[self::OUTBOX_VERSION,self::CHAT_VERSION,self::CHAT_TASK_VERSION,self::AUTOMATION_VERSION,self::WHATSAPP_GROUPS_VERSION],true))throw new RuntimeException('A migração do chat requer schema 21, 22, 23, 24 ou 25.');
    if($before<self::CHAT_TASK_VERSION){
     $timeout=(int)(DB::one('SELECT @@SESSION.lock_wait_timeout AS timeout')['timeout']??0);
     $db->exec('SET SESSION lock_wait_timeout=10');
@@ -368,7 +369,7 @@ final class Migrations {
    if($issues)throw new RuntimeException('Estrutura do chat incompatível: '.implode(',',$issues));
    if($before<self::CHAT_TASK_VERSION)DB::run("UPDATE settings SET value=? WHERE `key`='schema_version' AND value=?",[(string)self::CHAT_TASK_VERSION,(string)$before]);
    $after=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);
-   if(!in_array($after,[self::CHAT_TASK_VERSION,self::AUTOMATION_VERSION],true))throw new RuntimeException('Marcador de schema divergente após migração do chat.');
+   if(!in_array($after,[self::CHAT_TASK_VERSION,self::AUTOMATION_VERSION,self::WHATSAPP_GROUPS_VERSION],true))throw new RuntimeException('Marcador de schema divergente após migração do chat.');
    return ['previous'=>$before,'current'=>$after,'tables'=>['chat_threads','chat_messages','chat_message_tasks'],'changed'=>$before!==$after];
   }finally{
    try{if($timeout!==null)$db->exec('SET SESSION lock_wait_timeout='.$timeout);}finally{DB::run('SELECT RELEASE_LOCK(?)',[$lock]);}
@@ -427,7 +428,7 @@ final class Migrations {
   $timeout=null;
   try{
    $before=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);
-   if(!in_array($before,[self::CHAT_TASK_VERSION,self::AUTOMATION_VERSION],true))throw new RuntimeException('A migração de automações requer schema 23 ou 24.');
+   if(!in_array($before,[self::CHAT_TASK_VERSION,self::AUTOMATION_VERSION,self::WHATSAPP_GROUPS_VERSION],true))throw new RuntimeException('A migração de automações requer schema 23, 24 ou 25.');
    if($before<self::AUTOMATION_VERSION){
     $timeout=(int)(DB::one('SELECT @@SESSION.lock_wait_timeout AS timeout')['timeout']??0);
     $db->exec('SET SESSION lock_wait_timeout=10');
@@ -443,11 +444,23 @@ final class Migrations {
     }
     DB::run("INSERT INTO automation_worker_state (id,last_outbox_id,heartbeat_at,updated_at) SELECT 1,COALESCE(MAX(id),0),NULL,? FROM event_outbox WHERE 1=1 ON DUPLICATE KEY UPDATE id=id",[now()]);
    }
+   if($before<self::WHATSAPP_GROUPS_VERSION){
+    if($timeout===null){
+     $timeout=(int)(DB::one('SELECT @@SESSION.lock_wait_timeout AS timeout')['timeout']??0);
+     $db->exec('SET SESSION lock_wait_timeout=10');
+    }
+    $length=(int)(DB::one("SELECT CHARACTER_MAXIMUM_LENGTH AS n FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='whatsapp_messages' AND COLUMN_NAME='recipient_phone'")['n']??0);
+    if($length<96){
+     $sql=file_get_contents(ROOT.'/database/migrations/025_whatsapp_groups.sql');
+     if($sql===false)throw new RuntimeException('Arquivo de migração dos grupos ausente.');
+     $db->exec($sql);
+    }
+   }
    $issues=self::automationIssues();
    if($issues)throw new RuntimeException('Estrutura de automações incompatível: '.implode(',',$issues));
-   if($before<self::AUTOMATION_VERSION)DB::run("UPDATE settings SET value=? WHERE `key`='schema_version' AND value=?",[(string)self::AUTOMATION_VERSION,(string)$before]);
+   if($before<self::WHATSAPP_GROUPS_VERSION)DB::run("UPDATE settings SET value=? WHERE `key`='schema_version' AND value=?",[(string)self::WHATSAPP_GROUPS_VERSION,(string)$before]);
    $after=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);
-   if($after!==self::AUTOMATION_VERSION)throw new RuntimeException('Marcador de schema divergente após migração de automações.');
+   if($after!==self::WHATSAPP_GROUPS_VERSION)throw new RuntimeException('Marcador de schema divergente após migração de automações.');
    return ['previous'=>$before,'current'=>$after,'tables'=>['automations','automation_runs','automation_run_steps','automation_worker_state','whatsapp_messages'],'changed'=>$before!==$after];
   }finally{
    try{if($timeout!==null)$db->exec('SET SESSION lock_wait_timeout='.$timeout);}finally{DB::run('SELECT RELEASE_LOCK(?)',[$lock]);}
@@ -475,6 +488,7 @@ final class Migrations {
    $c=$columns[$table][$name]??null;if(!$c){$issues[]='column_'.$table.'_'.$name;continue;}
    if((string)$c['DATA_TYPE']!==$type&&!($type==='json'&&(string)$c['DATA_TYPE']==='longtext'))$issues[]='definition_'.$table.'_'.$name;
   }
+  if((int)($columns['whatsapp_messages']['recipient_phone']['CHARACTER_MAXIMUM_LENGTH']??0)<96)$issues[]='whatsapp_recipient_address_length';
   foreach([
    ['automations','idx_automations_active_trigger'],
    ['automation_runs','uq_automation_run_operation'],

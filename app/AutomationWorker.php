@@ -292,7 +292,7 @@ final class AutomationWorker
             ]);
         }
         try{
-            $sent=WppConnect::sendAutomationMessage($recipient['phone'],$message);
+            $sent=WppConnect::sendAutomationMessage($recipient['phone'],$message,$recipient['type']==='group');
             DB::update('whatsapp_messages',$messageId,['status'=>'sent','provider_message_id'=>$sent['message_id']??null,'sent_at'=>now(),'last_error'=>null]);
             return ['sent'=>true,'message_id'=>$sent['message_id']??null,'recipient_type'=>$recipient['type']];
         }catch(Throwable $e){
@@ -310,6 +310,11 @@ final class AutomationWorker
             if($mode==='assigned_user')$mode='creator'; // compatibilidade com tasks salvas antes da correção
         }
         if($mode==='none')return null;
+        if($mode==='group'){
+            try{$groupId=WppConnect::normalizeGroupId((string)($node['config']['group_id']??''));}
+            catch(Throwable){throw new AutomationPermanentException('whatsapp_group_invalid');}
+            return ['type'=>'group','user_id'=>null,'client_id'=>null,'phone'=>$groupId];
+        }
         if($mode==='custom'){
             try{$phone=WppConnect::normalizePhone((string)($node['config']['custom_phone']??''));}
             catch(Throwable){throw new AutomationPermanentException('custom_whatsapp_invalid');}

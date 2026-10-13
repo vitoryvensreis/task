@@ -531,3 +531,7 @@ As novas ações usam a tabela `automation_run_steps` para registrar o resultado
 **Banco:** não requer migração adicional; mantém schema 24.
 
 **Produção:** publicar o projeto atualizado com backup e verificar `tests/automation-core.php` em MySQL/MariaDB de testes, serviço `taskesc-automation-worker` e o envio real dos canais configurados.
+
+### Disparos para grupos do WhatsApp (schema 25)
+
+Em **Automações → Enviar WhatsApp → Destinatário**, selecione **Grupo do WhatsApp**, escolha um grupo da sessão WPPConnect e salve. A ação `wpp.groups` lista grupos de forma segura, restrita ao administrador, e o worker envia com `isGroup=true`. O histórico WhatsApp e a migração 25 preservam os registros anteriores. Consulte `docs/automation-triggers-recipients.md`.

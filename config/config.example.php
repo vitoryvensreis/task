@@ -10,5 +10,12 @@ return [
  'google_client_id' => '',
  'google_client_secret' => '',
  'smtp' => ['host'=>'','port'=>587,'encryption'=>'tls','username'=>'','password'=>'','from'=>'','from_name'=>'TaskEsc'],
+ 'wppconnect' => [
+   'internal_url' => 'http://127.0.0.1:21465',
+   'public_url' => 'https://wppconnect.escotilhaprodutora.com',
+   'session' => 'taskesc',
+   'secret' => '',
+   'webhook_url' => '',
+ ],
  'trusted_origins' => ['https://chatgpt.com','https://chat.openai.com'],
 ];

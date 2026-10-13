@@ -441,7 +441,7 @@ final class Migrations {
      $digits=preg_replace('/\D+/','',(string)$client['phone'])??'';
      if(strlen($digits)>=10&&strlen($digits)<=15)DB::update('clients',(int)$client['id'],['whatsapp_phone'=>$digits]);
     }
-    DB::run("INSERT INTO automation_worker_state (id,last_outbox_id,heartbeat_at,updated_at) SELECT 1,COALESCE(MAX(id),0),NULL,? FROM event_outbox ON DUPLICATE KEY UPDATE id=id",[nowMicro()]);
+    DB::run("INSERT INTO automation_worker_state (id,last_outbox_id,heartbeat_at,updated_at) SELECT 1,COALESCE(MAX(id),0),NULL,? FROM event_outbox ON DUPLICATE KEY UPDATE id=id",[now()]);
    }
    $issues=self::automationIssues();
    if($issues)throw new RuntimeException('Estrutura de automações incompatível: '.implode(',',$issues));

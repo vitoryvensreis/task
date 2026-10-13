@@ -73,3 +73,6 @@ $healthy=SystemHealth::health();
 $google=current(array_filter($healthy['items'],static fn($item)=>$item['key']==='google'));
 googleCheck($google['status']==='ok','Healthy connection must clear warning after sync');
 echo "Google health: transient OAuth, calendar diagnostics, daily dedupe and recovery OK\n";
+
+Auth::$user=null;Auth::$actor=null;Auth::$previewClientId=null;
+@unlink($configPath);@unlink(ROOT.'/storage/installed.lock');

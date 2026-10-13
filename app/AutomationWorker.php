@@ -235,12 +235,13 @@ final class AutomationWorker
     private static function recipient(array $demand): ?array
     {
         $mode=(string)($demand['whatsapp_recipient_mode']??'none');
+        if($mode==='assigned_user')$mode='creator'; // compatibilidade com tasks salvas antes desta correção
         if($mode==='none')return null;
-        if($mode==='assigned_user'){
-            $userId=(int)($demand['assigned_to']??0);if($userId<1)throw new AutomationPermanentException('assigned_user_missing');
+        if($mode==='creator'){
+            $userId=(int)($demand['created_by']??0);if($userId<1)throw new AutomationPermanentException('creator_missing');
             $row=DB::one('SELECT id,name,whatsapp_phone FROM users WHERE id=? AND active=1',[$userId]);
-            if(!$row||empty($row['whatsapp_phone']))throw new AutomationPermanentException('assigned_user_whatsapp_missing');
-            return ['type'=>'assigned_user','user_id'=>$userId,'client_id'=>null,'phone'=>WppConnect::normalizePhone((string)$row['whatsapp_phone'])];
+            if(!$row||empty($row['whatsapp_phone']))throw new AutomationPermanentException('creator_whatsapp_missing');
+            return ['type'=>'creator','user_id'=>$userId,'client_id'=>null,'phone'=>WppConnect::normalizePhone((string)$row['whatsapp_phone'])];
         }
         if($mode==='client'){
             $clientId=(int)($demand['client_id']??0);$row=DB::one('SELECT id,name,whatsapp_phone FROM clients WHERE id=? AND active=1',[$clientId]);
@@ -260,6 +261,7 @@ final class AutomationWorker
             '{{task.url}}'=>base('kanban/task/'.(int)($demand['id']??0)),
             '{{client.name}}'=>(string)($demand['client_name']??''),
             '{{assigned.name}}'=>(string)($demand['assigned_name']??''),
+            '{{creator.name}}'=>(string)($demand['creator_name']??''),
             '{{stage.name}}'=>(string)($demand['stage_name']??''),
         ];
         return mb_substr(strtr($template,$vars),0,4000);
@@ -267,8 +269,9 @@ final class AutomationWorker
 
     private static function demandContext(int $id): array
     {
-        $row=DB::one("SELECT d.*,c.name client_name,u.name assigned_name,s.name stage_name FROM demands d JOIN clients c ON c.id=d.client_id JOIN stages s ON s.id=d.stage_id LEFT JOIN users u ON u.id=d.assigned_to WHERE d.id=?",[$id]);
+        $row=DB::one("SELECT d.*,c.name client_name,u.name assigned_name,creator.name creator_name,s.name stage_name FROM demands d JOIN clients c ON c.id=d.client_id JOIN stages s ON s.id=d.stage_id LEFT JOIN users u ON u.id=d.assigned_to LEFT JOIN users creator ON creator.id=d.created_by WHERE d.id=?",[$id]);
         if(!$row)throw new AutomationPermanentException('demand_missing');
+        if(($row['whatsapp_recipient_mode']??'')==='assigned_user')$row['whatsapp_recipient_mode']='creator';
         return $row;
     }
 

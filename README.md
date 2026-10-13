@@ -488,7 +488,7 @@ O QR bruto e credenciais do provider não trafegam pelo Centrifugo. O painel bus
 
 ## Automações — núcleo executável (schema 24)
 
-O TaskEsc possui agora a fundação do motor de automações baseada nos eventos transacionais já emitidos pelo Outbox. Usuários e clientes possuem número de WhatsApp; cada Task define se os disparos relacionados usam o responsável, o cliente ou ninguém.
+O TaskEsc possui agora a fundação do motor de automações baseada nos eventos transacionais já emitidos pelo Outbox. Usuários e clientes possuem número de WhatsApp; cada Task define se os disparos relacionados usam quem criou a task, o cliente ou ninguém. O responsável pela execução não recebe por essa regra.
 
 As automações são armazenadas como grafos validados, com gatilho, condições, ramificações e ação WhatsApp. Um worker systemd dedicado consome eventos novos, deduplica o fanout pelo `operation_id`, registra cada execução/etapa e aplica retry limitado sem bloquear as requisições do sistema. Consulte `docs/automation-step3.md`.
 

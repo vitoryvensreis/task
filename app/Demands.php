@@ -82,7 +82,8 @@ final class Demands {
 
    $dueInput=trim((string)($p['due_at']??($old['due_at']??'')));if($dueInput===''&&!$old)$dueInput=businessDeadline(max(1,(int)($categoryRow['default_due_hours']??24)))->format('Y-m-d\\TH:i');if($dueInput==='')fail('Informe a data de entrega.');$due=timestamp($dueInput);if(!$due)fail('Informe a data de entrega.');validateDelivery($due,$old['due_at']??null);
    $priority=enumv($p['priority']??($old['priority']??($categoryRow['default_priority']??'normal')),['low','normal','high','urgent'],'prioridade');
-   $whatsappMode=enumv($p['whatsapp_recipient_mode']??($old['whatsapp_recipient_mode']??'none'),['none','assigned_user','client'],'destinatário do WhatsApp');
+   $whatsappModeRaw=(string)($p['whatsapp_recipient_mode']??($old['whatsapp_recipient_mode']??'none'));if($whatsappModeRaw==='assigned_user')$whatsappModeRaw='creator';
+   $whatsappMode=enumv($whatsappModeRaw,['none','creator','client'],'destinatário do WhatsApp');
    if(!$old&&empty($p['allow_duplicate'])){$duplicate=DB::one('SELECT id,title FROM demands WHERE client_id=? AND category_id=? AND title=? AND due_at=? AND deleted_at IS NULL LIMIT 1',[$client,$category,trim((string)($p['title']??'')),$due]);if($duplicate)fail('Já existe uma task igual para este cliente, serviço e entrega.',409,['duplicate_id'=>(int)$duplicate['id']]);}
    $details=$old?decode($old['details_json']??'{}'):[];
    $row=[

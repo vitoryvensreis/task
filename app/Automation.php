@@ -39,7 +39,7 @@ final class Automation
             'condition_operators'=>self::CONDITION_OPERATORS,
             'variables'=>[
                 '{{task.id}}','{{task.title}}','{{task.due_at}}','{{task.priority}}',
-                '{{task.url}}','{{client.name}}','{{assigned.name}}','{{stage.name}}'
+                '{{task.url}}','{{client.name}}','{{assigned.name}}','{{creator.name}}','{{stage.name}}'
             ],
         ];
     }

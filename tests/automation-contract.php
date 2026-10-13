@@ -28,6 +28,9 @@ contractCheck(str_contains($worker,'operation_id')&&str_contains($worker,'INSERT
 contractCheck(str_contains($worker,'whatsapp_delivery_ambiguous'),'Worker must avoid blind resend after an uncertain process interruption.');
 contractCheck(str_contains($worker,"status='retry'")&&str_contains($worker,'MAX_ATTEMPTS=4'),'Worker must use bounded retry.');
 contractCheck(str_contains($wpp,'sendAutomationMessage'),'WPPConnect must expose the internal automation send method.');
+contractCheck(str_contains($worker,"if(\$mode==='assigned_user')\$mode='creator'")&&str_contains($worker,"\$demand['created_by']")&&str_contains($worker,"'type'=>'creator'"),'Legacy assigned-user recipient must resolve to the task creator, never the responsible user.');
+contractCheck(str_contains($worker,"'{{creator.name}}'"),'Automation templates must expose the task creator name.');
+
 contractCheck(str_contains($unit,'TaskEsc Automation Worker')&&str_contains($unit,'NoNewPrivileges=true'),'Automation worker service definition missing.');
 contractCheck(str_contains($installer,"SERVICE='taskesc-automation-worker.service'")&&str_contains($installer,'--health'),'Automation worker installer/health missing.');
 contractCheck(str_contains($app,'name="whatsapp_recipient_mode"')&&substr_count($app,'name="whatsapp_phone"')>=2,'Automation WhatsApp UI fields missing.');

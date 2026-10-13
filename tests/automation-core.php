@@ -86,11 +86,12 @@ try{
  $due=gmdate('Y-m-d\TH:i',time()+7*86400);
  $saved=Demands::save([
   'client_id'=>$clientId,'category_id'=>1,'assigned_to'=>$staffId,'title'=>'Task automática','brief'=>'Briefing da task',
-  'due_at'=>$due,'priority'=>'normal','whatsapp_recipient_mode'=>'client','billing_mode'=>'one_off','amount_cents'=>0,'draft'=>0
+  'due_at'=>$due,'priority'=>'normal','whatsapp_recipient_mode'=>'creator','billing_mode'=>'one_off','amount_cents'=>0,'draft'=>0
  ]);
  $demandId=(int)$saved['id'];
  $demand=DB::one('SELECT * FROM demands WHERE id=?',[$demandId]);
- autoCheck(($demand['whatsapp_recipient_mode']??'')==='client','Task WhatsApp recipient mode must persist.');
+ autoCheck(($demand['whatsapp_recipient_mode']??'')==='creator','Task WhatsApp recipient mode must persist as creator.');
+ autoCheck((int)$demand['created_by']===$admin&&((int)$demand['assigned_to'])===$staffId,'Task creator and responsible must remain distinct users.');
 
  $tick=AutomationWorker::tick(200,20);
  autoCheck((int)$tick['ingested']===1,'Fanout Outbox rows must create only one automation run per operation.');
@@ -126,8 +127,8 @@ try{
  autoCheck(($sendStep['status']??'')==='skipped','WhatsApp action must be marked skipped when task says none.');
  autoCheck((int)(DB::one('SELECT COUNT(*) n FROM whatsapp_messages WHERE run_id=?',[$skipRun['id']])['n']??0)===0,'Skipped WhatsApp must not call or log provider delivery.');
 
- $rendered=AutomationWorker::renderTemplate('Olá {{client.name}} · {{task.title}}',DB::one("SELECT d.*,c.name client_name,u.name assigned_name,s.name stage_name FROM demands d JOIN clients c ON c.id=d.client_id JOIN stages s ON s.id=d.stage_id LEFT JOIN users u ON u.id=d.assigned_to WHERE d.id=?",[$demandId]));
- autoCheck(str_contains($rendered,'Cliente Automação')&&str_contains($rendered,'Task automática'),'Template variables must render from task context.');
+ $rendered=AutomationWorker::renderTemplate('Olá {{client.name}} · {{task.title}} · criado por {{creator.name}}',DB::one("SELECT d.*,c.name client_name,u.name assigned_name,creator.name creator_name,s.name stage_name FROM demands d JOIN clients c ON c.id=d.client_id JOIN stages s ON s.id=d.stage_id LEFT JOIN users u ON u.id=d.assigned_to LEFT JOIN users creator ON creator.id=d.created_by WHERE d.id=?",[$demandId]));
+ autoCheck(str_contains($rendered,'Cliente Automação')&&str_contains($rendered,'Task automática')&&str_contains($rendered,'Admin Automation'),'Template variables must render client, task and creator context.');
 
  $health=AutomationWorker::health(90);
  autoCheck($health['status']==='ok','Automation worker heartbeat/schema health must be OK after tick.');

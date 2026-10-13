@@ -94,7 +94,12 @@ try{
   ['events_calendar',"SELECT COUNT(*) n FROM events e LEFT JOIN calendars c ON c.id=e.calendar_id WHERE c.id IS NULL"],
   ['notifications_user',"SELECT COUNT(*) n FROM notifications n LEFT JOIN users u ON u.id=n.user_id WHERE u.id IS NULL"]
  ];
- if($schema==='23')$relations[]=['chat_message_tasks_demand',"SELECT COUNT(*) n FROM chat_message_tasks x LEFT JOIN demands d ON d.id=x.demand_id WHERE d.id IS NULL"];
+ if(in_array($schema,['23','24'],true))$relations[]=['chat_message_tasks_demand',"SELECT COUNT(*) n FROM chat_message_tasks x LEFT JOIN demands d ON d.id=x.demand_id WHERE d.id IS NULL"];
+ if($schema==='24'){
+  $relations[]=['automation_runs_automation',"SELECT COUNT(*) n FROM automation_runs r LEFT JOIN automations a ON a.id=r.automation_id WHERE a.id IS NULL"];
+  $relations[]=['automation_steps_run',"SELECT COUNT(*) n FROM automation_run_steps s LEFT JOIN automation_runs r ON r.id=s.run_id WHERE r.id IS NULL"];
+  $relations[]=['whatsapp_messages_run',"SELECT COUNT(*) n FROM whatsapp_messages m LEFT JOIN automation_runs r ON r.id=m.run_id WHERE m.run_id IS NOT NULL AND r.id IS NULL"];
+ }
  foreach($relations as [$key,$sql]){
   try{$n=$count($sql);if($n>0)$add($warnings,'orphan_'.$key,$n.' registro(s) órfão(s) em '.$key,$n);}catch(Throwable $e){$add($warnings,'check_'.$key,'Não foi possível validar '.$key.': '.$e->getMessage());}
  }

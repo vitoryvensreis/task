@@ -74,7 +74,7 @@ final class WppConnect
         Auth::admin();self::requirePost();$cfg=self::requireConfigured();
         $payload=['waitQrCode'=>false,'webhook'=>self::webhookUrl()];
         $response=self::request('POST','/api/'.rawurlencode($cfg['session']).'/start-session',$payload,true);
-        return ['started'=>true,'session'=>$cfg['session'],'provider'=>$response['body']];
+        return ['started'=>true,'session'=>$cfg['session'],'provider_status'=>(int)$response['status']];
     }
 
     public static function qr(): array

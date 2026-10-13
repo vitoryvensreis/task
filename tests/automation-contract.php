@@ -10,6 +10,7 @@ $migrations=file_get_contents(ROOT.'/app/Migrations.php');
 $automation=file_get_contents(ROOT.'/app/Automation.php');
 $worker=file_get_contents(ROOT.'/app/AutomationWorker.php');
 $businessEvents=file_get_contents(ROOT.'/app/AutomationEvent.php');
+$actions=file_get_contents(ROOT.'/app/AutomationActions.php');
 $catalog=file_get_contents(ROOT.'/app/Catalog.php');
 $cli=file_get_contents(ROOT.'/bin/automation-worker.php');
 $unit=file_get_contents(ROOT.'/ops/taskesc-automation-worker.service');
@@ -17,7 +18,7 @@ $installer=file_get_contents(ROOT.'/ops/automation-worker.py');
 $wpp=file_get_contents(ROOT.'/app/WppConnect.php');
 $app=file_get_contents(ROOT.'/public/assets/app.js');
 
-foreach([$schema,$migration,$migrations,$automation,$worker,$businessEvents,$catalog,$cli,$unit,$installer,$wpp,$app] as $source)contractCheck(is_string($source)&&$source!=='','Automation contract file missing.');
+foreach([$schema,$migration,$migrations,$automation,$worker,$businessEvents,$actions,$catalog,$cli,$unit,$installer,$wpp,$app] as $source)contractCheck(is_string($source)&&$source!=='','Automation contract file missing.');
 
 contractCheck(str_contains($schema,"('schema_version','24')"),'Fresh schema must be marked 24.');
 foreach(['automations','automation_runs','automation_run_steps','automation_worker_state','whatsapp_messages'] as $table)contractCheck(str_contains($schema,'CREATE TABLE '.$table),'Fresh schema missing '.$table);
@@ -45,5 +46,10 @@ contractCheck(str_contains($worker,"'{{creator.name}}'")&&str_contains($worker,"
 contractCheck(str_contains($unit,'TaskEsc Automation Worker')&&str_contains($unit,'NoNewPrivileges=true'),'Automation worker service definition missing.');
 contractCheck(str_contains($installer,"SERVICE='taskesc-automation-worker.service'")&&str_contains($installer,'--health'),'Automation worker installer/health missing.');
 contractCheck(str_contains($app,'name="whatsapp_recipient_mode"')&&substr_count($app,'name="whatsapp_phone"')>=2,'Automation WhatsApp UI fields missing.');
+
+contractCheck(str_contains($automation,"'demand.final_delivered'=>'Envio de entrega final'"),'Final delivery trigger missing.');
+foreach(['action.task','action.email','action.push','action.create_task'] as $type)contractCheck(str_contains($automation,"'".$type."'")&&str_contains($worker,"'".$type."'"),'Action missing: '.$type);
+contractCheck(str_contains($actions,'self::record($stepId')&&str_contains($actions,'automation_generated'),'Atomic/idempotent automation actions missing.');
+contractCheck(str_contains(file_get_contents(ROOT.'/app/Files.php'),'demand.final_delivered'),'Final uploads must emit an outbox event.');
 
 echo "Automation contract: client/billing triggers, scheduled deadlines, flexible WhatsApp recipients and graph engine OK\n";

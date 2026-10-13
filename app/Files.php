@@ -17,6 +17,7 @@ final class Files {
    Auth::demand((int)$d['id'],true);$save=$row;if(in_array($kind,['review','final'],true))$save['version_no']=(int)DB::one('SELECT COALESCE(MAX(version_no),0) AS n FROM files WHERE demand_id=?',[$d['id']])['n']+1;
    $id=DB::insert('files',$save);audit('demand',$d['id'],'file.added',null,['file_id'=>$id,'version'=>$save['version_no']??null,'storage'=>$save['storage_provider']??'local']);Notify::demand($d,$kind==='review'?'Versão para aprovação':'Novo arquivo',$save['label'],!$save['shared']);
    DemandRealtime::emit('demand.file_added',$d,['change'=>'file.added','file_id'=>$id,'version_no'=>$save['version_no']??null,'shared'=>(int)$save['shared']],(int)Auth::$user['id'],[],!$save['shared']?'staff':'all');
+   if($kind==='final')DemandRealtime::emit('demand.final_delivered',$d,['change'=>'final.delivered','file_id'=>$id,'version_no'=>$save['version_no']??null,'shared'=>(int)$save['shared']],(int)Auth::$user['id']);
    return ['id'=>$id,'version_no'=>$save['version_no']??null,'storage'=>$save['storage_provider']??'local','final_delivery_link'=>$finalLink];
   });
  }
@@ -51,6 +52,7 @@ final class Files {
    }
    audit('demand',$d['id'],'file.added',null,['file_id'=>$id,'version'=>$row['version_no']??null,'storage'=>'drive']);Notify::demand($d,$state['kind']==='review'?'Versão para aprovação':'Novo arquivo',$row['label'],!$row['shared']);
    DemandRealtime::emit('demand.file_added',$d,['change'=>'file.added','file_id'=>$id,'version_no'=>$row['version_no']??null,'shared'=>(int)$row['shared']],(int)Auth::$user['id'],[],!$row['shared']?'staff':'all');
+   if($state['kind']==='final')DemandRealtime::emit('demand.final_delivered',$d,['change'=>'final.delivered','file_id'=>$id,'version_no'=>$row['version_no']??null,'shared'=>(int)$row['shared']],(int)Auth::$user['id']);
    return ['id'=>$id,'version_no'=>$row['version_no']??null,'storage'=>'drive'];
   });
   if(isset($result['existing'])){

@@ -21,6 +21,7 @@ final class DemandRealtime
         'demand.time_logged',
         'demand.change_changed',
         'demand.file_added',
+        'demand.final_delivered',
         'demand.file_deleted',
         'demand.file_reviewed',
     ];
@@ -39,6 +40,7 @@ final class DemandRealtime
         'change_request_id',
         'file_id',
         'version_no',
+        'automation_generated',
         'internal',
         'shared',
         'approval',

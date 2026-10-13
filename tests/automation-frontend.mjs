@@ -48,4 +48,7 @@ check(app.includes('function automationFlowMarkup(')&&app.includes('function aut
 check(app.includes('function automationFlowAdd(')&&app.includes('function automationFlowLink(')&&app.includes('automationFlowCanConnect('),'Graph editor must support multiple outgoing paths and loop safety.');
 check(app.includes("card.addEventListener('pointermove'")&&app.includes('automationMarkDirty()'),'Dragging cards must update and persist node positions.');
 check(css.includes('.automation-flow-stage')&&css.includes('.automation-flow-node')&&css.includes('.automation-flow-lines'),'Free canvas position and SVG connector styles are required.');
+check(app.includes('function automationPanCanvas()')&&app.includes('automationPanCanvas();'),'Free canvas must support hold-and-drag background panning.');
+check(app.includes('previousCanvas.scrollLeft')&&app.includes('automationEditorState.viewport'),'Canvas viewport should survive editor rerenders.');
+check(css.includes('.automation-canvas-scroll.is-panning')&&css.includes('margin:240px 320px'),'Canvas must show grab feedback and allow dragging from initial edges.');
 console.log('Automation frontend: grouped triggers, deadlines, flexible WhatsApp recipients, visual tree and run history OK');

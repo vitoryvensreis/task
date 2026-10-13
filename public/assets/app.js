@@ -1954,9 +1954,48 @@
     automationEditorState.definition.edges.splice(index,1);
     automationMarkDirty();paintAutomationEditor();
   }
+  // Arrastar o espaço vazio desloca a visualização, sem modificar os nós.
+  // A margem extra permite navegar em todas as direções, inclusive no início do canvas.
+  function automationPanCanvas(){
+    const viewport=$('.automation-canvas-scroll');if(!viewport||!automationEditorState)return;
+    const initial=automationEditorState.viewport||{left:320,top:240};
+    viewport.scrollLeft=initial.left;viewport.scrollTop=initial.top;
+    viewport.addEventListener('scroll',()=>{
+      if(automationEditorState)automationEditorState.viewport={left:viewport.scrollLeft,top:viewport.scrollTop};
+    },{passive:true});
+    let active=null;
+    const finish=event=>{
+      if(!active||(event&&event.pointerId!==active.pointerId))return;
+      const id=active.pointerId;active=null;
+      viewport.classList.remove('is-panning');
+      if(viewport.hasPointerCapture?.(id))viewport.releasePointerCapture(id);
+    };
+    viewport.addEventListener('pointerdown',event=>{
+      if(active||event.button!==0||event.isPrimary===false)return;
+      // Cards, conectores e controles continuam com seus próprios gestos/cliques.
+      if(event.target?.closest?.('.automation-flow-node,.automation-flow-edge-remove,button,select,input,textarea,a,[contenteditable]'))return;
+      // Preserva o uso normal das barras de rolagem.
+      const rect=viewport.getBoundingClientRect();
+      if(event.clientX>=rect.left+viewport.clientWidth||event.clientY>=rect.top+viewport.clientHeight)return;
+      active={pointerId:event.pointerId,x:event.clientX,y:event.clientY,left:viewport.scrollLeft,top:viewport.scrollTop};
+      viewport.classList.add('is-panning');
+      viewport.setPointerCapture?.(event.pointerId);
+      event.preventDefault();
+    });
+    viewport.addEventListener('pointermove',event=>{
+      if(!active||active.pointerId!==event.pointerId)return;
+      viewport.scrollLeft=active.left-(event.clientX-active.x);
+      viewport.scrollTop=active.top-(event.clientY-active.y);
+      event.preventDefault();
+    });
+    viewport.addEventListener('pointerup',finish);
+    viewport.addEventListener('pointercancel',finish);
+    viewport.addEventListener('lostpointercapture',finish);
+  }
   function automationFlowWire(){
     const stage=$('.automation-flow-stage');if(!stage)return;
     automationFlowRedraw();
+    automationPanCanvas();
     stage.querySelectorAll('[data-flow-add]').forEach(select=>select.onchange=()=>{if(select.value)automationFlowAdd(select.dataset.flowAdd,select.dataset.flowBranch,select.value)});
     stage.querySelectorAll('[data-flow-connect]').forEach(button=>button.onclick=()=>{
       automationEditorState.linkFrom={from:button.dataset.flowConnect,branch:button.dataset.flowBranch};
@@ -2089,8 +2128,10 @@
   }
   function paintAutomationEditor(){
     if(!automationEditorState)return;
+    const previousCanvas=$('.automation-canvas-scroll');
+    if(previousCanvas)automationEditorState.viewport={left:previousCanvas.scrollLeft,top:previousCanvas.scrollTop};
     const root=automationRootId(),nodeCount=automationEditorState.definition.nodes.length,runCount=automationEditorState.runs?.length||0;
-    $('#content').innerHTML=`<div class="automation-editor-shell"><div class="automation-editor-top"><button type="button" class="ghost" id="automation-back">${icon('arrow-left','←')} Voltar</button><div class="automation-title-field"><span class="eyebrow">FLUXO</span><input id="automation-name" class="automation-name-input" maxlength="190" value="${esc(automationEditorState.name)}" aria-label="Nome da automação"></div><div class="automation-editor-actions"><label class="automation-active-switch"><input id="automation-active" type="checkbox" ${automationEditorState.active?'checked':''}><span></span><b>${automationEditorState.active?'Ativa':'Pausada'}</b></label><span id="automation-save-state" class="automation-save-state ${automationEditorState.dirty?'dirty':''}">${automationEditorState.dirty?'Alterações não salvas':'Tudo salvo'}</span><button type="button" class="primary" id="automation-save">${icon('save','✓')} Salvar automação</button></div></div><div class="automation-editor-meta"><span><b>${esc(automationTriggerLabel(automationEditorState.trigger_event))}</b><small>Gatilho</small></span><span><b>${nodeCount}</b><small>Blocos</small></span><span><b>${runCount}</b><small>Execuções recentes</small></span><span><b>Ações inteligentes</b><small>WhatsApp, e-mail, push e tasks</small></span></div><div class="automation-editor-layout"><section class="automation-canvas-panel"><div class="automation-canvas-head"><div><span class="eyebrow">EDITOR VISUAL</span><h3>Canvas livre da automação</h3><small>Arraste os cards para organizar. Use + Nova saída para criar ramos ou Conectar para ligar blocos existentes.</small></div><div class="automation-canvas-legend"><span><i class="dot trigger"></i>Gatilho</span><span><i class="dot condition"></i>Condição</span><span><i class="dot whatsapp"></i>WhatsApp</span></div></div><div class="automation-canvas-scroll"><div class="automation-flow-root">${root?automationFlowMarkup():'<div class="empty">Gatilho ausente.</div>'}</div></div></section><aside class="automation-side-panel"><section class="panel automation-inspector-card"><div id="automation-inspector"></div></section><section class="panel automation-runs-card"><div class="panel-head"><div><h3>Últimas execuções</h3><div class="panel-sub">Resultado real das automações disparadas pelo Outbox e pelos gatilhos de prazo.</div></div></div>${automationRunsMarkup()}</section></aside></div></div>`;
+    $('#content').innerHTML=`<div class="automation-editor-shell"><div class="automation-editor-top"><button type="button" class="ghost" id="automation-back">${icon('arrow-left','←')} Voltar</button><div class="automation-title-field"><span class="eyebrow">FLUXO</span><input id="automation-name" class="automation-name-input" maxlength="190" value="${esc(automationEditorState.name)}" aria-label="Nome da automação"></div><div class="automation-editor-actions"><label class="automation-active-switch"><input id="automation-active" type="checkbox" ${automationEditorState.active?'checked':''}><span></span><b>${automationEditorState.active?'Ativa':'Pausada'}</b></label><span id="automation-save-state" class="automation-save-state ${automationEditorState.dirty?'dirty':''}">${automationEditorState.dirty?'Alterações não salvas':'Tudo salvo'}</span><button type="button" class="primary" id="automation-save">${icon('save','✓')} Salvar automação</button></div></div><div class="automation-editor-meta"><span><b>${esc(automationTriggerLabel(automationEditorState.trigger_event))}</b><small>Gatilho</small></span><span><b>${nodeCount}</b><small>Blocos</small></span><span><b>${runCount}</b><small>Execuções recentes</small></span><span><b>Ações inteligentes</b><small>WhatsApp, e-mail, push e tasks</small></span></div><div class="automation-editor-layout"><section class="automation-canvas-panel"><div class="automation-canvas-head"><div><span class="eyebrow">EDITOR VISUAL</span><h3>Canvas livre da automação</h3><small>Arraste os cards para organizar; clique e arraste o fundo vazio para mover o canvas. Use + Nova saída ou Conectar para criar ramos.</small></div><div class="automation-canvas-legend"><span><i class="dot trigger"></i>Gatilho</span><span><i class="dot condition"></i>Condição</span><span><i class="dot whatsapp"></i>WhatsApp</span></div></div><div class="automation-canvas-scroll"><div class="automation-flow-root">${root?automationFlowMarkup():'<div class="empty">Gatilho ausente.</div>'}</div></div></section><aside class="automation-side-panel"><section class="panel automation-inspector-card"><div id="automation-inspector"></div></section><section class="panel automation-runs-card"><div class="panel-head"><div><h3>Últimas execuções</h3><div class="panel-sub">Resultado real das automações disparadas pelo Outbox e pelos gatilhos de prazo.</div></div></div>${automationRunsMarkup()}</section></aside></div></div>`;
     paintIcons();
     $('#automation-back').onclick=closeAutomationEditor;
     const name=$('#automation-name');name.addEventListener('input',e=>{automationEditorState.name=e.target.value;automationMarkDirty()});

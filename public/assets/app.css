@@ -2106,7 +2106,9 @@ button.compact-row{cursor:pointer}.compact-row:hover{border-color:#3a4854}.compa
 
 /* Canvas livre para fluxos DAG, compatível com os estilos anteriores da árvore. */
 .automation-flow-root{min-width:100%;width:max-content;min-height:100%}
-.automation-flow-stage{position:relative;min-width:100%;isolation:isolate}
+.automation-canvas-scroll{cursor:grab;touch-action:none;user-select:none}
+.automation-canvas-scroll.is-panning,.automation-canvas-scroll.is-panning *{cursor:grabbing!important}
+.automation-flow-stage{position:relative;min-width:100%;isolation:isolate;margin:240px 320px}
 .automation-flow-lines{position:absolute;left:0;top:0;z-index:0;pointer-events:none;overflow:visible}
 .automation-flow-node{position:absolute;z-index:2;width:292px;touch-action:none}
 .automation-flow-node .automation-node-card{width:292px;min-height:86px;cursor:grab;touch-action:none;user-select:none}

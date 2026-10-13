@@ -153,7 +153,7 @@ final class AutomationActions
             $id=DB::insert('demands',[
                 'client_id'=>$cid,'project_id'=>null,'category_id'=>(int)$category['id'],'stage_id'=>(int)$stage['id'],
                 'title'=>mb_substr($title,0,190),'brief'=>mb_substr($brief,0,20000),'details_json'=>'[]',
-                'due_at'=>$due,'priority'=>$cfg['priority'],'assigned_to'=>$assigned,'whatsapp_recipient_mode'=>'none',
+                'due_at'=>$due,'priority'=>$cfg['priority'],'assigned_to'=>$assigned,'whatsapp_recipient_mode'=>'creator',
                 'billing_mode'=>$client['commercial_type']==='monthly'?'included':'one_off','amount_cents'=>0,
                 'commercial_status'=>'pending','draft'=>0,'version'=>1,'created_by'=>$owner,'created_at'=>now(),'updated_at'=>now()
             ]);

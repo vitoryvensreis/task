@@ -30,7 +30,7 @@ final class Demands {
  public static function visible(array $d): array {
   if(Auth::$user['role']!=='admin'){
    unset($d['internal_notes']);
-   if(Auth::$user['role']==='client')unset($d['whatsapp_custom_phone']);
+   unset($d['whatsapp_recipient_mode'],$d['whatsapp_custom_phone']);
    if(Auth::$user['role']==='staff')unset($d['amount_cents']);
    elseif(!Auth::isPreview()&&!DB::one('SELECT client_id FROM user_clients WHERE user_id=? AND client_id=? AND can_finance=1',[Auth::$user['id'],$d['client_id']]))unset($d['amount_cents']);
   }
@@ -83,15 +83,18 @@ final class Demands {
 
    $dueInput=trim((string)($p['due_at']??($old['due_at']??'')));if($dueInput===''&&!$old)$dueInput=businessDeadline(max(1,(int)($categoryRow['default_due_hours']??24)))->format('Y-m-d\\TH:i');if($dueInput==='')fail('Informe a data de entrega.');$due=timestamp($dueInput);if(!$due)fail('Informe a data de entrega.');validateDelivery($due,$old['due_at']??null);
    $priority=enumv($p['priority']??($old['priority']??($categoryRow['default_priority']??'normal')),['low','normal','high','urgent'],'prioridade');
-   $whatsappModeRaw=(string)($p['whatsapp_recipient_mode']??($old['whatsapp_recipient_mode']??'none'));if($whatsappModeRaw==='assigned_user')$whatsappModeRaw='creator';
-   // Contas externas não podem redirecionar uma automação para um número arbitrário.
-   if($role==='client'&&$old&&($old['whatsapp_recipient_mode']??'none')==='custom')$whatsappModeRaw='custom';
-   elseif($role==='client'&&$whatsappModeRaw==='custom')fail('Somente a equipe pode configurar um número específico de WhatsApp.',403);
-   $whatsappMode=enumv($whatsappModeRaw,['none','creator','client','custom'],'destinatário do WhatsApp');
-   $whatsappCustomPhone=null;
-   if($whatsappMode==='custom'){
-    if($role==='client')$whatsappCustomPhone=(string)($old['whatsapp_custom_phone']??'');
-    else $whatsappCustomPhone=WppConnect::normalizePhone((string)($p['whatsapp_custom_phone']??($old['whatsapp_custom_phone']??'')));
+   // Apenas o ADM configura o destino; equipe e clientes preservam a preferência existente.
+   if($role==='admin'){
+    $whatsappModeRaw=(string)($p['whatsapp_recipient_mode']??($old['whatsapp_recipient_mode']??'creator'));
+    if($whatsappModeRaw==='assigned_user')$whatsappModeRaw='creator';
+    $whatsappMode=enumv($whatsappModeRaw,['none','creator','client','custom'],'destinatário do WhatsApp');
+    $whatsappCustomPhone=$whatsappMode==='custom'
+     ?WppConnect::normalizePhone((string)($p['whatsapp_custom_phone']??($old['whatsapp_custom_phone']??'')))
+     :null;
+   }else{
+    if(array_key_exists('whatsapp_recipient_mode',$p)||array_key_exists('whatsapp_custom_phone',$p))fail('Somente administradores podem configurar disparos de WhatsApp.',403);
+    $whatsappMode=(string)($old['whatsapp_recipient_mode']??'creator');
+    $whatsappCustomPhone=$old['whatsapp_custom_phone']??null;
    }
    if(!$old&&empty($p['allow_duplicate'])){$duplicate=DB::one('SELECT id,title FROM demands WHERE client_id=? AND category_id=? AND title=? AND due_at=? AND deleted_at IS NULL LIMIT 1',[$client,$category,trim((string)($p['title']??'')),$due]);if($duplicate)fail('Já existe uma task igual para este cliente, serviço e entrega.',409,['duplicate_id'=>(int)$duplicate['id']]);}
    $details=$old?decode($old['details_json']??'{}'):[];

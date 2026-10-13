@@ -99,6 +99,8 @@ def check(identity, deploy_path):
         'active': active,
         'enabled': enabled,
         'health': data.get('status'),
+        'queue_health': data.get('queue_status'),
+        'queue_warning': data.get('queue_warning'),
         'worker': data.get('worker'),
         'queue': data.get('queue'),
         'realtime': data.get('realtime'),

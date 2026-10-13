@@ -35,6 +35,7 @@ require ROOT.'/app/EventOutbox.php';
 require ROOT.'/app/Realtime.php';
 require ROOT.'/app/CentrifugoPublisher.php';
 require ROOT.'/app/RealtimeOutboxWorker.php';
+require ROOT.'/app/RealtimeWorkerHealth.php';
 function checkWorker(bool $condition,string $message): void {if(!$condition)throw new RuntimeException($message);}
 function makeEvent(string $key,string $channel='diagnostic'): int {
     return EventOutbox::transaction(fn()=>EventOutbox::enqueue($key,'realtime.test','system',1,$channel,['value'=>'ci']));
@@ -94,6 +95,11 @@ $exhaustedId=makeEvent('worker-exhausted');
 DB::run('UPDATE event_outbox SET attempts=8,last_error=? WHERE id=?',['centrifugo_transport',$exhaustedId]);
 $stats=EventOutbox::stats(8);
 checkWorker((int)$stats['exhausted']>=1,'Retry limit must be visible in health stats');
+$health=RealtimeWorkerHealth::evaluate(['status'=>'ok'],['status'=>'ok'],$stats);
+checkWorker($health['status']==='ok','Exhausted rows must not fail healthy worker liveness.');
+checkWorker($health['queue_status']==='warning'&&$health['queue_warning']==='exhausted_events','Exhausted rows must remain visible as queue warning.');
+$stale=RealtimeWorkerHealth::evaluate(['status'=>'stale'],['status'=>'ok'],$stats);
+checkWorker($stale['status']==='degraded','Stale worker heartbeat must still fail liveness.');
 checkWorker(!in_array($exhaustedId,array_column(EventOutbox::due(100,8),'id'),true),'Exhausted event must not be consumed again');
 
 @unlink($capture);@unlink($configPath);

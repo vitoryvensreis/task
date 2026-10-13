@@ -24,6 +24,20 @@ final class RealtimeWorkerHealth
         @rename($tmp, self::FILE);
     }
 
+    public static function evaluate(array $heartbeat, array $realtime, array $queue): array
+    {
+        $serviceOk = ($heartbeat['status'] ?? null) === 'ok' && ($realtime['status'] ?? null) === 'ok';
+        $exhausted = max(0, (int)($queue['exhausted'] ?? 0));
+        $due = max(0, (int)($queue['due'] ?? 0));
+        return [
+            'status' => $serviceOk ? 'ok' : 'degraded',
+            'queue_status' => $exhausted > 0 ? 'warning' : 'ok',
+            'queue_warning' => $exhausted > 0 ? 'exhausted_events' : null,
+            'exhausted' => $exhausted,
+            'due' => $due,
+        ];
+    }
+
     public static function read(int $freshSeconds = 90): array
     {
         if ($freshSeconds < 10 || $freshSeconds > 3600) $freshSeconds = 90;

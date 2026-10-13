@@ -493,3 +493,12 @@ O TaskEsc possui agora a fundação do motor de automações baseada nos eventos
 As automações são armazenadas como grafos validados, com gatilho, condições, ramificações e ação WhatsApp. Um worker systemd dedicado consome eventos novos, deduplica o fanout pelo `operation_id`, registra cada execução/etapa e aplica retry limitado sem bloquear as requisições do sistema. Consulte `docs/automation-step3.md`.
 
 O editor visual em árvore será construído por cima dessa estrutura no próximo passo.
+
+
+## Automações — editor visual em árvore
+
+A área **Automações** está disponível para Administradores em `/automacoes`. Ela usa o motor do schema 24 para montar visualmente fluxos com gatilho, condições com ramos **SIM/NÃO**, ação de WhatsApp e fim.
+
+O editor salva diretamente o `definition_json` validado pelo backend, protege alterações não salvas, permite ativar/pausar fluxos e mostra as execuções reais do worker. Nenhuma nova migração foi necessária neste passo.
+
+Detalhes: `docs/automation-step4.md`.

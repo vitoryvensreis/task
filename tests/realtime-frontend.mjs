@@ -55,6 +55,9 @@ check(app.includes('loadWppQr')&&app.includes('data:image/png;base64,'),'WPP pan
 check(app.includes("api('wpp.send_test'"),'WPP panel must support a controlled test message');
 check(app.includes('async function pollWppQr')&&app.includes('timeoutMs=20000')&&app.includes('setTimeout(resolve,800)'),'WPP connect action must poll until QR is actually available.');
 check(app.includes("result==='ready'")&&app.includes("'QR Code pronto para leitura'"),'WPP connect action must automatically surface QR readiness.');
+check((app.match(/name="whatsapp_phone"/g)||[]).length>=2,'User and client forms must collect WhatsApp numbers.');
+check(app.includes('name="whatsapp_recipient_mode"')&&app.includes('Responsável da task')&&app.includes('Não enviar para esta task'),'Task form must choose WhatsApp recipient or none.');
+
 
 
 

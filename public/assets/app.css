@@ -2176,3 +2176,6 @@ button.compact-row{cursor:pointer}.compact-row:hover{border-color:#3a4854}.compa
 .automation-add-select{height:31px;max-width:152px;min-width:116px;border:1px solid #30363d;background:#11151a;color:#dce3eb;border-radius:8px;padding:0 8px;font:inherit;font-size:11px;cursor:pointer}
 .automation-add-select:hover,.automation-add-select:focus-visible{border-color:#647d91;outline:none}
 .automation-add-select option{background:#13171d;color:#e6ebf1}
+
+/* Diagnóstico de integrações Google — Saúde & Logs */
+.google-health-panel{margin:16px 0}.google-health-issues{display:grid;gap:10px;margin:12px 0}.google-health-issue{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:14px;border:1px solid var(--border,#30353b);border-radius:12px}.google-health-issue>div{min-width:0}.google-health-issue b{display:block;margin:4px 0}.google-health-issue p{margin:6px 0;font-size:13px;overflow-wrap:anywhere}.google-health-issue small{display:block;overflow-wrap:anywhere;opacity:.8}.google-health-issue button{flex-shrink:0}@media(max-width:700px){.google-health-issue{flex-direction:column}.google-health-issue button{width:100%}}

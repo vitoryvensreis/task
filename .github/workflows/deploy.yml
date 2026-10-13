@@ -152,6 +152,7 @@ jobs:
           php tests/realtime-domain.php
           php tests/wppconnect-realtime.php
           php tests/automation-core.php
+          php tests/google-health.php
           php tests/chat.php
 
   deploy:

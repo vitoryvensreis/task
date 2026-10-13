@@ -53,6 +53,9 @@ check(app.includes('wppSettingsCard')&&app.includes('id="wpp-settings-panel"'),'
 check(app.includes("api('wpp.status')")&&app.includes("api('wpp.qr')")&&app.includes("api('wpp.start',{},'POST')"),'WPP panel must use authenticated TaskEsc endpoints for status, QR and session start');
 check(app.includes('loadWppQr')&&app.includes('data:image/png;base64,'),'WPP panel must render provider QR data without exposing provider credentials');
 check(app.includes("api('wpp.send_test'"),'WPP panel must support a controlled test message');
+check(app.includes('async function pollWppQr')&&app.includes('timeoutMs=20000')&&app.includes('setTimeout(resolve,800)'),'WPP connect action must poll until QR is actually available.');
+check(app.includes("result==='ready'")&&app.includes("'QR Code pronto para leitura'"),'WPP connect action must automatically surface QR readiness.');
+
 
 
 

@@ -74,7 +74,7 @@ final class WppConnect
         Auth::admin();self::requirePost();$cfg=self::requireConfigured();
         $payload=['waitQrCode'=>false,'webhook'=>self::webhookUrl()];
         $response=self::request('POST','/api/'.rawurlencode($cfg['session']).'/start-session',$payload,true);
-        return ['started'=>true,'session'=>$cfg['session'],'provider'=>$response['body']];
+        return ['started'=>true,'session'=>$cfg['session'],'provider_status'=>(int)$response['status']];
     }
 
     public static function qr(): array
@@ -120,8 +120,17 @@ final class WppConnect
         $response=self::request('POST','/api/'.rawurlencode($cfg['session']).'/send-message',[
             'phone'=>$phone,
             'message'=>$message,
+            'isGroup'=>false,
+            'isNewsletter'=>false,
         ],true);
-        return ['sent'=>true,'phone'=>$phone,'provider'=>$response['body']];
+        $body=is_array($response['body'])?$response['body']:[];
+        $messageId=self::providerMessageId($body);
+        return [
+            'sent'=>true,
+            'phone'=>$phone,
+            'provider_status'=>(int)$response['status'],
+            'message_id'=>$messageId,
+        ];
     }
 
     public static function sessionName(): string
@@ -148,6 +157,23 @@ final class WppConnect
     private static function webhookToken(string $secret): string
     {
         return hash_hmac('sha256','taskesc-wppconnect-webhook-v1',$secret);
+    }
+
+    private static function providerMessageId(array $body): ?string
+    {
+        $candidates=[
+            $body['messageId']??null,
+            $body['id']??null,
+            $body['response']['messageId']??null,
+            $body['response']['id']['_serialized']??null,
+            $body['response']['id']??null,
+        ];
+        foreach($candidates as $candidate){
+            if(!is_scalar($candidate)||$candidate===null)continue;
+            $value=trim((string)$candidate);
+            if($value!==''&&mb_strlen($value)<=255)return $value;
+        }
+        return null;
     }
 
     public static function normalizePhone(string $value): string
@@ -259,7 +285,7 @@ final class WppConnect
         $decoded=null;
         if(trim((string)$raw)!==''){
             try{$decoded=json_decode((string)$raw,true,512,JSON_THROW_ON_ERROR);}
-            catch(Throwable){$decoded=['raw'=>mb_substr((string)$raw,0,2000)];}
+            catch(Throwable){$decoded=['provider_response'=>'non_json'];}
         }
         $ok=$status>=200&&$status<300;
         if(!$ok&&!$allowError){

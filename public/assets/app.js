@@ -1567,7 +1567,7 @@
     $('#account-password-form').onsubmit=async e=>{e.preventDefault();const btn=e.submitter,old=btn?.textContent;if(btn){btn.disabled=true;btn.textContent='Alterando…'}try{await api('account.password',Object.fromEntries(new FormData(e.target)),'POST');e.target.reset();toast('Senha alterada com sucesso')}catch(x){toast(x.message,true)}finally{if(btn){btn.disabled=false;btn.textContent=old}}};
     wirePwaInstall();
   }
-  let wppRealtimeTimer=0,wppLastConnected=null;
+  let wppRealtimeTimer=0,wppLastConnected=null,wppQrPollGeneration=0;
   function wppSettingsCard(status={}){
     const configured=!!status.configured,provider=!!status.provider_up,connected=!!status.connected;
     const state=connected?'Conectado':provider?'Aguardando conexão':'Offline';
@@ -1617,14 +1617,31 @@
       return status;
     }catch(error){if($('#wpp-status-message'))$('#wpp-status-message').textContent=error.message||'Falha ao consultar WPPConnect.';return null}
   }
+  async function pollWppQr({timeoutMs=20000}={}){
+    const generation=++wppQrPollGeneration,started=Date.now(),placeholder=$('#wpp-qr-placeholder'),image=$('#wpp-qr-image');
+    if(placeholder){placeholder.classList.remove('hidden');placeholder.textContent='Gerando QR Code…';}
+    if(image)image.classList.add('hidden');
+    while(generation===wppQrPollGeneration&&Date.now()-started<timeoutMs&&S.user?.role==='admin'){
+      const status=await refreshWppSettingsStatus();
+      if(status?.connected)return 'connected';
+      if(await loadWppQr({silent:true}))return 'ready';
+      if(placeholder){placeholder.classList.remove('hidden');placeholder.textContent='Gerando QR Code… aguarde alguns segundos.';}
+      await new Promise(resolve=>setTimeout(resolve,800));
+    }
+    if(generation===wppQrPollGeneration&&placeholder){
+      placeholder.classList.remove('hidden');
+      placeholder.textContent='O QR ainda está sendo preparado. Clique em “Exibir QR Code” para tentar novamente.';
+    }
+    return 'timeout';
+  }
   async function startWppSession(button){
     const old=button?.textContent;if(button){button.disabled=true;button.textContent='Iniciando…'}
     try{
-      await api('wpp.start',{},'POST');toast('Sessão WhatsApp iniciada');
-      await refreshWppSettingsStatus();
-      let ready=await loadWppQr({silent:true});
-      if(!ready)setTimeout(()=>loadWppQr({silent:true}),900);
-      if(!ready)setTimeout(()=>loadWppQr({silent:true}),2200);
+      await api('wpp.start',{},'POST');
+      const result=await pollWppQr();
+      if(result==='ready')toast('QR Code pronto para leitura');
+      else if(result==='connected')toast('WhatsApp já está conectado');
+      else toast('Sessão iniciada. O QR ainda está sendo preparado.');
     }catch(error){toast(error.message||'Não foi possível iniciar o WhatsApp.',true)}
     finally{if(button){button.disabled=false;button.textContent=old||'Conectar WhatsApp'}await refreshWppSettingsStatus()}
   }

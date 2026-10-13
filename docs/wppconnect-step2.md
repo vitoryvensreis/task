@@ -148,3 +148,8 @@ O valor fica apenas no `.env` privado da VPS.
 Este passo não altera schema do banco.
 
 O próximo passo é o motor de automações + números WhatsApp em Users/Clients/Tasks.
+
+
+## Correções de UX do painel
+
+O botão **Conectar WhatsApp** aguarda o provider gerar o QR por até 20 segundos e tenta carregá-lo automaticamente; **Exibir QR Code** permanece como fallback manual. O envio de teste devolve ao navegador apenas confirmação e identificador seguro, sem serializar a resposta bruta do provider.

@@ -32,7 +32,8 @@ final class WppConnect
         try{
             $state=self::request('GET','/api/'.rawurlencode($cfg['session']).'/check-connection-session',null,true,true);
             $body=is_array($state['body'])?$state['body']:[];
-            $connected=(bool)($body['status']??$body['connected']??false);
+            $rawState=$body['status']??$body['connected']??false;
+            $connected=is_bool($rawState)?$rawState:in_array(strtolower(trim((string)$rawState)),['true','connected','islogged','logged','open'],true);
             $message=(string)($body['message']??($connected?'Conectado':'Sessão ainda não conectada.'));
             return [
                 'configured'=>true,
@@ -57,7 +58,7 @@ final class WppConnect
 
     public static function start(): array
     {
-        Auth::admin();$cfg=self::requireConfigured();
+        Auth::admin();self::requirePost();$cfg=self::requireConfigured();
         $payload=['waitQrCode'=>false];
         if($cfg['webhook_url']!=='')$payload['webhook']=$cfg['webhook_url'];
         $response=self::request('POST','/api/'.rawurlencode($cfg['session']).'/start-session',$payload,true);
@@ -80,7 +81,7 @@ final class WppConnect
 
     public static function sendTest(array $p): array
     {
-        Auth::admin();$cfg=self::requireConfigured();
+        Auth::admin();self::requirePost();$cfg=self::requireConfigured();
         $phone=self::normalizePhone((string)($p['phone']??''));
         $message=trim((string)($p['message']??''));
         if($message==='')$message='TaskEsc · teste de integração WPPConnect';
@@ -97,6 +98,11 @@ final class WppConnect
         $digits=preg_replace('/\D+/','',$value)??'';
         if(strlen($digits)<10||strlen($digits)>15)fail('Número de WhatsApp inválido. Use DDI + DDD + número.',422);
         return $digits;
+    }
+
+    private static function requirePost(): void
+    {
+        if(($_SERVER['REQUEST_METHOD']??'GET')!=='POST')fail('Método não permitido.',405);
     }
 
     private static function requireConfigured(): array

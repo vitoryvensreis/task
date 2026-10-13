@@ -45,6 +45,7 @@ jobs:
           set -e
           php tests/realtime.php
           php tests/wppconnect-contract.php
+          php tests/automation-contract.php
           python3 -m py_compile ops/realtime-step1.py ops/realtime-step3.py ops/realtime-step4.py ops/automation-worker.py
           python3 tests/realtime-ops.py
           rm -rf ops/__pycache__

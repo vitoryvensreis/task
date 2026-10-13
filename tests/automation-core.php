@@ -38,14 +38,20 @@ try{
  $db->exec('SET FOREIGN_KEY_CHECKS=1');
  $db->exec(file_get_contents(ROOT.'/database/schema.sql'));
 
- autoCheck((int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0)===25,'Fresh schema must be 25.');
- // Reproduce an existing schema 24 and verify a safe, repeatable 24 -> 25 upgrade.
+ autoCheck((int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0)===26,'Fresh schema must be 26.');
+ // Verify 24 -> 26 schema upgrade and preservation of WhatsApp data.
+ $db->exec('ALTER TABLE demands DROP COLUMN whatsapp_custom_phone');
  $db->exec('ALTER TABLE whatsapp_messages MODIFY recipient_phone VARCHAR(20) CHARACTER SET ascii COLLATE ascii_bin NOT NULL');
  DB::run("UPDATE settings SET value='24' WHERE `key`='schema_version'");
  $upgrade=Migrations::automation();
- autoCheck($upgrade['previous']===24&&$upgrade['current']===25&&$upgrade['changed'],'Schema 24 must upgrade to 25.');
- autoCheck(!Migrations::automationIssues(),'Schema 25 must retain a valid automation structure.');
- autoCheck(Migrations::automation()['changed']===false,'Schema 25 migration must be idempotent.');
+ autoCheck($upgrade['previous']===24&&$upgrade['current']===26&&$upgrade['changed'],'Schema 24 must upgrade to 26.');
+ autoCheck(!Migrations::automationIssues(),'Schema 26 must retain a valid automation structure.');
+ autoCheck(Migrations::automation()['changed']===false,'Schema 26 migration must be idempotent.');
+ $db->exec('ALTER TABLE demands DROP COLUMN whatsapp_custom_phone');
+ DB::run("UPDATE settings SET value='25' WHERE `key`='schema_version'");
+ $upgrade25=Migrations::automation();
+ autoCheck($upgrade25['previous']===25&&$upgrade25['current']===26&&$upgrade25['changed'],'Schema 25 must upgrade to 26.');
+ autoCheck(Migrations::automationIssues()===[],'Schema 26 must validate after upgrade.');
 
  $groupRows=WppConnect::normalizeGroupsResponse(['status'=>'success','response'=>[
   ['id'=>['_serialized'=>'120363012345678901@g.us'],'name'=>'Produção Geral','participants'=>[['id'=>'private']]],
@@ -58,7 +64,7 @@ try{
  try{WppConnect::normalizeGroupId('5585999990001@c.us');}catch(AppError $e){$badGroup=$e->status===422;}
  autoCheck($badGroup,'Individual WhatsApp IDs must be rejected as groups.');
 
- autoCheck(Migrations::automationIssues()===[],'Fresh schema 25 automation structure must validate.');
+ autoCheck(Migrations::automationIssues()===[],'Fresh schema 26 automation structure must validate.');
 
  $password=password_hash('Taskesc-automation-ci!',PASSWORD_DEFAULT);
  $admin=DB::insert('users',['name'=>'Admin Automation','email'=>'admin-auto@ci.invalid','whatsapp_phone'=>'5585999990001','password_hash'=>$password,'role'=>'admin','active'=>1,'email_notifications'=>0,'created_at'=>now()]);
@@ -322,6 +328,33 @@ try{
  AutomationWorker::executeRun((int)$finalRun['id']);
  autoCheck((int)DB::one("SELECT COUNT(*) n FROM mail_queue WHERE recipient='delivery@ci.invalid' AND subject LIKE 'Entrega final:%'")['n']===1,'Completed automation step must never duplicate email.');
  autoCheck((int)DB::one('SELECT COUNT(*) n FROM automation_runs WHERE automation_id=?',[$finalAutomation['id']])['n']===1,'One final upload must yield one automation run.');
+
+ // O destinatário manual é propriedade da task e o worker precisa respeitá-lo.
+ autoAs($admin);
+ $phoneTask=Demands::save([
+  'client_id'=>$clientId,'category_id'=>1,'assigned_to'=>$staffId,
+  'title'=>'Destino WhatsApp manual','brief'=>'Teste de encaminhamento',
+  'due_at'=>$due,'priority'=>'normal','whatsapp_recipient_mode'=>'custom',
+  'whatsapp_custom_phone'=>'+55 (85) 99999-3444','billing_mode'=>'one_off','amount_cents'=>0
+ ]);
+ $phoneDemand=DB::one('SELECT * FROM demands WHERE id=?',[$phoneTask['id']]);
+ autoCheck($phoneDemand['whatsapp_custom_phone']==='5585999993444','Task must store normalized custom WhatsApp destination.');
+ $recipientReflection=new ReflectionMethod(AutomationWorker::class,'recipient');
+ $recipientResult=$recipientReflection->invoke(null,['config'=>['recipient'=>'task']],$phoneDemand+['entity_type'=>'demand']);
+ autoCheck($recipientResult['type']==='custom'&&$recipientResult['phone']==='5585999993444','Worker must use the task-selected custom WhatsApp number.');
+ $invalidPhone=false;
+ try{Demands::save([
+   'client_id'=>$clientId,'category_id'=>1,'assigned_to'=>$staffId,
+   'title'=>'Destino inválido','brief'=>'Teste de validação','due_at'=>$due,
+   'whatsapp_recipient_mode'=>'custom','whatsapp_custom_phone'=>'123'
+ ]);}catch(AppError $e){$invalidPhone=$e->status===422;}
+ autoCheck($invalidPhone,'Invalid task-specific WhatsApp number must be rejected.');
+ Demands::save([
+   'id'=>$phoneDemand['id'],'version'=>$phoneDemand['version'],'title'=>$phoneDemand['title'],
+   'brief'=>$phoneDemand['brief'],'due_at'=>$due,'whatsapp_recipient_mode'=>'client'
+ ]);
+ $changedPhone=DB::one('SELECT whatsapp_recipient_mode,whatsapp_custom_phone FROM demands WHERE id=?',[$phoneDemand['id']]);
+ autoCheck($changedPhone['whatsapp_recipient_mode']==='client'&&$changedPhone['whatsapp_custom_phone']===null,'Changing recipient must clear the task custom number.');
 
  $health=AutomationWorker::health(90);
  autoCheck($health['status']==='ok','Automation worker heartbeat/schema health must be OK after tick.');

@@ -20,7 +20,7 @@ $app=file_get_contents(ROOT.'/public/assets/app.js');
 
 foreach([$schema,$migration,$migrations,$automation,$worker,$businessEvents,$actions,$catalog,$cli,$unit,$installer,$wpp,$app] as $source)contractCheck(is_string($source)&&$source!=='','Automation contract file missing.');
 
-contractCheck(str_contains($schema,"('schema_version','25')"),'Fresh schema must be marked 25.');
+contractCheck(str_contains($schema,"('schema_version','26')"),'Fresh schema must be marked 26.');
 foreach(['automations','automation_runs','automation_run_steps','automation_worker_state','whatsapp_messages'] as $table)contractCheck(str_contains($schema,'CREATE TABLE '.$table),'Fresh schema missing '.$table);
 contractCheck(str_contains($schema,'whatsapp_phone VARCHAR(20)')&&str_contains($schema,"whatsapp_recipient_mode VARCHAR(20) NOT NULL DEFAULT 'none'"),'Fresh schema missing WhatsApp contact/task fields.');
 contractCheck(str_contains($migrations,'AUTOMATION_VERSION=24')&&str_contains($migrations,'public static function automation()'),'Scoped schema 24 migration missing.');
@@ -46,6 +46,9 @@ contractCheck(str_contains($worker,"'{{creator.name}}'")&&str_contains($worker,"
 contractCheck(str_contains($unit,'TaskEsc Automation Worker')&&str_contains($unit,'NoNewPrivileges=true'),'Automation worker service definition missing.');
 contractCheck(str_contains($installer,"SERVICE='taskesc-automation-worker.service'")&&str_contains($installer,'--health'),'Automation worker installer/health missing.');
 contractCheck(str_contains($app,'name="whatsapp_recipient_mode"')&&substr_count($app,'name="whatsapp_phone"')>=2,'Automation WhatsApp UI fields missing.');
+contractCheck(str_contains($app,'name="whatsapp_custom_phone"')&&str_contains($app,'Número específico'),'Task form must expose custom phone destination.');
+contractCheck(str_contains($schema,'whatsapp_custom_phone VARCHAR(20) NULL'),'Schema must store task-specific WhatsApp numbers.');
+contractCheck(str_contains($worker,'task_whatsapp_number_invalid'),'Worker must resolve task-specific numbers.');
 
 contractCheck(str_contains($automation,"'demand.final_delivered'=>'Envio de entrega final'"),'Final delivery trigger missing.');
 foreach(['action.task','action.email','action.push','action.create_task'] as $type)contractCheck(str_contains($automation,"'".$type."'")&&str_contains($worker,"'".$type."'"),'Action missing: '.$type);

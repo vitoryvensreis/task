@@ -40,4 +40,5 @@ check(app.includes('data-auto-add-select')&&app.includes('data-auto-action-field
 check(automation.includes("'demand.final_delivered'=>'Envio de entrega final'"),'Final delivery trigger missing in backend.');
 check(app.includes("value:'group',label:'Grupo do WhatsApp'")&&app.includes("api('wpp.groups')")&&app.includes('data-auto-config="group_id"'),'Editor must list/select WhatsApp groups securely.');
 check(api.includes("'wpp.groups'=>WppConnect::groups()"),'Admin group listing route must be wired.');
+check(app.includes('id="demand-whatsapp-custom-phone"')&&app.includes('syncWhatsappNumber'),'Task WhatsApp custom number input must be conditional.');
 console.log('Automation frontend: grouped triggers, deadlines, flexible WhatsApp recipients, visual tree and run history OK');

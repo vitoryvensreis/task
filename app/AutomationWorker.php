@@ -316,8 +316,10 @@ final class AutomationWorker
             return ['type'=>'group','user_id'=>null,'client_id'=>null,'phone'=>$groupId];
         }
         if($mode==='custom'){
-            try{$phone=WppConnect::normalizePhone((string)($node['config']['custom_phone']??''));}
-            catch(Throwable){throw new AutomationPermanentException('custom_whatsapp_invalid');}
+            $fromTask=(string)($node['config']['recipient']??'task')==='task';
+            $raw=$fromTask?(string)($subject['whatsapp_custom_phone']??''):(string)($node['config']['custom_phone']??'');
+            try{$phone=WppConnect::normalizePhone($raw);}
+            catch(Throwable){throw new AutomationPermanentException($fromTask?'task_whatsapp_number_invalid':'custom_whatsapp_invalid');}
             return ['type'=>'custom','user_id'=>null,'client_id'=>null,'phone'=>$phone];
         }
         if($mode==='assigned_user'){

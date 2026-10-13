@@ -1,0 +1,139 @@
+<?php
+declare(strict_types=1);
+
+define('ROOT',dirname(__DIR__));
+$port=getenv('OUTBOX_TEST_PORT');
+if(!$port)throw new RuntimeException('Run only against the disposable CI database.');
+
+$configPath=ROOT.'/config/config.php';
+if(is_file($configPath))@unlink($configPath);
+$config=[
+ 'base_url'=>'https://task.escotilhaprodutora.com',
+ 'timezone'=>'America/Fortaleza',
+ 'db'=>['host'=>'127.0.0.1','port'=>(int)$port,'name'=>'taskesc_test','user'=>'root','password'=>'taskesc-ci-only'],
+ 'app_key'=>bin2hex(random_bytes(32)),
+ 'smtp'=>['host'=>''],
+ 'wppconnect'=>['internal_url'=>'http://127.0.0.1:21465','public_url'=>'https://wppconnect.escotilhaprodutora.com','session'=>'taskesc','secret'=>str_repeat('a',64),'webhook_url'=>''],
+];
+file_put_contents($configPath,"<?php\nreturn ".var_export($config,true).";\n");
+@mkdir(ROOT.'/storage/sessions',0700,true);
+touch(ROOT.'/storage/installed.lock');
+
+require ROOT.'/app/bootstrap.php';
+
+function autoCheck(bool $condition,string $message): void {if(!$condition)throw new RuntimeException($message);}
+function autoUser(int $id): array {
+ $u=DB::one('SELECT id,name,email,whatsapp_phone,role,active,email_notifications,weekly_report,twofa_enabled,last_login_at FROM users WHERE id=?',[$id]);
+ if(!$u)throw new RuntimeException('Missing automation test user.');
+ $u['is_preview']=0;return $u;
+}
+function autoAs(int $id): void {
+ Auth::$user=autoUser($id);Auth::$actor=Auth::$user;Auth::$previewClientId=null;Auth::$origin='web';Auth::$scopes='tools.read tools.write';
+}
+
+try{
+ $db=DB::conn();
+ $db->exec('SET FOREIGN_KEY_CHECKS=0');
+ foreach(DB::all('SHOW TABLES') as $row){$table=(string)array_values($row)[0];if(!preg_match('/\A[A-Za-z0-9_]+\z/D',$table))throw new RuntimeException('Unexpected table.');$db->exec('DROP TABLE `'.$table.'`');}
+ $db->exec('SET FOREIGN_KEY_CHECKS=1');
+ $db->exec(file_get_contents(ROOT.'/database/schema.sql'));
+
+ autoCheck((int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0)===24,'Fresh schema must be 24.');
+ autoCheck(Migrations::automationIssues()===[],'Fresh schema 24 automation structure must validate.');
+
+ $password=password_hash('Taskesc-automation-ci!',PASSWORD_DEFAULT);
+ $admin=DB::insert('users',['name'=>'Admin Automation','email'=>'admin-auto@ci.invalid','whatsapp_phone'=>'5585999990001','password_hash'=>$password,'role'=>'admin','active'=>1,'email_notifications'=>0,'created_at'=>now()]);
+ autoAs($admin);
+
+ $clientResult=Catalog::clientSave([
+  'name'=>'Cliente Automação','brand'=>'Teste','commercial_type'=>'one_off','monthly_amount_cents'=>0,'monthly_payment_day'=>10,
+  'drive_account_id'=>0,'email'=>'cliente-auto@ci.invalid','phone'=>'(85) 99999-1000','whatsapp_phone'=>'+55 (85) 99999-1000',
+  'document'=>'','notes'=>'','brand_url'=>'','active'=>1
+ ]);
+ $clientId=(int)$clientResult['id'];
+ $client=DB::one('SELECT whatsapp_phone FROM clients WHERE id=?',[$clientId]);
+ autoCheck(($client['whatsapp_phone']??'')==='5585999991000','Client WhatsApp must be normalized.');
+
+ $staffResult=Catalog::userSave([
+  'name'=>'Editor Automation','email'=>'editor-auto@ci.invalid','whatsapp_phone'=>'55 85 99999-2000','role'=>'staff','active'=>1,
+  'email_notifications'=>0,'password'=>'Taskesc-automation-ci!','clients'=>[['client_id'=>$clientId]]
+ ]);
+ $staffId=(int)$staffResult['id'];
+ autoCheck((DB::one('SELECT whatsapp_phone FROM users WHERE id=?',[$staffId])['whatsapp_phone']??'')==='5585999992000','User WhatsApp must be normalized.');
+
+ $invalid=false;
+ try{Catalog::userSave(['name'=>'Bad Phone','email'=>'bad-phone@ci.invalid','whatsapp_phone'=>'123','role'=>'staff','active'=>1,'password'=>'Taskesc-automation-ci!','clients'=>[]]);}
+ catch(AppError $e){$invalid=$e->status===422;}
+ autoCheck($invalid,'Invalid WhatsApp must be rejected.');
+
+ $definition=[
+  'version'=>1,
+  'nodes'=>[
+   ['id'=>'trigger','type'=>'trigger','config'=>['event'=>'demand.created']],
+   ['id'=>'condition','type'=>'condition','config'=>['field'=>'priority','operator'=>'eq','value'=>'normal']],
+   ['id'=>'end_yes','type'=>'end','config'=>[]],
+   ['id'=>'end_no','type'=>'end','config'=>[]],
+  ],
+  'edges'=>[
+   ['from'=>'trigger','to'=>'condition','branch'=>'next'],
+   ['from'=>'condition','to'=>'end_yes','branch'=>'yes'],
+   ['from'=>'condition','to'=>'end_no','branch'=>'no'],
+  ],
+ ];
+ $automation=Automation::save(['name'=>'Nova task normal','trigger_event'=>'demand.created','definition'=>$definition,'active'=>1]);
+ autoCheck((int)$automation['id']>0&&$automation['active']===1,'Automation must be saved active.');
+
+ $due=gmdate('Y-m-d\TH:i',time()+7*86400);
+ $saved=Demands::save([
+  'client_id'=>$clientId,'category_id'=>1,'assigned_to'=>$staffId,'title'=>'Task automática','brief'=>'Briefing da task',
+  'due_at'=>$due,'priority'=>'normal','whatsapp_recipient_mode'=>'client','billing_mode'=>'one_off','amount_cents'=>0,'draft'=>0
+ ]);
+ $demandId=(int)$saved['id'];
+ $demand=DB::one('SELECT * FROM demands WHERE id=?',[$demandId]);
+ autoCheck(($demand['whatsapp_recipient_mode']??'')==='client','Task WhatsApp recipient mode must persist.');
+
+ $tick=AutomationWorker::tick(200,20);
+ autoCheck((int)$tick['ingested']===1,'Fanout Outbox rows must create only one automation run per operation.');
+ $runs=DB::all('SELECT * FROM automation_runs WHERE automation_id=?',[$automation['id']]);
+ autoCheck(count($runs)===1&&$runs[0]['status']==='success','Created-task automation must execute successfully.');
+ $conditionStep=DB::one("SELECT * FROM automation_run_steps WHERE run_id=? AND node_id='condition'",[$runs[0]['id']]);
+ $conditionOutput=json_decode((string)$conditionStep['output_json'],true,16,JSON_THROW_ON_ERROR);
+ autoCheck(($conditionOutput['result']??false)===true,'Condition node must evaluate demand data.');
+
+ $skipDefinition=[
+  'version'=>1,
+  'nodes'=>[
+   ['id'=>'trigger','type'=>'trigger','config'=>['event'=>'demand.updated']],
+   ['id'=>'send','type'=>'action.whatsapp','config'=>['recipient'=>'task','message'=>'Task {{task.title}} atualizada para {{client.name}}']],
+   ['id'=>'end','type'=>'end','config'=>[]],
+  ],
+  'edges'=>[
+   ['from'=>'trigger','to'=>'send','branch'=>'next'],
+   ['from'=>'send','to'=>'end','branch'=>'next'],
+  ],
+ ];
+ $skipAutomation=Automation::save(['name'=>'WhatsApp conforme task','trigger_event'=>'demand.updated','definition'=>$skipDefinition,'active'=>1]);
+ $fresh=DB::one('SELECT * FROM demands WHERE id=?',[$demandId]);
+ Demands::save([
+  'id'=>$demandId,'version'=>(int)$fresh['version'],'client_id'=>$clientId,'category_id'=>1,'assigned_to'=>$staffId,
+  'title'=>'Task automática','brief'=>'Briefing atualizado','due_at'=>date('Y-m-d\TH:i',strtotime((string)$fresh['due_at'].' UTC')),
+  'priority'=>'normal','whatsapp_recipient_mode'=>'none','billing_mode'=>'one_off','amount_cents'=>0,'draft'=>0
+ ]);
+ AutomationWorker::tick(200,20);
+ $skipRun=DB::one('SELECT * FROM automation_runs WHERE automation_id=? ORDER BY id DESC LIMIT 1',[$skipAutomation['id']]);
+ autoCheck($skipRun&&$skipRun['status']==='success','Recipient none must skip WhatsApp without failing the run.');
+ $sendStep=DB::one("SELECT * FROM automation_run_steps WHERE run_id=? AND node_id='send'",[$skipRun['id']]);
+ autoCheck(($sendStep['status']??'')==='skipped','WhatsApp action must be marked skipped when task says none.');
+ autoCheck((int)(DB::one('SELECT COUNT(*) n FROM whatsapp_messages WHERE run_id=?',[$skipRun['id']])['n']??0)===0,'Skipped WhatsApp must not call or log provider delivery.');
+
+ $rendered=AutomationWorker::renderTemplate('Olá {{client.name}} · {{task.title}}',DB::one("SELECT d.*,c.name client_name,u.name assigned_name,s.name stage_name FROM demands d JOIN clients c ON c.id=d.client_id JOIN stages s ON s.id=d.stage_id LEFT JOIN users u ON u.id=d.assigned_to WHERE d.id=?",[$demandId]));
+ autoCheck(str_contains($rendered,'Cliente Automação')&&str_contains($rendered,'Task automática'),'Template variables must render from task context.');
+
+ $health=AutomationWorker::health(90);
+ autoCheck($health['status']==='ok','Automation worker heartbeat/schema health must be OK after tick.');
+
+ echo "Automation core: schema 24, WhatsApp contacts, task recipient, graph engine, Outbox dedupe and worker OK\n";
+}finally{
+ Auth::$user=null;Auth::$actor=null;Auth::$previewClientId=null;
+ @unlink($configPath);@unlink(ROOT.'/storage/installed.lock');
+}

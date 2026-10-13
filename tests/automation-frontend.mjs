@@ -38,4 +38,6 @@ check(automation.includes("'{{link do drive}}'"),'Automation variable catalog mu
 for(const action of ['action.task','action.email','action.push','action.create_task'])check(app.includes(action),'Action editor missing '+action);
 check(app.includes('data-auto-add-select')&&app.includes('data-auto-action-field'),'Additional actions must be configurable in visual editor.');
 check(automation.includes("'demand.final_delivered'=>'Envio de entrega final'"),'Final delivery trigger missing in backend.');
+check(app.includes("value:'group',label:'Grupo do WhatsApp'")&&app.includes("api('wpp.groups')")&&app.includes('data-auto-config="group_id"'),'Editor must list/select WhatsApp groups securely.');
+check(api.includes("'wpp.groups'=>WppConnect::groups()"),'Admin group listing route must be wired.');
 console.log('Automation frontend: grouped triggers, deadlines, flexible WhatsApp recipients, visual tree and run history OK');

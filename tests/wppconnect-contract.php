@@ -49,4 +49,6 @@ wppCheck(!str_contains($client,"'provider'=>\$response['body']"),'Raw provider s
 foreach(['wpp.status','wpp.start','wpp.qr','wpp.send_test'] as $route)wppCheck(str_contains($api,"'$route'"),'Missing API route '.$route);
 wppCheck(str_contains($config,"'wppconnect' => [")&&str_contains($config,"'secret' => ''"),'Private WPPConnect config example missing.');
 
+wppCheck(str_contains($api,"'wpp.groups'=>WppConnect::groups()"),'WPPConnect group listing API missing.');
+wppCheck(str_contains($client,"'isGroup'=>\$isGroup"),'Group delivery must set isGroup dynamically.');
 echo "WPPConnect step 2: isolated provider, signed webhook, admin realtime and settings panel OK\n";

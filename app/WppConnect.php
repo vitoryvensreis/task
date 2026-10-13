@@ -133,17 +133,81 @@ final class WppConnect
         ];
     }
 
-    public static function sendAutomationMessage(string $phone,string $message): array
+    /** List only the IDs and names of groups belonging to the connected WhatsApp session. */
+    public static function groups(): array
+    {
+        Auth::admin();
+        return ['groups'=>self::fetchGroups()];
+    }
+
+    /** Never return participant lists, conversation history or provider session secrets. */
+    public static function normalizeGroupsResponse(mixed $body): array
+    {
+        if(!is_array($body))return [];
+        $rows=$body['response']??$body['groups']??$body['chats']??$body;
+        if(is_array($rows)&&isset($rows['data'])&&is_array($rows['data']))$rows=$rows['data'];
+        if(!is_array($rows))return [];
+        $out=[];
+        foreach($rows as $row){
+            if(!is_array($row))continue;
+            $id=$row['id']??$row['groupId']??$row['chatId']??null;
+            if(is_array($id))$id=$id['_serialized']??$id['id']??null;
+            if(!is_string($id))continue;
+            try{$id=self::normalizeGroupId($id);}catch(Throwable){continue;}
+            $name=$row['name']??$row['subject']??$row['formattedTitle']??$row['title']??'';
+            if(!is_string($name)||trim($name)==='')$name='Grupo sem nome';
+            $out[$id]=['id'=>$id,'name'=>mb_substr(trim($name),0,140)];
+            if(count($out)>=1000)break;
+        }
+        $groups=array_values($out);
+        usort($groups,static fn(array $a,array $b)=>strnatcasecmp($a['name'],$b['name']));
+        return $groups;
+    }
+
+    public static function normalizeGroupId(string $value): string
+    {
+        $id=trim($value);
+        if(!preg_match('/\A[0-9]{6,25}(?:-[0-9]{1,25})?@g\.us\z/D',$id)){
+            fail('ID de grupo do WhatsApp inválido.',422);
+        }
+        return $id;
+    }
+
+    private static function fetchGroups(): array
     {
         $cfg=self::requireConfigured();
-        $phone=self::normalizePhone($phone);
+        $path='/api/'.rawurlencode($cfg['session']);
+        $result=self::request('GET',$path.'/all-groups',null,true,true);
+        if($result['ok']&&is_array($result['body'])){
+            $body=$result['body'];
+            if(($body['status']??'')!=='error'){
+                $groups=self::normalizeGroupsResponse($body);
+                if($groups||$body===[]||($body['response']??null)===[])return $groups;
+            }
+        }
+        // The server's all-groups endpoint is deprecated in some versions.
+        $fallback=self::request('POST',$path.'/list-chats',['onlyGroups'=>true,'count'=>1000],true,true);
+        if(!$fallback['ok']||!is_array($fallback['body'])){
+            throw new AppError('Não foi possível listar os grupos. Verifique a conexão do WhatsApp.',503);
+        }
+        return self::normalizeGroupsResponse($fallback['body']);
+    }
+
+    public static function sendAutomationMessage(string $phone,string $message,bool $isGroup=false): array
+    {
+        $cfg=self::requireConfigured();
+        if($isGroup){
+            $phone=self::normalizeGroupId($phone);
+            $valid=array_column(self::fetchGroups(),'id');
+            if(!in_array($phone,$valid,true))fail('O grupo selecionado não está disponível na sessão do WhatsApp.',422);
+        }else $phone=self::normalizePhone($phone);
         $message=trim($message);
         if($message==='')throw new InvalidArgumentException('Mensagem de automação vazia.');
         if(mb_strlen($message)>4000)throw new InvalidArgumentException('Mensagem de automação acima de 4000 caracteres.');
         $response=self::request('POST','/api/'.rawurlencode($cfg['session']).'/send-message',[
             'phone'=>$phone,
             'message'=>$message,
-            'isGroup'=>false,
+            'isGroup'=>$isGroup,
             'isNewsletter'=>false,
         ],true);
         $body=is_array($response['body'])?$response['body']:[];

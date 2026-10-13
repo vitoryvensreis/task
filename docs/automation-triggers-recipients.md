@@ -132,3 +132,17 @@ Destinatário: Responsável pela task
 Nova task: {{task.title}}
 {{task.url}}
 ```
+
+## WhatsApp — enviar para grupos (schema 25)
+
+O bloco **Enviar WhatsApp** também permite **Grupo do WhatsApp** como destinatário. O painel consulta a lista de grupos da sessão WPPConnect ativa em `wpp.groups`, exibindo apenas nome e ID. Você pode atualizar a lista sem sair do editor.
+
+- Somente administradores conseguem listar grupos e configurar automações.
+- Grupos são identificados por seu ID nativo terminado em `@g.us`, nunca por números de telefone ou nomes.
+- O servidor consulta `/api/{session}/all-groups`, com fallback para `/api/{session}/list-chats` filtrado para grupos.
+- No envio, o sistema confirma que o grupo ainda pertence à sessão e manda `isGroup: true` ao endpoint `send-message`.
+- A automação conserva o comportamento idempotente (uma mensagem por execução e bloco); falhas/estado ambíguo continuam registrados.
+- Não são retornados para o navegador os participantes, mensagens, credenciais ou token do WPPConnect.
+- O schema 25 amplia `whatsapp_messages.recipient_phone` para armazenar IDs de grupo sem truncamento, preservando mensagens históricas. O deploy executa a migração somente depois do backup obrigatório.
+
+A lista depende de a sessão estar conectada e de o bot participar dos grupos. Para enviar, selecione um grupo, salve o fluxo e mantenha a sessão conectada.

@@ -149,6 +149,7 @@ jobs:
           php tests/realtime-business-events.php
           php tests/realtime-domain.php
           php tests/wppconnect-realtime.php
+          php tests/automation-core.php
           php tests/chat.php
 
   deploy:

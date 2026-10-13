@@ -57,7 +57,7 @@ events.get('pointerdown')(pointer('mouse',3,350,280,'button'));
 events.get('pointermove')(pointer('mouse',3,200,150));
 assert.deepEqual({left:viewport.scrollLeft,top:viewport.scrollTop},before,'Buttons must remain interactive');
 assert.equal(captured,null);
-events.get('pointerdown')(pointer('mouse',4,899,280));
+events.get('pointerdown')(pointer('mouse',4,905,280));
 assert.equal(captured,null,'Scrollbar interaction must not start panning');
 events.get('pointerdown')(pointer('touch',5,400,280));
 events.get('pointermove')(pointer('touch',5,420,300));

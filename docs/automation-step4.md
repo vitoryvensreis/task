@@ -111,7 +111,7 @@ A ação WhatsApp mantém a regra definida no Passo 3:
 
 - o fluxo não armazena número;
 - o destinatário continua sendo o definido na própria Task;
-- pode ser responsável, cliente ou nenhum;
+- pode ser quem criou a task, cliente ou nenhum;
 - rascunhos continuam bloqueados pelo worker.
 
 O editor oferece as variáveis:
@@ -123,6 +123,7 @@ O editor oferece as variáveis:
 - `{{task.url}}`;
 - `{{client.name}}`;
 - `{{assigned.name}}`;
+- `{{creator.name}}`;
 - `{{stage.name}}`.
 
 Clicar em uma variável insere o token na posição atual do cursor da mensagem.

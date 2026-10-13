@@ -156,3 +156,7 @@ A lista depende de a sessão estar conectada e de o bot participar dos grupos. P
 - Use **Conectar** e clique em um card de destino para ligar blocos já existentes. A linha com `×` permite remover a conexão. Conexões cíclicas ou duplicadas são recusadas.
 - Todos os ramos elegíveis do mesmo evento são executados pelo worker de automações. A execução é sequencial e idempotente por nó (não são threads paralelas). Nós compartilhados entre ramos são executados uma única vez por execução.
 - Fluxos antigos sem coordenadas recebem uma posição inicial calculada no frontend, sem mudança em seus IDs, gatilhos, mensagens ou conexões.
+
+### Mover a visualização do canvas
+
+Clique e segure **uma área vazia do fundo pontilhado** e arraste para deslocar a visualização em qualquer direção. Em telas touch, arraste com um dedo no fundo. O scroll do mouse/touchpad continua funcionando. O arrasto do fundo não movimenta os cards, não modifica conexões, não marca a automação como alterada e preserva a posição da visualização ao editar os blocos; arrastar um card continua movendo apenas aquele card. O deslocamento da visualização é local à sessão do editor e não requer salvar.

@@ -6,14 +6,16 @@ final class AutomationPermanentException extends RuntimeException {}
 final class AutomationWorker
 {
     public const MAX_ATTEMPTS=4;
+    private static int $lastScheduleScanAt=0;
 
     public static function tick(int $eventBatch=100,int $runBatch=20): array
     {
         self::recoverStale();
         $ingested=self::ingestOutbox(max(1,min(500,$eventBatch)));
+        $scheduled=self::scheduleDueTriggers();
         $executed=self::executeReady(max(1,min(100,$runBatch)));
         self::heartbeat();
-        return ['ingested'=>$ingested,'executed'=>$executed,'stats'=>self::stats()];
+        return ['ingested'=>$ingested,'scheduled'=>$scheduled,'executed'=>$executed,'stats'=>self::stats()];
     }
 
     public static function ingestOutbox(int $limit=100): int
@@ -31,8 +33,11 @@ final class AutomationWorker
             $supported=array_flip(Automation::triggerEvents());$automations=[];$created=0;$maxId=$last;
             foreach($rows as $event){
                 $maxId=max($maxId,(int)$event['id']);
-                $type=(string)$event['event_type'];
-                if(!isset($supported[$type])||(string)$event['entity_type']!=='demand')continue;
+                $type=(string)$event['event_type'];$entityType=(string)$event['entity_type'];
+                if(!isset($supported[$type])||in_array($type,Automation::scheduledTriggerEvents(),true))continue;
+                if(str_starts_with($type,'demand.')&&$entityType!=='demand')continue;
+                if(str_starts_with($type,'client.')&&$entityType!=='client')continue;
+                if(str_starts_with($type,'invoice.')&&$entityType!=='invoice')continue;
                 try{$payload=json_decode((string)$event['payload_json'],true,32,JSON_THROW_ON_ERROR);}catch(Throwable){continue;}
                 if(!is_array($payload))continue;
                 $operationId=strtolower((string)($payload['operation_id']??''));
@@ -42,7 +47,7 @@ final class AutomationWorker
                 $context=[
                     'event'=>[
                         'type'=>$type,
-                        'entity_type'=>'demand',
+                        'entity_type'=>$entityType,
                         'entity_id'=>(int)$event['entity_id'],
                         'operation_id'=>$operationId,
                         'change'=>$payload['change']??null,
@@ -52,7 +57,7 @@ final class AutomationWorker
                 ];
                 foreach($automations[$type] as $automation){
                     $q=DB::run("INSERT IGNORE INTO automation_runs (automation_id,operation_id,trigger_event,entity_type,entity_id,status,context_json,attempts,available_at,created_at) VALUES (?,?,?,?,?,'pending',?,0,?,?)",[
-                        (int)$automation['id'],$operationId,$type,'demand',(int)$event['entity_id'],json($context),now(),now()
+                        (int)$automation['id'],$operationId,$type,$entityType,(int)$event['entity_id'],json($context),now(),now()
                     ]);
                     $created+=$q->rowCount()>0?1:0;
                 }
@@ -88,8 +93,8 @@ final class AutomationWorker
             $definition=Automation::validateDefinition(is_array($definition)?$definition:[],(string)$claimed['automation_trigger']);
             $context=json_decode((string)$claimed['context_json'],true,32,JSON_THROW_ON_ERROR);
             if(!is_array($context))$context=[];
-            $demand=self::demandContext((int)$claimed['entity_id']);
-            self::executeGraph($claimed,$definition,$context,$demand);
+            $subject=self::subjectContext((string)$claimed['entity_type'],(int)$claimed['entity_id'],$context);
+            self::executeGraph($claimed,$definition,$context,$subject);
             DB::update('automation_runs',$runId,['status'=>'success','finished_at'=>now(),'last_error'=>null]);
         }catch(AutomationPermanentException $e){
             DB::update('automation_runs',$runId,['status'=>'failed','finished_at'=>now(),'last_error'=>self::safeError($e)]);

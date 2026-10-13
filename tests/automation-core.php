@@ -323,6 +323,33 @@ try{
  autoCheck((int)DB::one("SELECT COUNT(*) n FROM mail_queue WHERE recipient='delivery@ci.invalid' AND subject LIKE 'Entrega final:%'")['n']===1,'Completed automation step must never duplicate email.');
  autoCheck((int)DB::one('SELECT COUNT(*) n FROM automation_runs WHERE automation_id=?',[$finalAutomation['id']])['n']===1,'One final upload must yield one automation run.');
 
+ // O destinatário manual é propriedade da task e o worker precisa respeitá-lo.
+ autoAs($admin);
+ $phoneTask=Demands::save([
+  'client_id'=>$clientId,'category_id'=>1,'assigned_to'=>$staffId,
+  'title'=>'Destino WhatsApp manual','brief'=>'Teste de encaminhamento',
+  'due_at'=>$due,'priority'=>'normal','whatsapp_recipient_mode'=>'custom',
+  'whatsapp_custom_phone'=>'+55 (85) 99999-3444','billing_mode'=>'one_off','amount_cents'=>0
+ ]);
+ $phoneDemand=DB::one('SELECT * FROM demands WHERE id=?',[$phoneTask['id']]);
+ autoCheck($phoneDemand['whatsapp_custom_phone']==='5585999993444','Task must store normalized custom WhatsApp destination.');
+ $recipientReflection=new ReflectionMethod(AutomationWorker::class,'recipient');
+ $recipientResult=$recipientReflection->invoke(null,['config'=>['recipient'=>'task']],$phoneDemand+['entity_type'=>'demand']);
+ autoCheck($recipientResult['type']==='custom'&&$recipientResult['phone']==='5585999993444','Worker must use the task-selected custom WhatsApp number.');
+ $invalidPhone=false;
+ try{Demands::save([
+   'client_id'=>$clientId,'category_id'=>1,'assigned_to'=>$staffId,
+   'title'=>'Destino inválido','brief'=>'Teste de validação','due_at'=>$due,
+   'whatsapp_recipient_mode'=>'custom','whatsapp_custom_phone'=>'123'
+ ]);}catch(AppError $e){$invalidPhone=$e->status===422;}
+ autoCheck($invalidPhone,'Invalid task-specific WhatsApp number must be rejected.');
+ Demands::save([
+   'id'=>$phoneDemand['id'],'version'=>$phoneDemand['version'],'title'=>$phoneDemand['title'],
+   'brief'=>$phoneDemand['brief'],'due_at'=>$due,'whatsapp_recipient_mode'=>'client'
+ ]);
+ $changedPhone=DB::one('SELECT whatsapp_recipient_mode,whatsapp_custom_phone FROM demands WHERE id=?',[$phoneDemand['id']]);
+ autoCheck($changedPhone['whatsapp_recipient_mode']==='client'&&$changedPhone['whatsapp_custom_phone']===null,'Changing recipient must clear the task custom number.');
+
  $health=AutomationWorker::health(90);
  autoCheck($health['status']==='ok','Automation worker heartbeat/schema health must be OK after tick.');
 

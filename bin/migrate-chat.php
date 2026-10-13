@@ -12,7 +12,7 @@ try{
  $manifest=file_get_contents($manifestPath);
  if(!preg_match('/^Arquivo do banco: (taskesc-predeploy-[A-Za-z0-9-]+\.sql\.gz)$/m',(string)$manifest,$file)
   || !preg_match('/^SHA256: ([a-f0-9]{64})$/m',(string)$manifest,$sha)
-  || !preg_match('/^Schema do banco: (21|22|23|24|25)$/m',(string)$manifest,$backupSchema))throw new RuntimeException('backup_manifest_invalid');
+  || !preg_match('/^Schema do banco: (21|22|23|24|25|26)$/m',(string)$manifest,$backupSchema))throw new RuntimeException('backup_manifest_invalid');
  $backup=dirname($manifestPath).'/'.$file[1];
  if(!is_file($backup)||is_link($backup)||filesize($backup)===0||!hash_equals($sha[1],hash_file('sha256',$backup)))throw new RuntimeException('backup_verification_failed');
 

@@ -544,3 +544,7 @@ Em **Automações → Enviar WhatsApp → Destinatário**, selecione **Grupo do 
 - Renovação OAuth distingue rejeição definitiva (`invalid_grant`, `invalid_client`, `unauthorized_client`, `access_denied`) de timeout, instabilidade e limites temporários. Apenas erros definitivos marcam a conta como `reconnect`; falhas transitórias usam retentativas com intervalo progressivo. Um HTTP 401 inesperado também força renovação única do token antes de repetir a chamada.
 - Uma sincronização real bem-sucedida limpa os erros antigos da respectiva conta e agenda.
 - Teste de integração: `tests/google-health.php` (executado com banco descartável após `tests/automation-core.php`). Nenhuma migração SQL nova é necessária; o estado do monitor usa `settings`.
+
+### WhatsApp: número específico por task (schema 26)
+
+Em **Criar/Editar task → Disparos de WhatsApp**, selecione **Número específico**, informe DDI + DDD + número e salve. O campo `demands.whatsapp_custom_phone` guarda apenas os dígitos normalizados. Os blocos de automação com destinatário **Usar seleção da própria task** passam a usar esse telefone. A seleção não altera blocos que escolheram outro destinatário explicitamente. Somente usuários da equipe podem escolher um número manual; usuários clientes não veem o número salvo. A migração de 25 para 26 adiciona apenas essa coluna nullable e preserva as demais tasks.

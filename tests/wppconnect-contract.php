@@ -41,6 +41,10 @@ wppCheck(!str_contains($realtime,'qrcode')&&!str_contains($realtime,'qrCode'),'R
 wppCheck(str_contains($realtime,"'wpp/global'")&&str_contains($realtime,"'wpp.changed'"),'WPP lifecycle must publish through the admin realtime channel.');
 wppCheck(str_contains($auth,"\$channels[] = 'wpp/global'")&&str_contains($auth,"\$channel === 'kanban/global' || \$channel === 'wpp/global'"),'Only administrators must receive the WPP realtime channel.');
 wppCheck(str_contains($app,'wppSettingsCard')&&str_contains($app,"api('wpp.qr')")&&str_contains($app,'handleWppRealtime(publication)'),'Settings must expose status, QR and realtime WPP handling.');
+wppCheck(str_contains($client,"'provider_response'=>'non_json'"),'Provider non-JSON responses must be sanitized before returning through TaskEsc.');
+wppCheck(str_contains($client,"'provider_status'=>(int)\$response['status']")&&str_contains($client,"'message_id'=>\$messageId"),'Test send response must expose only safe confirmation metadata.');
+wppCheck(!str_contains($client,"'provider'=>\$response['body']"),'Raw provider send responses must not be returned to the browser.');
+
 
 foreach(['wpp.status','wpp.start','wpp.qr','wpp.send_test'] as $route)wppCheck(str_contains($api,"'$route'"),'Missing API route '.$route);
 wppCheck(str_contains($config,"'wppconnect' => [")&&str_contains($config,"'secret' => ''"),'Private WPPConnect config example missing.');

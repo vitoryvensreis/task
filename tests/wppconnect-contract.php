@@ -27,6 +27,7 @@ wppCheck(str_contains($env,'HOST=https://wppconnect.escotilhaprodutora.com'),'Pu
 wppCheck(str_contains($client,"config('wppconnect',[])")&&str_contains($client,'http://127.0.0.1:21465'),'Runtime client must use private WPPConnect config with loopback default.');
 wppCheck(str_contains($client,'Authorization: Bearer ')&&str_contains($client,'generate-token'),'Runtime client must authenticate WPPConnect API requests.');
 wppCheck(str_contains($client,'self::requirePost()'),'State-changing WPPConnect commands must be POST-only.');
+wppCheck(str_contains($client,'requestRaw')&&str_contains($client,'image/png')&&str_contains($client,'data:image/png;base64,'),'QR endpoint must support binary PNG responses from WPPConnect.');
 foreach(['wpp.status','wpp.start','wpp.qr','wpp.send_test'] as $route)wppCheck(str_contains($api,"'$route'"),'Missing API route '.$route);
 wppCheck(str_contains($config,"'wppconnect' => [")&&str_contains($config,"'secret' => ''"),'Private WPPConnect config example missing.');
 

@@ -14,7 +14,7 @@ check(app.includes('automations:renderAutomations'),'Router must render the auto
 check(app.includes("api('automation.catalog')")&&app.includes("api('automation.list')")&&app.includes("api('automation.get'"),'Automation frontend must use authenticated catalog/list/get endpoints.');
 check(app.includes("api('automation.save'")&&app.includes("api('automation.toggle'"),'Automation frontend must save and activate/pause flows.');
 check(app.includes('function automationRenderNode(')&&app.includes('automation-branches'),'Visual editor must recursively render the automation tree and condition branches.');
-check(app.includes("data-auto-add="condition"")&&app.includes("data-auto-add="action.whatsapp""),'Tree connectors must add condition and WhatsApp blocks.');
+check(app.includes('data-auto-add="condition"')&&app.includes('data-auto-add="action.whatsapp"'),'Tree connectors must add condition and WhatsApp blocks.');
 check(app.includes("branch:'yes'")&&app.includes("branch:'no'"),'Condition nodes must create explicit SIM/NÃO branches.');
 check(app.includes('function automationRemoveNode(')&&app.includes('automationPruneBranch'),'Editor must safely remove graph nodes and prune discarded branches.');
 check(app.includes('data-auto-config="trigger_event"')&&app.includes('data-auto-config="operator"')&&app.includes('data-auto-config="message"'),'Inspector must configure trigger, condition and WhatsApp action.');

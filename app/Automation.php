@@ -16,11 +16,29 @@ final class Automation
         'demand.file_added'=>'Arquivo enviado',
         'demand.file_deleted'=>'Arquivo excluído',
         'demand.file_reviewed'=>'Versão aprovada/reprovada',
+        'demand.due_soon'=>'Task próxima da data de entrega',
+        'demand.overdue'=>'Task atrasada',
+        'client.created'=>'Cliente criado',
+        'client.team_member_added'=>'Conta da equipe criada para cliente',
+        'invoice.due_soon'=>'Cobrança próxima do vencimento',
+        'invoice.overdue'=>'Cobrança atrasada',
     ];
+
+    private const TRIGGER_GROUPS=[
+        'demand.created'=>'Tasks','demand.updated'=>'Tasks','demand.deleted'=>'Tasks','demand.stage_changed'=>'Tasks',
+        'demand.reordered'=>'Tasks','demand.comment_created'=>'Tasks','demand.checklist_changed'=>'Tasks',
+        'demand.time_logged'=>'Tasks','demand.change_changed'=>'Tasks','demand.file_added'=>'Tasks',
+        'demand.file_deleted'=>'Tasks','demand.file_reviewed'=>'Tasks','demand.due_soon'=>'Tasks','demand.overdue'=>'Tasks',
+        'client.created'=>'Clientes','client.team_member_added'=>'Clientes',
+        'invoice.due_soon'=>'Financeiro','invoice.overdue'=>'Financeiro',
+    ];
+
+    private const SCHEDULED_TRIGGERS=['demand.due_soon','demand.overdue','invoice.due_soon','invoice.overdue'];
 
     private const CONDITION_FIELDS=[
         'client_id','project_id','category_id','stage_id','priority','assigned_to',
-        'whatsapp_recipient_mode','draft','commercial_status','event.change'
+        'whatsapp_recipient_mode','draft','commercial_status','commercial_type',
+        'invoice_status','due_on','team_user_role','event.change'
     ];
     private const CONDITION_OPERATORS=['eq','neq','in','not_in','is_empty','not_empty'];
 
@@ -28,7 +46,12 @@ final class Automation
     {
         Auth::admin();
         return [
-            'triggers'=>array_map(fn($key,$label)=>['value'=>$key,'label'=>$label],array_keys(self::TRIGGERS),array_values(self::TRIGGERS)),
+            'triggers'=>array_map(fn($key,$label)=>[
+                'value'=>$key,
+                'label'=>$label,
+                'group'=>self::TRIGGER_GROUPS[$key]??'Outros',
+                'scheduled'=>in_array($key,self::SCHEDULED_TRIGGERS,true),
+            ],array_keys(self::TRIGGERS),array_values(self::TRIGGERS)),
             'node_types'=>[
                 ['value'=>'trigger','label'=>'Gatilho'],
                 ['value'=>'condition','label'=>'Condição'],
@@ -39,7 +62,10 @@ final class Automation
             'condition_operators'=>self::CONDITION_OPERATORS,
             'variables'=>[
                 '{{task.id}}','{{task.title}}','{{task.due_at}}','{{task.priority}}',
-                '{{task.url}}','{{client.name}}','{{assigned.name}}','{{creator.name}}','{{stage.name}}'
+                '{{task.url}}','{{link do drive}}','{{client.id}}','{{client.name}}','{{client.email}}','{{client.whatsapp}}',
+                '{{assigned.name}}','{{creator.name}}','{{stage.name}}',
+                '{{invoice.id}}','{{invoice.description}}','{{invoice.due_on}}','{{invoice.amount}}','{{invoice.status}}',
+                '{{team.name}}','{{team.email}}'
             ],
         ];
     }
@@ -66,7 +92,13 @@ final class Automation
         if(!$row)fail('Automação não encontrada.',404);
         $row['definition']=self::decodeDefinition((string)$row['definition_json']);
         unset($row['definition_json']);
-        $row['runs']=DB::all('SELECT id,operation_id,trigger_event,entity_type,entity_id,status,attempts,started_at,finished_at,last_error,created_at FROM automation_runs WHERE automation_id=? ORDER BY id DESC LIMIT 30',[$id]);
+        $row['runs']=DB::all("SELECT r.id,r.operation_id,r.trigger_event,r.entity_type,r.entity_id,r.status,r.attempts,r.started_at,r.finished_at,r.last_error,r.created_at,
+          CASE WHEN r.entity_type='demand' THEN d.title WHEN r.entity_type='client' THEN c.name WHEN r.entity_type='invoice' THEN i.description ELSE NULL END subject_label
+          FROM automation_runs r
+          LEFT JOIN demands d ON d.id=r.entity_id AND r.entity_type='demand'
+          LEFT JOIN clients c ON c.id=r.entity_id AND r.entity_type='client'
+          LEFT JOIN invoices i ON i.id=r.entity_id AND r.entity_type='invoice'
+          WHERE r.automation_id=? ORDER BY r.id DESC LIMIT 30",[$id]);
         return $row;
     }
 
@@ -116,7 +148,13 @@ final class Automation
     {
         Auth::admin();$id=integer($p['id']??0,1);
         if(!DB::one('SELECT id FROM automations WHERE id=?',[$id]))fail('Automação não encontrada.',404);
-        return DB::all("SELECT r.*,d.title demand_title FROM automation_runs r LEFT JOIN demands d ON d.id=r.entity_id AND r.entity_type='demand' WHERE r.automation_id=? ORDER BY r.id DESC LIMIT 100",[$id]);
+        return DB::all("SELECT r.*,
+          CASE WHEN r.entity_type='demand' THEN d.title WHEN r.entity_type='client' THEN c.name WHEN r.entity_type='invoice' THEN i.description ELSE NULL END subject_label
+          FROM automation_runs r
+          LEFT JOIN demands d ON d.id=r.entity_id AND r.entity_type='demand'
+          LEFT JOIN clients c ON c.id=r.entity_id AND r.entity_type='client'
+          LEFT JOIN invoices i ON i.id=r.entity_id AND r.entity_type='invoice'
+          WHERE r.automation_id=? ORDER BY r.id DESC LIMIT 100",[$id]);
     }
 
     public static function validateDefinition(array $definition,string $trigger): array
@@ -131,16 +169,26 @@ final class Automation
             if(!in_array($type,['trigger','condition','action.whatsapp','end'],true)||!is_array($config))fail('Tipo de nó inválido.',422);
             if($type==='trigger'){
                 $triggerCount++;if(($config['event']??'')!==$trigger)fail('O gatilho do fluxo não corresponde ao gatilho da automação.',422);
-                $config=['event'=>$trigger];
+                $cleanTrigger=['event'=>$trigger];
+                if($trigger==='demand.due_soon')$cleanTrigger['hours_before']=integer($config['hours_before']??24,1,720);
+                if($trigger==='invoice.due_soon')$cleanTrigger['days_before']=integer($config['days_before']??3,1,60);
+                $config=$cleanTrigger;
             }elseif($type==='condition'){
                 $field=(string)($config['field']??'');$operator=(string)($config['operator']??'eq');
                 if(!in_array($field,self::CONDITION_FIELDS,true)||!in_array($operator,self::CONDITION_OPERATORS,true))fail('Condição inválida.',422);
                 $value=$config['value']??null;if(in_array($operator,['in','not_in'],true)&&!is_array($value))fail('A condição IN precisa de uma lista.',422);
                 $config=['field'=>$field,'operator'=>$operator,'value'=>$value];
             }elseif($type==='action.whatsapp'){
-                $recipient=(string)($config['recipient']??'task');if($recipient!=='task')fail('Nesta versão o WhatsApp usa o destinatário definido na própria task.',422);
+                $recipient=(string)($config['recipient']??'task');
+                if(!in_array($recipient,['task','custom','assigned_user','creator','client'],true))fail('Destinatário do WhatsApp inválido.',422);
+                if(!str_starts_with($trigger,'demand.')&&in_array($recipient,['task','assigned_user','creator'],true))fail('Este gatilho não possui uma task para usar esse destinatário.',422);
                 $message=trim((string)($config['message']??''));if($message===''||mb_strlen($message)>4000)fail('Informe a mensagem do WhatsApp com até 4000 caracteres.',422);
-                $config=['recipient'=>'task','message'=>$message];
+                $clean=['recipient'=>$recipient,'message'=>$message];
+                if($recipient==='custom'){
+                    try{$clean['custom_phone']=WppConnect::normalizePhone((string)($config['custom_phone']??''));}
+                    catch(Throwable){fail('Informe um número específico de WhatsApp válido com DDI + DDD + número.',422);}
+                }
+                $config=$clean;
             }else $config=[];
             $ids[$id]=true;$cleanNodes[]=['id'=>$id,'type'=>$type,'config'=>$config];
         }
@@ -166,6 +214,8 @@ final class Automation
     }
 
     public static function triggerEvents(): array {return array_keys(self::TRIGGERS);}
+    public static function scheduledTriggerEvents(): array {return self::SCHEDULED_TRIGGERS;}
+    public static function triggerGroup(string $event): string {return self::TRIGGER_GROUPS[$event]??'Outros';}
 
     private static function decodeDefinition(string $json): array
     {

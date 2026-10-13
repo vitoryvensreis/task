@@ -66,6 +66,23 @@ try{
  catch(AppError $e){$invalid=$e->status===422;}
  autoCheck($invalid,'Invalid WhatsApp must be rejected.');
 
+ $customDefinition=[
+  'version'=>1,
+  'nodes'=>[
+   ['id'=>'trigger','type'=>'trigger','config'=>['event'=>'demand.created']],
+   ['id'=>'send','type'=>'action.whatsapp','config'=>['recipient'=>'custom','custom_phone'=>'+55 (85) 99999-3000','message'=>'Task {{task.title}}']],
+   ['id'=>'end','type'=>'end','config'=>[]],
+  ],
+  'edges'=>[
+   ['from'=>'trigger','to'=>'send','branch'=>'next'],
+   ['from'=>'send','to'=>'end','branch'=>'next'],
+  ],
+ ];
+ $customAutomation=Automation::save(['name'=>'Número específico','trigger_event'=>'demand.created','definition'=>$customDefinition,'active'=>0]);
+ $customSaved=Automation::get(['id'=>$customAutomation['id']]);
+ $customNode=array_values(array_filter($customSaved['definition']['nodes'],fn($n)=>$n['type']==='action.whatsapp'))[0]??[];
+ autoCheck(($customNode['config']['recipient']??'')==='custom'&&($customNode['config']['custom_phone']??'')==='5585999993000','Custom WhatsApp recipient must be normalized and persisted.');
+
  $definition=[
   'version'=>1,
   'nodes'=>[
@@ -130,10 +147,118 @@ try{
  $rendered=AutomationWorker::renderTemplate('Olá {{client.name}} · {{task.title}} · criado por {{creator.name}}',DB::one("SELECT d.*,c.name client_name,u.name assigned_name,creator.name creator_name,s.name stage_name FROM demands d JOIN clients c ON c.id=d.client_id JOIN stages s ON s.id=d.stage_id LEFT JOIN users u ON u.id=d.assigned_to LEFT JOIN users creator ON creator.id=d.created_by WHERE d.id=?",[$demandId]));
  autoCheck(str_contains($rendered,'Cliente Automação')&&str_contains($rendered,'Task automática')&&str_contains($rendered,'Admin Automation'),'Template variables must render client, task and creator context.');
 
+ $driveTest=AutomationWorker::renderTemplate('Acesse {{link do drive}}',[
+  'entity_type'=>'demand','id'=>$demandId,'final_delivery_link'=>'https://drive.google.com/drive/folders/ExampleDelivery123'
+ ]);
+ autoCheck($driveTest==='Acesse https://drive.google.com/drive/folders/ExampleDelivery123','Drive link must resolve into automation WhatsApp message.');
+
+ $clientTriggerDefinition=[
+  'version'=>1,
+  'nodes'=>[
+   ['id'=>'trigger','type'=>'trigger','config'=>['event'=>'client.created']],
+   ['id'=>'end','type'=>'end','config'=>[]],
+  ],
+  'edges'=>[['from'=>'trigger','to'=>'end','branch'=>'next']],
+ ];
+ $clientAutomation=Automation::save(['name'=>'Cliente criado','trigger_event'=>'client.created','definition'=>$clientTriggerDefinition,'active'=>1]);
+ $client2=Catalog::clientSave([
+  'name'=>'Cliente Gatilho','brand'=>'','commercial_type'=>'one_off','monthly_amount_cents'=>0,'monthly_payment_day'=>10,
+  'drive_account_id'=>0,'email'=>'gatilho@ci.invalid','phone'=>'85999994000','whatsapp_phone'=>'5585999994000',
+  'document'=>'','notes'=>'','brand_url'=>'','active'=>1
+ ]);
+ AutomationWorker::tick(200,50);
+ $clientRun=DB::one('SELECT * FROM automation_runs WHERE automation_id=? ORDER BY id DESC LIMIT 1',[$clientAutomation['id']]);
+ autoCheck($clientRun&&$clientRun['entity_type']==='client'&&(int)$clientRun['entity_id']===(int)$client2['id']&&$clientRun['status']==='success','Client-created Outbox trigger must execute.');
+
+ $teamTriggerDefinition=[
+  'version'=>1,
+  'nodes'=>[
+   ['id'=>'trigger','type'=>'trigger','config'=>['event'=>'client.team_member_added']],
+   ['id'=>'end','type'=>'end','config'=>[]],
+  ],
+  'edges'=>[['from'=>'trigger','to'=>'end','branch'=>'next']],
+ ];
+ $teamAutomation=Automation::save(['name'=>'Conta equipe criada','trigger_event'=>'client.team_member_added','definition'=>$teamTriggerDefinition,'active'=>1]);
+ $teamUser=Catalog::userSave([
+  'name'=>'Equipe Gatilho','email'=>'equipe-gatilho@ci.invalid','whatsapp_phone'=>'5585999995000','role'=>'staff','active'=>1,
+  'email_notifications'=>0,'password'=>'Taskesc-automation-ci!','clients'=>[['client_id'=>(int)$client2['id']]]
+ ]);
+ AutomationWorker::tick(200,50);
+ $teamRun=DB::one('SELECT * FROM automation_runs WHERE automation_id=? ORDER BY id DESC LIMIT 1',[$teamAutomation['id']]);
+ autoCheck($teamRun&&$teamRun['entity_type']==='client'&&(int)$teamRun['entity_id']===(int)$client2['id']&&$teamRun['status']==='success','Team-account-created trigger must execute for its related client.');
+
+ $dueSoonDefinition=[
+  'version'=>1,
+  'nodes'=>[
+   ['id'=>'trigger','type'=>'trigger','config'=>['event'=>'demand.due_soon','hours_before'=>24]],
+   ['id'=>'end','type'=>'end','config'=>[]],
+  ],
+  'edges'=>[['from'=>'trigger','to'=>'end','branch'=>'next']],
+ ];
+ $dueSoonAutomation=Automation::save(['name'=>'Task próxima','trigger_event'=>'demand.due_soon','definition'=>$dueSoonDefinition,'active'=>1]);
+ $futureDue=gmdate('Y-m-d H:i:s',time()+3600);DB::update('demands',$demandId,['due_at'=>$futureDue,'draft'=>0,'updated_at'=>now()]);
+ $scheduled=AutomationWorker::scheduleDueTriggers(true);
+ autoCheck($scheduled>=1,'Due-soon scheduler must create a run for a task inside the configured window.');
+ AutomationWorker::executeReady(100);
+ $dueSoonRun=DB::one('SELECT * FROM automation_runs WHERE automation_id=? ORDER BY id DESC LIMIT 1',[$dueSoonAutomation['id']]);
+ autoCheck($dueSoonRun&&$dueSoonRun['status']==='success'&&$dueSoonRun['entity_type']==='demand','Due-soon task run must execute.');
+ autoCheck(AutomationWorker::scheduleDueTriggers(true)===0,'Due-soon scheduler must be idempotent for the same task/deadline.');
+
+ $overdueDefinition=[
+  'version'=>1,
+  'nodes'=>[
+   ['id'=>'trigger','type'=>'trigger','config'=>['event'=>'demand.overdue']],
+   ['id'=>'end','type'=>'end','config'=>[]],
+  ],
+  'edges'=>[['from'=>'trigger','to'=>'end','branch'=>'next']],
+ ];
+ $overdueAutomation=Automation::save(['name'=>'Task atrasada','trigger_event'=>'demand.overdue','definition'=>$overdueDefinition,'active'=>1]);
+ DB::update('demands',$demandId,['due_at'=>gmdate('Y-m-d H:i:s',time()-3600),'updated_at'=>now()]);
+ autoCheck(AutomationWorker::scheduleDueTriggers(true)>=1,'Overdue scheduler must create a run for an open late task.');
+ AutomationWorker::executeReady(100);
+ $overdueRun=DB::one('SELECT * FROM automation_runs WHERE automation_id=? ORDER BY id DESC LIMIT 1',[$overdueAutomation['id']]);
+ autoCheck($overdueRun&&$overdueRun['status']==='success','Overdue task run must execute.');
+
+ $invoiceDueDefinition=[
+  'version'=>1,
+  'nodes'=>[
+   ['id'=>'trigger','type'=>'trigger','config'=>['event'=>'invoice.due_soon','days_before'=>3]],
+   ['id'=>'end','type'=>'end','config'=>[]],
+  ],
+  'edges'=>[['from'=>'trigger','to'=>'end','branch'=>'next']],
+ ];
+ $invoiceDueAutomation=Automation::save(['name'=>'Cobrança próxima','trigger_event'=>'invoice.due_soon','definition'=>$invoiceDueDefinition,'active'=>1]);
+ $localTz=new DateTimeZone(config('timezone'));$invoiceDue=(new DateTimeImmutable('now',$localTz))->modify('+2 days')->format('Y-m-d');
+ $invoiceId=DB::insert('invoices',['client_id'=>(int)$client2['id'],'description'=>'Cobrança Automação','amount_cents'=>12345,'due_on'=>$invoiceDue,'status'=>'open','created_at'=>now()]);
+ autoCheck(AutomationWorker::scheduleDueTriggers(true)>=1,'Invoice due-soon scheduler must create a run.');
+ AutomationWorker::executeReady(100);
+ $invoiceDueRun=DB::one('SELECT * FROM automation_runs WHERE automation_id=? ORDER BY id DESC LIMIT 1',[$invoiceDueAutomation['id']]);
+ autoCheck($invoiceDueRun&&$invoiceDueRun['status']==='success'&&$invoiceDueRun['entity_type']==='invoice','Invoice due-soon run must execute.');
+
+ $invoiceOverdueDefinition=[
+  'version'=>1,
+  'nodes'=>[
+   ['id'=>'trigger','type'=>'trigger','config'=>['event'=>'invoice.overdue']],
+   ['id'=>'end','type'=>'end','config'=>[]],
+  ],
+  'edges'=>[['from'=>'trigger','to'=>'end','branch'=>'next']],
+ ];
+ $invoiceOverdueAutomation=Automation::save(['name'=>'Cobrança atrasada','trigger_event'=>'invoice.overdue','definition'=>$invoiceOverdueDefinition,'active'=>1]);
+ DB::update('invoices',$invoiceId,['due_on'=>(new DateTimeImmutable('now',$localTz))->modify('-1 day')->format('Y-m-d')]);
+ autoCheck(AutomationWorker::scheduleDueTriggers(true)>=1,'Invoice overdue scheduler must create a run for open balance.');
+ AutomationWorker::executeReady(100);
+ $invoiceOverdueRun=DB::one('SELECT * FROM automation_runs WHERE automation_id=? ORDER BY id DESC LIMIT 1',[$invoiceOverdueAutomation['id']]);
+ autoCheck($invoiceOverdueRun&&$invoiceOverdueRun['status']==='success','Invoice overdue run must execute.');
+
+ $invoiceSubject=DB::one("SELECT i.id invoice_id,i.description invoice_description,i.due_on invoice_due_on,i.amount_cents invoice_amount_cents,i.status invoice_status,c.id client_id,c.name client_name,c.email client_email,c.whatsapp_phone client_whatsapp FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.id=?",[$invoiceId]);
+ $invoiceSubject['entity_type']='invoice';
+ $invoiceText=AutomationWorker::renderTemplate('{{client.name}} · {{invoice.amount}} · {{invoice.due_on}}',$invoiceSubject);
+ autoCheck(str_contains($invoiceText,'Cliente Gatilho')&&str_contains($invoiceText,'R$ 123,45'),'Invoice/client template variables must render.');
+
  $health=AutomationWorker::health(90);
  autoCheck($health['status']==='ok','Automation worker heartbeat/schema health must be OK after tick.');
 
- echo "Automation core: schema 24, WhatsApp contacts, task recipient, graph engine, Outbox dedupe and worker OK\n";
+ echo "Automation core: client events, deadlines, billing triggers, flexible WhatsApp recipients and worker OK\n";
 }finally{
  Auth::$user=null;Auth::$actor=null;Auth::$previewClientId=null;
  @unlink($configPath);@unlink(ROOT.'/storage/installed.lock');

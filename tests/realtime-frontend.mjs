@@ -62,6 +62,6 @@ check(app.includes('name="whatsapp_recipient_mode"')&&app.includes('Quem criou a
 
 
 
-check(!app.includes('<option value="assigned_user"')&&!app.includes(">Responsável da task</option>"),'WhatsApp task selector must not target the responsible user.');
+check(app.includes('<option value="creator"')&&!app.includes('<option value="assigned_user"'),'Task-level WhatsApp selector must target creator/client/none; responsible is available only as an automation-action override.');
 
 console.log('Realtime frontend: client channels, fanout dedupe, debounced refresh, creator WhatsApp recipient, modal safety and HTTP fallback OK');

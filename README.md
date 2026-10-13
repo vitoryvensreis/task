@@ -502,3 +502,14 @@ A área **Automações** está disponível para Administradores em `/automacoes`
 O editor salva diretamente o `definition_json` validado pelo backend, protege alterações não salvas, permite ativar/pausar fluxos e mostra as execuções reais do worker. Nenhuma nova migração foi necessária neste passo.
 
 Detalhes: `docs/automation-step4.md`.
+
+
+## Automações — clientes, prazos e destinatários WhatsApp
+
+O editor de automações também cobre **cliente criado**, **conta de Equipe criada e vinculada ao cliente**, **Task próxima da entrega/atrasada** e **cobrança próxima do vencimento/atrasada**. Os gatilhos de data são gerados pelo worker de forma idempotente.
+
+Cada ação **Enviar WhatsApp** pode usar a seleção da própria Task ou escolher diretamente **responsável pela task**, **quem criou a task**, **cliente** ou **número específico**. Para gatilhos de Cliente/Financeiro, estão disponíveis cliente e número específico.
+
+Detalhes: `docs/automation-triggers-recipients.md`.
+
+Para mensagens com links de entrega, a variável `{{link do drive}}` resolve o mesmo link compartilhável da pasta **Entrega final** da task (quando disponível).

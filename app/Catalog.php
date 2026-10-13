@@ -38,6 +38,7 @@ public static function clientSave(array $p): array {
    if($id)DB::update('clients',$id,$row);else $id=DB::insert('clients',$row+['drive_folder_id'=>null,'created_at'=>now()]);
    if($driveChanged)DB::run('UPDATE demands SET drive_folder_id=NULL WHERE client_id=?',[$id]);
    audit('client',$id,$isNew?'created':'save',$old,$row);
+   if($isNew)AutomationEvent::emit('client.created','client',$id,['client_id'=>$id,'change'=>'client.created'],(int)Auth::$user['id']);
    $userId=null;
    if($createAccess){
     $userId=DB::insert('users',['name'=>$accessName,'email'=>$accessEmail,'whatsapp_phone'=>$row['whatsapp_phone'],'password_hash'=>$accessHash,'role'=>'client','active'=>1,'email_notifications'=>1,'created_at'=>now()]);
@@ -82,9 +83,15 @@ public static function clientSave(array $p): array {
   $links=$p['clients']??[];if(!is_array($links))fail('Vínculos de clientes inválidos.',422);$cleanLinks=[];
   if($role!=='admin')foreach($links as $link){$cid=integer($link['client_id']??0,1);Auth::client($cid);if(isset($cleanLinks[$cid]))continue;$cleanLinks[$cid]=['client_id'=>$cid,'can_approve'=>(int)(bool)($link['can_approve']??1),'can_finance'=>$role==='client'?(int)(bool)($link['can_finance']??0):0];}
   DB::tx(function() use(&$id,$old,$row,$cleanLinks): void {
+   $isNew=!$old;
    if($id)DB::update('users',$id,$row);else $id=DB::insert('users',$row+['created_at'=>now()]);
    DB::run('DELETE FROM user_clients WHERE user_id=?',[$id]);
-   foreach($cleanLinks as $link)DB::insert('user_clients',['user_id'=>$id,'client_id'=>$link['client_id'],'can_approve'=>$link['can_approve'],'can_finance'=>$link['can_finance']]);
+   foreach($cleanLinks as $link){
+    DB::insert('user_clients',['user_id'=>$id,'client_id'=>$link['client_id'],'can_approve'=>$link['can_approve'],'can_finance'=>$link['can_finance']]);
+    if($isNew&&($row['role']??'')==='staff')AutomationEvent::emit('client.team_member_added','client',(int)$link['client_id'],[
+     'client_id'=>(int)$link['client_id'],'user_id'=>$id,'role'=>'staff','change'=>'team_member.created'
+    ],(int)Auth::$user['id']);
+   }
    $auditRow=$row;unset($auditRow['password_hash']);$auditRow['clients']=array_values($cleanLinks);audit('user',$id,'save',$old,$auditRow);
   });
   return ['id'=>$id];

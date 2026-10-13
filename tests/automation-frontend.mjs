@@ -4,6 +4,7 @@ const app=fs.readFileSync(new URL('../public/assets/app.js',import.meta.url),'ut
 const css=fs.readFileSync(new URL('../public/assets/app.css',import.meta.url),'utf8');
 const icons=fs.readFileSync(new URL('../public/assets/taskesc-icons.js',import.meta.url),'utf8');
 const api=fs.readFileSync(new URL('../public/api.php',import.meta.url),'utf8');
+const automation=fs.readFileSync(new URL('../app/Automation.php',import.meta.url),'utf8');
 
 function check(condition,message){if(!condition)throw new Error(message)}
 
@@ -18,6 +19,11 @@ check(app.includes('data-auto-add="condition"')&&app.includes('data-auto-add="ac
 check(app.includes("branch:'yes'")&&app.includes("branch:'no'"),'Condition nodes must create explicit SIM/NÃO branches.');
 check(app.includes('function automationRemoveNode(')&&app.includes('automationPruneBranch'),'Editor must safely remove graph nodes and prune discarded branches.');
 check(app.includes('data-auto-config="trigger_event"')&&app.includes('data-auto-config="operator"')&&app.includes('data-auto-config="message"'),'Inspector must configure trigger, condition and WhatsApp action.');
+check(app.includes('automationTriggerOptionsMarkup')&&app.includes("group||'Outros'"),'Trigger selector must group Task, Client and Finance triggers.');
+check(app.includes('data-auto-config="hours_before"')&&app.includes('data-auto-config="days_before"'),'Scheduled due-soon triggers must expose configurable lead time.');
+check(app.includes("value:'assigned_user',label:'Responsável pela task'")&&app.includes("value:'creator',label:'Quem criou a task'")&&app.includes("value:'client',label:'Cliente'")&&app.includes("value:'custom',label:'Número específico'"),'WhatsApp action must expose responsible, creator, client and custom-number recipients.');
+check(app.includes('data-auto-config="recipient"')&&app.includes('data-auto-config="custom_phone"'),'WhatsApp inspector must let admins choose recipient and enter a custom phone.');
+check(automation.includes("'{{invoice.due_on}}'")&&automation.includes("'{{team.name}}'")&&automation.includes("'{{client.whatsapp}}'"),'Backend catalog for the message variable palette must include billing, team and client variables.');
 check(app.includes("{{task.title}}")&&app.includes('data-auto-variable'),'WhatsApp editor must expose template variables.');
 check(app.includes("name:'Nova automação'")&&app.includes("routeUrl('automations')+'?automation=new'"),'New automation flow and deep-link state must exist.');
 check(app.includes("window.addEventListener('beforeunload'")&&app.includes('automationEditorState?.dirty'),'Unsaved automation changes must be protected.');
@@ -28,4 +34,5 @@ check(css.includes('@media(max-width:700px)')&&css.includes('.automation-side-pa
 check(icons.includes("workflow:")&&icons.includes("'git-branch':")&&icons.includes("'circle-play':")&&icons.includes("'circle-stop':"),'Automation editor icons must be bundled locally.');
 check(api.includes("'automation.catalog'=>Automation::catalog()")&&api.includes("'automation.save'=>Automation::save($p)"),'Visual editor APIs must remain server-side/admin backed.');
 
-console.log('Automation frontend: route, visual tree, SIM/NAO branches, inspector, save/toggle, run history and responsive canvas OK');
+check(automation.includes("'{{link do drive}}'"),'Automation variable catalog must expose Drive delivery link.');
+console.log('Automation frontend: grouped triggers, deadlines, flexible WhatsApp recipients, visual tree and run history OK');

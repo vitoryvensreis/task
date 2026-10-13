@@ -2167,3 +2167,7 @@ button.compact-row{cursor:pointer}.compact-row:hover{border-color:#3a4854}.compa
   .automation-save-state{width:100%;order:3}
   .automation-canvas-scroll{padding-left:14px;padding-right:14px}
 }
+
+.automation-inline-unit{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:7px}
+.automation-inline-unit>span{height:34px;display:flex;align-items:center;padding:0 9px;border:1px solid #2a2a2a;border-radius:8px;background:#101010;color:#737373;font-size:8px;white-space:nowrap}
+.automation-inspector-body select optgroup{background:#111;color:#9a9a9a;font-weight:700}

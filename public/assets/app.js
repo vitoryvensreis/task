@@ -1685,13 +1685,39 @@
   }
 
   let automationEditorState=null,automationCatalogCache=null,automationListCache=[],automationNodeSeq=0;
-  const AUTO_FIELD_LABELS={client_id:'Cliente',project_id:'Projeto',category_id:'Serviço / categoria',stage_id:'Etapa do Kanban',priority:'Prioridade',assigned_to:'Responsável',whatsapp_recipient_mode:'Destinatário WhatsApp',draft:'Rascunho',commercial_status:'Situação comercial','event.change':'Tipo de alteração'};
+  const AUTO_FIELD_LABELS={client_id:'Cliente',project_id:'Projeto',category_id:'Serviço / categoria',stage_id:'Etapa do Kanban',priority:'Prioridade',assigned_to:'Responsável',whatsapp_recipient_mode:'Destinatário WhatsApp da task',draft:'Rascunho',commercial_status:'Situação comercial',commercial_type:'Modelo comercial do cliente',invoice_status:'Situação da cobrança',due_on:'Data de vencimento',team_user_role:'Perfil da conta criada','event.change':'Tipo de alteração'};
   const AUTO_OPERATOR_LABELS={eq:'é igual a',neq:'é diferente de',in:'está em',not_in:'não está em',is_empty:'está vazio',not_empty:'não está vazio'};
   const AUTO_RUN_LABELS={pending:'Pendente',retry:'Nova tentativa',running:'Executando',success:'Concluída',failed:'Falhou',skipped:'Ignorada'};
   const AUTO_RUN_CLASSES={pending:'warn',retry:'warn',running:'running',success:'ok',failed:'error',skipped:'muted'};
 
   async function automationCatalog(){return automationCatalogCache||(automationCatalogCache=await api('automation.catalog'))}
   function automationTriggerLabel(value){const rows=automationCatalogCache?.triggers||[];return rows.find(x=>x.value===value)?.label||value||'Gatilho'}
+  function automationTriggerOptionsMarkup(){
+    const groups=new Map();for(const row of automationCatalogCache?.triggers||[]){const group=row.group||'Outros';if(!groups.has(group))groups.set(group,[]);groups.get(group).push(row)}
+    return [...groups.entries()].map(([group,rows])=>`<optgroup label="${esc(group)}">${rows.map(x=>`<option value="${esc(x.value)}" ${x.value===automationEditorState.trigger_event?'selected':''}>${esc(x.label)}</option>`).join('')}</optgroup>`).join('')
+  }
+  function automationIsDemandTrigger(event=automationEditorState?.trigger_event||''){return String(event).startsWith('demand.')}
+  function automationRecipientOptions(){
+    const common=[{value:'client',label:'Cliente'},{value:'custom',label:'Número específico'}];
+    if(!automationIsDemandTrigger())return common;
+    return [{value:'task',label:'Usar seleção da própria task'},{value:'assigned_user',label:'Responsável pela task'},{value:'creator',label:'Quem criou a task'},...common]
+  }
+  function automationDefaultRecipient(){return automationIsDemandTrigger()?'task':'client'}
+  function automationRecipientLabel(value){return automationRecipientOptions().find(x=>x.value===value)?.label||({task:'Usar seleção da própria task',assigned_user:'Responsável pela task',creator:'Quem criou a task',client:'Cliente',custom:'Número específico'}[value]||value||'Destinatário')}
+  function automationNormalizeRecipientsForTrigger(){
+    const allowed=new Set(automationRecipientOptions().map(x=>x.value));
+    for(const node of automationEditorState?.definition?.nodes||[])if(node.type==='action.whatsapp'&&!allowed.has(node.config?.recipient)){node.config.recipient=automationDefaultRecipient();delete node.config.custom_phone}
+  }
+  function automationTriggerConfigMarkup(node){
+    const event=automationEditorState?.trigger_event||node.config?.event||'';
+    if(event==='demand.due_soon')return `<div class="field"><label>Antecedência</label><div class="automation-inline-unit"><input class="input" type="number" min="1" max="720" data-auto-config="hours_before" value="${Number(node.config?.hours_before||24)}"><span>horas antes</span></div><small class="field-help">Dispara uma vez por task e por data de entrega.</small></div>`;
+    if(event==='invoice.due_soon')return `<div class="field"><label>Antecedência</label><div class="automation-inline-unit"><input class="input" type="number" min="1" max="60" data-auto-config="days_before" value="${Number(node.config?.days_before||3)}"><span>dias antes</span></div><small class="field-help">Dispara uma vez por cobrança e por vencimento.</small></div>`;
+    if(event==='demand.overdue')return '<div class="automation-inspector-note">Dispara quando uma task publicada ultrapassar a data de entrega e ainda não estiver concluída, cancelada ou arquivada.</div>';
+    if(event==='invoice.overdue')return '<div class="automation-inspector-note">Dispara para cobranças vencidas que ainda possuem saldo em aberto.</div>';
+    if(event==='client.created')return '<div class="automation-inspector-note">Dispara assim que um novo cliente é cadastrado.</div>';
+    if(event==='client.team_member_added')return '<div class="automation-inspector-note">Dispara quando uma nova conta de Equipe é criada já vinculada a um cliente.</div>';
+    return '<small class="field-help">O fluxo será criado a partir dos eventos transacionais do TaskEsc.</small>'
+  }
   function automationRunLabel(value){return AUTO_RUN_LABELS[String(value||'')]||String(value||'—')}
   function automationNodeById(id){return automationEditorState?.definition?.nodes?.find(n=>n.id===id)||null}
   function automationEdgeFrom(id,branch='next'){return automationEditorState?.definition?.edges?.find(e=>e.from===id&&e.branch===branch)||null}
@@ -1757,6 +1783,9 @@
     if(field==='whatsapp_recipient_mode')return [['none','Não enviar'],['creator','Quem criou a task'],['client','Cliente']].map(x=>({value:x[0],label:x[1]}));
     if(field==='draft')return [['0','Publicada'],['1','Rascunho']].map(x=>({value:x[0],label:x[1]}));
     if(field==='commercial_status')return [['pending','Pendente'],['approved','Aprovada'],['rejected','Rejeitada']].map(x=>({value:x[0],label:x[1]}));
+    if(field==='commercial_type')return [['one_off','Avulso'],['monthly','Mensal']].map(x=>({value:x[0],label:x[1]}));
+    if(field==='invoice_status')return [['open','Aberta'],['cancelled','Cancelada']].map(x=>({value:x[0],label:x[1]}));
+    if(field==='team_user_role')return [['staff','Equipe'],['client','Cliente'],['admin','Administrador']].map(x=>({value:x[0],label:x[1]}));
     return []
   }
   function automationValueMarkup(node){
@@ -1772,11 +1801,12 @@
     const meta=automationNodeMeta(node);
     let body='';
     if(node.type==='trigger'){
-      body=`<div class="field"><label>Quando acontecer</label><select class="select" data-auto-config="trigger_event">${(automationCatalogCache?.triggers||[]).map(x=>`<option value="${esc(x.value)}" ${x.value===automationEditorState.trigger_event?'selected':''}>${esc(x.label)}</option>`).join('')}</select><small class="field-help">O fluxo será criado a partir dos eventos transacionais do TaskEsc.</small></div>`;
+      body=`<div class="field"><label>Quando acontecer</label><select class="select" data-auto-config="trigger_event">${automationTriggerOptionsMarkup()}</select></div>${automationTriggerConfigMarkup(node)}`;
     }else if(node.type==='condition'){
       body=`<div class="field"><label>Campo</label><select class="select" data-auto-config="field">${Object.entries(AUTO_FIELD_LABELS).map(([value,label])=>`<option value="${esc(value)}" ${value===node.config?.field?'selected':''}>${esc(label)}</option>`).join('')}</select></div><div class="field"><label>Operador</label><select class="select" data-auto-config="operator">${Object.entries(AUTO_OPERATOR_LABELS).map(([value,label])=>`<option value="${esc(value)}" ${value===node.config?.operator?'selected':''}>${esc(label)}</option>`).join('')}</select></div>${automationValueMarkup(node)}<div class="automation-inspector-note">O ramo <b>SIM</b> executa quando a condição for verdadeira; o ramo <b>NÃO</b> segue quando for falsa.</div>`;
     }else if(node.type==='action.whatsapp'){
-      body=`<div class="automation-recipient-box"><span>DESTINATÁRIO</span><b>Definido na própria Task</b><small>Quem criou a task, cliente ou nenhum. O responsável pela execução não recebe por esta opção.</small></div><div class="field"><label>Mensagem</label><textarea class="textarea automation-message-editor" data-auto-config="message" maxlength="4000" placeholder="Digite a mensagem...">${esc(node.config?.message||'')}</textarea><small class="field-help"><span id="automation-message-count">${String(node.config?.message||'').length}</span>/4000 caracteres</small></div><div class="automation-variable-list">${(automationCatalogCache?.variables||[]).map(v=>`<button type="button" class="automation-variable" data-auto-variable="${esc(v)}">${esc(v)}</button>`).join('')}</div>`;
+      const recipient=node.config?.recipient||automationDefaultRecipient(),recipientOptions=automationRecipientOptions();
+      body=`<div class="field"><label>Destinatário</label><select class="select" data-auto-config="recipient">${recipientOptions.map(x=>`<option value="${x.value}" ${x.value===recipient?'selected':''}>${esc(x.label)}</option>`).join('')}</select><small class="field-help">${automationIsDemandTrigger()?'Você pode respeitar a escolha da task ou sobrescrever com responsável, criador, cliente ou número específico.':'Para este gatilho, envie ao cliente relacionado ou a um número específico.'}</small></div>${recipient==='custom'?`<div class="field"><label>Número específico</label><input class="input" data-auto-config="custom_phone" inputmode="tel" maxlength="20" value="${esc(node.config?.custom_phone||'')}" placeholder="5585999999999"><small class="field-help">Use DDI + DDD + número.</small></div>`:''}<div class="automation-recipient-box"><span>DESTINATÁRIO ATUAL</span><b>${esc(automationRecipientLabel(recipient))}</b><small>${recipient==='task'?'A ação seguirá o campo “Disparos de WhatsApp” da própria task.':'Esta ação ignora o destinatário padrão da task e usa esta escolha.'}</small></div><div class="field"><label>Mensagem</label><textarea class="textarea automation-message-editor" data-auto-config="message" maxlength="4000" placeholder="Digite a mensagem...">${esc(node.config?.message||'')}</textarea><small class="field-help"><span id="automation-message-count">${String(node.config?.message||'').length}</span>/4000 caracteres</small></div><div class="automation-variable-list">${(automationCatalogCache?.variables||[]).map(v=>`<button type="button" class="automation-variable" data-auto-variable="${esc(v)}">${esc(v)}</button>`).join('')}</div>`;
     }else body='<div class="automation-inspector-note">Este bloco encerra o ramo atual do fluxo.</div>';
     return `<div class="automation-inspector-head"><span class="automation-node-icon ${meta.tone}">${icon(meta.icon,'•')}</span><div><span class="eyebrow">${esc(meta.eyebrow)}</span><h3>${esc(meta.title)}</h3></div></div><div class="automation-inspector-body">${body}</div>${!['trigger','end'].includes(node.type)?`<button type="button" class="danger full automation-remove-node" data-auto-remove="${esc(node.id)}">${icon('trash-2','×')} Remover este bloco</button>`:''}`
   }
@@ -1784,16 +1814,20 @@
     const runs=automationEditorState?.runs||[];
     if(!automationEditorState?.id)return '<div class="empty slim">Salve a automação para começar a registrar execuções.</div>';
     if(!runs.length)return '<div class="empty slim">Nenhuma execução registrada ainda.</div>';
-    return `<div class="automation-runs-list">${runs.slice(0,12).map(run=>`<div class="automation-run-row"><span class="automation-run-status ${AUTO_RUN_CLASSES[run.status]||''}">${esc(automationRunLabel(run.status))}</span><div><b>#${Number(run.entity_id||0)} · ${esc(run.trigger_event||'Evento')}</b><small>${time(run.created_at)} · ${Number(run.attempts||0)} tentativa(s)${run.last_error?' · '+esc(run.last_error):''}</small></div></div>`).join('')}</div>`
+    return `<div class="automation-runs-list">${runs.slice(0,12).map(run=>`<div class="automation-run-row"><span class="automation-run-status ${AUTO_RUN_CLASSES[run.status]||''}">${esc(automationRunLabel(run.status))}</span><div><b>${esc(run.subject_label||('#'+Number(run.entity_id||0)))} · ${esc(automationTriggerLabel(run.trigger_event))}</b><small>${time(run.created_at)} · ${Number(run.attempts||0)} tentativa(s)${run.last_error?' · '+esc(run.last_error):''}</small></div></div>`).join('')}</div>`
   }
   function paintAutomationInspector(){
     const panel=$('#automation-inspector');if(!panel)return;panel.innerHTML=automationInspectorMarkup();paintIcons();
     const node=automationNodeById(automationEditorState?.selectedNodeId)||automationNodeById(automationRootId());if(!node)return;
-    panel.querySelector('[data-auto-config="trigger_event"]')?.addEventListener('change',e=>{automationEditorState.trigger_event=e.target.value;node.config.event=e.target.value;automationMarkDirty();paintAutomationEditor()});
+    panel.querySelector('[data-auto-config="trigger_event"]')?.addEventListener('change',e=>{automationEditorState.trigger_event=e.target.value;node.config={event:e.target.value};if(e.target.value==='demand.due_soon')node.config.hours_before=24;if(e.target.value==='invoice.due_soon')node.config.days_before=3;automationNormalizeRecipientsForTrigger();automationMarkDirty();paintAutomationEditor()});
+    panel.querySelector('[data-auto-config="hours_before"]')?.addEventListener('change',e=>{node.config.hours_before=Math.max(1,Math.min(720,Number(e.target.value)||24));automationMarkDirty();paintAutomationEditor()});
+    panel.querySelector('[data-auto-config="days_before"]')?.addEventListener('change',e=>{node.config.days_before=Math.max(1,Math.min(60,Number(e.target.value)||3));automationMarkDirty();paintAutomationEditor()});
     panel.querySelector('[data-auto-config="field"]')?.addEventListener('change',e=>{node.config.field=e.target.value;const options=automationFieldOptions(node.config.field);node.config.value=options[0]?.value||'';automationMarkDirty();paintAutomationEditor()});
     panel.querySelector('[data-auto-config="operator"]')?.addEventListener('change',e=>{node.config.operator=e.target.value;if(['in','not_in'].includes(node.config.operator)&&!Array.isArray(node.config.value))node.config.value=String(node.config.value??'').trim()?[String(node.config.value)]:[];if(!['in','not_in'].includes(node.config.operator)&&Array.isArray(node.config.value))node.config.value=node.config.value[0]??'';automationMarkDirty();paintAutomationEditor()});
     panel.querySelector('[data-auto-config="value"]')?.addEventListener('change',e=>{node.config.value=e.target.value;automationMarkDirty();paintAutomationEditor()});
     panel.querySelector('[data-auto-config="value-list"]')?.addEventListener('change',e=>{node.config.value=String(e.target.value||'').split(',').map(x=>x.trim()).filter(Boolean).slice(0,50);automationMarkDirty();paintAutomationEditor()});
+    panel.querySelector('[data-auto-config="recipient"]')?.addEventListener('change',e=>{node.config.recipient=e.target.value;if(e.target.value!=='custom')delete node.config.custom_phone;else node.config.custom_phone=node.config.custom_phone||'';automationMarkDirty();paintAutomationEditor()});
+    panel.querySelector('[data-auto-config="custom_phone"]')?.addEventListener('input',e=>{node.config.custom_phone=e.target.value;automationMarkDirty()});
     const message=panel.querySelector('[data-auto-config="message"]');if(message)message.addEventListener('input',e=>{node.config.message=e.target.value;automationMarkDirty();const count=$('#automation-message-count');if(count)count.textContent=String(e.target.value.length)});
     panel.querySelectorAll('[data-auto-variable]').forEach(btn=>btn.onclick=()=>{const input=panel.querySelector('[data-auto-config="message"]');if(!input)return;const token=btn.dataset.autoVariable,start=input.selectionStart??input.value.length,end=input.selectionEnd??input.value.length;input.value=input.value.slice(0,start)+token+input.value.slice(end);input.focus();input.setSelectionRange(start+token.length,start+token.length);input.dispatchEvent(new Event('input',{bubbles:true}))});
     panel.querySelector('[data-auto-remove]')?.addEventListener('click',()=>automationRemoveNode(node.id));
@@ -1801,7 +1835,7 @@
   function paintAutomationEditor(){
     if(!automationEditorState)return;
     const root=automationRootId(),nodeCount=automationEditorState.definition.nodes.length,runCount=automationEditorState.runs?.length||0;
-    $('#content').innerHTML=`<div class="automation-editor-shell"><div class="automation-editor-top"><button type="button" class="ghost" id="automation-back">${icon('arrow-left','←')} Voltar</button><div class="automation-title-field"><span class="eyebrow">FLUXO</span><input id="automation-name" class="automation-name-input" maxlength="190" value="${esc(automationEditorState.name)}" aria-label="Nome da automação"></div><div class="automation-editor-actions"><label class="automation-active-switch"><input id="automation-active" type="checkbox" ${automationEditorState.active?'checked':''}><span></span><b>${automationEditorState.active?'Ativa':'Pausada'}</b></label><span id="automation-save-state" class="automation-save-state ${automationEditorState.dirty?'dirty':''}">${automationEditorState.dirty?'Alterações não salvas':'Tudo salvo'}</span><button type="button" class="primary" id="automation-save">${icon('save','✓')} Salvar automação</button></div></div><div class="automation-editor-meta"><span><b>${esc(automationTriggerLabel(automationEditorState.trigger_event))}</b><small>Gatilho</small></span><span><b>${nodeCount}</b><small>Blocos</small></span><span><b>${runCount}</b><small>Execuções recentes</small></span><span><b>Task → WhatsApp</b><small>Destino controlado pela task</small></span></div><div class="automation-editor-layout"><section class="automation-canvas-panel"><div class="automation-canvas-head"><div><span class="eyebrow">EDITOR VISUAL</span><h3>Árvore da automação</h3><small>Clique em um bloco para configurar. Use os botões entre blocos para inserir condições e ações.</small></div><div class="automation-canvas-legend"><span><i class="dot trigger"></i>Gatilho</span><span><i class="dot condition"></i>Condição</span><span><i class="dot whatsapp"></i>WhatsApp</span></div></div><div class="automation-canvas-scroll"><div class="automation-tree">${root?automationRenderNode(root):'<div class="empty">Gatilho ausente.</div>'}</div></div></section><aside class="automation-side-panel"><section class="panel automation-inspector-card"><div id="automation-inspector"></div></section><section class="panel automation-runs-card"><div class="panel-head"><div><h3>Últimas execuções</h3><div class="panel-sub">Resultado real das automações disparadas pelo Outbox.</div></div></div>${automationRunsMarkup()}</section></aside></div></div>`;
+    $('#content').innerHTML=`<div class="automation-editor-shell"><div class="automation-editor-top"><button type="button" class="ghost" id="automation-back">${icon('arrow-left','←')} Voltar</button><div class="automation-title-field"><span class="eyebrow">FLUXO</span><input id="automation-name" class="automation-name-input" maxlength="190" value="${esc(automationEditorState.name)}" aria-label="Nome da automação"></div><div class="automation-editor-actions"><label class="automation-active-switch"><input id="automation-active" type="checkbox" ${automationEditorState.active?'checked':''}><span></span><b>${automationEditorState.active?'Ativa':'Pausada'}</b></label><span id="automation-save-state" class="automation-save-state ${automationEditorState.dirty?'dirty':''}">${automationEditorState.dirty?'Alterações não salvas':'Tudo salvo'}</span><button type="button" class="primary" id="automation-save">${icon('save','✓')} Salvar automação</button></div></div><div class="automation-editor-meta"><span><b>${esc(automationTriggerLabel(automationEditorState.trigger_event))}</b><small>Gatilho</small></span><span><b>${nodeCount}</b><small>Blocos</small></span><span><b>${runCount}</b><small>Execuções recentes</small></span><span><b>WhatsApp flexível</b><small>Task, cliente ou número específico</small></span></div><div class="automation-editor-layout"><section class="automation-canvas-panel"><div class="automation-canvas-head"><div><span class="eyebrow">EDITOR VISUAL</span><h3>Árvore da automação</h3><small>Clique em um bloco para configurar. Use os botões entre blocos para inserir condições e ações.</small></div><div class="automation-canvas-legend"><span><i class="dot trigger"></i>Gatilho</span><span><i class="dot condition"></i>Condição</span><span><i class="dot whatsapp"></i>WhatsApp</span></div></div><div class="automation-canvas-scroll"><div class="automation-tree">${root?automationRenderNode(root):'<div class="empty">Gatilho ausente.</div>'}</div></div></section><aside class="automation-side-panel"><section class="panel automation-inspector-card"><div id="automation-inspector"></div></section><section class="panel automation-runs-card"><div class="panel-head"><div><h3>Últimas execuções</h3><div class="panel-sub">Resultado real das automações disparadas pelo Outbox e pelos gatilhos de prazo.</div></div></div>${automationRunsMarkup()}</section></aside></div></div>`;
     paintIcons();
     $('#automation-back').onclick=closeAutomationEditor;
     const name=$('#automation-name');name.addEventListener('input',e=>{automationEditorState.name=e.target.value;automationMarkDirty()});
@@ -1812,7 +1846,8 @@
     paintAutomationInspector()
   }
   function automationDefaultDefinition(trigger){
-    return {version:1,nodes:[{id:'trigger',type:'trigger',config:{event:trigger}},{id:'end',type:'end',config:{}}],edges:[{from:'trigger',to:'end',branch:'next'}]}
+    const config={event:trigger};if(trigger==='demand.due_soon')config.hours_before=24;if(trigger==='invoice.due_soon')config.days_before=3;
+    return {version:1,nodes:[{id:'trigger',type:'trigger',config},{id:'end',type:'end',config:{}}],edges:[{from:'trigger',to:'end',branch:'next'}]}
   }
   async function createAutomationEditor(push=true){
     const catalog=await automationCatalog(),trigger=catalog.triggers?.[0]?.value||'demand.created';
@@ -1836,7 +1871,8 @@
       automationEditorState.definition.nodes.push({id:newId,type:'condition',config:{field:'client_id',operator:'eq',value:options[0]?.value||''}},{id:endId,type:'end',config:{}});
       edge.to=newId;automationEditorState.definition.edges.push({from:newId,to:oldTarget,branch:'yes'},{from:newId,to:endId,branch:'no'});
     }else{
-      automationEditorState.definition.nodes.push({id:newId,type:'action.whatsapp',config:{recipient:'task',message:'Olá! A task {{task.title}} foi atualizada.'}});
+      const demandTrigger=automationIsDemandTrigger(),message=demandTrigger?'Olá! A task {{task.title}} foi atualizada.':'Olá {{client.name}}!';
+      automationEditorState.definition.nodes.push({id:newId,type:'action.whatsapp',config:{recipient:automationDefaultRecipient(),message}});
       edge.to=newId;automationEditorState.definition.edges.push({from:newId,to:oldTarget,branch:'next'});
     }
     automationEditorState.selectedNodeId=newId;automationMarkDirty();paintAutomationEditor()

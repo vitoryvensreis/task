@@ -25,3 +25,5 @@ sudo python3 ops/realtime-step3.py diagnostic --deploy-path=/caminho/taskesc
 ```
 
 O diagnóstico cria um evento `realtime.diagnostic`, publica no canal simples `diagnostic` e exige `published_at` antes de concluir com sucesso. Nenhum secret, payload bruto ou erro de transporte é escrito em log.
+
+O health diferencia **liveness do worker** de **saúde da fila**. Heartbeat/Redis/Centrifugo quebrados continuam retornando falha. Já eventos históricos que chegaram ao limite de 8 tentativas permanecem preservados e aparecem como `queue_status: warning` / `queue_warning: exhausted_events`, sem derrubar um worker que está ativo e processando eventos novos.

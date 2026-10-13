@@ -56,10 +56,12 @@ check(app.includes("api('wpp.send_test'"),'WPP panel must support a controlled t
 check(app.includes('async function pollWppQr')&&app.includes('timeoutMs=20000')&&app.includes('setTimeout(resolve,800)'),'WPP connect action must poll until QR is actually available.');
 check(app.includes("result==='ready'")&&app.includes("'QR Code pronto para leitura'"),'WPP connect action must automatically surface QR readiness.');
 check((app.match(/name="whatsapp_phone"/g)||[]).length>=2,'User and client forms must collect WhatsApp numbers.');
-check(app.includes('name="whatsapp_recipient_mode"')&&app.includes('Responsável da task')&&app.includes('Não enviar para esta task'),'Task form must choose WhatsApp recipient or none.');
+check(app.includes('name="whatsapp_recipient_mode"')&&app.includes('Quem criou a task')&&app.includes('Não enviar para esta task'),'Task form must choose creator, client or none for WhatsApp.');
 
 
 
 
 
-console.log('Realtime frontend: client channels, fanout dedupe, debounced refresh, modal safety and HTTP fallback OK');
+check(!app.includes('<option value="assigned_user"')&&!app.includes(">Responsável da task</option>"),'WhatsApp task selector must not target the responsible user.');
+
+console.log('Realtime frontend: client channels, fanout dedupe, debounced refresh, creator WhatsApp recipient, modal safety and HTTP fallback OK');

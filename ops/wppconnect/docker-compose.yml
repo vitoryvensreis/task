@@ -12,13 +12,6 @@ services:
       CUSTOM_USER_DATA_DIR: "${CUSTOM_USER_DATA_DIR:-/usr/src/wpp-server/userDataDir/}"
       MAX_LISTENERS: "${MAX_LISTENERS:-30}"
       MANAGER_ENABLED: "${MANAGER_ENABLED:-false}"
-      REDIS_HOST: "${REDIS_HOST:-host.docker.internal}"
-      REDIS_PORT: "${REDIS_PORT:-6379}"
-      REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
-      REDIS_DB: "${REDIS_DB:-3}"
-      REDIS_PREFIX: "${REDIS_PREFIX:-taskesc-wpp}"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     volumes:
       - wppconnect_tokens:/usr/src/wpp-server/tokens
       - wppconnect_user_data:/usr/src/wpp-server/userDataDir

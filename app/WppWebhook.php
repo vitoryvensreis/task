@@ -31,11 +31,18 @@ final class WppWebhook
         // Include only a digest of QR/state input for idempotency. Raw provider
         // payloads never enter the Outbox or Centrifugo.
         $qrDigest=$qrValue===null?null:hash('sha256',(string)$qrValue);
+        $providerIdentity=$source['timestamp']??$source['id']??$source['eventId']??null;
+        if($providerIdentity===null||is_array($providerIdentity)||is_object($providerIdentity)){
+            // WPPConnect status-find historically has no event/session id. A short
+            // bucket deduplicates immediate retries without suppressing a later reconnect.
+            $providerIdentity=$qrDigest??(string)floor(time()/5);
+        }
         $fingerprint=hash('sha256',json_encode([
             'event'=>$event,
             'status'=>$normalizedStatus,
             'connected'=>$connected,
             'qr_digest'=>$qrDigest,
+            'provider_identity'=>(string)$providerIdentity,
             'session'=>(string)($source['session']??WppConnect::sessionName()),
         ],JSON_THROW_ON_ERROR|JSON_UNESCAPED_SLASHES));
 

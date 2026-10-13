@@ -35,4 +35,7 @@ check(icons.includes("workflow:")&&icons.includes("'git-branch':")&&icons.includ
 check(api.includes("'automation.catalog'=>Automation::catalog()")&&api.includes("'automation.save'=>Automation::save($p)"),'Visual editor APIs must remain server-side/admin backed.');
 
 check(automation.includes("'{{link do drive}}'"),'Automation variable catalog must expose Drive delivery link.');
+for(const action of ['action.task','action.email','action.push','action.create_task'])check(app.includes(action),'Action editor missing '+action);
+check(app.includes('data-auto-add-select')&&app.includes('data-auto-action-field'),'Additional actions must be configurable in visual editor.');
+check(automation.includes("'demand.final_delivered'=>'Envio de entrega final'"),'Final delivery trigger missing in backend.');
 console.log('Automation frontend: grouped triggers, deadlines, flexible WhatsApp recipients, visual tree and run history OK');

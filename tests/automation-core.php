@@ -255,6 +255,36 @@ try{
  $invoiceText=AutomationWorker::renderTemplate('{{client.name}} · {{invoice.amount}} · {{invoice.due_on}}',$invoiceSubject);
  autoCheck(str_contains($invoiceText,'Cliente Gatilho')&&str_contains($invoiceText,'R$ 123,45'),'Invoice/client template variables must render.');
 
+ // Teste ponta-a-ponta: um upload final aciona mudança de coluna, e-mail, push e criação.
+ $finalNodes=[
+  ['id'=>'trigger','type'=>'trigger','config'=>['event'=>'demand.final_delivered']],
+  ['id'=>'move','type'=>'action.task','config'=>['operation'=>'stage','value'=>'5']],
+  ['id'=>'priority','type'=>'action.task','config'=>['operation'=>'priority','value'=>'high']],
+  ['id'=>'email','type'=>'action.email','config'=>['recipient'=>'custom','custom_email'=>'delivery@ci.invalid','subject'=>'Entrega final: {{task.title}}','message'=>'Link da task: {{task.url}}']],
+  ['id'=>'push','type'=>'action.push','config'=>['recipient'=>'creator','title'=>'Entrega concluída','message'=>'Final: {{task.title}}']],
+  ['id'=>'create','type'=>'action.create_task','config'=>['client_mode'=>'related','category_id'=>1,'title'=>'Revisar {{task.title}}','brief'=>'Verificar os arquivos da entrega final.','hours_due'=>72,'priority'=>'normal']],
+  ['id'=>'end','type'=>'end','config'=>[]]
+ ];
+ $finalEdges=[];
+ for($i=0;$i<count($finalNodes)-1;$i++)$finalEdges[]=['from'=>$finalNodes[$i]['id'],'to'=>$finalNodes[$i+1]['id'],'branch'=>'next'];
+ $finalAutomation=Automation::save(['name'=>'Teste entrega final','trigger_event'=>'demand.final_delivered','definition'=>['version'=>1,'nodes'=>$finalNodes,'edges'=>$finalEdges],'active'=>1]);
+ $initialCopies=(int)DB::one("SELECT COUNT(*) n FROM demands WHERE title='Revisar Task automática'")['n'];
+ Files::add(['demand_id'=>$demandId,'kind'=>'final','label'=>'Link final de teste','url'=>'https://example.com/entrega-final']);
+ AutomationWorker::tick(200,80);
+ $finalRun=DB::one('SELECT id,status FROM automation_runs WHERE automation_id=? ORDER BY id DESC LIMIT 1',[$finalAutomation['id']]);
+ autoCheck($finalRun&&$finalRun['status']==='success','Final delivery must execute all actions.');
+ $moved=DB::one('SELECT stage_id,priority FROM demands WHERE id=?',[$demandId]);
+ autoCheck((int)$moved['stage_id']===5&&$moved['priority']==='high','Task actions must persist stage and priority.');
+ autoCheck((int)DB::one("SELECT COUNT(*) n FROM transitions WHERE demand_id=? AND to_stage=5",[$demandId])['n']>=1,'Automation stage must write transition.');
+ autoCheck((int)DB::one("SELECT COUNT(*) n FROM mail_queue WHERE recipient='delivery@ci.invalid' AND subject LIKE 'Entrega final:%'")['n']===1,'Email action must queue exactly one message.');
+ autoCheck((int)DB::one('SELECT COUNT(*) n FROM notifications WHERE dedupe_key=?',['auto-push:'.$finalRun['id'].':push:'.$admin])['n']===1,'Push action must persist notification once.');
+ autoCheck((int)DB::one("SELECT COUNT(*) n FROM demands WHERE title='Revisar Task automática'")['n']===$initialCopies+1,'Create task action must create one task.');
+ AutomationWorker::tick(200,80);
+ autoCheck((int)DB::one("SELECT COUNT(*) n FROM demands WHERE title='Revisar Task automática'")['n']===$initialCopies+1,'Auto-created tasks cannot produce recursive task creation.');
+ AutomationWorker::executeRun((int)$finalRun['id']);
+ autoCheck((int)DB::one("SELECT COUNT(*) n FROM mail_queue WHERE recipient='delivery@ci.invalid' AND subject LIKE 'Entrega final:%'")['n']===1,'Completed automation step must never duplicate email.');
+ autoCheck((int)DB::one('SELECT COUNT(*) n FROM automation_runs WHERE automation_id=?',[$finalAutomation['id']])['n']===1,'One final upload must yield one automation run.');
+
  $health=AutomationWorker::health(90);
  autoCheck($health['status']==='ok','Automation worker heartbeat/schema health must be OK after tick.');
 

@@ -39,7 +39,7 @@ final class AutomationWorker
                 if(str_starts_with($type,'client.')&&$entityType!=='client')continue;
                 if(str_starts_with($type,'invoice.')&&$entityType!=='invoice')continue;
                 try{$payload=json_decode((string)$event['payload_json'],true,32,JSON_THROW_ON_ERROR);}catch(Throwable){continue;}
-                if(!is_array($payload))continue;
+                if(!is_array($payload)||!empty($payload['automation_generated']))continue;
                 $operationId=strtolower((string)($payload['operation_id']??''));
                 if(!preg_match('/\A[a-f0-9]{32}\z/D',$operationId))$operationId=substr(hash('sha256',(string)$event['event_hash'].'|'.$type.'|'.$event['entity_id']),0,32);
                 if(!array_key_exists($type,$automations))$automations[$type]=DB::all('SELECT id FROM automations WHERE active=1 AND trigger_event=? ORDER BY id',[$type]);
@@ -136,7 +136,7 @@ final class AutomationWorker
     public static function executeRun(int $runId): void
     {
         $claimed=DB::tx(function() use($runId): ?array {
-            $run=DB::one("SELECT r.*,a.active,a.definition_json,a.trigger_event automation_trigger FROM automation_runs r JOIN automations a ON a.id=r.automation_id WHERE r.id=? FOR UPDATE",[$runId]);
+            $run=DB::one("SELECT r.*,a.active,a.definition_json,a.trigger_event automation_trigger,a.created_by automation_owner FROM automation_runs r JOIN automations a ON a.id=r.automation_id WHERE r.id=? FOR UPDATE",[$runId]);
             if(!$run||!in_array($run['status'],['pending','retry'],true))return null;
             if(!(int)$run['active']){
                 DB::update('automation_runs',$runId,['status'=>'skipped','finished_at'=>now(),'last_error'=>'automation_inactive']);
@@ -224,7 +224,7 @@ final class AutomationWorker
         }
     }
 
-    private static function executeNode(array $run,array $node,array $eventContext,array $demand): array
+    private static function executeNode(array $run,array $node,array $eventContext,array &$demand): array
     {
         $existing=DB::one('SELECT * FROM automation_run_steps WHERE run_id=? AND node_id=?',[(int)$run['id'],(string)$node['id']]);
         if($existing&&in_array($existing['status'],['success','skipped'],true)){
@@ -240,6 +240,10 @@ final class AutomationWorker
                 'trigger'=>['event'=>(string)$run['trigger_event']],
                 'condition'=>['result'=>self::condition($node['config'],$eventContext,$demand)],
                 'action.whatsapp'=>self::whatsapp($run,$node,$eventContext,$demand),
+                'action.task'=>AutomationActions::task($run,$node,$demand,$stepId),
+                'action.email'=>AutomationActions::email($run,$node,$demand,$eventContext,$stepId),
+                'action.push'=>AutomationActions::push($run,$node,$demand,$eventContext,$stepId),
+                'action.create_task'=>AutomationActions::createTask($run,$node,$demand,$eventContext,$stepId),
                 'end'=>['ended'=>true],
                 default=>throw new AutomationPermanentException('node_type_unsupported'),
             };

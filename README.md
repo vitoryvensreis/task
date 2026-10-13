@@ -513,3 +513,21 @@ Cada ação **Enviar WhatsApp** pode usar a seleção da própria Task ou escolh
 Detalhes: `docs/automation-triggers-recipients.md`.
 
 Para mensagens com links de entrega, a variável `{{link do drive}}` resolve o mesmo link compartilhável da pasta **Entrega final** da task (quando disponível).
+
+
+## Automações — entrega final e ações de negócio
+
+O editor `/automacoes` tem o gatilho **Envio de entrega final**, emitido apenas após o registro transacional de um arquivo na categoria *Entrega final* (upload normal ou direto). O evento mantém o `file_id` e a versão, permitindo um disparo por envio.
+
+Além de WhatsApp e condições, o fluxo permite:
+
+- **Alterar task:** movimentar para uma coluna ativa, alterar prioridade ou responsável de equipe vinculado ao cliente. Alterações registram transições, auditoria e evento realtime.
+- **Enviar e-mail:** destinatário cliente, criador, responsável ou endereço personalizado. Assunto e mensagem usam variáveis do fluxo; envio entra na fila SMTP existente.
+- **Notificação push:** criador, responsável, usuários do cliente ou usuário escolhido. Salva notificação no aplicativo e tenta enviar Web Push aos dispositivos inscritos.
+- **Criar task:** cliente do gatilho ou outro cliente ativo, categoria, título, briefing, prioridade e horas úteis até a entrega. Respeita o prazo mínimo e atribui a criação ao administrador proprietário da automação. Sem cobrança automática.
+
+As novas ações usam a tabela `automation_run_steps` para registrar o resultado na mesma transação das alterações de negócio; execuções repetidas não duplicam tasks ou mensagens na fila. Eventos originados por ações de automação levam marcação `automation_generated` e são ignorados pelo motor de automações, evitando ciclos, mas continuam sendo publicados para atualizar a interface em realtime.
+
+**Banco:** não requer migração adicional; mantém schema 24.
+
+**Produção:** publicar o projeto atualizado com backup e verificar `tests/automation-core.php` em MySQL/MariaDB de testes, serviço `taskesc-automation-worker` e o envio real dos canais configurados.

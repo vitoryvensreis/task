@@ -14,6 +14,7 @@ final class Automation
         'demand.time_logged'=>'Horas lançadas',
         'demand.change_changed'=>'Alteração de escopo',
         'demand.file_added'=>'Arquivo enviado',
+        'demand.final_delivered'=>'Envio de entrega final',
         'demand.file_deleted'=>'Arquivo excluído',
         'demand.file_reviewed'=>'Versão aprovada/reprovada',
         'demand.due_soon'=>'Task próxima da data de entrega',
@@ -28,7 +29,7 @@ final class Automation
         'demand.created'=>'Tasks','demand.updated'=>'Tasks','demand.deleted'=>'Tasks','demand.stage_changed'=>'Tasks',
         'demand.reordered'=>'Tasks','demand.comment_created'=>'Tasks','demand.checklist_changed'=>'Tasks',
         'demand.time_logged'=>'Tasks','demand.change_changed'=>'Tasks','demand.file_added'=>'Tasks',
-        'demand.file_deleted'=>'Tasks','demand.file_reviewed'=>'Tasks','demand.due_soon'=>'Tasks','demand.overdue'=>'Tasks',
+        'demand.file_deleted'=>'Tasks','demand.file_reviewed'=>'Tasks','demand.final_delivered'=>'Tasks','demand.due_soon'=>'Tasks','demand.overdue'=>'Tasks',
         'client.created'=>'Clientes','client.team_member_added'=>'Clientes',
         'invoice.due_soon'=>'Financeiro','invoice.overdue'=>'Financeiro',
     ];
@@ -56,6 +57,10 @@ final class Automation
                 ['value'=>'trigger','label'=>'Gatilho'],
                 ['value'=>'condition','label'=>'Condição'],
                 ['value'=>'action.whatsapp','label'=>'Enviar WhatsApp'],
+                ['value'=>'action.task','label'=>'Alterar task'],
+                ['value'=>'action.email','label'=>'Enviar e-mail'],
+                ['value'=>'action.push','label'=>'Notificação push'],
+                ['value'=>'action.create_task','label'=>'Criar task'],
                 ['value'=>'end','label'=>'Fim'],
             ],
             'condition_fields'=>self::CONDITION_FIELDS,
@@ -166,7 +171,7 @@ final class Automation
             if(!is_array($node))fail('Nó de automação inválido.',422);
             $id=(string)($node['id']??'');$type=(string)($node['type']??'');$config=$node['config']??[];
             if(!preg_match('/\A[A-Za-z0-9_-]{1,64}\z/D',$id)||isset($ids[$id]))fail('Identificador de nó inválido ou duplicado.',422);
-            if(!in_array($type,['trigger','condition','action.whatsapp','end'],true)||!is_array($config))fail('Tipo de nó inválido.',422);
+            if(!in_array($type,['trigger','condition','action.whatsapp','action.task','action.email','action.push','action.create_task','end'],true)||!is_array($config))fail('Tipo de nó inválido.',422);
             if($type==='trigger'){
                 $triggerCount++;if(($config['event']??'')!==$trigger)fail('O gatilho do fluxo não corresponde ao gatilho da automação.',422);
                 $cleanTrigger=['event'=>$trigger];
@@ -189,6 +194,37 @@ final class Automation
                     catch(Throwable){fail('Informe um número específico de WhatsApp válido com DDI + DDD + número.',422);}
                 }
                 $config=$clean;
+            }elseif($type==='action.task'){
+                if(!str_starts_with($trigger,'demand.')||$trigger==='demand.deleted')fail('Alterar task exige um gatilho de task existente.',422);
+                $operation=enumv((string)($config['operation']??''),['stage','priority','assign'],'tipo de alteração');
+                $value=(string)($config['value']??'');
+                if($operation==='priority')$value=enumv($value,['low','normal','high','urgent'],'prioridade');
+                else $value=(string)integer($value,$operation==='assign'?0:1);
+                $config=['operation'=>$operation,'value'=>$value];
+            }elseif($type==='action.email'){
+                $recipient=enumv((string)($config['recipient']??''),['client','creator','assigned_user','custom'],'destinatário do e-mail');
+                if(!str_starts_with($trigger,'demand.')&&in_array($recipient,['creator','assigned_user'],true))fail('Este gatilho não possui criador/responsável da task.',422);
+                $subject=required($config,'subject',190);$body=required($config,'message',4000);
+                $config=['recipient'=>$recipient,'subject'=>$subject,'message'=>$body];
+                if($recipient==='custom'){
+                    $email=strtolower(trim((string)($node['config']['custom_email']??'')));
+                    if(!filter_var($email,FILTER_VALIDATE_EMAIL))fail('Informe um e-mail válido.',422);
+                    $config['custom_email']=$email;
+                }
+            }elseif($type==='action.push'){
+                $recipient=enumv((string)($config['recipient']??''),['creator','assigned_user','client_users','specific'],'destinatário push');
+                if(!str_starts_with($trigger,'demand.')&&in_array($recipient,['creator','assigned_user'],true))fail('Este gatilho não possui criador/responsável da task.',422);
+                $config=['recipient'=>$recipient,'title'=>required($config,'title',120),'message'=>required($config,'message',360)];
+                if($recipient==='specific')$config['user_id']=integer($node['config']['user_id']??0,1);
+            }elseif($type==='action.create_task'){
+                $mode=enumv((string)($config['client_mode']??'related'),['related','specific'],'cliente de destino');
+                $config=[
+                    'client_mode'=>$mode,'category_id'=>integer($config['category_id']??0,1),
+                    'title'=>required($config,'title',190),'brief'=>required($config,'brief',20000),
+                    'hours_due'=>integer($config['hours_due']??24,1,720),
+                    'priority'=>enumv((string)($config['priority']??'normal'),['low','normal','high','urgent'],'prioridade')
+                ];
+                if($mode==='specific')$config['client_id']=integer($node['config']['client_id']??0,1);
             }else $config=[];
             $ids[$id]=true;$cleanNodes[]=['id'=>$id,'type'=>$type,'config'=>$config];
         }

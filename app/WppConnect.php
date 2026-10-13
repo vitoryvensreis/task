@@ -33,14 +33,27 @@ final class WppConnect
             $state=self::request('GET','/api/'.rawurlencode($cfg['session']).'/check-connection-session',null,true,true);
             $body=is_array($state['body'])?$state['body']:[];
             $rawState=$body['status']??$body['connected']??false;
-            $connected=is_bool($rawState)?$rawState:in_array(strtolower(trim((string)$rawState)),['true','connected','islogged','logged','open'],true);
+            $connected=is_bool($rawState)?$rawState:in_array(strtolower(trim((string)$rawState)),['true','connected','islogged','logged','open','inchat'],true);
             $message=(string)($body['message']??($connected?'Conectado':'Sessão ainda não conectada.'));
+            $phone=null;
+            if($connected){
+                $number=self::request('GET','/api/'.rawurlencode($cfg['session']).'/get-phone-number',null,true,true);
+                $numberBody=is_array($number['body'])?$number['body']:[];
+                $candidate=$numberBody['response']??$numberBody['number']??$numberBody['phone']??$numberBody['id']??null;
+                if(is_array($candidate))$candidate=$candidate['user']??$candidate['_serialized']??null;
+                if(is_string($candidate)){
+                    $digits=preg_replace('/\D+/','',$candidate)??'';
+                    if(strlen($digits)>=10&&strlen($digits)<=15)$phone=$digits;
+                }
+            }
             return [
                 'configured'=>true,
                 'provider_up'=>true,
                 'connected'=>$connected,
                 'session'=>$cfg['session'],
                 'public_url'=>$cfg['public_url'],
+                'phone'=>$phone,
+                'webhook_ready'=>true,
                 'provider'=>$body,
                 'message'=>$message,
             ];
@@ -59,8 +72,7 @@ final class WppConnect
     public static function start(): array
     {
         Auth::admin();self::requirePost();$cfg=self::requireConfigured();
-        $payload=['waitQrCode'=>false];
-        if($cfg['webhook_url']!=='')$payload['webhook']=$cfg['webhook_url'];
+        $payload=['waitQrCode'=>false,'webhook'=>self::webhookUrl()];
         $response=self::request('POST','/api/'.rawurlencode($cfg['session']).'/start-session',$payload,true);
         return ['started'=>true,'session'=>$cfg['session'],'provider'=>$response['body']];
     }
@@ -110,6 +122,32 @@ final class WppConnect
             'message'=>$message,
         ],true);
         return ['sent'=>true,'phone'=>$phone,'provider'=>$response['body']];
+    }
+
+    public static function sessionName(): string
+    {
+        return self::settings()['session'];
+    }
+
+    public static function webhookUrl(): string
+    {
+        $cfg=self::requireConfigured();
+        if($cfg['webhook_url']!=='')return $cfg['webhook_url'];
+        $base=rtrim((string)config('base_url',''),'/');
+        if($base===''||!preg_match('#^https://#i',$base))throw new RuntimeException('base_url HTTPS é obrigatório para o webhook do WPPConnect.');
+        return $base.'/wppconnect-webhook.php?token='.self::webhookToken($cfg['secret']);
+    }
+
+    public static function verifyWebhookToken(string $token): bool
+    {
+        $cfg=self::settings();
+        if(!$cfg['configured']||$token==='')return false;
+        return hash_equals(self::webhookToken($cfg['secret']),$token);
+    }
+
+    private static function webhookToken(string $secret): string
+    {
+        return hash_hmac('sha256','taskesc-wppconnect-webhook-v1',$secret);
     }
 
     public static function normalizePhone(string $value): string

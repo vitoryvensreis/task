@@ -481,6 +481,6 @@ O TaskEsc nunca expõe `SECRET_KEY` ou token do WPPConnect ao navegador. A integ
 
 ## WPPConnect — painel realtime
 
-O WPPConnect agora possui integração administrativa dentro de **Configurações → Integrações**. O TaskEsc registra um webhook HTTPS assinado, converte eventos de sessão em `wpp.changed` no Outbox e publica somente para `wpp/global`, canal exclusivo de Administradores.
+O WPPConnect agora possui integração administrativa dentro de **Configurações → WhatsApp**. O TaskEsc registra um webhook HTTPS assinado, converte eventos de sessão em `wpp.changed` no Outbox e publica somente para `wpp/global`, canal exclusivo de Administradores.
 
 O QR bruto e credenciais do provider não trafegam pelo Centrifugo. O painel busca QR/status pelos endpoints autenticados do TaskEsc e recebe invalidações instantâneas via WebSocket. Consulte `docs/wppconnect-step2.md`.

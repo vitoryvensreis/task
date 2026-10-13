@@ -80,7 +80,7 @@ Equipe, Cliente e modo preview não recebem nem conseguem assinar o canal.
 
 ## Painel
 
-Em **Configurações → Integrações**, o Administrador vê:
+Em **Configurações → WhatsApp**, o Administrador vê:
 
 - provider Online/Offline;
 - WhatsApp Conectado/Aguardando/Offline;
@@ -101,7 +101,7 @@ Depois do deploy deste passo, configure o `WEBHOOK_URL` real sem imprimir o toke
 ```bash
 cd /home/escotilhaprodutora-task/htdocs/task.escotilhaprodutora.com
 
-WEBHOOK_URL="$(php -r 'require "app/bootstrap.php"; echo WppConnect::webhookUrl();')"
+export WEBHOOK_URL="$(php -r 'require "app/bootstrap.php"; echo WppConnect::webhookUrl();')"
 
 cd ops/wppconnect
 
@@ -134,7 +134,7 @@ O valor fica apenas no `.env` privado da VPS.
 
 ## Teste esperado
 
-1. abrir Configurações → Integrações;
+1. abrir Configurações → WhatsApp;
 2. confirmar Provider Online;
 3. clicar em **Conectar WhatsApp**;
 4. QR aparecer no TaskEsc;

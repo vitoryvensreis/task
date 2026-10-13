@@ -133,6 +133,27 @@ final class WppConnect
         ];
     }
 
+    public static function sendAutomationMessage(string $phone,string $message): array
+    {
+        $cfg=self::requireConfigured();
+        $phone=self::normalizePhone($phone);
+        $message=trim($message);
+        if($message==='')throw new InvalidArgumentException('Mensagem de automação vazia.');
+        if(mb_strlen($message)>4000)throw new InvalidArgumentException('Mensagem de automação acima de 4000 caracteres.');
+        $response=self::request('POST','/api/'.rawurlencode($cfg['session']).'/send-message',[
+            'phone'=>$phone,
+            'message'=>$message,
+            'isGroup'=>false,
+            'isNewsletter'=>false,
+        ],true);
+        $body=is_array($response['body'])?$response['body']:[];
+        return [
+            'sent'=>true,
+            'provider_status'=>(int)$response['status'],
+            'message_id'=>self::providerMessageId($body),
+        ];
+    }
+
     public static function sessionName(): string
     {
         return self::settings()['session'];

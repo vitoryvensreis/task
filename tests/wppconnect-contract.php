@@ -39,7 +39,7 @@ wppCheck(str_contains($publicWebhook,'WppConnect::verifyWebhookToken')&&str_cont
 wppCheck(str_contains($webhook,'event_ignored')&&str_contains($webhook,'qr_digest'),'Webhook relay must ignore non-lifecycle payloads and hash QR data.');
 wppCheck(!str_contains($realtime,'qrcode')&&!str_contains($realtime,'qrCode'),'Realtime publisher must not transport raw QR content.');
 wppCheck(str_contains($realtime,"'wpp/global'")&&str_contains($realtime,"'wpp.changed'"),'WPP lifecycle must publish through the admin realtime channel.');
-wppCheck(str_contains($auth,"$channels[] = 'wpp/global'")&&str_contains($auth,"$channel === 'kanban/global' || $channel === 'wpp/global'"),'Only administrators must receive the WPP realtime channel.');
+wppCheck(str_contains($auth,"\$channels[] = 'wpp/global'")&&str_contains($auth,"\$channel === 'kanban/global' || \$channel === 'wpp/global'"),'Only administrators must receive the WPP realtime channel.');
 wppCheck(str_contains($app,'wppSettingsCard')&&str_contains($app,"api('wpp.qr')")&&str_contains($app,'handleWppRealtime(publication)'),'Settings must expose status, QR and realtime WPP handling.');
 
 foreach(['wpp.status','wpp.start','wpp.qr','wpp.send_test'] as $route)wppCheck(str_contains($api,"'$route'"),'Missing API route '.$route);

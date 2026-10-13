@@ -1,13 +1,32 @@
 <?php
 declare(strict_types=1);
 
-// Executar apenas após automation-core.php, no banco descartável do GitHub Actions.
+// Isolado: testes anteriores limpam config/config.php ao terminar.
+define('ROOT',dirname(__DIR__));
 $port=getenv('OUTBOX_TEST_PORT');
 if(!$port)throw new RuntimeException('Testes Google Health apenas no CI descartável.');
-require dirname(__DIR__).'/app/bootstrap.php';
+$configPath=ROOT.'/config/config.php';
+if(is_file($configPath))@unlink($configPath);
+$config=[
+ 'base_url'=>'https://task.escotilhaprodutora.com','timezone'=>'America/Fortaleza',
+ 'db'=>['host'=>'127.0.0.1','port'=>(int)$port,'name'=>'taskesc_test','user'=>'root','password'=>'taskesc-ci-only'],
+ 'app_key'=>bin2hex(random_bytes(32)),'smtp'=>['host'=>'']
+];
+file_put_contents($configPath,"<?php\nreturn ".var_export($config,true).";\n");
+@mkdir(ROOT.'/storage/sessions',0700,true);
+touch(ROOT.'/storage/installed.lock');
+require ROOT.'/app/bootstrap.php';
 function googleCheck(bool $ok,string $message): void {if(!$ok)throw new RuntimeException($message);}
-$admin=DB::one("SELECT * FROM users WHERE role='admin' AND active=1 ORDER BY id LIMIT 1");
-if(!$admin)throw new RuntimeException('Usuário admin do teste de automação não encontrado.');
+$db=DB::conn();$db->exec('SET FOREIGN_KEY_CHECKS=0');
+foreach(DB::all('SHOW TABLES') as $table){$name=(string)array_values($table)[0];if(!preg_match('/\A[A-Za-z0-9_]+\z/D',$name))throw new RuntimeException('Tabela inesperada.');$db->exec('DROP TABLE `'.$name.'`');}
+$db->exec('SET FOREIGN_KEY_CHECKS=1');
+$db->exec(file_get_contents(ROOT.'/database/schema.sql'));
+$adminId=DB::insert('users',[
+ 'name'=>'Admin Google Health','email'=>'admin-health@ci.invalid',
+ 'password_hash'=>password_hash('Taskesc-ci-health!',PASSWORD_DEFAULT),
+ 'role'=>'admin','active'=>1,'email_notifications'=>0,'created_at'=>now()
+]);
+$admin=DB::one('SELECT * FROM users WHERE id=?',[$adminId]);
 Auth::$user=$admin;Auth::$actor=$admin;Auth::$origin='web';Auth::$previewClientId=null;
 
 googleCheck(Google::refreshErrorCategory(new AppError('Google: invalid_grant (400)',502,['oauth_error'=>'invalid_grant','google_status'=>400]))==='reconnect','invalid_grant must require reconnect');

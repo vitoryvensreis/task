@@ -1955,3 +1955,44 @@ button.compact-row{cursor:pointer}.compact-row:hover{border-color:#3a4854}.compa
  .chat-avatar.large{width:38px;height:38px;flex-basis:38px}
  .chat-contact-top time{display:none}
 }
+
+
+/* WhatsApp / WPPConnect settings */
+.wpp-settings-panel{overflow:hidden}
+.wpp-status-pill{display:inline-flex;align-items:center;gap:7px;padding:7px 10px;border:1px solid var(--border);border-radius:999px;background:var(--surface);font-size:11px;font-weight:800;white-space:nowrap}
+.wpp-status-pill i{width:8px;height:8px;border-radius:50%;background:#707070;box-shadow:0 0 0 3px rgba(128,128,128,.1)}
+.wpp-status-pill.online i{background:#52c878;box-shadow:0 0 0 3px rgba(82,200,120,.12)}
+.wpp-status-pill.waiting i{background:#e0aa4c;box-shadow:0 0 0 3px rgba(224,170,76,.12)}
+.wpp-status-pill.offline i{background:#8c8c8c}
+.wpp-settings-grid{display:grid;grid-template-columns:minmax(300px,1.1fr) minmax(260px,.9fr);gap:16px}
+.wpp-status-card,.wpp-qr-card{min-width:0;border:1px solid var(--border);border-radius:16px;background:var(--surface);padding:15px}
+.wpp-provider-row{display:grid;grid-template-columns:130px minmax(0,1fr);align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)}
+.wpp-provider-row:last-of-type{border-bottom:0}
+.wpp-provider-row>span{font-size:11px;color:var(--muted)}
+.wpp-provider-row>b,.wpp-provider-row>small{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}
+.wpp-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.wpp-qr-card{display:flex;flex-direction:column;gap:12px;align-items:stretch}
+.wpp-qr-head{display:grid;gap:3px}
+.wpp-qr-head>b{font-size:12px}
+.wpp-qr-head>small{font-size:10px;color:var(--muted)}
+.wpp-qr-wrap{min-height:260px;display:grid;place-items:center;padding:14px;border:1px dashed var(--border);border-radius:14px;background:var(--panel)}
+.wpp-qr-wrap img{display:block;width:min(100%,320px);height:auto;aspect-ratio:1/1;object-fit:contain;border-radius:10px;background:#fff;padding:8px}
+.wpp-qr-placeholder{max-width:260px;text-align:center;color:var(--muted);font-size:11px;line-height:1.45}
+.wpp-test-form{margin-top:16px;padding-top:15px;border-top:1px solid var(--border);display:grid;gap:11px}
+.wpp-test-form>div:first-child{display:grid;gap:3px}
+.wpp-test-form>div:first-child>b{font-size:12px}
+.wpp-test-form>div:first-child>small{font-size:10px;color:var(--muted)}
+.wpp-test-fields{display:grid;grid-template-columns:minmax(180px,.75fr) minmax(260px,1.5fr) auto;gap:9px;align-items:center}
+@media(max-width:900px){
+ .wpp-settings-grid{grid-template-columns:1fr}
+ .wpp-test-fields{grid-template-columns:1fr}
+ .wpp-test-fields button{width:100%}
+}
+@media(max-width:560px){
+ .wpp-settings-panel .panel-head{align-items:flex-start;gap:10px}
+ .wpp-settings-panel .wpp-status-pill{font-size:10px}
+ .wpp-status-card,.wpp-qr-card{padding:12px;border-radius:13px}
+ .wpp-provider-row{grid-template-columns:105px minmax(0,1fr)}
+ .wpp-actions>*{flex:1 1 100%}
+ .wpp-qr-wrap{min-height:220px;padding:10px}
+}

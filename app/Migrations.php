@@ -483,7 +483,8 @@ final class Migrations {
    ['whatsapp_messages','uq_whatsapp_run_node']
   ] as [$table,$index])if(!self::hasIndex($table,$index))$issues[]='index_'.$table.'_'.$index;
   $mode=DB::one("SELECT COLUMN_DEFAULT,IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='demands' AND COLUMN_NAME='whatsapp_recipient_mode'");
-  if(($mode['COLUMN_DEFAULT']??null)!=='none'||($mode['IS_NULLABLE']??'YES')!=='NO')$issues[]='definition_demands_whatsapp_recipient_mode';
+  $modeDefault=$mode['COLUMN_DEFAULT']??null;if(is_string($modeDefault))$modeDefault=trim($modeDefault,"'\"");
+  if($modeDefault!=='none'||($mode['IS_NULLABLE']??'YES')!=='NO')$issues[]='definition_demands_whatsapp_recipient_mode';
   return array_values(array_unique($issues));
  }
 

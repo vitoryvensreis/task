@@ -552,3 +552,7 @@ Em **Criar/Editar task → Disparos de WhatsApp**, selecione **Número específi
 ### Disparos de WhatsApp por task: acesso e padrão
 
 Somente o perfil **ADM** vê e pode editar os controles de WhatsApp na criação/edição de tasks. A configuração é opcional; em novas tasks criadas por qualquer perfil (inclusive via automação), o destino padrão é **Quem criou a task**. O telefone só é obrigatório ao escolher explicitamente **Número específico**. Contas de equipe e clientes não recebem o campo na API e não podem alterá-lo via `demands.save`; edições nesses perfis preservam a preferência anterior. Tasks antigas mantêm sua seleção já salva. Sem migração: schema 26 preservado.
+
+### Canvas livre de automações
+
+O editor visual permite arrastar os cards, salvar as posições no JSON da automação e conectar um gatilho/ação a vários destinos. O worker executa cada ramo uma vez por execução, preservando a proteção contra reenvios. Os fluxos antigos continuam compatíveis, sem migração SQL. Consulte `docs/automation-triggers-recipients.md`.

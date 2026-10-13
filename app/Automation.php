@@ -229,14 +229,31 @@ final class Automation
                 ];
                 if($mode==='specific')$config['client_id']=integer($node['config']['client_id']??0,1);
             }else $config=[];
-            $ids[$id]=true;$cleanNodes[]=['id'=>$id,'type'=>$type,'config'=>$config];
+            $ids[$id]=true;
+            $cleanNode=['id'=>$id,'type'=>$type,'config'=>$config];
+            if(isset($node['position'])){
+                $position=$node['position'];
+                if(!is_array($position)||!isset($position['x'],$position['y'])||!is_numeric($position['x'])||!is_numeric($position['y']))fail('Posição do bloco inválida.',422);
+                $x=(float)$position['x'];$y=(float)$position['y'];
+                if(!is_finite($x)||!is_finite($y)||$x<0||$y<0||$x>20000||$y>20000)fail('Posição fora do canvas.',422);
+                $cleanNode['position']=['x'=>(int)round($x),'y'=>(int)round($y)];
+            }
+            $cleanNodes[]=$cleanNode;
         }
         if($triggerCount!==1)fail('O fluxo precisa ter exatamente um gatilho.',422);
-        $cleanEdges=[];$adj=[];
+        $cleanEdges=[];$adj=[];$uniqueEdges=[];$branchCount=[];
         foreach($edges as $edge){
             if(!is_array($edge))fail('Conexão de automação inválida.',422);
             $from=(string)($edge['from']??'');$to=(string)($edge['to']??'');$branch=(string)($edge['branch']??'next');
             if(!isset($ids[$from],$ids[$to])||$from===$to||!in_array($branch,['next','yes','no'],true))fail('Conexão de automação inválida.',422);
+            $sourceType='';
+            foreach($cleanNodes as $item)if($item['id']===$from){$sourceType=$item['type'];break;}
+            if($sourceType==='end'||($sourceType==='condition'&&$branch==='next')||($sourceType!=='condition'&&$branch!=='next'))fail('Saída incompatível com o tipo de bloco.',422);
+            $edgeKey=$from.'|'.$branch.'|'.$to;
+            if(isset($uniqueEdges[$edgeKey]))fail('Conexão duplicada.',422);
+            $uniqueEdges[$edgeKey]=true;
+            $branchCount[$from.'|'.$branch]=($branchCount[$from.'|'.$branch]??0)+1;
+            if($branchCount[$from.'|'.$branch]>($sourceType==='condition'?1:12))fail('Limite de saídas deste bloco excedido.',422);
             $cleanEdges[]=['from'=>$from,'to'=>$to,'branch'=>$branch];$adj[$from][]=$to;
         }
         $visiting=[];$visited=[];

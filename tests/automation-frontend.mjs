@@ -44,4 +44,8 @@ check(api.includes("'wpp.groups'=>WppConnect::groups()"),'Admin group listing ro
 check(app.includes('id="demand-whatsapp-custom-phone"')&&app.includes('syncWhatsappNumber'),'Task WhatsApp custom number input must be conditional.');
 check(app.includes('${admin?`<div class="field"><label>Disparos de WhatsApp</label>')&&app.includes("storedWhatsappMode=d?.whatsapp_recipient_mode||'creator'"),'Only admins must see WhatsApp task fields, with creator as default.');
 check(demands.includes("if($role==='admin')")&&demands.includes('Somente administradores podem configurar disparos de WhatsApp.'),'API must protect WhatsApp settings on non-admin demand writes.');
+check(app.includes('function automationFlowMarkup(')&&app.includes('function automationFlowWire(')&&app.includes('automationFlowRedraw()'),'Free canvas must render positioned blocks and connectors.');
+check(app.includes('function automationFlowAdd(')&&app.includes('function automationFlowLink(')&&app.includes('automationFlowCanConnect('),'Graph editor must support multiple outgoing paths and loop safety.');
+check(app.includes("card.addEventListener('pointermove'")&&app.includes('automationMarkDirty()'),'Dragging cards must update and persist node positions.');
+check(css.includes('.automation-flow-stage')&&css.includes('.automation-flow-node')&&css.includes('.automation-flow-lines'),'Free canvas position and SVG connector styles are required.');
 console.log('Automation frontend: grouped triggers, deadlines, flexible WhatsApp recipients, visual tree and run history OK');

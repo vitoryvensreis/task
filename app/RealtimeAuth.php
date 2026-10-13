@@ -51,6 +51,7 @@ final class RealtimeAuth
         }
         if (($user['role'] ?? '') === 'admin') {
             $channels[] = 'kanban/global';
+            $channels[] = 'wpp/global';
             return array_values(array_unique($channels));
         }
 
@@ -63,7 +64,7 @@ final class RealtimeAuth
 
     public function authorizeChannel(string $channel, array $user): void
     {
-        if ($channel === 'kanban/global') {
+        if ($channel === 'kanban/global' || $channel === 'wpp/global') {
             if (($user['role'] ?? '') !== 'admin' || Auth::isPreview()) fail('Sem permissão para este canal realtime.', 403);
             return;
         }

@@ -477,3 +477,10 @@ O chat administrativo continua em canais pessoais `user:{id}`. O polling de 30 s
 A integração de WhatsApp do TaskEsc usa WPPConnect Server isolado em Docker. O provider fica em `127.0.0.1:21465` e o subdomínio `wppconnect.escotilhaprodutora.com` atua como reverse proxy HTTPS com suporte a Socket.IO/WebSocket.
 
 O TaskEsc nunca expõe `SECRET_KEY` ou token do WPPConnect ao navegador. A integração backend inicial oferece health/status, iniciar sessão, QR Code e envio de teste. Veja `docs/wppconnect-step1.md`.
+
+
+## WPPConnect — painel realtime
+
+O WPPConnect agora possui integração administrativa dentro de **Configurações → WhatsApp**. O TaskEsc registra um webhook HTTPS assinado, converte eventos de sessão em `wpp.changed` no Outbox e publica somente para `wpp/global`, canal exclusivo de Administradores.
+
+O QR bruto e credenciais do provider não trafegam pelo Centrifugo. O painel busca QR/status pelos endpoints autenticados do TaskEsc e recebe invalidações instantâneas via WebSocket. Consulte `docs/wppconnect-step2.md`.

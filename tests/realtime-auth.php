@@ -115,6 +115,7 @@ try {
     $service->subscription(['channel'=>'user:'.$staff]);
     $service->subscription(['channel'=>'staff/global']);
     $service->subscription(['channel'=>'agenda/global']);
+    rtStatus(fn()=> $service->subscription(['channel'=>'wpp/global']),403);
     rtStatus(fn()=> $service->subscription(['channel'=>'demand:'.$d2]),403);
     rtStatus(fn()=> $service->subscription(['channel'=>'project:'.$p2]),403);
     rtStatus(fn()=> $service->subscription(['channel'=>'client:'.$c2]),403);
@@ -125,10 +126,11 @@ try {
 
     $adminUser=rtReset($admin);
     $adminService=new RealtimeAuth(new Realtime($configFile));
-    rtCheck($adminService->connection([])['channels']===['user:'.$admin,'staff/global','agenda/global','kanban/global'],'Admin bootstrap must include personal, staff, agenda and kanban globals');
+    rtCheck($adminService->connection([])['channels']===['user:'.$admin,'staff/global','agenda/global','kanban/global','wpp/global'],'Admin bootstrap must include personal, staff, agenda, kanban and WPP globals');
     $adminService->subscription(['channel'=>'kanban/global']);
     $adminService->subscription(['channel'=>'staff/global']);
     $adminService->subscription(['channel'=>'agenda/global']);
+    $adminService->subscription(['channel'=>'wpp/global']);
     $adminService->subscription(['channel'=>'demand:'.$d2]);
     $adminService->subscription(['channel'=>'project:'.$p2]);
 
@@ -143,6 +145,7 @@ try {
     rtStatus(fn()=> $clientService->subscription(['channel'=>'kanban/global']),403);
     rtStatus(fn()=> $clientService->subscription(['channel'=>'staff/global']),403);
     rtStatus(fn()=> $clientService->subscription(['channel'=>'agenda/global']),403);
+    rtStatus(fn()=> $clientService->subscription(['channel'=>'wpp/global']),403);
 
     $previewUser=rtReset($admin,$c1);
     $previewService=new RealtimeAuth(new Realtime($configFile));
@@ -157,6 +160,7 @@ try {
     rtStatus(fn()=> $previewService->subscription(['channel'=>'kanban/global']),403);
     rtStatus(fn()=> $previewService->subscription(['channel'=>'staff/global']),403);
     rtStatus(fn()=> $previewService->subscription(['channel'=>'agenda/global']),403);
+    rtStatus(fn()=> $previewService->subscription(['channel'=>'wpp/global']),403);
 
     Auth::$origin='api';Auth::$user=$adminUser;Auth::$actor=$adminUser;Auth::$previewClientId=null;
     rtStatus(fn()=> (new RealtimeAuth(new Realtime($configFile)))->connection([]),403);

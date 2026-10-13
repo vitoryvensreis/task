@@ -48,6 +48,12 @@ check(app.includes('function flushAgendaRealtime()')&&app.includes('stableRender
 check(app.includes("api('agenda.detail',{id:detailId})"),'open calendar event details must refresh after realtime changes');
 check(app.includes('agendaRealtimeDirty')&&app.includes('agendaRealtimeTimer'),'agenda realtime must debounce and resume hidden-tab refreshes');
 check(app.includes("String(publication.event_type||'').startsWith('demand.')"),'all demand sub-resource events must share the demand invalidation path');
+check(app.includes("startsWith('wpp.')")&&app.includes('handleWppRealtime(publication)'),'frontend must route WPPConnect lifecycle events from Centrifugo');
+check(app.includes('wppSettingsCard')&&app.includes('id="wpp-settings-panel"'),'admin settings must render the WhatsApp provider panel');
+check(app.includes("api('wpp.status')")&&app.includes("api('wpp.qr')")&&app.includes("api('wpp.start',{},'POST')"),'WPP panel must use authenticated TaskEsc endpoints for status, QR and session start');
+check(app.includes('loadWppQr')&&app.includes('data:image/png;base64,'),'WPP panel must render provider QR data without exposing provider credentials');
+check(app.includes("api('wpp.send_test'"),'WPP panel must support a controlled test message');
+
 
 
 console.log('Realtime frontend: client channels, fanout dedupe, debounced refresh, modal safety and HTTP fallback OK');

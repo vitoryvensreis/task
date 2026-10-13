@@ -38,12 +38,12 @@ Na migração, clientes antigos recebem automaticamente `whatsapp_phone` quando 
 Cada Task possui:
 
 ```text
-none           → não enviar WhatsApp relacionado à task
-assigned_user  → usar WhatsApp do responsável
-client         → usar WhatsApp do cliente
+none     → não enviar WhatsApp relacionado à task
+creator  → usar o WhatsApp do usuário que criou a task
+client   → usar WhatsApp do cliente
 ```
 
-A decisão fica na própria Task. Assim, uma automação usa "destinatário da Task" e não precisa armazenar números em sua definição.
+A decisão fica na própria Task. Assim, uma automação usa "destinatário da Task" e não precisa armazenar números em sua definição. O responsável pela execução da task não é usado como destinatário dessa regra. Tasks antigas salvas com `assigned_user` são interpretadas como `creator` por compatibilidade.
 
 Rascunhos nunca disparam a ação WhatsApp.
 
@@ -124,6 +124,7 @@ A ação usa o WPPConnect interno já configurado. Variáveis iniciais:
 - `{{task.url}}`;
 - `{{client.name}}`;
 - `{{assigned.name}}`;
+- `{{creator.name}}`;
 - `{{stage.name}}`.
 
 A automação nunca recebe SECRET_KEY ou token do provider.

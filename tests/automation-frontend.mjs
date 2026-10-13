@@ -34,4 +34,5 @@ check(css.includes('@media(max-width:700px)')&&css.includes('.automation-side-pa
 check(icons.includes("workflow:")&&icons.includes("'git-branch':")&&icons.includes("'circle-play':")&&icons.includes("'circle-stop':"),'Automation editor icons must be bundled locally.');
 check(api.includes("'automation.catalog'=>Automation::catalog()")&&api.includes("'automation.save'=>Automation::save($p)"),'Visual editor APIs must remain server-side/admin backed.');
 
+check(automation.includes("'{{link do drive}}'"),'Automation variable catalog must expose Drive delivery link.');
 console.log('Automation frontend: grouped triggers, deadlines, flexible WhatsApp recipients, visual tree and run history OK');

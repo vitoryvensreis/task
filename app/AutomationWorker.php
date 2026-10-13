@@ -338,12 +338,28 @@ final class AutomationWorker
         $demandId=(int)($subject['demand_id']??($entityType==='demand'?($subject['id']??0):0));
         $taskTitle=(string)($subject['task_title']??($entityType==='demand'?($subject['title']??''):''));
         $invoiceAmount=(int)($subject['invoice_amount_cents']??($entityType==='invoice'?($subject['amount_cents']??0):0));
+        // Resolve o mesmo link compartilhável da pasta "Entrega final" usado na task.
+        // Não cria pastas nem expõe a pasta privada de trabalho em mensagens.
+        $driveLink='';
+        if(str_contains($template,'{{link do drive}}')){
+            $driveLink=trim((string)($subject['final_delivery_link']??''));
+            if($driveLink===''&&$demandId>0){
+                $driveSubject=$entityType==='demand'?$subject:DB::one('SELECT id,client_id,drive_folder_id FROM demands WHERE id=?',[$demandId]);
+                if(is_array($driveSubject)){
+                    $finalFile=DB::one("SELECT drive_account_id,drive_file_id FROM files WHERE demand_id=? AND kind='final' AND storage_provider='drive' AND drive_file_id IS NOT NULL AND drive_file_id<>'' ORDER BY created_at DESC,id DESC LIMIT 1",[$demandId]);
+                    if($finalFile||!empty($driveSubject['drive_folder_id'])){
+                        $driveLink=trim((string)(Google::finalDeliveryShareLink($driveSubject,$finalFile)??''));
+                    }
+                }
+            }
+        }
         $vars=[
             '{{task.id}}'=>$demandId>0?(string)$demandId:'',
             '{{task.title}}'=>$taskTitle,
             '{{task.due_at}}'=>(string)($subject['task_due_at']??($entityType==='demand'?($subject['due_at']??'') : '')),
             '{{task.priority}}'=>(string)($subject['task_priority']??($entityType==='demand'?($subject['priority']??'') : '')),
             '{{task.url}}'=>$demandId>0?base('kanban/task/'.$demandId):'',
+            '{{link do drive}}'=>$driveLink,
             '{{client.id}}'=>(string)($subject['client_id']??''),
             '{{client.name}}'=>(string)($subject['client_name']??''),
             '{{client.email}}'=>(string)($subject['client_email']??''),

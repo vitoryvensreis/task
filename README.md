@@ -511,3 +511,5 @@ O editor de automações também cobre **cliente criado**, **conta de Equipe cri
 Cada ação **Enviar WhatsApp** pode usar a seleção da própria Task ou escolher diretamente **responsável pela task**, **quem criou a task**, **cliente** ou **número específico**. Para gatilhos de Cliente/Financeiro, estão disponíveis cliente e número específico.
 
 Detalhes: `docs/automation-triggers-recipients.md`.
+
+Para mensagens com links de entrega, a variável `{{link do drive}}` resolve o mesmo link compartilhável da pasta **Entrega final** da task (quando disponível).

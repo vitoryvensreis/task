@@ -147,6 +147,11 @@ try{
  $rendered=AutomationWorker::renderTemplate('Olá {{client.name}} · {{task.title}} · criado por {{creator.name}}',DB::one("SELECT d.*,c.name client_name,u.name assigned_name,creator.name creator_name,s.name stage_name FROM demands d JOIN clients c ON c.id=d.client_id JOIN stages s ON s.id=d.stage_id LEFT JOIN users u ON u.id=d.assigned_to LEFT JOIN users creator ON creator.id=d.created_by WHERE d.id=?",[$demandId]));
  autoCheck(str_contains($rendered,'Cliente Automação')&&str_contains($rendered,'Task automática')&&str_contains($rendered,'Admin Automation'),'Template variables must render client, task and creator context.');
 
+ $driveTest=AutomationWorker::renderTemplate('Acesse {{link do drive}}',[
+  'entity_type'=>'demand','id'=>$demandId,'final_delivery_link'=>'https://drive.google.com/drive/folders/ExampleDelivery123'
+ ]);
+ autoCheck($driveTest==='Acesse https://drive.google.com/drive/folders/ExampleDelivery123','Drive link must resolve into automation WhatsApp message.');
+
  $clientTriggerDefinition=[
   'version'=>1,
   'nodes'=>[

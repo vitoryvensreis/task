@@ -62,7 +62,7 @@ final class Automation
             'condition_operators'=>self::CONDITION_OPERATORS,
             'variables'=>[
                 '{{task.id}}','{{task.title}}','{{task.due_at}}','{{task.priority}}',
-                '{{task.url}}','{{client.id}}','{{client.name}}','{{client.email}}','{{client.whatsapp}}',
+                '{{task.url}}','{{link do drive}}','{{client.id}}','{{client.name}}','{{client.email}}','{{client.whatsapp}}',
                 '{{assigned.name}}','{{creator.name}}','{{stage.name}}',
                 '{{invoice.id}}','{{invoice.description}}','{{invoice.due_on}}','{{invoice.amount}}','{{invoice.status}}',
                 '{{team.name}}','{{team.email}}'

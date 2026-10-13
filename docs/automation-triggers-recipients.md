@@ -93,6 +93,13 @@ Além das variáveis de Task, o editor oferece contexto de cliente, cobrança e 
 
 As variáveis de Task continuam disponíveis, incluindo `{{assigned.name}}` e `{{creator.name}}`.
 
+### Link do Google Drive
+
+- `{{link do drive}}` — usa o link compartilhável da pasta **Entrega final** da task, o mesmo do botão **Copiar link do Drive** nos detalhes da task.
+
+O link é resolvido somente quando a mensagem precisa dessa variável, reutilizando a integração Google Drive existente. Se ainda não existir uma pasta de entrega final compartilhável, o valor fica vazio; por isso, prefira esse token em notificações após o envio de arquivos finais. O sistema não expõe automaticamente a pasta de trabalho privada da task.
+
+
 ## Exemplos
 
 Lembrete financeiro:

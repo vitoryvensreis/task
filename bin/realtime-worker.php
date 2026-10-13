@@ -23,10 +23,11 @@ try {
         $queue = EventOutbox::stats(RealtimeOutboxWorker::DEFAULT_MAX_ATTEMPTS);
         $heartbeat = RealtimeWorkerHealth::read();
         $realtime = (new Realtime())->health();
-        $status = $heartbeat['status'] === 'ok' && $realtime['status'] === 'ok' && (int)$queue['exhausted'] === 0 ? 'ok' : 'degraded';
-        echo json(['status' => $status, 'worker' => $heartbeat, 'queue' => $queue,
+        $health = RealtimeWorkerHealth::evaluate($heartbeat, $realtime, $queue);
+        echo json(['status' => $health['status'], 'queue_status' => $health['queue_status'],
+            'queue_warning' => $health['queue_warning'], 'worker' => $heartbeat, 'queue' => $queue,
             'realtime' => ['config' => $realtime['config'], 'redis' => $realtime['redis'], 'centrifugo' => $realtime['centrifugo']]]).PHP_EOL;
-        exit($status === 'ok' ? 0 : 1);
+        exit($health['status'] === 'ok' ? 0 : 1);
     }
 
     $publisher = new CentrifugoPublisher(new Realtime());

@@ -470,3 +470,10 @@ A camada realtime do TaskEsc cobre agora o ciclo completo das tasks: criar, edit
 A Agenda usa `agenda/global` para Administradores e Equipe e reage a criação, edição, cancelamento, resolução de conflitos e mudanças vindas do Google Calendar (webhook/cron/sync manual). O navegador recebe apenas uma invalidação mínima e relê os dados pelos endpoints HTTP autorizados.
 
 O chat administrativo continua em canais pessoais `user:{id}`. O polling de 30 segundos permanece somente como fallback. Detalhes em `docs/realtime-full.md`.
+
+
+## WPPConnect — infraestrutura inicial
+
+A integração de WhatsApp do TaskEsc usa WPPConnect Server isolado em Docker. O provider fica em `127.0.0.1:21465` e o subdomínio `wppconnect.escotilhaprodutora.com` atua como reverse proxy HTTPS com suporte a Socket.IO/WebSocket.
+
+O TaskEsc nunca expõe `SECRET_KEY` ou token do WPPConnect ao navegador. A integração backend inicial oferece health/status, iniciar sessão, QR Code e envio de teste. Veja `docs/wppconnect-step1.md`.

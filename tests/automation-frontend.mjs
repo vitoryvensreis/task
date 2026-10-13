@@ -4,6 +4,7 @@ const app=fs.readFileSync(new URL('../public/assets/app.js',import.meta.url),'ut
 const css=fs.readFileSync(new URL('../public/assets/app.css',import.meta.url),'utf8');
 const icons=fs.readFileSync(new URL('../public/assets/taskesc-icons.js',import.meta.url),'utf8');
 const api=fs.readFileSync(new URL('../public/api.php',import.meta.url),'utf8');
+const automation=fs.readFileSync(new URL('../app/Automation.php',import.meta.url),'utf8');
 
 function check(condition,message){if(!condition)throw new Error(message)}
 
@@ -22,7 +23,7 @@ check(app.includes('automationTriggerOptionsMarkup')&&app.includes("group||'Outr
 check(app.includes('data-auto-config="hours_before"')&&app.includes('data-auto-config="days_before"'),'Scheduled due-soon triggers must expose configurable lead time.');
 check(app.includes("value:'assigned_user',label:'Responsável pela task'")&&app.includes("value:'creator',label:'Quem criou a task'")&&app.includes("value:'client',label:'Cliente'")&&app.includes("value:'custom',label:'Número específico'"),'WhatsApp action must expose responsible, creator, client and custom-number recipients.');
 check(app.includes('data-auto-config="recipient"')&&app.includes('data-auto-config="custom_phone"'),'WhatsApp inspector must let admins choose recipient and enter a custom phone.');
-check(app.includes("{{invoice.due_on}}")&&app.includes("{{team.name}}")&&app.includes("{{client.whatsapp}}"),'Message variable palette must include billing, team and client variables.');
+check(automation.includes("'{{invoice.due_on}}'")&&automation.includes("'{{team.name}}'")&&automation.includes("'{{client.whatsapp}}'"),'Backend catalog for the message variable palette must include billing, team and client variables.');
 check(app.includes("{{task.title}}")&&app.includes('data-auto-variable'),'WhatsApp editor must expose template variables.');
 check(app.includes("name:'Nova automação'")&&app.includes("routeUrl('automations')+'?automation=new'"),'New automation flow and deep-link state must exist.');
 check(app.includes("window.addEventListener('beforeunload'")&&app.includes('automationEditorState?.dirty'),'Unsaved automation changes must be protected.');

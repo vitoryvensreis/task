@@ -68,11 +68,30 @@ final class WppConnect
     public static function qr(): array
     {
         Auth::admin();$cfg=self::requireConfigured();
-        $response=self::request('GET','/api/'.rawurlencode($cfg['session']).'/qrcode-session',null,true);
-        $body=is_array($response['body'])?$response['body']:[];
+        $response=self::requestRaw('GET','/api/'.rawurlencode($cfg['session']).'/qrcode-session',true);
+        $contentType=strtolower((string)($response['content_type']??''));
+        if(str_starts_with($contentType,'image/png')){
+            $raw=(string)$response['raw'];
+            if($raw==='')fail('O WPPConnect retornou um QR Code vazio.',502);
+            return [
+                'session'=>$cfg['session'],
+                'status'=>'qrcode',
+                'ready'=>true,
+                'mime'=>'image/png',
+                'qrcode'=>'data:image/png;base64,'.base64_encode($raw),
+                'url_code'=>null,
+            ];
+        }
+        $body=[];
+        if(trim((string)$response['raw'])!==''){
+            try{$body=json_decode((string)$response['raw'],true,512,JSON_THROW_ON_ERROR);}
+            catch(Throwable){$body=[];}
+        }
         return [
             'session'=>$cfg['session'],
             'status'=>$body['status']??null,
+            'ready'=>!empty($body['qrcode'])||!empty($body['qrCode'])||!empty($body['urlCode'])||!empty($body['url_code']),
+            'mime'=>null,
             'qrcode'=>$body['qrcode']??$body['qrCode']??null,
             'url_code'=>$body['urlCode']??$body['url_code']??null,
             'provider'=>$body,
@@ -142,6 +161,32 @@ final class WppConnect
         $token=trim((string)($body['token']??''));
         if($token==='')throw new RuntimeException('WPPConnect não retornou token de sessão.');
         return self::$token=$token;
+    }
+
+    private static function requestRaw(string $method,string $path,bool $auth=true): array
+    {
+        $cfg=self::settings();
+        $url=$cfg['internal_url'].'/'.ltrim($path,'/');
+        $ch=curl_init($url);
+        if($ch===false)throw new RuntimeException('Não foi possível iniciar a conexão com WPPConnect.');
+        $headers=['Accept: image/png, application/json'];
+        if($auth)$headers[]='Authorization: Bearer '.self::token();
+        curl_setopt_array($ch,[
+            CURLOPT_CUSTOMREQUEST=>strtoupper($method),
+            CURLOPT_RETURNTRANSFER=>true,
+            CURLOPT_CONNECTTIMEOUT=>3,
+            CURLOPT_TIMEOUT=>15,
+            CURLOPT_FOLLOWLOCATION=>false,
+            CURLOPT_HTTPHEADER=>$headers,
+        ]);
+        $raw=curl_exec($ch);
+        $status=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);
+        $contentType=(string)curl_getinfo($ch,CURLINFO_CONTENT_TYPE);
+        $error=curl_error($ch);
+        curl_close($ch);
+        if($raw===false||$error!=='')throw new RuntimeException('Falha ao conectar ao WPPConnect.');
+        if($status<200||$status>=300)throw new AppError('WPPConnect respondeu com erro ao solicitar QR Code.',502,['provider_status'=>$status]);
+        return ['status'=>$status,'content_type'=>$contentType,'raw'=>(string)$raw];
     }
 
     private static function request(string $method,string $path,?array $payload=null,bool $auth=true,bool $allowError=false): array

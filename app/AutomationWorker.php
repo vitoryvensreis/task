@@ -67,6 +67,65 @@ final class AutomationWorker
         });
     }
 
+    public static function scheduleDueTriggers(bool $force=false): int
+    {
+        $nowTs=time();
+        if(!$force&&self::$lastScheduleScanAt>0&&($nowTs-self::$lastScheduleScanAt)<30)return 0;
+        self::$lastScheduleScanAt=$nowTs;
+        $scheduled=Automation::scheduledTriggerEvents();
+        if(!$scheduled)return 0;
+        $marks=implode(',',array_fill(0,count($scheduled),'?'));
+        $automations=DB::all("SELECT id,trigger_event,definition_json FROM automations WHERE active=1 AND trigger_event IN ($marks) ORDER BY id",$scheduled);
+        if(!$automations)return 0;
+        $created=0;$utcNow=now();$localTz=new DateTimeZone((string)config('timezone','America/Fortaleza'));
+        $localToday=(new DateTimeImmutable('now',$localTz))->format('Y-m-d');
+        foreach($automations as $automation){
+            $automationId=(int)$automation['id'];$trigger=(string)$automation['trigger_event'];
+            try{$definition=json_decode((string)$automation['definition_json'],true,64,JSON_THROW_ON_ERROR);}catch(Throwable){continue;}
+            if(!is_array($definition))continue;
+            $triggerNode=null;foreach(($definition['nodes']??[]) as $node)if(($node['type']??'')==='trigger'){$triggerNode=$node;break;}
+            $cfg=is_array($triggerNode['config']??null)?$triggerNode['config']:[];
+            if($trigger==='demand.due_soon'){
+                $hours=max(1,min(720,(int)($cfg['hours_before']??24)));
+                $until=gmdate('Y-m-d H:i:s',$nowTs+$hours*3600);
+                $rows=DB::all("SELECT d.id,d.due_at FROM demands d JOIN stages s ON s.id=d.stage_id WHERE d.deleted_at IS NULL AND d.draft=0 AND s.kind NOT IN ('completed','cancelled','archived') AND d.due_at>? AND d.due_at<=? ORDER BY d.due_at,d.id",[$utcNow,$until]);
+                foreach($rows as $row)$created+=self::createScheduledRun($automationId,$trigger,'demand',(int)$row['id'],(string)$row['due_at'],['hours_before'=>$hours]);
+            }elseif($trigger==='demand.overdue'){
+                $rows=DB::all("SELECT d.id,d.due_at FROM demands d JOIN stages s ON s.id=d.stage_id WHERE d.deleted_at IS NULL AND d.draft=0 AND s.kind NOT IN ('completed','cancelled','archived') AND d.due_at<? ORDER BY d.due_at,d.id",[$utcNow]);
+                foreach($rows as $row)$created+=self::createScheduledRun($automationId,$trigger,'demand',(int)$row['id'],(string)$row['due_at'],[]);
+            }elseif($trigger==='invoice.due_soon'){
+                $days=max(1,min(60,(int)($cfg['days_before']??3)));
+                $until=(new DateTimeImmutable($localToday,$localTz))->modify('+'.$days.' days')->format('Y-m-d');
+                $rows=DB::all("SELECT i.id,i.due_on FROM invoices i WHERE i.deleted_at IS NULL AND i.status<>'cancelled' AND i.due_on>? AND i.due_on<=? AND COALESCE((SELECT SUM(p.amount_cents+COALESCE(p.discount_cents,0)) FROM payments p WHERE p.invoice_id=i.id),0)<i.amount_cents ORDER BY i.due_on,i.id",[$localToday,$until]);
+                foreach($rows as $row)$created+=self::createScheduledRun($automationId,$trigger,'invoice',(int)$row['id'],(string)$row['due_on'],['days_before'=>$days]);
+            }elseif($trigger==='invoice.overdue'){
+                $rows=DB::all("SELECT i.id,i.due_on FROM invoices i WHERE i.deleted_at IS NULL AND i.status<>'cancelled' AND i.due_on<? AND COALESCE((SELECT SUM(p.amount_cents+COALESCE(p.discount_cents,0)) FROM payments p WHERE p.invoice_id=i.id),0)<i.amount_cents ORDER BY i.due_on,i.id",[$localToday]);
+                foreach($rows as $row)$created+=self::createScheduledRun($automationId,$trigger,'invoice',(int)$row['id'],(string)$row['due_on'],[]);
+            }
+        }
+        return $created;
+    }
+
+    private static function createScheduledRun(int $automationId,string $trigger,string $entityType,int $entityId,string $dueValue,array $payload): int
+    {
+        $operationId=substr(hash('sha256','scheduled|'.$automationId.'|'.$trigger.'|'.$entityType.'|'.$entityId.'|'.$dueValue),0,32);
+        $context=[
+            'event'=>[
+                'type'=>$trigger,
+                'entity_type'=>$entityType,
+                'entity_id'=>$entityId,
+                'operation_id'=>$operationId,
+                'change'=>'scheduled',
+                'created_at'=>now(),
+            ],
+            'payload'=>$payload+['scheduled'=>1,'due_value'=>$dueValue],
+        ];
+        $q=DB::run("INSERT IGNORE INTO automation_runs (automation_id,operation_id,trigger_event,entity_type,entity_id,status,context_json,attempts,available_at,created_at) VALUES (?,?,?,?,?,'pending',?,0,?,?)",[
+            $automationId,$operationId,$trigger,$entityType,$entityId,json($context),now(),now()
+        ]);
+        return $q->rowCount()>0?1:0;
+    }
+
     public static function executeReady(int $limit=20): int
     {
         $rows=DB::all("SELECT id FROM automation_runs WHERE status IN ('pending','retry') AND available_at<=? AND attempts<? ORDER BY available_at,id LIMIT ".(int)$limit,[now(),self::MAX_ATTEMPTS]);

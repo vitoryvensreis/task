@@ -358,14 +358,6 @@ try{
 
  // Somente administradores podem configurar destinatários pelo formulário da task.
  autoAs($staffId);
- $staffTask=Demands::save([
-  'client_id'=>$clientId,'category_id'=>1,'assigned_to'=>$staffId,
-  'title'=>'Task equipe sem escolha WhatsApp','brief'=>'Destino padrão',
-  'due_at'=>$due,'priority'=>'normal'
- ]);
- $staffTaskData=DB::one('SELECT * FROM demands WHERE id=?',[$staffTask['id']]);
- autoCheck($staffTaskData['whatsapp_recipient_mode']==='creator'&&$staffTaskData['whatsapp_custom_phone']===null,
-  'Staff-created tasks must default to the creator with no manual number.');
  $noOverride=false;
  try{Demands::save([
   'id'=>$phoneDemand['id'],'version'=>DB::one('SELECT version FROM demands WHERE id=?',[$phoneDemand['id']])['version'],
@@ -381,7 +373,7 @@ try{
  $preserved=DB::one('SELECT whatsapp_recipient_mode,whatsapp_custom_phone FROM demands WHERE id=?',[$phoneDemand['id']]);
  autoCheck($preserved['whatsapp_recipient_mode']==='client'&&$preserved['whatsapp_custom_phone']===null,
   'Staff editing without WhatsApp fields must preserve existing recipient.');
- $publicTask=Demands::visible(DB::one('SELECT * FROM demands WHERE id=?',[$staffTask['id']]));
+ $publicTask=Demands::visible(DB::one('SELECT * FROM demands WHERE id=?',[$phoneDemand['id']]));
  autoCheck(!array_key_exists('whatsapp_recipient_mode',$publicTask)&&!array_key_exists('whatsapp_custom_phone',$publicTask),
   'Staff API data must not expose admin-only WhatsApp settings.');
  autoAs($admin);

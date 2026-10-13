@@ -38,14 +38,20 @@ try{
  $db->exec('SET FOREIGN_KEY_CHECKS=1');
  $db->exec(file_get_contents(ROOT.'/database/schema.sql'));
 
- autoCheck((int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0)===25,'Fresh schema must be 25.');
- // Reproduce an existing schema 24 and verify a safe, repeatable 24 -> 25 upgrade.
+ autoCheck((int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0)===26,'Fresh schema must be 26.');
+ // Verify 24 -> 26 schema upgrade and preservation of WhatsApp data.
+ $db->exec('ALTER TABLE demands DROP COLUMN whatsapp_custom_phone');
  $db->exec('ALTER TABLE whatsapp_messages MODIFY recipient_phone VARCHAR(20) CHARACTER SET ascii COLLATE ascii_bin NOT NULL');
  DB::run("UPDATE settings SET value='24' WHERE `key`='schema_version'");
  $upgrade=Migrations::automation();
- autoCheck($upgrade['previous']===24&&$upgrade['current']===25&&$upgrade['changed'],'Schema 24 must upgrade to 25.');
- autoCheck(!Migrations::automationIssues(),'Schema 25 must retain a valid automation structure.');
- autoCheck(Migrations::automation()['changed']===false,'Schema 25 migration must be idempotent.');
+ autoCheck($upgrade['previous']===24&&$upgrade['current']===26&&$upgrade['changed'],'Schema 24 must upgrade to 26.');
+ autoCheck(!Migrations::automationIssues(),'Schema 26 must retain a valid automation structure.');
+ autoCheck(Migrations::automation()['changed']===false,'Schema 26 migration must be idempotent.');
+ $db->exec('ALTER TABLE demands DROP COLUMN whatsapp_custom_phone');
+ DB::run("UPDATE settings SET value='25' WHERE `key`='schema_version'");
+ $upgrade25=Migrations::automation();
+ autoCheck($upgrade25['previous']===25&&$upgrade25['current']===26&&$upgrade25['changed'],'Schema 25 must upgrade to 26.');
+ autoCheck(Migrations::automationIssues()===[],'Schema 26 must validate after upgrade.');
 
  $groupRows=WppConnect::normalizeGroupsResponse(['status'=>'success','response'=>[
   ['id'=>['_serialized'=>'120363012345678901@g.us'],'name'=>'Produção Geral','participants'=>[['id'=>'private']]],
@@ -58,7 +64,7 @@ try{
  try{WppConnect::normalizeGroupId('5585999990001@c.us');}catch(AppError $e){$badGroup=$e->status===422;}
  autoCheck($badGroup,'Individual WhatsApp IDs must be rejected as groups.');
 
- autoCheck(Migrations::automationIssues()===[],'Fresh schema 25 automation structure must validate.');
+ autoCheck(Migrations::automationIssues()===[],'Fresh schema 26 automation structure must validate.');
 
  $password=password_hash('Taskesc-automation-ci!',PASSWORD_DEFAULT);
  $admin=DB::insert('users',['name'=>'Admin Automation','email'=>'admin-auto@ci.invalid','whatsapp_phone'=>'5585999990001','password_hash'=>$password,'role'=>'admin','active'=>1,'email_notifications'=>0,'created_at'=>now()]);

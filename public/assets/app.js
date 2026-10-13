@@ -1831,6 +1831,169 @@
     const next=automationEdgeFrom(node.id,'next')?.to;
     return `<div class="automation-tree-node">${automationNodeCard(node)}${automationAddControls(node.id,'next')}${next?automationRenderNode(next,nextSeen):'<div class="automation-broken">Fluxo sem destino</div>'}</div>`
   }
+
+  // Canvas livre: coordenadas pertencem ao nó, não à posição na árvore.
+  function automationEnsurePositions(){
+    const def=automationEditorState?.definition;if(!def)return;
+    const depth=new Map(),root=automationRootId(),queue=[root];depth.set(root,0);
+    for(let i=0;i<queue.length&&i<def.nodes.length*5;i++){
+      const id=queue[i],level=depth.get(id);
+      for(const e of def.edges.filter(e=>e.from===id))if(!depth.has(e.to)){depth.set(e.to,level+1);queue.push(e.to)}
+    }
+    const columns=new Map();
+    for(const n of def.nodes){const level=depth.get(n.id)??Math.max(1,depth.size);if(!columns.has(level))columns.set(level,[]);columns.get(level).push(n)}
+    for(const [level,nodes] of columns)nodes.forEach((n,i)=>{
+      if(n.position&&Number.isFinite(Number(n.position.x))&&Number.isFinite(Number(n.position.y)))return;
+      n.position={x:95+level*390,y:Math.max(75,320-(nodes.length-1)*98)+i*195};
+    });
+  }
+  function automationFlowBranches(node){return node.type==='condition'?['yes','no']:node.type==='end'?[]:['next']}
+  function automationFlowChoiceMarkup(node,branch){
+    const choices=[['action.whatsapp','Enviar WhatsApp'],['action.email','Enviar e-mail'],['action.push','Notificação push'],['action.create_task','Criar task']];
+    if(automationIsDemandTrigger())choices.unshift(['action.task','Alterar task']);
+    choices.unshift(['condition','Condição']);
+    return '<select class="automation-flow-add" data-flow-add="'+esc(node.id)+'" data-flow-branch="'+branch+'" aria-label="Adicionar saída '+branch+'"><option value="">+ Nova saída</option>'+choices.map(x=>'<option value="'+x[0]+'">'+x[1]+'</option>').join('')+'</select>';
+  }
+  function automationFlowBounds(){
+    const nodes=automationEditorState.definition.nodes;
+    return {width:Math.max(1420,...nodes.map(n=>Math.round(Number(n.position?.x)||0)+440)),height:Math.max(850,...nodes.map(n=>Math.round(Number(n.position?.y)||0)+220))};
+  }
+  function automationFlowMarkup(){
+    automationEnsurePositions();
+    const def=automationEditorState.definition,bounds=automationFlowBounds();
+    const cards=def.nodes.map(node=>{
+      const pos=node.position,tools=automationFlowBranches(node).map(branch=>
+        '<div class="automation-flow-tools-row"><span class="automation-flow-branch '+branch+'">'+(branch==='yes'?'SIM':branch==='no'?'NÃO':'SAÍDA')+'</span>'+
+        automationFlowChoiceMarkup(node,branch)+
+        '<button type="button" class="automation-flow-connect" data-flow-connect="'+esc(node.id)+'" data-flow-branch="'+branch+'" title="Conectar a um bloco existente">'+icon('link-2','↗')+'</button></div>'
+      ).join('');
+      return '<div class="automation-flow-node" data-flow-node="'+esc(node.id)+'" style="left:'+Math.round(pos.x)+'px;top:'+Math.round(pos.y)+'px">'+
+        automationNodeCard(node)+(tools?'<div class="automation-flow-tools">'+tools+'</div>':'')+'</div>';
+    }).join('');
+    const controls=def.edges.map((e,i)=>'<button type="button" class="automation-flow-edge-remove" data-flow-remove="'+i+'" title="Remover esta conexão" aria-label="Remover conexão">'+icon('x','×')+'</button>').join('');
+    return '<div class="automation-flow-stage" style="width:'+bounds.width+'px;height:'+bounds.height+'px">'+
+      '<svg class="automation-flow-lines" width="'+bounds.width+'" height="'+bounds.height+'" aria-hidden="true"><defs><marker id="automation-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#69727c"/></marker></defs></svg>'+
+      controls+cards+'</div>';
+  }
+  function automationFlowRedraw(){
+    const stage=$('.automation-flow-stage'),svg=stage?.querySelector('.automation-flow-lines');if(!svg)return;
+    const def=automationEditorState.definition,nodes=new Map(def.nodes.map(n=>[n.id,n])),bounds=automationFlowBounds();
+    stage.style.width=bounds.width+'px';stage.style.height=bounds.height+'px';svg.setAttribute('width',bounds.width);svg.setAttribute('height',bounds.height);
+    const paths=def.edges.map((edge,i)=>{
+      const a=nodes.get(edge.from),b=nodes.get(edge.to);if(!a||!b)return '';
+      const x1=Number(a.position.x)+292,y1=Number(a.position.y)+(edge.branch==='yes'?43:edge.branch==='no'?72:52);
+      const x2=Number(b.position.x),y2=Number(b.position.y)+43;
+      const bend=Math.max(66,Math.min(190,Math.abs(x2-x1)*0.43));
+      const d='M'+x1+' '+y1+' C'+(x1+bend)+' '+y1+' '+(x2-bend)+' '+y2+' '+x2+' '+y2;
+      const stroke=edge.branch==='yes'?'#87bda0':edge.branch==='no'?'#c2a076':'#69727c';
+      const control=stage.querySelector('[data-flow-remove="'+i+'"]');
+      if(control){control.style.left=((x1+x2)/2-10)+'px';control.style.top=((y1+y2)/2-11)+'px'}
+      return '<path d="'+d+'" stroke="'+stroke+'" stroke-width="1.8" fill="none" marker-end="url(#automation-arrow)"/>';
+    }).join('');
+    svg.innerHTML='<defs><marker id="automation-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#69727c"/></marker></defs>'+paths;
+  }
+  function automationFlowCanConnect(from,to){
+    if(from===to||automationNodeById(to)?.type==='trigger')return false;
+    const pending=[to],seen=new Set();
+    while(pending.length){const id=pending.pop();if(id===from)return false;if(seen.has(id))continue;seen.add(id);
+      for(const edge of automationEditorState.definition.edges)if(edge.from===id)pending.push(edge.to)}
+    return true;
+  }
+  function automationFlowLink(to){
+    const link=automationEditorState?.linkFrom;if(!link)return false;
+    automationEditorState.linkFrom=null;
+    const fromNode=automationNodeById(link.from),toNode=automationNodeById(to);
+    if(!fromNode||!toNode||!automationFlowCanConnect(link.from,to)){toast('Conexão inválida ou circular.',true);paintAutomationEditor();return true}
+    const edges=automationEditorState.definition.edges;
+    const duplicate=edges.some(e=>e.from===link.from&&e.to===to&&e.branch===link.branch);
+    if(duplicate){toast('Estes blocos já estão conectados.',true);paintAutomationEditor();return true}
+    if(fromNode.type==='condition'){
+      const edge=edges.find(e=>e.from===link.from&&e.branch===link.branch);
+      if(edge){if(!confirm('Substituir a conexão atual deste ramo?')){paintAutomationEditor();return true}edge.to=to}
+      else edges.push({from:link.from,to,branch:link.branch});
+    }else{
+      if(edges.filter(e=>e.from===link.from).length>=12){toast('Limite de 12 saídas por bloco.',true);paintAutomationEditor();return true}
+      edges.push({from:link.from,to,branch:'next'});
+    }
+    automationEditorState.selectedNodeId=to;automationMarkDirty();paintAutomationEditor();return true;
+  }
+  function automationFlowAdd(parent,branch,type){
+    const node=automationNodeById(parent);if(!node||node.type==='end')return;
+    const defs={
+      'action.whatsapp':{recipient:automationDefaultRecipient(),message:automationIsDemandTrigger()?'Olá! A task {{task.title}} foi atualizada.':'Olá {{client.name}}!'},
+      'action.task':{operation:'stage',value:String(S.meta?.stages?.[0]?.id||'')},
+      'action.email':{recipient:'client',subject:'Atualização da task {{task.title}}',message:'Olá {{client.name}}!'},
+      'action.push':{recipient:'client_users',title:'Atualização do TaskEsc',message:'Olá {{client.name}}!'},
+      'action.create_task':{client_mode:'related',category_id:Number(S.meta?.categories?.[0]?.id||0),title:'Nova demanda para {{client.name}}',brief:'Task criada automaticamente.',hours_due:24,priority:'normal'}
+    };
+    if(type!=='condition'&&!defs[type])return;
+    const edges=automationEditorState.definition.edges;
+    if(branch==='next'&&edges.filter(e=>e.from===parent).length>=12){toast('Limite de saídas atingido.',true);return}
+    const old=node.type==='condition'?edges.find(e=>e.from===parent&&e.branch===branch):null;
+    const id=automationNextId(type==='condition'?'cond':'action'),base=node.position||{x:100,y:100};
+    const siblings=edges.filter(e=>e.from===parent).length;
+    const target=old?.to||null;
+    const position={x:Math.min(19000,Math.round(base.x+395)),y:Math.min(19000,Math.max(45,Math.round(base.y+(node.type==='condition'?(branch==='yes'?-135:180):(siblings?180*siblings:0)))))};
+    const newNode={id,type,config:type==='condition'?{field:'client_id',operator:'eq',value:automationFieldOptions('client_id')[0]?.value||''}:defs[type],position};
+    automationEditorState.definition.nodes.push(newNode);
+    if(old)old.to=id;else edges.push({from:parent,to:id,branch});
+    if(type==='condition'){
+      const yesId=automationNextId('end_yes'),noId=automationNextId('end_no');
+      if(!target)automationEditorState.definition.nodes.push({id:yesId,type:'end',config:{},position:{x:position.x+375,y:Math.max(45,position.y-120)}});
+      automationEditorState.definition.nodes.push({id:noId,type:'end',config:{},position:{x:position.x+375,y:position.y+150}});
+      edges.push({from:id,to:target||yesId,branch:'yes'},{from:id,to:noId,branch:'no'});
+    }else{
+      let end=target;
+      if(!end){end=automationNextId('end');automationEditorState.definition.nodes.push({id:end,type:'end',config:{},position:{x:position.x+385,y:position.y}})}
+      edges.push({from:id,to:end,branch:'next'});
+    }
+    automationEditorState.selectedNodeId=id;automationMarkDirty();paintAutomationEditor();
+  }
+  function automationFlowRemoveEdge(index){
+    if(!confirm('Remover esta ligação entre blocos?'))return;
+    automationEditorState.definition.edges.splice(index,1);
+    automationMarkDirty();paintAutomationEditor();
+  }
+  function automationFlowWire(){
+    const stage=$('.automation-flow-stage');if(!stage)return;
+    automationFlowRedraw();
+    stage.querySelectorAll('[data-flow-add]').forEach(select=>select.onchange=()=>{if(select.value)automationFlowAdd(select.dataset.flowAdd,select.dataset.flowBranch,select.value)});
+    stage.querySelectorAll('[data-flow-connect]').forEach(button=>button.onclick=()=>{
+      automationEditorState.linkFrom={from:button.dataset.flowConnect,branch:button.dataset.flowBranch};
+      stage.querySelectorAll('.automation-flow-node').forEach(node=>node.classList.add('automation-flow-target'));
+      toast('Agora clique no card de destino para criar a conexão.');
+    });
+    stage.querySelectorAll('[data-flow-remove]').forEach(button=>button.onclick=()=>automationFlowRemoveEdge(Number(button.dataset.flowRemove)));
+    stage.querySelectorAll('.automation-flow-node').forEach(wrapper=>{
+      const card=wrapper.querySelector('.automation-node-card'),node=automationNodeById(wrapper.dataset.flowNode);
+      let dragging=null,suppress=false;
+      card.addEventListener('pointerdown',event=>{
+        if(event.button!==0||automationEditorState.linkFrom)return;
+        dragging={x:event.clientX,y:event.clientY,initialX:Number(node.position.x),initialY:Number(node.position.y),moved:false,pointer:event.pointerId};
+        card.setPointerCapture?.(event.pointerId);
+      });
+      card.addEventListener('pointermove',event=>{
+        if(!dragging||dragging.pointer!==event.pointerId)return;
+        const dx=event.clientX-dragging.x,dy=event.clientY-dragging.y;
+        if(!dragging.moved&&Math.hypot(dx,dy)<4)return;
+        dragging.moved=true;event.preventDefault();
+        node.position.x=Math.max(0,Math.min(19800,Math.round(dragging.initialX+dx)));
+        node.position.y=Math.max(0,Math.min(19800,Math.round(dragging.initialY+dy)));
+        wrapper.style.left=node.position.x+'px';wrapper.style.top=node.position.y+'px';
+        automationFlowRedraw();
+      });
+      const finish=event=>{if(!dragging||dragging.pointer!==event.pointerId)return;if(dragging.moved){suppress=true;automationMarkDirty()}dragging=null};
+      card.addEventListener('pointerup',finish);card.addEventListener('pointercancel',finish);
+      card.addEventListener('click',event=>{
+        if(suppress){suppress=false;event.preventDefault();return}
+        if(automationEditorState.linkFrom){automationFlowLink(node.id);return}
+        automationEditorState.selectedNodeId=node.id;
+        stage.querySelectorAll('.automation-node-card').forEach(x=>x.classList.toggle('selected',x.dataset.autoNode===node.id));
+        paintAutomationInspector();
+      });
+    });
+  }
+
   function automationFieldOptions(field){
     if(field==='client_id')return (S.meta?.clients||[]).map(x=>({value:String(x.id),label:x.name}));
     if(field==='project_id')return (S.meta?.projects||[]).map(x=>({value:String(x.id),label:x.name}));
@@ -1927,13 +2090,13 @@
   function paintAutomationEditor(){
     if(!automationEditorState)return;
     const root=automationRootId(),nodeCount=automationEditorState.definition.nodes.length,runCount=automationEditorState.runs?.length||0;
-    $('#content').innerHTML=`<div class="automation-editor-shell"><div class="automation-editor-top"><button type="button" class="ghost" id="automation-back">${icon('arrow-left','←')} Voltar</button><div class="automation-title-field"><span class="eyebrow">FLUXO</span><input id="automation-name" class="automation-name-input" maxlength="190" value="${esc(automationEditorState.name)}" aria-label="Nome da automação"></div><div class="automation-editor-actions"><label class="automation-active-switch"><input id="automation-active" type="checkbox" ${automationEditorState.active?'checked':''}><span></span><b>${automationEditorState.active?'Ativa':'Pausada'}</b></label><span id="automation-save-state" class="automation-save-state ${automationEditorState.dirty?'dirty':''}">${automationEditorState.dirty?'Alterações não salvas':'Tudo salvo'}</span><button type="button" class="primary" id="automation-save">${icon('save','✓')} Salvar automação</button></div></div><div class="automation-editor-meta"><span><b>${esc(automationTriggerLabel(automationEditorState.trigger_event))}</b><small>Gatilho</small></span><span><b>${nodeCount}</b><small>Blocos</small></span><span><b>${runCount}</b><small>Execuções recentes</small></span><span><b>Ações inteligentes</b><small>WhatsApp, e-mail, push e tasks</small></span></div><div class="automation-editor-layout"><section class="automation-canvas-panel"><div class="automation-canvas-head"><div><span class="eyebrow">EDITOR VISUAL</span><h3>Árvore da automação</h3><small>Clique em um bloco para configurar. Use os botões entre blocos para inserir condições e ações.</small></div><div class="automation-canvas-legend"><span><i class="dot trigger"></i>Gatilho</span><span><i class="dot condition"></i>Condição</span><span><i class="dot whatsapp"></i>WhatsApp</span></div></div><div class="automation-canvas-scroll"><div class="automation-tree">${root?automationRenderNode(root):'<div class="empty">Gatilho ausente.</div>'}</div></div></section><aside class="automation-side-panel"><section class="panel automation-inspector-card"><div id="automation-inspector"></div></section><section class="panel automation-runs-card"><div class="panel-head"><div><h3>Últimas execuções</h3><div class="panel-sub">Resultado real das automações disparadas pelo Outbox e pelos gatilhos de prazo.</div></div></div>${automationRunsMarkup()}</section></aside></div></div>`;
+    $('#content').innerHTML=`<div class="automation-editor-shell"><div class="automation-editor-top"><button type="button" class="ghost" id="automation-back">${icon('arrow-left','←')} Voltar</button><div class="automation-title-field"><span class="eyebrow">FLUXO</span><input id="automation-name" class="automation-name-input" maxlength="190" value="${esc(automationEditorState.name)}" aria-label="Nome da automação"></div><div class="automation-editor-actions"><label class="automation-active-switch"><input id="automation-active" type="checkbox" ${automationEditorState.active?'checked':''}><span></span><b>${automationEditorState.active?'Ativa':'Pausada'}</b></label><span id="automation-save-state" class="automation-save-state ${automationEditorState.dirty?'dirty':''}">${automationEditorState.dirty?'Alterações não salvas':'Tudo salvo'}</span><button type="button" class="primary" id="automation-save">${icon('save','✓')} Salvar automação</button></div></div><div class="automation-editor-meta"><span><b>${esc(automationTriggerLabel(automationEditorState.trigger_event))}</b><small>Gatilho</small></span><span><b>${nodeCount}</b><small>Blocos</small></span><span><b>${runCount}</b><small>Execuções recentes</small></span><span><b>Ações inteligentes</b><small>WhatsApp, e-mail, push e tasks</small></span></div><div class="automation-editor-layout"><section class="automation-canvas-panel"><div class="automation-canvas-head"><div><span class="eyebrow">EDITOR VISUAL</span><h3>Canvas livre da automação</h3><small>Arraste os cards para organizar. Use + Nova saída para criar ramos ou Conectar para ligar blocos existentes.</small></div><div class="automation-canvas-legend"><span><i class="dot trigger"></i>Gatilho</span><span><i class="dot condition"></i>Condição</span><span><i class="dot whatsapp"></i>WhatsApp</span></div></div><div class="automation-canvas-scroll"><div class="automation-flow-root">${root?automationFlowMarkup():'<div class="empty">Gatilho ausente.</div>'}</div></div></section><aside class="automation-side-panel"><section class="panel automation-inspector-card"><div id="automation-inspector"></div></section><section class="panel automation-runs-card"><div class="panel-head"><div><h3>Últimas execuções</h3><div class="panel-sub">Resultado real das automações disparadas pelo Outbox e pelos gatilhos de prazo.</div></div></div>${automationRunsMarkup()}</section></aside></div></div>`;
     paintIcons();
     $('#automation-back').onclick=closeAutomationEditor;
     const name=$('#automation-name');name.addEventListener('input',e=>{automationEditorState.name=e.target.value;automationMarkDirty()});
     $('#automation-active').addEventListener('change',e=>{automationEditorState.active=e.target.checked;automationMarkDirty();paintAutomationEditor()});
     $('#automation-save').onclick=saveAutomationEditor;
-    document.querySelectorAll('[data-auto-node]').forEach(btn=>btn.onclick=()=>{automationEditorState.selectedNodeId=btn.dataset.autoNode;document.querySelectorAll('[data-auto-node]').forEach(x=>x.classList.toggle('selected',x.dataset.autoNode===automationEditorState.selectedNodeId));paintAutomationInspector()});
+    automationFlowWire();
     document.querySelectorAll('[data-auto-add]').forEach(btn=>btn.onclick=()=>automationAddNode(btn.dataset.autoParent,btn.dataset.autoBranch,btn.dataset.autoAdd));
     document.querySelectorAll('[data-auto-add-select]').forEach(select=>select.onchange=()=>{if(select.value)automationAddNode(select.dataset.autoParent,select.dataset.autoBranch,select.value)});
     paintAutomationInspector()
@@ -1993,22 +2156,28 @@
     automationEditorState.definition.edges=automationEditorState.definition.edges.filter(e=>!remove.has(e.from)&&!remove.has(e.to))
   }
   function automationRemoveNode(nodeId){
-    const node=automationNodeById(nodeId);if(!node||['trigger','end'].includes(node.type))return;
-    if(!confirm(node.type==='condition'?'Remover esta condição? O ramo NÃO será descartado e o ramo SIM continuará no fluxo.':'Remover este bloco da automação?'))return;
-    const incoming=automationIncoming(nodeId)[0];if(!incoming){toast('Não foi possível localizar a entrada deste bloco.',true);return}
-    if(node.type==='condition'){
-      const yes=automationEdgeFrom(nodeId,'yes')?.to,no=automationEdgeFrom(nodeId,'no')?.to;if(!yes){toast('A condição não possui ramo SIM válido.',true);return}
-      incoming.to=yes;
-      automationEditorState.definition.edges=automationEditorState.definition.edges.filter(e=>e.from!==nodeId);
-      automationEditorState.definition.nodes=automationEditorState.definition.nodes.filter(n=>n.id!==nodeId);
-      if(no)automationPruneBranch(no)
-    }else{
-      const next=automationEdgeFrom(nodeId,'next')?.to;if(!next){toast('A ação não possui continuação válida.',true);return}
-      incoming.to=next;
-      automationEditorState.definition.edges=automationEditorState.definition.edges.filter(e=>e.from!==nodeId);
-      automationEditorState.definition.nodes=automationEditorState.definition.nodes.filter(n=>n.id!==nodeId)
+    const node=automationNodeById(nodeId);if(!node||node.type==='trigger')return;
+    if(!confirm('Remover este bloco? As ligações serão reorganizadas e ramos sem origem poderão ser removidos.'))return;
+    const edges=automationEditorState.definition.edges,parents=edges.filter(e=>e.to===nodeId);
+    const outputs=edges.filter(e=>e.from===nodeId);
+    const continuation=outputs.find(e=>e.branch==='next'||e.branch==='yes')||outputs[0]||null;
+    const replacement=continuation?.to||null;
+    automationEditorState.definition.edges=edges.filter(e=>e.to!==nodeId&&e.from!==nodeId);
+    if(replacement)for(const edge of parents){
+      const previous=automationEditorState.definition.edges;
+      const unique=!previous.some(e=>e.from===edge.from&&e.to===replacement&&e.branch===edge.branch);
+      if(unique&&automationFlowCanConnect(edge.from,replacement))previous.push({from:edge.from,to:replacement,branch:edge.branch});
     }
-    automationEditorState.selectedNodeId=incoming.from;automationMarkDirty();paintAutomationEditor()
+    automationEditorState.definition.nodes=automationEditorState.definition.nodes.filter(n=>n.id!==nodeId);
+    const reached=new Set(),queue=[automationRootId()];
+    for(let k=0;k<queue.length;k++){
+      const id=queue[k];if(reached.has(id))continue;reached.add(id);
+      automationEditorState.definition.edges.filter(e=>e.from===id).forEach(e=>queue.push(e.to));
+    }
+    automationEditorState.definition.nodes=automationEditorState.definition.nodes.filter(n=>reached.has(n.id));
+    automationEditorState.definition.edges=automationEditorState.definition.edges.filter(e=>reached.has(e.to)&&reached.has(e.from));
+    automationEditorState.selectedNodeId=parents[0]?.from||automationRootId();
+    automationMarkDirty();paintAutomationEditor()
   }
   async function saveAutomationEditor(){
     if(!automationEditorState)return;

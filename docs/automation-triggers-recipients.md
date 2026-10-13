@@ -146,3 +146,13 @@ O bloco **Enviar WhatsApp** também permite **Grupo do WhatsApp** como destinat�
 - O schema 25 amplia `whatsapp_messages.recipient_phone` para armazenar IDs de grupo sem truncamento, preservando mensagens históricas. O deploy executa a migração somente depois do backup obrigatório.
 
 A lista depende de a sessão estar conectada e de o bot participar dos grupos. Para enviar, selecione um grupo, salve o fluxo e mantenha a sessão conectada.
+
+
+## Canvas livre e múltiplas saídas (sem migração SQL)
+
+- O editor das automações deixa de depender da árvore visual vertical e passa a exibir cards posicionáveis no canvas com coordenadas `nodes[].position = {x,y}`, salvas dentro do JSON existente em `automations.definition_json`.
+- Arraste um card pelo corpo para movê-lo. As conexões acompanham o movimento; **Salvar automação** persiste as posições, inclusive após recarregar.
+- Use **+ Nova saída** em um gatilho ou ação para criar outro ramo independente. É possível ter várias conexões do tipo `next` (limite seguro de 12 por origem); em condições, apenas uma conexão `yes` e uma `no`.
+- Use **Conectar** e clique em um card de destino para ligar blocos já existentes. A linha com `×` permite remover a conexão. Conexões cíclicas ou duplicadas são recusadas.
+- Todos os ramos elegíveis do mesmo evento são executados pelo worker de automações. A execução é sequencial e idempotente por nó (não são threads paralelas). Nós compartilhados entre ramos são executados uma única vez por execução.
+- Fluxos antigos sem coordenadas recebem uma posição inicial calculada no frontend, sem mudança em seus IDs, gatilhos, mensagens ou conexões.

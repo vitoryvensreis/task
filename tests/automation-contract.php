@@ -35,6 +35,8 @@ contractCheck(str_contains($businessEvents,"'client.created'")&&str_contains($bu
 contractCheck(str_contains($catalog,"AutomationEvent::emit('client.created'")&&str_contains($catalog,"AutomationEvent::emit('client.team_member_added'"),'Client/user mutations must emit automation events inside their transactions.');
 
 contractCheck(str_contains($automation,'O fluxo não pode conter ciclos'),'Automation graph must reject cycles.');
+contractCheck(str_contains($automation,'$cleanNode')&&str_contains($automation,'position')&&str_contains($automation,'$branchCount'),'Graph validator must persist positions and allow bounded multiple outgoing edges.');
+contractCheck(str_contains($app,'automationFlowMarkup(')&&str_contains($app,'automationFlowWire('),'Free canvas editor must render positionable graph nodes.');
 contractCheck(str_contains($worker,'operation_id')&&str_contains($worker,'INSERT IGNORE INTO automation_runs'),'Worker must dedupe Outbox fanout by operation.');
 contractCheck(str_contains($worker,'whatsapp_delivery_ambiguous'),'Worker must avoid blind resend after an uncertain process interruption.');
 contractCheck(str_contains($worker,"status='retry'")&&str_contains($worker,'MAX_ATTEMPTS=4'),'Worker must use bounded retry.');

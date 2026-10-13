@@ -378,6 +378,57 @@ try{
   'Staff API data must not expose admin-only WhatsApp settings.');
  autoAs($admin);
 
+
+ // Editor livre: um gatilho pode executar dois ramos independentes.
+ $parallel=[
+  'version'=>1,
+  'nodes'=>[
+   ['id'=>'trigger','type'=>'trigger','config'=>['event'=>'demand.created'],'position'=>['x'=>90,'y'=>230]],
+   ['id'=>'push_a','type'=>'action.push','config'=>['recipient'=>'creator','title'=>'Ramo A','message'=>'Ação A'],'position'=>['x'=>490,'y'=>100]],
+   ['id'=>'push_b','type'=>'action.push','config'=>['recipient'=>'creator','title'=>'Ramo B','message'=>'Ação B'],'position'=>['x'=>490,'y'=>400]],
+   ['id'=>'end_a','type'=>'end','config'=>[],'position'=>['x'=>890,'y'=>100]],
+   ['id'=>'end_b','type'=>'end','config'=>[],'position'=>['x'=>890,'y'=>400]],
+  ],
+  'edges'=>[
+   ['from'=>'trigger','to'=>'push_a','branch'=>'next'],
+   ['from'=>'trigger','to'=>'push_b','branch'=>'next'],
+   ['from'=>'push_a','to'=>'end_a','branch'=>'next'],
+   ['from'=>'push_b','to'=>'end_b','branch'=>'next'],
+  ]
+ ];
+ $savedParallel=Automation::save(['name'=>'Ramos paralelos','trigger_event'=>'demand.created','definition'=>$parallel,'active'=>1]);
+ $parallelRead=Automation::get(['id'=>$savedParallel['id']]);
+ $savedPosition=array_values(array_filter($parallelRead['definition']['nodes'],fn($n)=>$n['id']==='push_b'))[0]['position']??[];
+ autoCheck(($savedPosition['x']??null)===490&&($savedPosition['y']??null)===400,'Free canvas card position must survive save/reload.');
+ autoCheck(count($parallelRead['definition']['edges'])===4,'Parallel outgoing edges must survive serialization.');
+ $parallelTask=Demands::save([
+  'client_id'=>$clientId,'category_id'=>1,'assigned_to'=>$staffId,
+  'title'=>'Evento com dois caminhos','brief'=>'Teste de paralelismo',
+  'due_at'=>$due,'priority'=>'normal'
+ ]);
+ AutomationWorker::tick(250,120);
+ $runParallel=DB::one('SELECT id,status FROM automation_runs WHERE automation_id=? AND entity_id=? ORDER BY id DESC LIMIT 1',[$savedParallel['id'],$parallelTask['id']]);
+ autoCheck($runParallel&&$runParallel['status']==='success','Parallel automation must execute successfully.');
+ foreach(['push_a','push_b'] as $nodeId){
+  $step=DB::one('SELECT status FROM automation_run_steps WHERE run_id=? AND node_id=?',[$runParallel['id'],$nodeId]);
+  autoCheck($step&&$step['status']==='success','Each outgoing branch must execute once: '.$nodeId);
+  autoCheck((int)(DB::one('SELECT COUNT(*) n FROM notifications WHERE dedupe_key=?',['auto-push:'.$runParallel['id'].':'.$nodeId.':'.$admin])['n']??0)===1,
+   'Each parallel branch must send exactly one notification.');
+ }
+ AutomationWorker::executeRun((int)$runParallel['id']);
+ autoCheck((int)(DB::one('SELECT COUNT(*) n FROM notifications WHERE dedupe_key LIKE ?',['auto-push:'.$runParallel['id'].':%'])['n']??0)===2,'Parallel branches must not duplicate after rerun.');
+
+ $cyclic=$parallel;
+ $cyclic['edges'][]=['from'=>'push_a','to'=>'trigger','branch'=>'next'];
+ $rejectedCycle=false;
+ try{Automation::validateDefinition($cyclic,'demand.created');}catch(AppError $e){$rejectedCycle=$e->status===422;}
+ autoCheck($rejectedCycle,'Cycles must remain invalid in free canvas.');
+ $duplicateEdge=$parallel;
+ $duplicateEdge['edges'][]=$duplicateEdge['edges'][0];
+ $rejectedDuplicate=false;
+ try{Automation::validateDefinition($duplicateEdge,'demand.created');}catch(AppError $e){$rejectedDuplicate=$e->status===422;}
+ autoCheck($rejectedDuplicate,'Duplicate edges must be rejected.');
+
  $health=AutomationWorker::health(90);
  autoCheck($health['status']==='ok','Automation worker heartbeat/schema health must be OK after tick.');
 

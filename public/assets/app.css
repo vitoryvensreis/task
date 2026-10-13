@@ -2103,6 +2103,35 @@ button.compact-row{cursor:pointer}.compact-row:hover{border-color:#3a4854}.compa
 .automation-branch.no .automation-branch-label span{color:#d3a3a3}
 .automation-broken{padding:10px 12px;border:1px dashed #523030;border-radius:8px;background:#1b1010;color:#ce9797;font-size:9px}
 
+
+/* Canvas livre para fluxos DAG, compatível com os estilos anteriores da árvore. */
+.automation-flow-root{min-width:100%;width:max-content;min-height:100%}
+.automation-flow-stage{position:relative;min-width:100%;isolation:isolate}
+.automation-flow-lines{position:absolute;left:0;top:0;z-index:0;pointer-events:none;overflow:visible}
+.automation-flow-node{position:absolute;z-index:2;width:292px;touch-action:none}
+.automation-flow-node .automation-node-card{width:292px;min-height:86px;cursor:grab;touch-action:none;user-select:none}
+.automation-flow-node .automation-node-card:active{cursor:grabbing}
+.automation-flow-node.automation-flow-target .automation-node-card{border-color:#506d85}
+.automation-flow-tools{display:grid;gap:5px;margin-top:5px;padding:5px 7px;border:1px solid #262c32;border-radius:9px;background:rgba(11,14,17,.96)}
+.automation-flow-tools-row{display:flex;align-items:center;gap:6px;min-height:29px}
+.automation-flow-branch{flex:0 0 39px;font-size:8px;letter-spacing:.35px;font-weight:800;color:#8998a5}
+.automation-flow-branch.yes{color:#9bcbb0}
+.automation-flow-branch.no{color:#d6b58d}
+.automation-flow-add{flex:1;min-width:0;height:26px;padding:0 7px;border:1px solid #303c45;border-radius:6px;background:#12181b;color:#a4b5be;font-size:10px;cursor:pointer}
+.automation-flow-add:focus{outline:1px solid #7799b5}
+.automation-flow-connect{display:grid;place-items:center;min-width:27px;height:26px;padding:0 4px;border:1px solid #394550;border-radius:6px;background:#111b21;color:#a3c2d5;cursor:crosshair}
+.automation-flow-connect:hover{background:#1c2c36;color:#fff}
+.automation-flow-connect .ui-icon{width:13px;height:13px}
+.automation-flow-edge-remove{position:absolute;z-index:1;display:grid;place-items:center;width:20px;height:20px;padding:2px;border:1px solid #363f48;border-radius:50%;background:#131b21;color:#b5bbc2;opacity:.65;cursor:pointer;transition:opacity .14s,background .14s}
+.automation-flow-edge-remove:hover{z-index:3;opacity:1;background:#422024;color:#f4b6b6}
+.automation-flow-edge-remove .ui-icon{width:11px;height:11px}
+.automation-flow-node .automation-node-chevron{pointer-events:none}
+@media (pointer:coarse){
+  .automation-flow-connect{min-width:34px;height:33px}
+  .automation-flow-add{height:33px}
+  .automation-flow-edge-remove{width:26px;height:26px;opacity:1}
+}
+
 .automation-side-panel{position:sticky;top:calc(var(--topbar) + 74px);display:grid;gap:10px}
 .automation-inspector-card,.automation-runs-card{padding:13px}
 .automation-inspector-head{display:flex;align-items:center;gap:10px;margin-bottom:13px;padding-bottom:12px;border-bottom:1px solid #222}

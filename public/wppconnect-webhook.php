@@ -13,7 +13,7 @@ if(($_SERVER['REQUEST_METHOD']??'GET')!=='POST'){
 }
 
 $length=(int)($_SERVER['CONTENT_LENGTH']??0);
-if($length<1||$length>1048576){
+if($length>1048576){
     http_response_code(413);
     echo json(['ok'=>false,'error'=>'invalid_payload_size']);
     exit;
@@ -30,6 +30,11 @@ $raw=file_get_contents('php://input');
 if($raw===false||trim($raw)===''){
     http_response_code(400);
     echo json(['ok'=>false,'error'=>'empty_payload']);
+    exit;
+}
+if(strlen($raw)>1048576){
+    http_response_code(413);
+    echo json(['ok'=>false,'error'=>'invalid_payload_size']);
     exit;
 }
 

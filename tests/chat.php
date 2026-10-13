@@ -40,12 +40,12 @@ try{
  $db->exec('SET FOREIGN_KEY_CHECKS=1');
  $db->exec(file_get_contents(ROOT.'/database/schema.sql'));
 
- chatCheck((string)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??'')==='25','Fresh schema must be 25.');
- chatCheck(!Migrations::chatIssues(),'Fresh schema 25 must retain a valid chat/task-reference structure.');
+ chatCheck((string)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??'')==='26','Fresh schema must be 26.');
+ chatCheck(!Migrations::chatIssues(),'Fresh schema 26 must retain a valid chat/task-reference structure.');
  $workerSource=file_get_contents(ROOT.'/bin/realtime-worker.php');
  chatCheck(is_string($workerSource)&&str_contains($workerSource,'Migrations::OUTBOX_VERSION')&&str_contains($workerSource,'Migrations::CURRENT_VERSION'),'Realtime worker must accept the current migrated schema range.');
  $outboxMigratorSource=file_get_contents(ROOT.'/bin/migrate-outbox.php');
- chatCheck(is_string($outboxMigratorSource)&&str_contains($outboxMigratorSource,'(19|21|22|23|24|25)'),'Outbox deploy migrator must accept a validated backup from current schema 24.');
+ chatCheck(is_string($outboxMigratorSource)&&str_contains($outboxMigratorSource,'(19|21|22|23|24|25|26)'),'Outbox deploy migrator must accept a validated backup from schema 26.');
 
  // Simulate a production schema 22 and prove the scoped migration is safe/idempotent.
  $db->exec('DROP TABLE chat_message_tasks');

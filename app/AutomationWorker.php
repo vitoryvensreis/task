@@ -239,7 +239,7 @@ final class AutomationWorker
             $output=match($node['type']){
                 'trigger'=>['event'=>(string)$run['trigger_event']],
                 'condition'=>['result'=>self::condition($node['config'],$eventContext,$demand)],
-                'action.whatsapp'=>self::whatsapp($run,$node,$demand),
+                'action.whatsapp'=>self::whatsapp($run,$node,$eventContext,$demand),
                 'end'=>['ended'=>true],
                 default=>throw new AutomationPermanentException('node_type_unsupported'),
             };
@@ -267,12 +267,12 @@ final class AutomationWorker
         };
     }
 
-    private static function whatsapp(array $run,array $node,array $demand): array
+    private static function whatsapp(array $run,array $node,array $eventContext,array $subject): array
     {
-        if(!empty($demand['draft']))return ['skipped'=>true,'reason'=>'task_draft'];
-        $recipient=self::recipient($demand);
+        if(($subject['entity_type']??'')==='demand'&&!empty($subject['draft']))return ['skipped'=>true,'reason'=>'task_draft'];
+        $recipient=self::recipient($node,$subject);
         if($recipient===null)return ['skipped'=>true,'reason'=>'task_recipient_none'];
-        $message=self::renderTemplate((string)$node['config']['message'],$demand);
+        $message=self::renderTemplate((string)$node['config']['message'],$subject,$eventContext);
         if(trim($message)==='')throw new AutomationPermanentException('whatsapp_message_empty');
         $existing=DB::one('SELECT * FROM whatsapp_messages WHERE run_id=? AND node_id=?',[(int)$run['id'],(string)$node['id']]);
         if($existing&&$existing['status']==='sent')return ['sent'=>true,'message_id'=>$existing['provider_message_id']??null];
@@ -280,8 +280,9 @@ final class AutomationWorker
         if($existing){
             $messageId=(int)$existing['id'];DB::update('whatsapp_messages',$messageId,['status'=>'sending','attempts'=>(int)$existing['attempts']+1,'last_error'=>null]);
         }else{
+            $demandId=(int)($subject['demand_id']??0);
             $messageId=DB::insert('whatsapp_messages',[
-                'run_id'=>(int)$run['id'],'demand_id'=>(int)$demand['id'],'node_id'=>(string)$node['id'],
+                'run_id'=>(int)$run['id'],'demand_id'=>$demandId>0?$demandId:null,'node_id'=>(string)$node['id'],
                 'recipient_type'=>$recipient['type'],'recipient_user_id'=>$recipient['user_id'],'recipient_client_id'=>$recipient['client_id'],
                 'recipient_phone'=>$recipient['phone'],'body'=>$message,'status'=>'sending','attempts'=>1,'created_at'=>now()
             ]);
@@ -296,52 +297,101 @@ final class AutomationWorker
         }
     }
 
-    private static function recipient(array $demand): ?array
+    private static function recipient(array $node,array $subject): ?array
     {
-        $mode=(string)($demand['whatsapp_recipient_mode']??'none');
-        if($mode==='assigned_user')$mode='creator'; // compatibilidade com tasks salvas antes desta correção
+        $mode=(string)($node['config']['recipient']??'task');
+        if($mode==='task'){
+            if(($subject['entity_type']??'')!=='demand')throw new AutomationPermanentException('task_recipient_unavailable');
+            $mode=(string)($subject['whatsapp_recipient_mode']??'none');
+            if($mode==='assigned_user')$mode='creator'; // compatibilidade com tasks salvas antes da correção
+        }
         if($mode==='none')return null;
+        if($mode==='custom'){
+            try{$phone=WppConnect::normalizePhone((string)($node['config']['custom_phone']??''));}
+            catch(Throwable){throw new AutomationPermanentException('custom_whatsapp_invalid');}
+            return ['type'=>'custom','user_id'=>null,'client_id'=>null,'phone'=>$phone];
+        }
+        if($mode==='assigned_user'){
+            $userId=(int)($subject['assigned_to']??0);if($userId<1)throw new AutomationPermanentException('assigned_user_missing');
+            $row=DB::one('SELECT id,name,whatsapp_phone FROM users WHERE id=? AND active=1',[$userId]);
+            if(!$row||empty($row['whatsapp_phone']))throw new AutomationPermanentException('assigned_user_whatsapp_missing');
+            return ['type'=>'assigned_user','user_id'=>$userId,'client_id'=>null,'phone'=>WppConnect::normalizePhone((string)$row['whatsapp_phone'])];
+        }
         if($mode==='creator'){
-            $userId=(int)($demand['created_by']??0);if($userId<1)throw new AutomationPermanentException('creator_missing');
+            $userId=(int)($subject['created_by']??0);if($userId<1)throw new AutomationPermanentException('creator_missing');
             $row=DB::one('SELECT id,name,whatsapp_phone FROM users WHERE id=? AND active=1',[$userId]);
             if(!$row||empty($row['whatsapp_phone']))throw new AutomationPermanentException('creator_whatsapp_missing');
             return ['type'=>'creator','user_id'=>$userId,'client_id'=>null,'phone'=>WppConnect::normalizePhone((string)$row['whatsapp_phone'])];
         }
         if($mode==='client'){
-            $clientId=(int)($demand['client_id']??0);$row=DB::one('SELECT id,name,whatsapp_phone FROM clients WHERE id=? AND active=1',[$clientId]);
+            $clientId=(int)($subject['client_id']??0);if($clientId<1)throw new AutomationPermanentException('client_missing');
+            $row=DB::one('SELECT id,name,whatsapp_phone FROM clients WHERE id=? AND active=1',[$clientId]);
             if(!$row||empty($row['whatsapp_phone']))throw new AutomationPermanentException('client_whatsapp_missing');
             return ['type'=>'client','user_id'=>null,'client_id'=>$clientId,'phone'=>WppConnect::normalizePhone((string)$row['whatsapp_phone'])];
         }
-        throw new AutomationPermanentException('task_recipient_invalid');
+        throw new AutomationPermanentException('whatsapp_recipient_invalid');
     }
 
-    public static function renderTemplate(string $template,array $demand): string
+    public static function renderTemplate(string $template,array $subject,array $eventContext=[]): string
     {
+        $entityType=(string)($subject['entity_type']??'demand');
+        $demandId=(int)($subject['demand_id']??($entityType==='demand'?($subject['id']??0):0));
+        $taskTitle=(string)($subject['task_title']??($entityType==='demand'?($subject['title']??''):''));
+        $invoiceAmount=(int)($subject['invoice_amount_cents']??($entityType==='invoice'?($subject['amount_cents']??0):0));
         $vars=[
-            '{{task.id}}'=>(string)($demand['id']??''),
-            '{{task.title}}'=>(string)($demand['title']??''),
-            '{{task.due_at}}'=>(string)($demand['due_at']??''),
-            '{{task.priority}}'=>(string)($demand['priority']??''),
-            '{{task.url}}'=>base('kanban/task/'.(int)($demand['id']??0)),
-            '{{client.name}}'=>(string)($demand['client_name']??''),
-            '{{assigned.name}}'=>(string)($demand['assigned_name']??''),
-            '{{creator.name}}'=>(string)($demand['creator_name']??''),
-            '{{stage.name}}'=>(string)($demand['stage_name']??''),
+            '{{task.id}}'=>$demandId>0?(string)$demandId:'',
+            '{{task.title}}'=>$taskTitle,
+            '{{task.due_at}}'=>(string)($subject['task_due_at']??($entityType==='demand'?($subject['due_at']??'') : '')),
+            '{{task.priority}}'=>(string)($subject['task_priority']??($entityType==='demand'?($subject['priority']??'') : '')),
+            '{{task.url}}'=>$demandId>0?base('kanban/task/'.$demandId):'',
+            '{{client.id}}'=>(string)($subject['client_id']??''),
+            '{{client.name}}'=>(string)($subject['client_name']??''),
+            '{{client.email}}'=>(string)($subject['client_email']??''),
+            '{{client.whatsapp}}'=>(string)($subject['client_whatsapp']??''),
+            '{{assigned.name}}'=>(string)($subject['assigned_name']??''),
+            '{{creator.name}}'=>(string)($subject['creator_name']??''),
+            '{{stage.name}}'=>(string)($subject['stage_name']??''),
+            '{{invoice.id}}'=>(string)($subject['invoice_id']??''),
+            '{{invoice.description}}'=>(string)($subject['invoice_description']??''),
+            '{{invoice.due_on}}'=>(string)($subject['invoice_due_on']??''),
+            '{{invoice.amount}}'=>$invoiceAmount>0?'R$ '.number_format($invoiceAmount/100,2,',','.'):'',
+            '{{invoice.status}}'=>(string)($subject['invoice_status']??''),
+            '{{team.name}}'=>(string)($subject['team_name']??''),
+            '{{team.email}}'=>(string)($subject['team_email']??''),
         ];
         return mb_substr(strtr($template,$vars),0,4000);
     }
 
-    private static function demandContext(int $id): array
+    private static function subjectContext(string $entityType,int $id,array $eventContext=[]): array
     {
-        $row=DB::one("SELECT d.*,c.name client_name,u.name assigned_name,creator.name creator_name,s.name stage_name FROM demands d JOIN clients c ON c.id=d.client_id JOIN stages s ON s.id=d.stage_id LEFT JOIN users u ON u.id=d.assigned_to LEFT JOIN users creator ON creator.id=d.created_by WHERE d.id=?",[$id]);
-        if(!$row)throw new AutomationPermanentException('demand_missing');
-        if(($row['whatsapp_recipient_mode']??'')==='assigned_user')$row['whatsapp_recipient_mode']='creator';
-        return $row;
+        if($entityType==='demand'){
+            $row=DB::one("SELECT d.*,d.id demand_id,d.title task_title,d.due_at task_due_at,d.priority task_priority,c.id client_id,c.name client_name,c.email client_email,c.whatsapp_phone client_whatsapp,u.name assigned_name,creator.name creator_name,s.name stage_name FROM demands d JOIN clients c ON c.id=d.client_id JOIN stages s ON s.id=d.stage_id LEFT JOIN users u ON u.id=d.assigned_to LEFT JOIN users creator ON creator.id=d.created_by WHERE d.id=?",[$id]);
+            if(!$row)throw new AutomationPermanentException('demand_missing');
+            if(($row['whatsapp_recipient_mode']??'')==='assigned_user')$row['whatsapp_recipient_mode']='creator';
+            $row['entity_type']='demand';return $row;
+        }
+        if($entityType==='client'){
+            $row=DB::one("SELECT c.*,c.id client_id,c.name client_name,c.email client_email,c.whatsapp_phone client_whatsapp,c.commercial_type commercial_type FROM clients c WHERE c.id=?",[$id]);
+            if(!$row)throw new AutomationPermanentException('client_missing');
+            $row['entity_type']='client';
+            $teamId=(int)($eventContext['payload']['user_id']??0);
+            if($teamId>0){
+                $team=DB::one('SELECT id,name,email,role,whatsapp_phone FROM users WHERE id=?',[$teamId]);
+                if($team){$row['team_user_id']=(int)$team['id'];$row['team_name']=$team['name'];$row['team_email']=$team['email'];$row['team_user_role']=$team['role'];$row['team_whatsapp']=$team['whatsapp_phone'];}
+            }
+            return $row;
+        }
+        if($entityType==='invoice'){
+            $row=DB::one("SELECT i.*,i.id invoice_id,i.description invoice_description,i.due_on invoice_due_on,i.amount_cents invoice_amount_cents,i.status invoice_status,c.id client_id,c.name client_name,c.email client_email,c.whatsapp_phone client_whatsapp,c.commercial_type commercial_type,d.id demand_id,d.title task_title,d.due_at task_due_at,d.priority task_priority,d.assigned_to,d.created_by,u.name assigned_name,creator.name creator_name,s.name stage_name FROM invoices i JOIN clients c ON c.id=i.client_id LEFT JOIN demands d ON d.id=i.demand_id LEFT JOIN users u ON u.id=d.assigned_to LEFT JOIN users creator ON creator.id=d.created_by LEFT JOIN stages s ON s.id=d.stage_id WHERE i.id=?",[$id]);
+            if(!$row)throw new AutomationPermanentException('invoice_missing');
+            $row['entity_type']='invoice';return $row;
+        }
+        throw new AutomationPermanentException('automation_entity_unsupported');
     }
 
     private static function safeTriggerPayload(array $payload): array
     {
-        $allowed=['operation_id','change','previous_project_id','previous_stage_id','comment_id','checklist_id','time_entry_id','change_request_id','file_id','version_no','approval','decision','internal','shared'];
+        $allowed=['operation_id','change','previous_project_id','previous_stage_id','comment_id','checklist_id','time_entry_id','change_request_id','file_id','version_no','approval','decision','internal','shared','client_id','user_id','role','scheduled','due_value','hours_before','days_before'];
         $safe=[];foreach($allowed as $key)if(array_key_exists($key,$payload)&&(is_scalar($payload[$key])||$payload[$key]===null))$safe[$key]=$payload[$key];
         return $safe;
     }

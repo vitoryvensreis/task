@@ -35,6 +35,7 @@ require ROOT.'/app/EventOutbox.php';
 require ROOT.'/app/Realtime.php';
 require ROOT.'/app/CentrifugoPublisher.php';
 require ROOT.'/app/RealtimeOutboxWorker.php';
+require ROOT.'/app/RealtimeWorkerHealth.php';
 function checkWorker(bool $condition,string $message): void {if(!$condition)throw new RuntimeException($message);}
 function makeEvent(string $key,string $channel='diagnostic'): int {
     return EventOutbox::transaction(fn()=>EventOutbox::enqueue($key,'realtime.test','system',1,$channel,['value'=>'ci']));

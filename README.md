@@ -548,3 +548,7 @@ Em **Automações → Enviar WhatsApp → Destinatário**, selecione **Grupo do 
 ### WhatsApp: número específico por task (schema 26)
 
 Em **Criar/Editar task → Disparos de WhatsApp**, selecione **Número específico**, informe DDI + DDD + número e salve. O campo `demands.whatsapp_custom_phone` guarda apenas os dígitos normalizados. Os blocos de automação com destinatário **Usar seleção da própria task** passam a usar esse telefone. A seleção não altera blocos que escolheram outro destinatário explicitamente. Somente usuários da equipe podem escolher um número manual; usuários clientes não veem o número salvo. A migração de 25 para 26 adiciona apenas essa coluna nullable e preserva as demais tasks.
+
+### Disparos de WhatsApp por task: acesso e padrão
+
+Somente o perfil **ADM** vê e pode editar os controles de WhatsApp na criação/edição de tasks. A configuração é opcional; em novas tasks criadas por qualquer perfil (inclusive via automação), o destino padrão é **Quem criou a task**. O telefone só é obrigatório ao escolher explicitamente **Número específico**. Contas de equipe e clientes não recebem o campo na API e não podem alterá-lo via `demands.save`; edições nesses perfis preservam a preferência anterior. Tasks antigas mantêm sua seleção já salva. Sem migração: schema 26 preservado.

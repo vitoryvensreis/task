@@ -17,8 +17,9 @@ $unit=file_get_contents(ROOT.'/ops/taskesc-automation-worker.service');
 $installer=file_get_contents(ROOT.'/ops/automation-worker.py');
 $wpp=file_get_contents(ROOT.'/app/WppConnect.php');
 $app=file_get_contents(ROOT.'/public/assets/app.js');
+$demand=file_get_contents(ROOT.'/app/Demands.php');
 
-foreach([$schema,$migration,$migrations,$automation,$worker,$businessEvents,$actions,$catalog,$cli,$unit,$installer,$wpp,$app] as $source)contractCheck(is_string($source)&&$source!=='','Automation contract file missing.');
+foreach([$schema,$migration,$migrations,$automation,$worker,$businessEvents,$actions,$catalog,$cli,$unit,$installer,$wpp,$app,$demand] as $source)contractCheck(is_string($source)&&$source!=='','Automation contract file missing.');
 
 contractCheck(str_contains($schema,"('schema_version','26')"),'Fresh schema must be marked 26.');
 foreach(['automations','automation_runs','automation_run_steps','automation_worker_state','whatsapp_messages'] as $table)contractCheck(str_contains($schema,'CREATE TABLE '.$table),'Fresh schema missing '.$table);
@@ -47,6 +48,8 @@ contractCheck(str_contains($unit,'TaskEsc Automation Worker')&&str_contains($uni
 contractCheck(str_contains($installer,"SERVICE='taskesc-automation-worker.service'")&&str_contains($installer,'--health'),'Automation worker installer/health missing.');
 contractCheck(str_contains($app,'name="whatsapp_recipient_mode"')&&substr_count($app,'name="whatsapp_phone"')>=2,'Automation WhatsApp UI fields missing.');
 contractCheck(str_contains($app,'name="whatsapp_custom_phone"')&&str_contains($app,'Número específico'),'Task form must expose custom phone destination.');
+contractCheck(str_contains($app,'${admin?`<div class="field"><label>Disparos de WhatsApp</label>'),'Task WhatsApp fields must be admin-only.');
+contractCheck(str_contains($demand,"if(\$role==='admin')")&&str_contains($demand,'Somente administradores podem configurar disparos de WhatsApp.'),'Server must protect WhatsApp options from other roles.');
 contractCheck(str_contains($schema,'whatsapp_custom_phone VARCHAR(20) NULL'),'Schema must store task-specific WhatsApp numbers.');
 contractCheck(str_contains($worker,'task_whatsapp_number_invalid'),'Worker must resolve task-specific numbers.');
 

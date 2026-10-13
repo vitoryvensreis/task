@@ -45,7 +45,8 @@ jobs:
           set -e
           php tests/realtime.php
           php tests/wppconnect-contract.php
-          python3 -m py_compile ops/realtime-step1.py ops/realtime-step3.py ops/realtime-step4.py
+          php tests/automation-contract.php
+          python3 -m py_compile ops/realtime-step1.py ops/realtime-step3.py ops/realtime-step4.py ops/automation-worker.py
           python3 tests/realtime-ops.py
           rm -rf ops/__pycache__
 
@@ -149,6 +150,7 @@ jobs:
           php tests/realtime-business-events.php
           php tests/realtime-domain.php
           php tests/wppconnect-realtime.php
+          php tests/automation-core.php
           php tests/chat.php
 
   deploy:
@@ -398,7 +400,7 @@ jobs:
           scp -P "$VPS_PORT"             public/assets/vendor/centrifuge-5.7.4.js             public/assets/vendor/centrifuge-5.7.4.sha256             public/assets/vendor/centrifuge-js.LICENSE             "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/public/assets/vendor/"
           ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "cd '$DEPLOY_PATH/public/assets/vendor' && sha256sum -c centrifuge-5.7.4.sha256 && test -s centrifuge-js.LICENSE"
 
-      - name: Aplicar migrações realtime e chat com backup validado
+      - name: Aplicar migrações realtime, chat e automações com backup validado
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_PORT: ${{ secrets.VPS_PORT }}
@@ -413,6 +415,7 @@ jobs:
             cd "$DEPLOY_PATH"
             php bin/migrate-outbox.php "--backup-manifest=$BACKUP_MANIFEST"
             php bin/migrate-chat.php "--backup-manifest=$BACKUP_MANIFEST"
+            php bin/migrate-automation.php "--backup-manifest=$BACKUP_MANIFEST"
           REMOTE
 
       - name: Auditoria de integridade sem alterações de dados
@@ -428,9 +431,9 @@ jobs:
             set -euo pipefail
             cd "$DEPLOY_PATH"
             umask 077
-            AUDIT_FILE="$DEPLOY_PATH/storage/backups/taskesc-schema23-audit-$(date -u +%Y%m%dT%H%M%SZ).json"
+            AUDIT_FILE="$DEPLOY_PATH/storage/backups/taskesc-schema24-audit-$(date -u +%Y%m%dT%H%M%SZ).json"
             AUDIT_EXIT=0
-            php bin/system-audit.php --strict --offline --expect-schema=23 > "$AUDIT_FILE" || AUDIT_EXIT=$?
+            php bin/system-audit.php --strict --offline --expect-schema=24 > "$AUDIT_FILE" || AUDIT_EXIT=$?
             php -r '
               $r=json_decode(file_get_contents($argv[1]),true,512,JSON_THROW_ON_ERROR);
               echo json_encode(["audit"=>["ok"=>$r["ok"],"schema"=>$r["schema"],"critical_count"=>count($r["critical"]),"warning_count"=>count($r["warnings"]),"warning_keys"=>array_column($r["warnings"],"key"),"cleanup_saas"=>$r["cleanup_saas"],"offline"=>$r["offline"]]],JSON_UNESCAPED_SLASHES).PHP_EOL;
@@ -453,6 +456,24 @@ jobs:
               python3 "$DEPLOY_PATH/ops/realtime-step3.py" install --deploy-path "$DEPLOY_PATH"
             else
               sudo -n python3 "$DEPLOY_PATH/ops/realtime-step3.py" install --deploy-path "$DEPLOY_PATH"
+            fi
+          REMOTE
+
+      - name: Instalar worker de automações
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          printf -v REMOTE_COMMAND 'DEPLOY_PATH=%q bash -s' "$DEPLOY_PATH"
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "$REMOTE_COMMAND" <<'REMOTE'
+            set -euo pipefail
+            if [ "$(id -u)" -eq 0 ]; then
+              python3 "$DEPLOY_PATH/ops/automation-worker.py" install --deploy-path "$DEPLOY_PATH"
+            else
+              sudo -n python3 "$DEPLOY_PATH/ops/automation-worker.py" install --deploy-path "$DEPLOY_PATH"
             fi
           REMOTE
 
@@ -489,6 +510,24 @@ jobs:
               python3 "$DEPLOY_PATH/ops/realtime-step3.py" check --deploy-path "$DEPLOY_PATH"
             else
               sudo -n python3 "$DEPLOY_PATH/ops/realtime-step3.py" check --deploy-path "$DEPLOY_PATH"
+            fi
+          REMOTE
+
+      - name: Health do worker de automações
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          printf -v REMOTE_COMMAND 'DEPLOY_PATH=%q bash -s' "$DEPLOY_PATH"
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "$REMOTE_COMMAND" <<'REMOTE'
+            set -euo pipefail
+            if [ "$(id -u)" -eq 0 ]; then
+              python3 "$DEPLOY_PATH/ops/automation-worker.py" check --deploy-path "$DEPLOY_PATH"
+            else
+              sudo -n python3 "$DEPLOY_PATH/ops/automation-worker.py" check --deploy-path "$DEPLOY_PATH"
             fi
           REMOTE
 

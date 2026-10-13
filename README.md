@@ -484,3 +484,12 @@ O TaskEsc nunca expõe `SECRET_KEY` ou token do WPPConnect ao navegador. A integ
 O WPPConnect agora possui integração administrativa dentro de **Configurações → WhatsApp**. O TaskEsc registra um webhook HTTPS assinado, converte eventos de sessão em `wpp.changed` no Outbox e publica somente para `wpp/global`, canal exclusivo de Administradores.
 
 O QR bruto e credenciais do provider não trafegam pelo Centrifugo. O painel busca QR/status pelos endpoints autenticados do TaskEsc e recebe invalidações instantâneas via WebSocket. Consulte `docs/wppconnect-step2.md`.
+
+
+## Automações — núcleo executável (schema 24)
+
+O TaskEsc possui agora a fundação do motor de automações baseada nos eventos transacionais já emitidos pelo Outbox. Usuários e clientes possuem número de WhatsApp; cada Task define se os disparos relacionados usam o responsável, o cliente ou ninguém.
+
+As automações são armazenadas como grafos validados, com gatilho, condições, ramificações e ação WhatsApp. Um worker systemd dedicado consome eventos novos, deduplica o fanout pelo `operation_id`, registra cada execução/etapa e aplica retry limitado sem bloquear as requisições do sistema. Consulte `docs/automation-step3.md`.
+
+O editor visual em árvore será construído por cima dessa estrutura no próximo passo.

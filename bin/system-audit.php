@@ -26,8 +26,8 @@ try{
  $schema=setting('schema_version','unknown');
  $info[]=['key'=>'schema','message'=>'Schema atual: '.$schema,'meta'=>$schema];
 
- if(!in_array($expectedSchema,['19','21','22','23'],true)||$schema!==$expectedSchema)$add($critical,'schema_mismatch','Schema diferente da versão esperada.',['actual'=>$schema,'expected'=>$expectedSchema]);
- if(in_array($schema,['21','22','23'],true)){
+ if(!in_array($expectedSchema,['19','21','22','23','24'],true)||$schema!==$expectedSchema)$add($critical,'schema_mismatch','Schema diferente da versão esperada.',['actual'=>$schema,'expected'=>$expectedSchema]);
+ if(in_array($schema,['21','22','23','24'],true)){
   $outboxIssues=Migrations::outboxIssues();
   foreach($outboxIssues as $issue)$add($critical,'outbox_'.$issue,'Estrutura Outbox incompatível: '.$issue);
   if(!$outboxIssues)$info[]=['key'=>'event_outbox','message'=>'Outbox InnoDB, JSON e índices validados.','meta'=>['valid'=>true]];
@@ -58,16 +58,22 @@ try{
 
  $workspaceColumns=DB::all("SELECT TABLE_NAME,COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND COLUMN_NAME='workspace_id' ORDER BY TABLE_NAME");
  if($workspaceColumns)$add($warnings,'workspace_columns','Foram encontradas colunas workspace_id. Elas não são usadas pelo TaskEsc v3.25 e não foram removidas automaticamente.',$workspaceColumns);
- if(in_array($schema,['21','22','23'],true)&&($presentTables||$presentFlags||$workspaceColumns))$add($critical,'removed_saas_present','A Outbox não admite estruturas do SaaS removido.');
+ if(in_array($schema,['21','22','23','24'],true)&&($presentTables||$presentFlags||$workspaceColumns))$add($critical,'removed_saas_present','A Outbox não admite estruturas do SaaS removido.');
 
  $essential=['users','clients','stages','categories','projects','demands','files','comments','invoices','payments','google_accounts','calendars','events','settings'];
- if(in_array($schema,['22','23'],true))array_push($essential,'chat_threads','chat_messages');
- if($schema==='23')$essential[]='chat_message_tasks';
+ if(in_array($schema,['22','23','24'],true))array_push($essential,'chat_threads','chat_messages');
+ if(in_array($schema,['23','24'],true))$essential[]='chat_message_tasks';
+ if($schema==='24')array_push($essential,'automations','automation_runs','automation_run_steps','automation_worker_state','whatsapp_messages');
  foreach($essential as $table)if(!$tableExists($table))$add($critical,'missing_table_'.$table,'Tabela essencial ausente: '.$table);
- if($schema==='23'){
+ if(in_array($schema,['23','24'],true)){
   $chatIssues=Migrations::chatIssues();
   foreach($chatIssues as $issue)$add($critical,'chat_'.$issue,'Estrutura do chat incompatível: '.$issue);
   if(!$chatIssues)$info[]=['key'=>'chat_schema','message'=>'Chat administrativo e referências de tasks validados.','meta'=>['valid'=>true]];
+ }
+ if($schema==='24'){
+  $automationIssues=Migrations::automationIssues();
+  foreach($automationIssues as $issue)$add($critical,'automation_'.$issue,'Estrutura de automações incompatível: '.$issue);
+  if(!$automationIssues)$info[]=['key'=>'automation_schema','message'=>'Automações, WhatsApp e worker schema validados.','meta'=>['valid'=>true]];
  }
 
  $relations=[
@@ -88,7 +94,12 @@ try{
   ['events_calendar',"SELECT COUNT(*) n FROM events e LEFT JOIN calendars c ON c.id=e.calendar_id WHERE c.id IS NULL"],
   ['notifications_user',"SELECT COUNT(*) n FROM notifications n LEFT JOIN users u ON u.id=n.user_id WHERE u.id IS NULL"]
  ];
- if($schema==='23')$relations[]=['chat_message_tasks_demand',"SELECT COUNT(*) n FROM chat_message_tasks x LEFT JOIN demands d ON d.id=x.demand_id WHERE d.id IS NULL"];
+ if(in_array($schema,['23','24'],true))$relations[]=['chat_message_tasks_demand',"SELECT COUNT(*) n FROM chat_message_tasks x LEFT JOIN demands d ON d.id=x.demand_id WHERE d.id IS NULL"];
+ if($schema==='24'){
+  $relations[]=['automation_runs_automation',"SELECT COUNT(*) n FROM automation_runs r LEFT JOIN automations a ON a.id=r.automation_id WHERE a.id IS NULL"];
+  $relations[]=['automation_steps_run',"SELECT COUNT(*) n FROM automation_run_steps s LEFT JOIN automation_runs r ON r.id=s.run_id WHERE r.id IS NULL"];
+  $relations[]=['whatsapp_messages_run',"SELECT COUNT(*) n FROM whatsapp_messages m LEFT JOIN automation_runs r ON r.id=m.run_id WHERE m.run_id IS NOT NULL AND r.id IS NULL"];
+ }
  foreach($relations as [$key,$sql]){
   try{$n=$count($sql);if($n>0)$add($warnings,'orphan_'.$key,$n.' registro(s) órfão(s) em '.$key,$n);}catch(Throwable $e){$add($warnings,'check_'.$key,'Não foi possível validar '.$key.': '.$e->getMessage());}
  }

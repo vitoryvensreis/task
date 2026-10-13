@@ -82,11 +82,12 @@ final class Demands {
 
    $dueInput=trim((string)($p['due_at']??($old['due_at']??'')));if($dueInput===''&&!$old)$dueInput=businessDeadline(max(1,(int)($categoryRow['default_due_hours']??24)))->format('Y-m-d\\TH:i');if($dueInput==='')fail('Informe a data de entrega.');$due=timestamp($dueInput);if(!$due)fail('Informe a data de entrega.');validateDelivery($due,$old['due_at']??null);
    $priority=enumv($p['priority']??($old['priority']??($categoryRow['default_priority']??'normal')),['low','normal','high','urgent'],'prioridade');
+   $whatsappMode=enumv($p['whatsapp_recipient_mode']??($old['whatsapp_recipient_mode']??'none'),['none','assigned_user','client'],'destinatário do WhatsApp');
    if(!$old&&empty($p['allow_duplicate'])){$duplicate=DB::one('SELECT id,title FROM demands WHERE client_id=? AND category_id=? AND title=? AND due_at=? AND deleted_at IS NULL LIMIT 1',[$client,$category,trim((string)($p['title']??'')),$due]);if($duplicate)fail('Já existe uma task igual para este cliente, serviço e entrega.',409,['duplicate_id'=>(int)$duplicate['id']]);}
    $details=$old?decode($old['details_json']??'{}'):[];
    $row=[
     'client_id'=>$client,'project_id'=>$project,'category_id'=>$category,'title'=>required($p,'title',190),'brief'=>required($p,'brief',20000),
-    'details_json'=>json($details),'due_at'=>$due,'priority'=>$priority,'draft'=>(int)(bool)($p['draft']??0),'updated_at'=>now()
+    'details_json'=>json($details),'due_at'=>$due,'priority'=>$priority,'whatsapp_recipient_mode'=>$whatsappMode,'draft'=>(int)(bool)($p['draft']??0),'updated_at'=>now()
    ];
 
    $firstStage=DB::one('SELECT * FROM stages WHERE active=1 ORDER BY position,id LIMIT 1');if(!$firstStage)fail('Crie ao menos uma coluna ativa no Kanban.');

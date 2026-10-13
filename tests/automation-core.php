@@ -95,7 +95,8 @@ try{
   'edges'=>[['from'=>'trigger','to'=>'send','branch'=>'next'],['from'=>'send','to'=>'end','branch'=>'next']],
  ];
  $groupSaved=Automation::save(['name'=>'Grupo WhatsApp','trigger_event'=>'demand.created','definition'=>$groupDefinition,'active'=>0]);
- $groupNode=array_values(array_filter($groupSaved['definition']['nodes'],static fn($n)=>$n['type']==='action.whatsapp'))[0]??[];
+ $groupRead=Automation::get(['id'=>$groupSaved['id']]);
+ $groupNode=array_values(array_filter($groupRead['definition']['nodes'],static fn($n)=>$n['type']==='action.whatsapp'))[0]??[];
  autoCheck(($groupNode['config']['recipient']??'')==='group'&&($groupNode['config']['group_id']??'')==='120363012345678901@g.us','Group recipient and ID must be saved without truncation.');
  $invalidGroup=$groupDefinition;
  $invalidGroup['nodes'][1]['config']['group_id']='5585999990001@c.us';

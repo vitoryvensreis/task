@@ -535,3 +535,12 @@ As novas ações usam a tabela `automation_run_steps` para registrar o resultado
 ### Disparos para grupos do WhatsApp (schema 25)
 
 Em **Automações → Enviar WhatsApp → Destinatário**, selecione **Grupo do WhatsApp**, escolha um grupo da sessão WPPConnect e salve. A ação `wpp.groups` lista grupos de forma segura, restrita ao administrador, e o worker envia com `isGroup=true`. O histórico WhatsApp e a migração 25 preservam os registros anteriores. Consulte `docs/automation-triggers-recipients.md`.
+
+### Diagnóstico Google e notificações de saúde (13/10/2026)
+
+- **Saúde & Logs → Diagnóstico Google**: contas e agendas com falhas, último erro, motivo sugerido, ação de sincronização e reconexão explícita (sem expor tokens).
+- `SystemHealth::watch()` identifica incidentes persistentes por recurso e tipo de erro, emite o primeiro aviso, mudanças de situação e no máximo um lembrete a cada 24 horas; emite também confirmação única de normalização. O histórico anterior permanece intacto.
+- Contas Google desconectadas intencionalmente e agendas locais não contam como erros.
+- Renovação OAuth distingue rejeição definitiva (`invalid_grant`, `invalid_client`, `unauthorized_client`, `access_denied`) de timeout, instabilidade e limites temporários. Apenas erros definitivos marcam a conta como `reconnect`; falhas transitórias usam retentativas com intervalo progressivo. Um HTTP 401 inesperado também força renovação única do token antes de repetir a chamada.
+- Uma sincronização real bem-sucedida limpa os erros antigos da respectiva conta e agenda.
+- Teste de integração: `tests/google-health.php` (executado com banco descartável após `tests/automation-core.php`). Nenhuma migração SQL nova é necessária; o estado do monitor usa `settings`.

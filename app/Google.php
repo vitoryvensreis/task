@@ -14,7 +14,13 @@ final class Google {
   $body=curl_exec($ch);$code=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);$err=curl_error($ch);curl_close($ch);
   if($body===false)throw new RuntimeException('Conexão com o Google indisponível: '.$err);
   $decoded=$body!==''?(json_decode($body,true)??[]):[];
-  if($code<200||$code>=300)throw new AppError('Google: '.($decoded['error']['message']??$decoded['error_description']??'operação recusada').' ('.$code.')',502,['google_status'=>$code]);
+  if($code<200||$code>=300){
+   $googleError=$decoded['error']??null;
+   $oauthCode=is_string($googleError)?$googleError:(is_array($googleError)?(string)($googleError['status']??''):'');
+   $message=is_array($googleError)?($googleError['message']??null):null;
+   $message=$message??$decoded['error_description']??(is_string($googleError)?$googleError:'operação recusada');
+   throw new AppError('Google: '.mb_substr((string)$message,0,400).' ('.$code.')',502,['google_status'=>$code,'oauth_error'=>$oauthCode]);
+  }
   return $decoded;
  }
 
@@ -63,16 +69,65 @@ final class Google {
   return ['account_id'=>$id,'email'=>$info['email'],'purpose'=>$purpose,'return_to'=>$returnTo];
  }
 
- public static function token(int $id): string {
-  $a=DB::one('SELECT * FROM google_accounts WHERE id=?',[$id]);
-  if(!$a||$a['status']==='disconnected')throw new RuntimeException('Conta Google desconectada.');
-  if(strtotime($a['expires_at'].' UTC')>time()+60)return secretDecrypt($a['access_token']);
-  try{$r=self::http('https://oauth2.googleapis.com/token','POST',['client_id'=>config('google_client_id'),'client_secret'=>config('google_client_secret'),'refresh_token'=>secretDecrypt($a['refresh_token']),'grant_type'=>'refresh_token'],null,[],true);$liveScopes=self::liveScopes((string)$r['access_token'],(string)($r['scope']??$a['scopes']??''));$update=['access_token'=>secretEncrypt($r['access_token']),'expires_at'=>gmdate('Y-m-d H:i:s',time()+(int)$r['expires_in']),'status'=>'connected','last_error'=>null,'scopes'=>$liveScopes,'calendar_enabled'=>(int)str_contains($liveScopes,self::CALENDAR_SCOPE),'drive_enabled'=>(int)str_contains($liveScopes,self::DRIVE_SCOPE)];DB::update('google_accounts',$id,$update);return $r['access_token'];}
-  catch(Throwable $e){DB::update('google_accounts',$id,['status'=>'reconnect','last_error'=>$e->getMessage()]);throw $e;}
+ /** Classificação independente do Google: apenas rejeições definitivas exigem reconexão. */
+ public static function refreshErrorCategory(Throwable $e): string {
+  if($e instanceof AppError){
+   $oauth=strtolower((string)($e->details['oauth_error']??''));
+   if(in_array($oauth,['invalid_grant','invalid_client','unauthorized_client','access_denied'],true))return 'reconnect';
+   $status=(int)($e->details['google_status']??0);
+   if(in_array($status,[408,429,500,502,503,504],true))return 'retry';
+   return 'review';
+  }
+  return 'retry'; // Timeout, DNS e falhas de transporte não revogam credenciais.
  }
 
- private static function api(int $account,string $path,string $method='GET',?array $data=null,array $headers=[]): array {return self::http(self::API.$path,$method,$data,self::token($account),$headers);}
- private static function driveApi(int $account,string $path,string $method='GET',?array $data=null,array $headers=[]): array {return self::http(self::DRIVE.$path,$method,$data,self::token($account),$headers);}
+ private static function refreshTokenWithRetry(array $a): array {
+  for($attempt=0;$attempt<3;$attempt++){
+   try{return self::http('https://oauth2.googleapis.com/token','POST',[
+    'client_id'=>config('google_client_id'),'client_secret'=>config('google_client_secret'),
+    'refresh_token'=>secretDecrypt($a['refresh_token']),'grant_type'=>'refresh_token'
+   ],null,[],true);}
+   catch(Throwable $e){
+    if(self::refreshErrorCategory($e)!=='retry'||$attempt===2)throw $e;
+    usleep(250000*(1<<$attempt));
+   }
+  }
+  throw new RuntimeException('Não foi possível renovar o token Google.');
+ }
+
+ public static function token(int $id,bool $forceRefresh=false): string {
+  $a=DB::one('SELECT * FROM google_accounts WHERE id=?',[$id]);
+  if(!$a||$a['status']==='disconnected')throw new RuntimeException('Conta Google desconectada.');
+  if(!$forceRefresh&&strtotime($a['expires_at'].' UTC')>time()+60)return secretDecrypt($a['access_token']);
+  try{
+   $r=self::refreshTokenWithRetry($a);
+   $liveScopes=self::liveScopes((string)$r['access_token'],(string)($r['scope']??$a['scopes']??''));
+   DB::update('google_accounts',$id,[
+    'access_token'=>secretEncrypt($r['access_token']),
+    'expires_at'=>gmdate('Y-m-d H:i:s',time()+(int)$r['expires_in']),
+    'status'=>'connected','last_error'=>null,'scopes'=>$liveScopes,
+    'calendar_enabled'=>(int)str_contains($liveScopes,self::CALENDAR_SCOPE),
+    'drive_enabled'=>(int)str_contains($liveScopes,self::DRIVE_SCOPE)
+   ]);
+   return $r['access_token'];
+  }catch(Throwable $e){
+   $error=['last_error'=>mb_substr($e->getMessage(),0,1000)];
+   if(self::refreshErrorCategory($e)==='reconnect')$error['status']='reconnect';
+   DB::update('google_accounts',$id,$error);
+   throw $e;
+  }
+ }
+
+ private static function authenticatedApi(int $account,string $url,string $path,string $method='GET',?array $data=null,array $headers=[]): array {
+  try{return self::http($url.$path,$method,$data,self::token($account),$headers);}
+  catch(AppError $e){
+   // Um access token pode ser revogado antes do vencimento guardado no banco.
+   if((int)($e->details['google_status']??0)!==401)throw $e;
+   return self::http($url.$path,$method,$data,self::token($account,true),$headers);
+  }
+ }
+ private static function api(int $account,string $path,string $method='GET',?array $data=null,array $headers=[]): array {return self::authenticatedApi($account,self::API,$path,$method,$data,$headers);}
+ private static function driveApi(int $account,string $path,string $method='GET',?array $data=null,array $headers=[]): array {return self::authenticatedApi($account,self::DRIVE,$path,$method,$data,$headers);}
 
  public static function discover(int $account): void {
   $next='';do{$data=self::api($account,'users/me/calendarList?maxResults=250'.($next?'&pageToken='.rawurlencode($next):''));foreach($data['items']??[] as $c){$old=DB::one('SELECT * FROM calendars WHERE account_id=? AND google_id=?',[$account,$c['id']]);$role=$c['accessRole']??'reader';$writable=in_array($role,['owner','writer','writerWithoutPrivateAccess'],true);$row=['name'=>$c['summaryOverride']??$c['summary']??$c['id'],'color'=>$c['backgroundColor']??'#8a8a8a','access_role'=>$role];if($old){if(!$writable)$row['write_enabled']=0;DB::update('calendars',$old['id'],$row);}else DB::insert('calendars',$row+['account_id'=>$account,'google_id'=>$c['id'],'selected'=>1,'write_enabled'=>(int)$writable]);}$next=$data['nextPageToken']??'';}while($next);
@@ -282,7 +337,7 @@ final class Google {
  }
 
  public static function sync(?int $only=null): array {
-  $ok=0;$errors=[];$rows=DB::all("SELECT c.* FROM calendars c JOIN google_accounts a ON a.id=c.account_id WHERE c.selected=1 AND a.status<>'disconnected' AND a.calendar_enabled=1".($only?' AND c.id=?':''),$only?[$only]:[]);foreach($rows as $c){try{self::push($c);self::pull($c);self::watch($c);DB::update('calendars',$c['id'],['synced_at'=>now(),'last_error'=>null,'dirty'=>0]);$ok++;}catch(Throwable $e){$message=mb_substr($e->getMessage(),0,1000);DB::update('calendars',$c['id'],['last_error'=>$message]);$errors[]=['calendar_id'=>$c['id'],'message'=>$message];}}return ['synced'=>$ok,'errors'=>$errors,'updated_at'=>now()];
+  $ok=0;$errors=[];$rows=DB::all("SELECT c.* FROM calendars c JOIN google_accounts a ON a.id=c.account_id WHERE c.selected=1 AND a.status<>'disconnected' AND a.calendar_enabled=1".($only?' AND c.id=?':''),$only?[$only]:[]);foreach($rows as $c){try{self::push($c);self::pull($c);self::watch($c);DB::update('calendars',$c['id'],['synced_at'=>now(),'last_error'=>null,'dirty'=>0]);DB::run("UPDATE google_accounts SET status='connected',last_error=NULL WHERE id=? AND status<>'disconnected' AND last_error IS NOT NULL",[(int)$c['account_id']]);$ok++;}catch(Throwable $e){$message=mb_substr($e->getMessage(),0,1000);DB::update('calendars',$c['id'],['last_error'=>$message]);$errors[]=['calendar_id'=>$c['id'],'message'=>$message];}}return ['synced'=>$ok,'errors'=>$errors,'updated_at'=>now()];
  }
 
  private static function push(array $c): void {

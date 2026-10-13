@@ -1516,8 +1516,24 @@
     const pushScope=v=>({task_responsible:'Responsável da task',test:'Teste manual',system:'Sistema'}[v]||String(v||'Sistema'));
     const pushDevice=ua=>{const x=String(ua||'');if(!x)return '—';const os=/iphone|ipad|ipod/i.test(x)?'iPhone/iPad':/android/i.test(x)?'Android':/windows/i.test(x)?'Windows':/macintosh|mac os/i.test(x)?'macOS':'Dispositivo';const browser=/edg\//i.test(x)?'Edge':/firefox\//i.test(x)?'Firefox':/chrome\//i.test(x)?'Chrome':/safari\//i.test(x)?'Safari':'Navegador';return os+' · '+browser};
     const sentPush=push.filter(x=>x.status==='sent').length,failedPush=push.filter(x=>x.status==='failed').length,noDevicePush=push.filter(x=>x.status==='no_subscription').length;
+    const googleAccounts=items.find(x=>x.key==='google')?.meta||[],googleCalendars=items.find(x=>x.key==='calendar')?.meta||[];
+    const diagnostics=[
+      ...googleAccounts.filter(a=>a.status!=='connected'||a.last_error).map(a=>({
+        title:a.email||'Conta Google',source:'Conta Google',error:a.last_error||'A autorização precisa ser renovada.',
+        hint:a.hint||'',status:a.status||'indefinido',id:a.id,reconnect:true,calendar:!!Number(a.calendar_enabled)
+      })),
+      ...googleCalendars.filter(c=>c.last_error||!c.synced_at).map(c=>({
+        title:c.name||'Agenda Google',source:c.account_email||'Google Calendar',
+        error:c.last_error||'Aguardando primeira sincronização.',hint:c.hint||'',
+        status:c.last_error?'Falha de sincronização':'Pendente',reconnect:false,
+        last_sync:c.synced_at
+      }))
+    ];
     $('#content').innerHTML=`<div class="section-title"><div><h3>Saúde & Logs</h3><div class="panel-sub">Estado das integrações, rotinas, erros e atividades administrativas do TaskEsc.</div></div><button class="secondary" id="refresh-system-health">${icon('refresh-cw','↻')} Atualizar agora</button></div>
       <div class="health-summary"><div class="panel health-overall"><span class="eyebrow">STATUS GERAL</span><h2>${healthBadge(health.status)}</h2><div class="panel-sub">Verificado em ${time(health.checked_at)}</div></div>${items.map(x=>`<div class="panel health-card ${esc(x.status)}"><div class="health-card-head"><b>${esc(x.label)}</b>${healthBadge(x.status)}</div><div class="panel-sub">${esc(x.detail)}</div></div>`).join('')}</div>
+      <section class="panel google-health-panel"><div class="panel-head"><div><h3>Diagnóstico Google</h3><div class="panel-sub">${diagnostics.length?diagnostics.length+' conexão(ões) ou agenda(s) precisam de atenção.':'Nenhum erro Google ativo detectado.'} O histórico de notificações não será apagado.</div></div><button class="secondary" id="google-health-sync">${icon('refresh-cw','↻')} Sincronizar agendas</button></div>
+      ${diagnostics.length?`<div class="google-health-issues">${diagnostics.map(x=>`<div class="google-health-issue"><div><small>${esc(x.source)} · ${esc(x.status)}</small><b>${esc(x.title)}</b><p>${esc(x.error)}</p><small>${esc(x.hint)}${x.last_sync?' · Última sincronização: '+esc(time(x.last_sync)):''}</small></div>${x.reconnect?`<button class="secondary google-health-reconnect" data-calendar="${x.calendar?'1':'0'}" data-account-id="${Number(x.id)}">Reconectar</button>`:''}</div>`).join('')}</div>`:'<div class="panel-sub">Integrações Google sem falhas registradas.</div>'}
+      <div class="field-help">Reconectar abre a autorização Google: escolha a mesma conta. Em falhas temporárias, tente primeiro “Sincronizar agendas”.</div></section>
       <div class="tabs system-log-tabs"><button class="tab active" data-log-tab="audit">Atividades</button><button class="tab" data-log-tab="errors">Erros ${errors.filter(x=>!x.resolved_at).length?`<span class="tab-count">${errors.filter(x=>!x.resolved_at).length}</span>`:''}</button><button class="tab" data-log-tab="mail">E-mails</button><button class="tab" data-log-tab="push">Push ${failedPush?`<span class="tab-count">${failedPush}</span>`:''}</button></div>
       <section class="panel system-log-section" data-log-panel="audit"><div class="panel-head"><div><h3>Histórico do sistema</h3><div class="panel-sub">Quem fez o quê, quando e em qual área.</div></div></div><div class="table-wrap system-log-scroll"><table class="table"><thead><tr><th>Data</th><th>Usuário</th><th>Área</th><th>Ação </th><th>Origem</th></tr></thead><tbody>${audit.map(x=>`<tr><td>${time(x.created_at)}</td><td>${esc(x.user_name||'Sistema')}</td><td>${esc(x.entity)} #${Number(x.entity_id||0)}</td><td>${esc(auditActionLabel(x.action))}</td><td>${esc(x.origin||'web')}</td></tr>`).join('')||'<tr><td colspan="5"><div class="empty slim">Nenhuma atividade registrada.</div></td></tr>'}</tbody></table></div></section>
       <section class="panel system-log-section hidden" data-log-panel="errors"><div class="panel-head"><div><h3>Erros internos</h3><div class="panel-sub">Falhas capturadas pela API e pelas rotinas do sistema.</div></div></div><div class="system-error-list">${errors.map(x=>`<article class="system-error ${x.resolved_at?'resolved':''}"><div><span class="eyebrow">${esc(x.context)} · ${time(x.created_at)}</span><b>${esc(x.message)}</b><small>${esc(x.request_uri||'')}</small></div>${x.resolved_at?'<span class="status-ok">Resolvido</span>':`<button class="mini-btn resolve-system-error" data-id="${x.id}">Marcar resolvido</button>`}</article>`).join('')||'<div class="empty slim">Nenhum erro registrado.</div>'}</div></section>
@@ -1527,6 +1543,20 @@
         <div class="table-wrap system-log-scroll"><table class="table push-log-table"><thead><tr><th>Data</th><th>Destinatário</th><th>Task</th><th>Notificação</th><th>Regra</th><th>Dispositivo</th><th>Status</th><th>Detalhe</th></tr></thead><tbody>${push.map(p=>{const st=pushStatus(p.status);return `<tr><td>${time(p.created_at)}</td><td><div class="row-title"><b>${esc(p.user_name||'Usuário #'+p.user_id)}</b><span>${esc(p.user_email||'')}</span></div></td><td>${p.demand_id?`<div class="row-title"><b>#${Number(p.demand_id)} · ${esc(p.demand_title||'Task')}</b><span>${p.scope==='task_responsible'?'destino: responsável':''}</span></div>`:'—'}</td><td><div class="row-title push-log-message"><b>${esc(p.title||'TaskEsc')}</b><span>${esc(p.body||'')}</span></div></td><td><span class="tag">${esc(pushScope(p.scope))}</span></td><td>${esc(pushDevice(p.user_agent))}</td><td><span class="${st[1]}"><b>${esc(st[0])}</b></span>${p.http_code?`<small class="push-http-code">HTTP ${Number(p.http_code)}</small>`:''}</td><td>${esc(p.error||'—')}</td></tr>`}).join('')||'<tr><td colspan="8"><div class="empty slim">Nenhum Push registrado ainda.</div></td></tr>'}</tbody></table></div>
       </section>`;
     $('#refresh-system-health').onclick=()=>stableRender(renderSystemLogs);
+    $('#google-health-sync').onclick=async()=>{
+      const button=$('#google-health-sync');button.disabled=true;
+      try{
+        const result=await api('google.sync',{},'POST');
+        const errors=result.errors||[];
+        toast(errors.length?`Falha em ${errors.length} agenda(s); veja o diagnóstico atualizado.`:`${result.synced||0} agenda(s) sincronizada(s).`,!!errors.length);
+        await stableRender(renderSystemLogs);
+      }catch(e){toast(e.message||'Não foi possível sincronizar.',true);button.disabled=false}
+    };
+    document.querySelectorAll('.google-health-reconnect').forEach(button=>button.onclick=async()=>{
+      button.disabled=true;
+      try{const result=await api('google.connect',{purpose:button.dataset.calendar==='1'?'calendar':'drive',return_to:'settings'},'POST');location.href=result.url}
+      catch(e){toast(e.message||'Falha ao iniciar reconexão Google.',true);button.disabled=false}
+    });
     document.querySelectorAll('[data-log-tab]').forEach(b=>b.onclick=()=>{
       document.querySelectorAll('[data-log-tab]').forEach(x=>x.classList.toggle('active',x===b));
       document.querySelectorAll('[data-log-panel]').forEach(x=>x.classList.toggle('hidden',x.dataset.logPanel!==b.dataset.logTab));

@@ -280,7 +280,7 @@ final class Migrations {
   $timeout=null;
   try{
    $before=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);
-   if(!in_array($before,[19,self::OUTBOX_VERSION,self::CHAT_VERSION,self::CURRENT_VERSION],true))throw new RuntimeException('A migração Outbox requer schema 19, 21, 22 ou 23; schema 20 não é suportado.');
+   if(!in_array($before,[19,self::OUTBOX_VERSION,self::CHAT_VERSION,self::CHAT_TASK_VERSION,self::AUTOMATION_VERSION],true))throw new RuntimeException('A migração Outbox requer schema 19, 21, 22, 23 ou 24; schema 20 não é suportado.');
    if($before===19){
     $timeout=(int)(DB::one('SELECT @@SESSION.lock_wait_timeout AS timeout')['timeout']??0);
     $db->exec('SET SESSION lock_wait_timeout=10');

@@ -205,6 +205,7 @@ final class AutomationWorker
 
     private static function whatsapp(array $run,array $node,array $demand): array
     {
+        if(!empty($demand['draft']))return ['skipped'=>true,'reason'=>'task_draft'];
         $recipient=self::recipient($demand);
         if($recipient===null)return ['skipped'=>true,'reason'=>'task_recipient_none'];
         $message=self::renderTemplate((string)$node['config']['message'],$demand);
@@ -274,7 +275,7 @@ final class AutomationWorker
     private static function safeTriggerPayload(array $payload): array
     {
         $allowed=['operation_id','change','previous_project_id','previous_stage_id','comment_id','checklist_id','time_entry_id','change_request_id','file_id','version_no','approval','decision','internal','shared'];
-        $safe=[];foreach($allowed as $key)if(array_key_exists($key,$payload)&&is_scalar($payload[$key])||array_key_exists($key,$payload)&&$payload[$key]===null)$safe[$key]=$payload[$key];
+        $safe=[];foreach($allowed as $key)if(array_key_exists($key,$payload)&&(is_scalar($payload[$key])||$payload[$key]===null))$safe[$key]=$payload[$key];
         return $safe;
     }
 

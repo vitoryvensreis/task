@@ -92,7 +92,13 @@ final class Automation
         if(!$row)fail('Automação não encontrada.',404);
         $row['definition']=self::decodeDefinition((string)$row['definition_json']);
         unset($row['definition_json']);
-        $row['runs']=DB::all('SELECT id,operation_id,trigger_event,entity_type,entity_id,status,attempts,started_at,finished_at,last_error,created_at FROM automation_runs WHERE automation_id=? ORDER BY id DESC LIMIT 30',[$id]);
+        $row['runs']=DB::all("SELECT r.id,r.operation_id,r.trigger_event,r.entity_type,r.entity_id,r.status,r.attempts,r.started_at,r.finished_at,r.last_error,r.created_at,
+          CASE WHEN r.entity_type='demand' THEN d.title WHEN r.entity_type='client' THEN c.name WHEN r.entity_type='invoice' THEN i.description ELSE NULL END subject_label
+          FROM automation_runs r
+          LEFT JOIN demands d ON d.id=r.entity_id AND r.entity_type='demand'
+          LEFT JOIN clients c ON c.id=r.entity_id AND r.entity_type='client'
+          LEFT JOIN invoices i ON i.id=r.entity_id AND r.entity_type='invoice'
+          WHERE r.automation_id=? ORDER BY r.id DESC LIMIT 30",[$id]);
         return $row;
     }
 
@@ -142,7 +148,13 @@ final class Automation
     {
         Auth::admin();$id=integer($p['id']??0,1);
         if(!DB::one('SELECT id FROM automations WHERE id=?',[$id]))fail('Automação não encontrada.',404);
-        return DB::all("SELECT r.*,d.title demand_title FROM automation_runs r LEFT JOIN demands d ON d.id=r.entity_id AND r.entity_type='demand' WHERE r.automation_id=? ORDER BY r.id DESC LIMIT 100",[$id]);
+        return DB::all("SELECT r.*,
+          CASE WHEN r.entity_type='demand' THEN d.title WHEN r.entity_type='client' THEN c.name WHEN r.entity_type='invoice' THEN i.description ELSE NULL END subject_label
+          FROM automation_runs r
+          LEFT JOIN demands d ON d.id=r.entity_id AND r.entity_type='demand'
+          LEFT JOIN clients c ON c.id=r.entity_id AND r.entity_type='client'
+          LEFT JOIN invoices i ON i.id=r.entity_id AND r.entity_type='invoice'
+          WHERE r.automation_id=? ORDER BY r.id DESC LIMIT 100",[$id]);
     }
 
     public static function validateDefinition(array $definition,string $trigger): array

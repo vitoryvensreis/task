@@ -92,9 +92,9 @@
     document.querySelectorAll('[data-push-test]').forEach(b=>b.onclick=()=>testPush(b));
     await updatePushControls();
   }
-    const ROUTES={dashboard:'dashboard',kanban:'kanban',demands:'tasks',agenda:'agenda',clients:'clientes',services:'servicos',finance:'financeiro',reports:'relatorios',logs:'saude-logs',settings:'configuracoes'};
+    const ROUTES={dashboard:'dashboard',kanban:'kanban',demands:'tasks',agenda:'agenda',clients:'clientes',services:'servicos',finance:'financeiro',reports:'relatorios',automations:'automacoes',logs:'saude-logs',settings:'configuracoes'};
   const ROUTE_PAGES=Object.fromEntries(Object.entries(ROUTES).map(([k,v])=>[v,k]));
-  function readRoute(){let path=location.pathname;if(BASE&&path.startsWith(BASE))path=path.slice(BASE.length);path=path.replace(/^\/+|\/+$/g,'');const parts=path.split('/').filter(Boolean);let page=ROUTE_PAGES[parts[0]]||'';let taskId=0;if(parts[0]==='kanban'&&parts[1]==='task'&&/^\d+$/.test(parts[2]||'')){page='kanban';taskId=Number(parts[2])}if(!page&&location.hash){const legacy=location.hash.replace(/^#/,'').split('/');page=['dashboard','kanban','demands','agenda','clients','services','finance','reports','logs','settings'].includes(legacy[0])?legacy[0]:'';if(legacy[0]==='demands'&&/^\d+$/.test(legacy[1]||'')){page='kanban';taskId=Number(legacy[1])}}return {page:page||'dashboard',taskId}}
+  function readRoute(){let path=location.pathname;if(BASE&&path.startsWith(BASE))path=path.slice(BASE.length);path=path.replace(/^\/+|\/+$/g,'');const parts=path.split('/').filter(Boolean);let page=ROUTE_PAGES[parts[0]]||'';let taskId=0;if(parts[0]==='kanban'&&parts[1]==='task'&&/^\d+$/.test(parts[2]||'')){page='kanban';taskId=Number(parts[2])}if(!page&&location.hash){const legacy=location.hash.replace(/^#/,'').split('/');page=['dashboard','kanban','demands','agenda','clients','services','finance','reports','automations','logs','settings'].includes(legacy[0])?legacy[0]:'';if(legacy[0]==='demands'&&/^\d+$/.test(legacy[1]||'')){page='kanban';taskId=Number(legacy[1])}}return {page:page||'dashboard',taskId}}
   const initialRoute=readRoute();
   const S={user:null,meta:null,csrf:'',page:initialRoute.page,pendingTaskId:initialRoute.taskId,demands:[],dashboard:null,timer:null,chatPeerId:0,chatContacts:[],chatUnread:0,chatOpen:false};
   const realtimeOwnedChannels=new Set(),realtimeSeen=new Map(),realtimePending=new Map();
@@ -778,7 +778,7 @@
 
   async function squarePngFromLogo(file,size,maskable=false){try{const bitmap=await createImageBitmap(file),canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');canvas.width=size;canvas.height=size;ctx.fillStyle='#050607';ctx.fillRect(0,0,size,size);const pad=Math.round(size*(maskable?.19:.11)),max=size-pad*2,scale=Math.min(max/bitmap.width,max/bitmap.height),w=Math.max(1,Math.round(bitmap.width*scale)),h=Math.max(1,Math.round(bitmap.height*scale));ctx.drawImage(bitmap,Math.round((size-w)/2),Math.round((size-h)/2),w,h);bitmap.close?.();return await new Promise(resolve=>canvas.toBlob(resolve,'image/png',.96))}catch(_){return null}}
   async function uploadLogoFile(file){const fd=new FormData();fd.append('logo',file);const icons=await Promise.all([[180,false,'icon_180'],[192,false,'icon_192'],[512,false,'icon_512'],[512,true,'icon_maskable_512']].map(async ([size,mask,key])=>[key,await squarePngFromLogo(file,size,mask)]));for(const [key,blob] of icons)if(blob)fd.append(key,blob,key+'.png');const r=await fetch(appPath('api.php')+'?action=settings.logo_upload',{method:'POST',headers:{'Accept':'application/json',...(S.csrf?{'X-CSRF-Token':S.csrf}:{})},body:fd}),j=await r.json().catch(()=>({error:'Resposta inválida do servidor.'}));if(!r.ok||j.error)throw new Error(j.error||'Não foi possível enviar a logo.');return j}
-  function showLogin(){closeNotifications();closeAdminChat();document.body.classList.remove('admin-chat-enabled');$('#admin-chat-root')?.classList.add('hidden');S.user=null;window.TaskEscRealtime?.setCsrf?.('');realtimeOwnedChannels.clear();realtimePending.clear();realtimeSeen.clear();S.chatPeerId=0;S.chatContacts=[];S.chatUnread=0;agendaRealtimeDirty=false;if(realtimeTimer)clearTimeout(realtimeTimer);realtimeTimer=0;if(agendaRealtimeTimer)clearTimeout(agendaRealtimeTimer);agendaRealtimeTimer=0;if(S.timer)clearInterval(S.timer);S.timer=null;$('#app').classList.add('hidden');$('#login').classList.remove('hidden');$('#login-form').reset();$('#login-form').classList.remove('hidden');$('#twofa-form')?.classList.add('hidden');$('#twofa-form')?.reset();$('#login-error').textContent='';if($('#twofa-error'))$('#twofa-error').textContent='';}
+  function showLogin(){closeNotifications();closeAdminChat();automationEditorState=null;automationCatalogCache=null;automationListCache=[];document.body.classList.remove('admin-chat-enabled');$('#admin-chat-root')?.classList.add('hidden');S.user=null;window.TaskEscRealtime?.setCsrf?.('');realtimeOwnedChannels.clear();realtimePending.clear();realtimeSeen.clear();S.chatPeerId=0;S.chatContacts=[];S.chatUnread=0;agendaRealtimeDirty=false;if(realtimeTimer)clearTimeout(realtimeTimer);realtimeTimer=0;if(agendaRealtimeTimer)clearTimeout(agendaRealtimeTimer);agendaRealtimeTimer=0;if(S.timer)clearInterval(S.timer);S.timer=null;$('#app').classList.add('hidden');$('#login').classList.remove('hidden');$('#login-form').reset();$('#login-form').classList.remove('hidden');$('#twofa-form')?.classList.add('hidden');$('#twofa-form')?.reset();$('#login-error').textContent='';if($('#twofa-error'))$('#twofa-error').textContent='';}
   function showApp(){
     const requestedChatPeer=adminChatEnabled()?Number(new URLSearchParams(location.search).get('chat')||0):0;
     S.user=S.meta.user;window.TaskEscRealtime?.setCsrf?.(S.csrf);syncRealtimeChannels();$('#login').classList.add('hidden');$('#app').classList.remove('hidden');applyBranding();
@@ -827,6 +827,7 @@
         ['services','briefcase','Serviços','✦'],
         ['finance','wallet','Financeiro','R$'],
         ['reports','chart-bar','Relatórios','▤'],
+        ['automations','workflow','Automações','◇'],
         ['logs','activity','Saúde & Logs','◉']
       ]:[]),
       ...(staff&&!admin?[['reports','chart-bar','Relatórios','▤']]:[]),
@@ -845,7 +846,7 @@
   document.addEventListener('click',e=>{if(!e.target.closest('.notification-shell'))closeNotifications()});
   document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeNotifications();closeAdminChat()}});
   $('#logout').onclick=async()=>{try{await api('auth.logout',{},'POST',false)}finally{showLogin()}};$('#preview-exit').onclick=async()=>{try{showPageLoader();await api('preview.stop',{},'POST');location.href=routeUrl('dashboard')}catch(x){hidePageLoader();toast(x.message,true)}};$('#menu').onclick=()=>{const open=!$('.sidebar').classList.contains('open');$('.sidebar').classList.toggle('open',open);document.body.classList.toggle('nav-open',open)};$('#nav-backdrop')?.addEventListener('click',closeMobileNav);$('#new-demand').onclick=()=>openDemand();
-  async function go(page,push=false,visualLoad=false,preserveView=null){const previousPage=S.page,keepView=preserveView===null?(page===previousPage&&!push):!!preserveView,viewState=keepView?captureViewState():null;if(page==='agenda'&&previousPage!=='agenda'){window.taskescAgendaView=window.matchMedia&&window.matchMedia('(max-width:760px)').matches?'day':'week';window.taskescAgendaDate=null}if(visualLoad)showPageLoader();if(push&&page!==S.page)history.pushState({},'',routeUrl(page));S.page=page;syncRealtimeChannels();closeNotifications();document.body.classList.toggle('kanban-page',page==='kanban');document.querySelectorAll('.nav-btn').forEach(b=>{const active=b.dataset.page===page;b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});const names={dashboard:['VISÃO GERAL','Dashboard'],kanban:['PRODUÇÃO','Kanban'],demands:['PRODUÇÃO','Tasks'],agenda:['PLANEJAMENTO','Agenda'],clients:['RELACIONAMENTO','Clientes'],services:['PRODUÇÃO','Serviços'],finance:['COMERCIAL','Financeiro'],reports:['INDICADORES','Relatórios'],logs:['SISTEMA','Saúde & Logs'],settings:['SISTEMA','Configurações']};if(page==='settings'&&S.user.role!=='admin')names.settings=['CONTA','Minha conta'];$('#page-kicker').textContent=names[page]?.[0]||'';$('#page-title').textContent=names[page]?.[1]||page;closeMobileNav();try{await (({dashboard:renderDashboard,kanban:renderKanban,demands:renderDemandList,agenda:renderAgenda,clients:renderClients,services:renderServices,finance:renderFinance,reports:renderReports,logs:renderSystemLogs,settings:renderSettings}[page]||renderDashboard)());if(page==='kanban'&&S.pendingTaskId){const id=S.pendingTaskId;S.pendingTaskId=0;await openDemand(id)}}catch(e){toast(e.message,true);$('#content').innerHTML=`<div class="empty">${esc(e.message)}</div>`}finally{if(viewState)restoreViewState(viewState);else if(page!==previousPage)requestAnimationFrame(()=>window.scrollTo({left:0,top:0,behavior:'auto'}));if(page==='kanban'&&page!==previousPage)requestAnimationFrame(()=>requestAnimationFrame(()=>{const board=$('.kanban');if(board)board.scrollLeft=0}));if(visualLoad)hidePageLoader()}}
+  async function go(page,push=false,visualLoad=false,preserveView=null){const previousPage=S.page;if(previousPage==='automations'&&page!=='automations'&&automationEditorState?.dirty&&!confirm('Você tem alterações não salvas nesta automação. Deseja descartá-las?'))return;const keepView=preserveView===null?(page===previousPage&&!push):!!preserveView,viewState=keepView?captureViewState():null;if(page==='agenda'&&previousPage!=='agenda'){window.taskescAgendaView=window.matchMedia&&window.matchMedia('(max-width:760px)').matches?'day':'week';window.taskescAgendaDate=null}if(visualLoad)showPageLoader();if(push&&page!==S.page)history.pushState({},'',routeUrl(page));S.page=page;syncRealtimeChannels();closeNotifications();document.body.classList.toggle('kanban-page',page==='kanban');document.querySelectorAll('.nav-btn').forEach(b=>{const active=b.dataset.page===page;b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});const names={dashboard:['VISÃO GERAL','Dashboard'],kanban:['PRODUÇÃO','Kanban'],demands:['PRODUÇÃO','Tasks'],agenda:['PLANEJAMENTO','Agenda'],clients:['RELACIONAMENTO','Clientes'],services:['PRODUÇÃO','Serviços'],finance:['COMERCIAL','Financeiro'],reports:['INDICADORES','Relatórios'],automations:['AUTOMAÇÃO','Automações'],logs:['SISTEMA','Saúde & Logs'],settings:['SISTEMA','Configurações']};if(page==='settings'&&S.user.role!=='admin')names.settings=['CONTA','Minha conta'];$('#page-kicker').textContent=names[page]?.[0]||'';$('#page-title').textContent=names[page]?.[1]||page;closeMobileNav();try{await (({dashboard:renderDashboard,kanban:renderKanban,demands:renderDemandList,agenda:renderAgenda,clients:renderClients,services:renderServices,finance:renderFinance,reports:renderReports,automations:renderAutomations,logs:renderSystemLogs,settings:renderSettings}[page]||renderDashboard)());if(page==='kanban'&&S.pendingTaskId){const id=S.pendingTaskId;S.pendingTaskId=0;await openDemand(id)}}catch(e){toast(e.message,true);$('#content').innerHTML=`<div class="empty">${esc(e.message)}</div>`}finally{if(viewState)restoreViewState(viewState);else if(page!==previousPage)requestAnimationFrame(()=>window.scrollTo({left:0,top:0,behavior:'auto'}));if(page==='kanban'&&page!==previousPage)requestAnimationFrame(()=>requestAnimationFrame(()=>{const board=$('.kanban');if(board)board.scrollLeft=0}));if(visualLoad)hidePageLoader()}}
   function refresh(){return go(S.page,false,false,true)};
   window.addEventListener('popstate',()=>{const r=readRoute();S.pendingTaskId=r.taskId;go(r.page,false,true)});
   function dashboardDelta(current,previous){current=Number(current||0);previous=Number(previous||0);if(previous===0)return current===0?{text:'0%',cls:'neutral'}:{text:'+100%',cls:'positive'};const pct=Math.round(((current-previous)/previous)*100);return {text:(pct>0?'+':'')+pct+'%',cls:pct>0?'positive':pct<0?'negative':'neutral'}}
@@ -1682,6 +1683,237 @@
     const show=group=>{panels.forEach(p=>p.classList.toggle('settings-panel-hidden',p.dataset.settingsGroup!==group));document.querySelectorAll('[data-settings-tab]').forEach(b=>b.classList.toggle('active',b.dataset.settingsTab===group))};
     document.querySelectorAll('[data-settings-tab]').forEach(b=>b.onclick=()=>show(b.dataset.settingsTab));show('geral');
   }
+
+  let automationEditorState=null,automationCatalogCache=null,automationListCache=[],automationNodeSeq=0;
+  const AUTO_FIELD_LABELS={client_id:'Cliente',project_id:'Projeto',category_id:'Serviço / categoria',stage_id:'Etapa do Kanban',priority:'Prioridade',assigned_to:'Responsável',whatsapp_recipient_mode:'Destinatário WhatsApp',draft:'Rascunho',commercial_status:'Situação comercial','event.change':'Tipo de alteração'};
+  const AUTO_OPERATOR_LABELS={eq:'é igual a',neq:'é diferente de',in:'está em',not_in:'não está em',is_empty:'está vazio',not_empty:'não está vazio'};
+  const AUTO_RUN_LABELS={pending:'Pendente',retry:'Nova tentativa',running:'Executando',success:'Concluída',failed:'Falhou',skipped:'Ignorada'};
+  const AUTO_RUN_CLASSES={pending:'warn',retry:'warn',running:'running',success:'ok',failed:'error',skipped:'muted'};
+
+  async function automationCatalog(){return automationCatalogCache||(automationCatalogCache=await api('automation.catalog'))}
+  function automationTriggerLabel(value){const rows=automationCatalogCache?.triggers||[];return rows.find(x=>x.value===value)?.label||value||'Gatilho'}
+  function automationRunLabel(value){return AUTO_RUN_LABELS[String(value||'')]||String(value||'—')}
+  function automationNodeById(id){return automationEditorState?.definition?.nodes?.find(n=>n.id===id)||null}
+  function automationEdgeFrom(id,branch='next'){return automationEditorState?.definition?.edges?.find(e=>e.from===id&&e.branch===branch)||null}
+  function automationIncoming(id){return automationEditorState?.definition?.edges?.filter(e=>e.to===id)||[]}
+  function automationNextId(prefix='node'){
+    const used=new Set((automationEditorState?.definition?.nodes||[]).map(n=>n.id));
+    let id='';do{id=`${prefix}_${Date.now().toString(36)}_${(++automationNodeSeq).toString(36)}`}while(used.has(id));return id
+  }
+  function automationMarkDirty(){
+    if(!automationEditorState)return;automationEditorState.dirty=true;
+    const state=$('#automation-save-state');if(state){state.textContent='Alterações não salvas';state.classList.add('dirty')}
+  }
+  function automationRootId(){return automationEditorState?.definition?.nodes?.find(n=>n.type==='trigger')?.id||''}
+  function automationNodeMeta(node){
+    if(!node)return {icon:'activity',eyebrow:'NÓ',title:'Nó',tone:'neutral'};
+    if(node.type==='trigger')return {icon:'circle-play',eyebrow:'GATILHO',title:automationTriggerLabel(node.config?.event),tone:'trigger'};
+    if(node.type==='condition')return {icon:'git-branch',eyebrow:'CONDIÇÃO',title:AUTO_FIELD_LABELS[node.config?.field]||node.config?.field||'Condição',tone:'condition'};
+    if(node.type==='action.whatsapp')return {icon:'message-circle',eyebrow:'AÇÃO',title:'Enviar WhatsApp',tone:'whatsapp'};
+    return {icon:'circle-stop',eyebrow:'FIM',title:'Encerrar fluxo',tone:'end'}
+  }
+  function automationConditionSummary(node){
+    const cfg=node?.config||{},op=AUTO_OPERATOR_LABELS[cfg.operator]||cfg.operator||'';
+    if(['is_empty','not_empty'].includes(cfg.operator))return op;
+    const raw=Array.isArray(cfg.value)?cfg.value.join(', '):String(cfg.value??'');
+    const options=automationFieldOptions(cfg.field),label=options.find(x=>String(x.value)===raw)?.label||raw||'—';
+    return `${op} ${label}`.trim()
+  }
+  function automationNodeSummary(node){
+    if(node.type==='trigger')return 'Inicia quando '+automationTriggerLabel(node.config?.event).toLowerCase()+'.';
+    if(node.type==='condition')return automationConditionSummary(node);
+    if(node.type==='action.whatsapp'){
+      const message=String(node.config?.message||'').replace(/\s+/g,' ').trim();
+      return message?message.slice(0,78)+(message.length>78?'…':''):'Mensagem não configurada';
+    }
+    return 'Nenhuma outra etapa será executada neste ramo.'
+  }
+  function automationNodeCard(node){
+    const meta=automationNodeMeta(node),selected=automationEditorState?.selectedNodeId===node.id;
+    return `<button type="button" class="automation-node-card ${meta.tone} ${selected?'selected':''}" data-auto-node="${esc(node.id)}"><span class="automation-node-icon ${meta.tone}">${icon(meta.icon,'•')}</span><span class="automation-node-copy"><span class="eyebrow">${esc(meta.eyebrow)}</span><b>${esc(meta.title)}</b><small>${esc(automationNodeSummary(node))}</small></span><span class="automation-node-chevron">${icon('chevron-right','›')}</span></button>`
+  }
+  function automationAddControls(parentId,branch='next'){
+    return `<div class="automation-add-step"><span class="automation-line"></span><div class="automation-add-actions"><button type="button" class="automation-add-btn" data-auto-add="condition" data-auto-parent="${esc(parentId)}" data-auto-branch="${esc(branch)}">${icon('git-branch','+')} Condição</button><button type="button" class="automation-add-btn" data-auto-add="action.whatsapp" data-auto-parent="${esc(parentId)}" data-auto-branch="${esc(branch)}">${icon('message-circle','+')} WhatsApp</button></div></div>`
+  }
+  function automationRenderNode(nodeId,seen=new Set()){
+    const node=automationNodeById(nodeId);if(!node)return '<div class="automation-broken">Nó ausente</div>';
+    if(seen.has(nodeId))return '<div class="automation-broken">Ciclo inválido</div>';
+    const nextSeen=new Set(seen);nextSeen.add(nodeId);
+    if(node.type==='condition'){
+      const yes=automationEdgeFrom(node.id,'yes')?.to,no=automationEdgeFrom(node.id,'no')?.to;
+      return `<div class="automation-tree-node">${automationNodeCard(node)}<div class="automation-branch-stem"></div><div class="automation-branches"><section class="automation-branch yes"><div class="automation-branch-label"><span>SIM</span><small>Condição atendida</small></div>${automationAddControls(node.id,'yes')}${yes?automationRenderNode(yes,nextSeen):'<div class="automation-broken">Ramo sem destino</div>'}</section><section class="automation-branch no"><div class="automation-branch-label"><span>NÃO</span><small>Condição não atendida</small></div>${automationAddControls(node.id,'no')}${no?automationRenderNode(no,nextSeen):'<div class="automation-broken">Ramo sem destino</div>'}</section></div></div>`
+    }
+    if(node.type==='end')return `<div class="automation-tree-node">${automationNodeCard(node)}</div>`;
+    const next=automationEdgeFrom(node.id,'next')?.to;
+    return `<div class="automation-tree-node">${automationNodeCard(node)}${automationAddControls(node.id,'next')}${next?automationRenderNode(next,nextSeen):'<div class="automation-broken">Fluxo sem destino</div>'}</div>`
+  }
+  function automationFieldOptions(field){
+    if(field==='client_id')return (S.meta?.clients||[]).map(x=>({value:String(x.id),label:x.name}));
+    if(field==='project_id')return (S.meta?.projects||[]).map(x=>({value:String(x.id),label:x.name}));
+    if(field==='category_id')return (S.meta?.categories||[]).map(x=>({value:String(x.id),label:x.name}));
+    if(field==='stage_id')return (S.meta?.stages||[]).map(x=>({value:String(x.id),label:x.name}));
+    if(field==='assigned_to')return (S.meta?.users||[]).map(x=>({value:String(x.id),label:x.name}));
+    if(field==='priority')return [['low','Baixa'],['normal','Normal'],['high','Alta'],['urgent','Urgente']].map(x=>({value:x[0],label:x[1]}));
+    if(field==='whatsapp_recipient_mode')return [['none','Não enviar'],['assigned_user','Responsável da task'],['client','Cliente']].map(x=>({value:x[0],label:x[1]}));
+    if(field==='draft')return [['0','Publicada'],['1','Rascunho']].map(x=>({value:x[0],label:x[1]}));
+    if(field==='commercial_status')return [['pending','Pendente'],['approved','Aprovada'],['rejected','Rejeitada']].map(x=>({value:x[0],label:x[1]}));
+    return []
+  }
+  function automationValueMarkup(node){
+    const cfg=node.config||{},operator=cfg.operator||'eq';
+    if(['is_empty','not_empty'].includes(operator))return '<div class="automation-inspector-note">Este operador não precisa de valor.</div>';
+    const value=Array.isArray(cfg.value)?cfg.value.join(', '):String(cfg.value??''),options=automationFieldOptions(cfg.field);
+    if(['in','not_in'].includes(operator))return `<div class="field"><label>Valores</label><input class="input" data-auto-config="value-list" value="${esc(value)}" placeholder="Separe por vírgula"><small class="field-help">Para listas, use os IDs/valores separados por vírgula.</small></div>`;
+    if(options.length)return `<div class="field"><label>Valor</label><select class="select" data-auto-config="value">${options.map(x=>`<option value="${esc(x.value)}" ${String(x.value)===String(value)?'selected':''}>${esc(x.label)}</option>`).join('')}</select></div>`;
+    return `<div class="field"><label>Valor</label><input class="input" data-auto-config="value" value="${esc(value)}" placeholder="Valor da condição"></div>`
+  }
+  function automationInspectorMarkup(){
+    const node=automationNodeById(automationEditorState?.selectedNodeId)||automationNodeById(automationRootId());if(!node)return '<div class="empty slim">Selecione um bloco.</div>';
+    const meta=automationNodeMeta(node);
+    let body='';
+    if(node.type==='trigger'){
+      body=`<div class="field"><label>Quando acontecer</label><select class="select" data-auto-config="trigger_event">${(automationCatalogCache?.triggers||[]).map(x=>`<option value="${esc(x.value)}" ${x.value===automationEditorState.trigger_event?'selected':''}>${esc(x.label)}</option>`).join('')}</select><small class="field-help">O fluxo será criado a partir dos eventos transacionais do TaskEsc.</small></div>`;
+    }else if(node.type==='condition'){
+      body=`<div class="field"><label>Campo</label><select class="select" data-auto-config="field">${Object.entries(AUTO_FIELD_LABELS).map(([value,label])=>`<option value="${esc(value)}" ${value===node.config?.field?'selected':''}>${esc(label)}</option>`).join('')}</select></div><div class="field"><label>Operador</label><select class="select" data-auto-config="operator">${Object.entries(AUTO_OPERATOR_LABELS).map(([value,label])=>`<option value="${esc(value)}" ${value===node.config?.operator?'selected':''}>${esc(label)}</option>`).join('')}</select></div>${automationValueMarkup(node)}<div class="automation-inspector-note">O ramo <b>SIM</b> executa quando a condição for verdadeira; o ramo <b>NÃO</b> segue quando for falsa.</div>`;
+    }else if(node.type==='action.whatsapp'){
+      body=`<div class="automation-recipient-box"><span>DESTINATÁRIO</span><b>Definido na própria Task</b><small>Responsável, cliente ou nenhum. O fluxo nunca armazena o número.</small></div><div class="field"><label>Mensagem</label><textarea class="textarea automation-message-editor" data-auto-config="message" maxlength="4000" placeholder="Digite a mensagem...">${esc(node.config?.message||'')}</textarea><small class="field-help"><span id="automation-message-count">${String(node.config?.message||'').length}</span>/4000 caracteres</small></div><div class="automation-variable-list">${(automationCatalogCache?.variables||[]).map(v=>`<button type="button" class="automation-variable" data-auto-variable="${esc(v)}">${esc(v)}</button>`).join('')}</div>`;
+    }else body='<div class="automation-inspector-note">Este bloco encerra o ramo atual do fluxo.</div>';
+    return `<div class="automation-inspector-head"><span class="automation-node-icon ${meta.tone}">${icon(meta.icon,'•')}</span><div><span class="eyebrow">${esc(meta.eyebrow)}</span><h3>${esc(meta.title)}</h3></div></div><div class="automation-inspector-body">${body}</div>${!['trigger','end'].includes(node.type)?`<button type="button" class="danger full automation-remove-node" data-auto-remove="${esc(node.id)}">${icon('trash-2','×')} Remover este bloco</button>`:''}`
+  }
+  function automationRunsMarkup(){
+    const runs=automationEditorState?.runs||[];
+    if(!automationEditorState?.id)return '<div class="empty slim">Salve a automação para começar a registrar execuções.</div>';
+    if(!runs.length)return '<div class="empty slim">Nenhuma execução registrada ainda.</div>';
+    return `<div class="automation-runs-list">${runs.slice(0,12).map(run=>`<div class="automation-run-row"><span class="automation-run-status ${AUTO_RUN_CLASSES[run.status]||''}">${esc(automationRunLabel(run.status))}</span><div><b>#${Number(run.entity_id||0)} · ${esc(run.trigger_event||'Evento')}</b><small>${time(run.created_at)} · ${Number(run.attempts||0)} tentativa(s)${run.last_error?' · '+esc(run.last_error):''}</small></div></div>`).join('')}</div>`
+  }
+  function paintAutomationInspector(){
+    const panel=$('#automation-inspector');if(!panel)return;panel.innerHTML=automationInspectorMarkup();paintIcons();
+    const node=automationNodeById(automationEditorState?.selectedNodeId)||automationNodeById(automationRootId());if(!node)return;
+    panel.querySelector('[data-auto-config="trigger_event"]')?.addEventListener('change',e=>{automationEditorState.trigger_event=e.target.value;node.config.event=e.target.value;automationMarkDirty();paintAutomationEditor()});
+    panel.querySelector('[data-auto-config="field"]')?.addEventListener('change',e=>{node.config.field=e.target.value;const options=automationFieldOptions(node.config.field);node.config.value=options[0]?.value||'';automationMarkDirty();paintAutomationEditor()});
+    panel.querySelector('[data-auto-config="operator"]')?.addEventListener('change',e=>{node.config.operator=e.target.value;if(['in','not_in'].includes(node.config.operator)&&!Array.isArray(node.config.value))node.config.value=String(node.config.value??'').trim()?[String(node.config.value)]:[];if(!['in','not_in'].includes(node.config.operator)&&Array.isArray(node.config.value))node.config.value=node.config.value[0]??'';automationMarkDirty();paintAutomationEditor()});
+    panel.querySelector('[data-auto-config="value"]')?.addEventListener('change',e=>{node.config.value=e.target.value;automationMarkDirty();paintAutomationEditor()});
+    panel.querySelector('[data-auto-config="value-list"]')?.addEventListener('change',e=>{node.config.value=String(e.target.value||'').split(',').map(x=>x.trim()).filter(Boolean).slice(0,50);automationMarkDirty();paintAutomationEditor()});
+    const message=panel.querySelector('[data-auto-config="message"]');if(message)message.addEventListener('input',e=>{node.config.message=e.target.value;automationMarkDirty();const count=$('#automation-message-count');if(count)count.textContent=String(e.target.value.length)});
+    panel.querySelectorAll('[data-auto-variable]').forEach(btn=>btn.onclick=()=>{const input=panel.querySelector('[data-auto-config="message"]');if(!input)return;const token=btn.dataset.autoVariable,start=input.selectionStart??input.value.length,end=input.selectionEnd??input.value.length;input.value=input.value.slice(0,start)+token+input.value.slice(end);input.focus();input.setSelectionRange(start+token.length,start+token.length);input.dispatchEvent(new Event('input',{bubbles:true}))});
+    panel.querySelector('[data-auto-remove]')?.addEventListener('click',()=>automationRemoveNode(node.id));
+  }
+  function paintAutomationEditor(){
+    if(!automationEditorState)return;
+    const root=automationRootId(),nodeCount=automationEditorState.definition.nodes.length,runCount=automationEditorState.runs?.length||0;
+    $('#content').innerHTML=`<div class="automation-editor-shell"><div class="automation-editor-top"><button type="button" class="ghost" id="automation-back">${icon('arrow-left','←')} Voltar</button><div class="automation-title-field"><span class="eyebrow">FLUXO</span><input id="automation-name" class="automation-name-input" maxlength="190" value="${esc(automationEditorState.name)}" aria-label="Nome da automação"></div><div class="automation-editor-actions"><label class="automation-active-switch"><input id="automation-active" type="checkbox" ${automationEditorState.active?'checked':''}><span></span><b>${automationEditorState.active?'Ativa':'Pausada'}</b></label><span id="automation-save-state" class="automation-save-state ${automationEditorState.dirty?'dirty':''}">${automationEditorState.dirty?'Alterações não salvas':'Tudo salvo'}</span><button type="button" class="primary" id="automation-save">${icon('save','✓')} Salvar automação</button></div></div><div class="automation-editor-meta"><span><b>${esc(automationTriggerLabel(automationEditorState.trigger_event))}</b><small>Gatilho</small></span><span><b>${nodeCount}</b><small>Blocos</small></span><span><b>${runCount}</b><small>Execuções recentes</small></span><span><b>Task → WhatsApp</b><small>Destino controlado pela task</small></span></div><div class="automation-editor-layout"><section class="automation-canvas-panel"><div class="automation-canvas-head"><div><span class="eyebrow">EDITOR VISUAL</span><h3>Árvore da automação</h3><small>Clique em um bloco para configurar. Use os botões entre blocos para inserir condições e ações.</small></div><div class="automation-canvas-legend"><span><i class="dot trigger"></i>Gatilho</span><span><i class="dot condition"></i>Condição</span><span><i class="dot whatsapp"></i>WhatsApp</span></div></div><div class="automation-canvas-scroll"><div class="automation-tree">${root?automationRenderNode(root):'<div class="empty">Gatilho ausente.</div>'}</div></div></section><aside class="automation-side-panel"><section class="panel automation-inspector-card"><div id="automation-inspector"></div></section><section class="panel automation-runs-card"><div class="panel-head"><div><h3>Últimas execuções</h3><div class="panel-sub">Resultado real das automações disparadas pelo Outbox.</div></div></div>${automationRunsMarkup()}</section></aside></div></div>`;
+    paintIcons();
+    $('#automation-back').onclick=closeAutomationEditor;
+    const name=$('#automation-name');name.addEventListener('input',e=>{automationEditorState.name=e.target.value;automationMarkDirty()});
+    $('#automation-active').addEventListener('change',e=>{automationEditorState.active=e.target.checked;automationMarkDirty();paintAutomationEditor()});
+    $('#automation-save').onclick=saveAutomationEditor;
+    document.querySelectorAll('[data-auto-node]').forEach(btn=>btn.onclick=()=>{automationEditorState.selectedNodeId=btn.dataset.autoNode;document.querySelectorAll('[data-auto-node]').forEach(x=>x.classList.toggle('selected',x.dataset.autoNode===automationEditorState.selectedNodeId));paintAutomationInspector()});
+    document.querySelectorAll('[data-auto-add]').forEach(btn=>btn.onclick=()=>automationAddNode(btn.dataset.autoParent,btn.dataset.autoBranch,btn.dataset.autoAdd));
+    paintAutomationInspector()
+  }
+  function automationDefaultDefinition(trigger){
+    return {version:1,nodes:[{id:'trigger',type:'trigger',config:{event:trigger}},{id:'end',type:'end',config:{}}],edges:[{from:'trigger',to:'end',branch:'next'}]}
+  }
+  async function createAutomationEditor(push=true){
+    const catalog=await automationCatalog(),trigger=catalog.triggers?.[0]?.value||'demand.created';
+    automationEditorState={id:0,version:0,name:'Nova automação',trigger_event:trigger,active:false,definition:automationDefaultDefinition(trigger),runs:[],selectedNodeId:'trigger',dirty:true};
+    if(push)history.pushState({},'',routeUrl('automations')+'?automation=new');else history.replaceState({},'',routeUrl('automations')+'?automation=new');
+    paintAutomationEditor()
+  }
+  async function openAutomationEditor(id,push=true){
+    if(!id)return createAutomationEditor(push);
+    if(automationEditorState?.dirty&&automationEditorState.id!==id&&!confirm('Você tem alterações não salvas nesta automação. Deseja descartá-las?'))return;
+    const [,data]=await Promise.all([automationCatalog(),api('automation.get',{id})]);
+    automationEditorState={id:Number(data.id),version:Number(data.version),name:data.name||'',trigger_event:data.trigger_event,active:!!Number(data.active),definition:data.definition||automationDefaultDefinition(data.trigger_event),runs:data.runs||[],selectedNodeId:data.definition?.nodes?.find(n=>n.type==='trigger')?.id||'trigger',dirty:false};
+    if(push)history.pushState({},'',routeUrl('automations')+'?automation='+Number(id));
+    paintAutomationEditor()
+  }
+  function automationAddNode(parentId,branch,type){
+    const edge=automationEdgeFrom(parentId,branch);if(!edge){toast('Este ramo não possui destino válido.',true);return}
+    const oldTarget=edge.to,newId=automationNextId(type==='condition'?'cond':'whatsapp');
+    if(type==='condition'){
+      const options=automationFieldOptions('client_id'),endId=automationNextId('end');
+      automationEditorState.definition.nodes.push({id:newId,type:'condition',config:{field:'client_id',operator:'eq',value:options[0]?.value||''}},{id:endId,type:'end',config:{}});
+      edge.to=newId;automationEditorState.definition.edges.push({from:newId,to:oldTarget,branch:'yes'},{from:newId,to:endId,branch:'no'});
+    }else{
+      automationEditorState.definition.nodes.push({id:newId,type:'action.whatsapp',config:{recipient:'task',message:'Olá! A task {{task.title}} foi atualizada.'}});
+      edge.to=newId;automationEditorState.definition.edges.push({from:newId,to:oldTarget,branch:'next'});
+    }
+    automationEditorState.selectedNodeId=newId;automationMarkDirty();paintAutomationEditor()
+  }
+  function automationCollectDescendants(start,set=new Set()){
+    if(!start||set.has(start))return set;set.add(start);
+    (automationEditorState.definition.edges||[]).filter(e=>e.from===start).forEach(e=>automationCollectDescendants(e.to,set));return set
+  }
+  function automationPruneBranch(start){
+    const candidates=automationCollectDescendants(start),protectedSet=new Set();
+    for(const id of candidates){
+      const incoming=(automationEditorState.definition.edges||[]).filter(e=>e.to===id);
+      if(incoming.some(e=>!candidates.has(e.from)))automationCollectDescendants(id,protectedSet)
+    }
+    const remove=new Set([...candidates].filter(id=>!protectedSet.has(id)));
+    automationEditorState.definition.nodes=automationEditorState.definition.nodes.filter(n=>!remove.has(n.id));
+    automationEditorState.definition.edges=automationEditorState.definition.edges.filter(e=>!remove.has(e.from)&&!remove.has(e.to))
+  }
+  function automationRemoveNode(nodeId){
+    const node=automationNodeById(nodeId);if(!node||['trigger','end'].includes(node.type))return;
+    if(!confirm(node.type==='condition'?'Remover esta condição? O ramo NÃO será descartado e o ramo SIM continuará no fluxo.':'Remover este bloco da automação?'))return;
+    const incoming=automationIncoming(nodeId)[0];if(!incoming){toast('Não foi possível localizar a entrada deste bloco.',true);return}
+    if(node.type==='condition'){
+      const yes=automationEdgeFrom(nodeId,'yes')?.to,no=automationEdgeFrom(nodeId,'no')?.to;if(!yes){toast('A condição não possui ramo SIM válido.',true);return}
+      incoming.to=yes;
+      automationEditorState.definition.edges=automationEditorState.definition.edges.filter(e=>e.from!==nodeId);
+      automationEditorState.definition.nodes=automationEditorState.definition.nodes.filter(n=>n.id!==nodeId);
+      if(no)automationPruneBranch(no)
+    }else{
+      const next=automationEdgeFrom(nodeId,'next')?.to;if(!next){toast('A ação não possui continuação válida.',true);return}
+      incoming.to=next;
+      automationEditorState.definition.edges=automationEditorState.definition.edges.filter(e=>e.from!==nodeId);
+      automationEditorState.definition.nodes=automationEditorState.definition.nodes.filter(n=>n.id!==nodeId)
+    }
+    automationEditorState.selectedNodeId=incoming.from;automationMarkDirty();paintAutomationEditor()
+  }
+  async function saveAutomationEditor(){
+    if(!automationEditorState)return;
+    const button=$('#automation-save'),name=automationEditorState.name.trim();if(!name){toast('Informe o nome da automação.',true);$('#automation-name')?.focus();return}
+    const old=button?.innerHTML;if(button){button.disabled=true;button.textContent='Salvando…'}
+    try{
+      const result=await api('automation.save',{id:automationEditorState.id||0,version:automationEditorState.version||0,name,trigger_event:automationEditorState.trigger_event,active:automationEditorState.active?1:0,definition:automationEditorState.definition},'POST');
+      automationEditorState.id=Number(result.id);automationEditorState.version=Number(result.version);automationEditorState.name=name;automationEditorState.dirty=false;
+      history.replaceState({},'',routeUrl('automations')+'?automation='+automationEditorState.id);
+      const fresh=await api('automation.get',{id:automationEditorState.id});automationEditorState.definition=fresh.definition;automationEditorState.runs=fresh.runs||[];automationEditorState.active=!!Number(fresh.active);automationEditorState.trigger_event=fresh.trigger_event;
+      if(!automationNodeById(automationEditorState.selectedNodeId))automationEditorState.selectedNodeId=automationRootId();
+      toast('Automação salva');paintAutomationEditor()
+    }catch(x){toast(x.message||'Não foi possível salvar a automação.',true);if(button){button.disabled=false;button.innerHTML=old;paintIcons()}}
+  }
+  async function closeAutomationEditor(){
+    if(automationEditorState?.dirty&&!confirm('Descartar as alterações não salvas desta automação?'))return;
+    automationEditorState=null;history.pushState({},'',routeUrl('automations'));await renderAutomations()
+  }
+  function paintAutomationList(rows){
+    const active=rows.filter(x=>Number(x.active)).length,failed=rows.filter(x=>x.last_run_status==='failed').length,totalRuns=rows.reduce((sum,x)=>sum+Number(x.run_count||0),0);
+    $('#content').innerHTML=`<div class="automation-page"><div class="automation-hero"><div><span class="eyebrow">AUTOMAÇÃO</span><h3>Fluxos automáticos</h3><p>Monte gatilhos, condições e mensagens de WhatsApp em uma árvore visual. O motor roda no worker sem bloquear o TaskEsc.</p></div><button type="button" class="primary" id="new-automation">${icon('plus','+')} Nova automação</button></div><div class="grid automation-stats"><div class="stat-card"><div class="stat-label">Automações</div><div class="stat-value">${rows.length}</div><div class="stat-note">fluxos cadastrados</div></div><div class="stat-card"><div class="stat-label">Ativas</div><div class="stat-value">${active}</div><div class="stat-note">ouvindo eventos</div></div><div class="stat-card"><div class="stat-label">Execuções</div><div class="stat-value">${totalRuns}</div><div class="stat-note">histórico acumulado</div></div><div class="stat-card"><div class="stat-label">Última execução falhou</div><div class="stat-value">${failed}</div><div class="stat-note">pedem revisão</div></div></div><section class="panel automation-list-panel"><div class="panel-head automation-list-head"><div><h3>Seus fluxos</h3><div class="panel-sub">Clique em uma automação para abrir o editor visual.</div></div><div class="search-box automation-search"><span>${icon('search','⌕')}</span><input id="automation-search" class="input" type="search" placeholder="Buscar automação"></div></div><div id="automation-list"></div></section></div>`;
+    $('#new-automation').onclick=()=>createAutomationEditor(true);
+    const input=$('#automation-search');input.addEventListener('input',()=>paintAutomationListRows(rows,input.value));
+    paintAutomationListRows(rows,'');paintIcons()
+  }
+  function paintAutomationListRows(rows,query=''){
+    const root=$('#automation-list');if(!root)return;const q=String(query||'').trim().toLocaleLowerCase('pt-BR'),visible=rows.filter(x=>!q||String(x.name||'').toLocaleLowerCase('pt-BR').includes(q)||automationTriggerLabel(x.trigger_event).toLocaleLowerCase('pt-BR').includes(q));
+    root.innerHTML=visible.length?`<div class="automation-card-list">${visible.map(row=>`<article class="automation-list-card" data-auto-open="${Number(row.id)}"><div class="automation-list-icon">${icon('workflow','◇')}</div><div class="automation-list-copy"><div class="automation-list-title"><b>${esc(row.name)}</b><span class="automation-status-pill ${Number(row.active)?'active':'paused'}">${Number(row.active)?'Ativa':'Pausada'}</span></div><small>${esc(automationTriggerLabel(row.trigger_event))}</small><div class="automation-list-meta"><span>${Number(row.run_count||0)} execução(ões)</span><span>${row.last_run_at?'Última '+time(row.last_run_at):'Ainda não executada'}</span>${row.last_run_status?`<span class="automation-run-status ${AUTO_RUN_CLASSES[row.last_run_status]||''}">${esc(automationRunLabel(row.last_run_status))}</span>`:''}</div></div><div class="automation-list-actions"><button type="button" class="mini-btn" data-auto-toggle="${Number(row.id)}" data-active="${Number(row.active)?1:0}">${icon(Number(row.active)?'pause':'play',Number(row.active)?'Ⅱ':'▶')} ${Number(row.active)?'Pausar':'Ativar'}</button><button type="button" class="secondary" data-auto-edit="${Number(row.id)}">Editar</button></div></article>`).join('')}</div>`:'<div class="empty">Nenhuma automação encontrada.</div>';
+    root.querySelectorAll('[data-auto-open]').forEach(card=>card.onclick=e=>{if(e.target.closest('button'))return;openAutomationEditor(Number(card.dataset.autoOpen),true)});
+    root.querySelectorAll('[data-auto-edit]').forEach(btn=>btn.onclick=e=>{e.stopPropagation();openAutomationEditor(Number(btn.dataset.autoEdit),true)});
+    root.querySelectorAll('[data-auto-toggle]').forEach(btn=>btn.onclick=async e=>{e.stopPropagation();btn.disabled=true;try{await api('automation.toggle',{id:Number(btn.dataset.autoToggle),active:btn.dataset.active==='1'?0:1},'POST');toast(btn.dataset.active==='1'?'Automação pausada':'Automação ativada');automationListCache=await api('automation.list');paintAutomationList(automationListCache)}catch(x){toast(x.message,true);btn.disabled=false}});
+    paintIcons()
+  }
+  async function renderAutomations(){
+    if(S.user.role!=='admin')throw new Error('Somente administradores podem acessar automações.');
+    const requested=new URLSearchParams(location.search).get('automation');await automationCatalog();
+    if(requested==='new'){await createAutomationEditor(false);return}
+    if(/^\d+$/.test(requested||'')){await openAutomationEditor(Number(requested),false);return}
+    automationEditorState=null;automationListCache=await api('automation.list');paintAutomationList(automationListCache)
+  }
+  window.addEventListener('beforeunload',event=>{if(automationEditorState?.dirty){event.preventDefault();event.returnValue=''}});
+
   async function renderSettings(){
     if(S.user.role!=='admin'){await renderAccountSettings();return}const [set,accounts,users,wppStatus]=await Promise.all([api('settings.get'),api('google.accounts'),api('users.list'),api('wpp.status').catch(error=>({configured:false,provider_up:false,connected:false,session:'taskesc',public_url:'',message:error.message||'WPPConnect indisponível'}))]),driveAccounts=accounts.filter(a=>a.drive_ready&&a.status==='connected'),calendarAccounts=accounts.filter(a=>a.calendar_enabled&&a.status!=='disconnected'),mailLog=set.mail_log||[];
     const mailStatus=m=>m.status==='sent'?'<span class="status-ok">Enviado</span>':m.status==='failed'?'<span class="status-error">Falhou</span>':'<span class="status-warn">Pendente</span>';

@@ -10,7 +10,7 @@ final class AiWhatsAppTools
   ];
   if(Auth::can('tasks.create'))$tools[]=['type'=>'function','function'=>['name'=>'create_task','description'=>'Criar uma task nova somente em cliente acessível; exige título, briefing, cliente e categoria. Prazo usa padrão mínimo do sistema se omitido.','parameters'=>['type'=>'object','properties'=>[
    'title'=>['type'=>'string'],'brief'=>['type'=>'string'],'client_id'=>['type'=>'integer'],
-   'category_id'=>['type'=>'integer'],'assigned_to'=>['type'=>'integer'],
+   'category_id'=>['type'=>'integer'],'assigned_to'=>['type'=>'integer','description'=>'ID de um responsável válido; não invente.'],'assign_to_me'=>['type'=>'boolean','description'=>'Use true quando o autor pedir "eu mesmo", "para mim" ou seu próprio nome e for da equipe. Não combine com assigned_to.'], 
    'due_at'=>['type'=>'string','description'=>'Data e hora local YYYY-MM-DDTHH:mm; não invente prazo'],
    'priority'=>['type'=>'string','enum'=>['low','normal','high','urgent']]
   ],'required'=>['title','brief','client_id','category_id'],'additionalProperties'=>false]]];
@@ -29,7 +29,10 @@ final class AiWhatsAppTools
   $clients=DB::all('SELECT c.id,c.name FROM clients c WHERE c.active=1 AND '.$where.' ORDER BY c.name LIMIT 40',$params);
   $categories=DB::all('SELECT id,name,default_assigned_to FROM categories WHERE active=1 ORDER BY name LIMIT 40');
   $stages=DB::all('SELECT id,name,kind FROM stages WHERE active=1 ORDER BY position,id LIMIT 30');
-  return ['clients'=>$clients,'categories'=>$categories,'stages'=>$stages,'timezone'=>(string)config('timezone','America/Fortaleza')];
+  $actor=Auth::$user??[];
+  $selfRole=(string)($actor['role']??'');
+  $self=in_array($selfRole,['admin','staff'],true)?['id'=>(int)($actor['id']??0),'name'=>(string)($actor['name']??''),'role'=>$selfRole]:null;
+  return ['clients'=>$clients,'categories'=>$categories,'stages'=>$stages,'current_user'=>$self,'timezone'=>(string)config('timezone','America/Fortaleza')];
  }
 
  public static function run(string $name,array $args): array {
@@ -50,8 +53,24 @@ final class AiWhatsAppTools
     $input=['client_id'=>integer($args['client_id'],1),'category_id'=>integer($args['category_id'],1),
       'title'=>required($args,'title',190),'brief'=>required($args,'brief',3000),'priority'=>enumv($args['priority']??'normal',['low','normal','high','urgent'],'prioridade'),
       'amount_cents'=>0,'billing_mode'=>'included'];
-    // No finance, arbitrary WhatsApp recipient, deletions, bulk actions, or changes to existing tasks.
-    if(isset($args['assigned_to']))$input['assigned_to']=integer($args['assigned_to'],1);
+    // Only the authenticated actor can represent "me". The model cannot choose an arbitrary identity.
+    $toMe=$args['assign_to_me']??false;
+    if(!is_bool($toMe))fail('Indicação do próprio responsável inválida.',422);
+    if($toMe&&array_key_exists('assigned_to',$args))fail('Informe apenas uma opção de responsável.',422);
+    if($toMe){
+     if(!in_array((string)(Auth::$user['role']??''),['admin','staff'],true))fail('O responsável deve ser alguém da equipe.',422);
+     $input['assigned_to']=(int)Auth::$user['id'];
+    }elseif(array_key_exists('assigned_to',$args)){
+     $input['assigned_to']=integer($args['assigned_to'],1);
+    }else{
+     // Preserve the category's designated default. With no default, safely use the authenticated staff/ADM.
+     $category=DB::one('SELECT default_assigned_to FROM categories WHERE id=? AND active=1',[$input['category_id']]);
+     if(!$category)fail('Categoria inválida.',422);
+     if((int)($category['default_assigned_to']??0)<1&&in_array((string)(Auth::$user['role']??''),['admin','staff'],true)){
+      $input['assigned_to']=(int)Auth::$user['id'];
+     }
+    }
+    // All assignments still pass Demands::responsible, which checks active staff and client links.
     if(isset($args['due_at'])){$dt=(string)$args['due_at'];if(!preg_match('/\\A\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}\\z/D',$dt))fail('Data inválida.',422);$input['due_at']=$dt;}
     $result=TaskEscTaskApi::create($input);
     return ['kind'=>'created','id'=>(int)$result['id'],'url'=>$result['url']];

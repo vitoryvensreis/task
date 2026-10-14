@@ -6,7 +6,8 @@ O webhook autenticado continua **somente recebendo e armazenando mensagens**. Ne
 
 - ADM ativo: acesso implícito, independentemente do checkbox.
 - Equipe/cliente ativo: acesso somente se `users.ai_assistant_enabled=1`, habilitado pelo ADM em **Configurações → Usuários → Editar usuário**.
-- Contas inativas, telefones sem vínculo, números compartilhados entre contas e qualquer identificador `@lid` sem mapeamento autenticado: **negado por padrão**.
+- Contas inativas, telefones sem vínculo, números compartilhados entre contas e identificadores `@lid` sem mapeamento autenticado: **negados por padrão**.
+- Para `@lid`, o TaskEsc pode consultar `GET /api/{session}/contact/pn-lid/{pnLid}` pelo WPPConnect privado. O retorno precisa confirmar **o mesmo LID** e fornecer um telefone real `@c.us`; em caso de erro, ausência, inconsistência ou número não cadastrado, negar acesso. A disponibilidade dessa rota pode variar conforme a versão instalada do WPPConnect.
 - A autorização por WhatsApp não substitui as permissões específicas de cada papel no TaskEsc, que deverão ser verificadas por cada ação futura.
 - Nunca tomar o número informado dentro de uma mensagem como identidade. A identidade vem do `sender_id` do webhook tokenizado do WPPConnect e só é associada a `users.whatsapp_phone` por igualdade exata de número completo DDI+DDD.
 - Ao editar usuários, o sistema impede criar novos números duplicados; números antigos duplicados são negados em tempo de verificação.
@@ -16,6 +17,7 @@ O webhook autenticado continua **somente recebendo e armazenando mensagens**. Ne
 - Consultar participantes em tempo real via `GET /api/{session}/group-members/{groupId}`, nunca confiar em uma lista de participantes incluída em mensagem recebida.
 - Exigir simultaneamente (1) remetente ativo/autorizado com identidade de telefone confirmada, (2) remetente entre os membros atuais do grupo e (3) pelo menos um ADM ativo do TaskEsc também presente no grupo.
 - Um ADM do TaskEsc **não precisa ser administrador do grupo WhatsApp**.
+- Se participantes forem retornados como `@lid`, verificar a correspondência PN/LID diretamente com o provedor para identificar remetente e ADM. Não presumir que os dígitos do LID sejam um número de telefone.
 - Se provedor estiver fora do ar, resposta inválida, membro não identificado ou `@lid` sem vínculo verificado, a autorização **falha de forma fechada**.
 - A autorização de grupo só é um snapshot: antes de realizar uma ação futura será preciso repetir a consulta e verificar a permissão da ação. Permissões de menção/reply e limites de resposta pertencem ao próximo passo, que habilitará ações.
 
@@ -37,3 +39,23 @@ FROM ai_whatsapp_inbox GROUP BY chat_type,auth_status,auth_reason;
 ```
 
 O histórico do Passo 1 terá `auth_status='pending'`. Os novos eventos terão `authorized` ou `denied`. Isso **não habilita** leitura/execução da IA: não existe consumidor de comandos nesta etapa.
+
+## Diagnóstico de sender_unverified
+
+Esse resultado significa que o remetente não foi vinculado a **exatamente um usuário ativo** do TaskEsc. Confira em **Configurações → Usuários** se o campo WhatsApp tem o número completo (DDI + DDD), e se o usuário está ativo; libere o checkbox de IA para equipe/cliente. A existência de contato na agenda do WhatsApp não substitui o cadastro no TaskEsc.
+
+Execute apenas este resumo anônimo para ver os formatos recebidos:
+
+```sql
+SELECT chat_type,
+ CASE WHEN sender_id LIKE '%@lid' THEN 'lid'
+      WHEN sender_id LIKE '%@c.us' THEN 'phone_c_us'
+      WHEN sender_id LIKE '%@s.whatsapp.net' THEN 'phone_s_whatsapp_net'
+      ELSE 'other' END AS sender_format,
+ COUNT(*) AS messages
+FROM ai_whatsapp_inbox
+WHERE auth_checked_at IS NOT NULL
+GROUP BY chat_type,sender_format;
+```
+
+**Sem comandos AI nem respostas automáticas neste passo.**

@@ -82,7 +82,7 @@ final class AiWhatsAppInbox
             // If the verification cannot complete, pending is NOT an authorization.
             $decision=AiWhatsAppAccess::decide($sender,$group?'group':'private',$chatId);
             $checked=(new DateTimeImmutable('now',new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u');
-            $queue=($decision['status']??'')==='authorized'&&$body!==null&&in_array($type,['chat','text'],true);
+            $queue=AiWhatsAppGroq::enabled()&&($decision['status']??'')==='authorized'&&$body!==null&&in_array($type,['chat','text'],true);
             DB::run('UPDATE ai_whatsapp_inbox SET auth_user_id=?,auth_status=?,auth_reason=?,auth_checked_at=?,ai_state=?,ai_mentions_json=?,ai_updated_at=? WHERE session_name=? AND provider_message_id=? AND auth_status=\'pending\'',
                 [$decision['user_id'],$decision['status'],$decision['reason'],$checked,
                  $queue?'queued':'ignored',$mentionsJson,$checked,$session,$providerId]);

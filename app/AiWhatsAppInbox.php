@@ -59,7 +59,7 @@ final class AiWhatsAppInbox
             "INSERT INTO ai_whatsapp_inbox (session_name,provider_message_id,chat_id,sender_id,chat_type,message_type,body,status,received_at)
              VALUES (?,?,?,?,?,?,?,'received',?)
              ON DUPLICATE KEY UPDATE id=id",
-            [$session,$providerId,$chatId,$sender,$group?'group':'private',$type,$body,gmdate('Y-m-d H:i:s.u')]
+            [$session,$providerId,$chatId,$sender,$group?'group':'private',$type,$body,(new DateTimeImmutable('now',new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u')]
         );
         return ['accepted'=>true,'stored'=>$stmt->rowCount()===1,'duplicate'=>$stmt->rowCount()!==1,
             'chat_type'=>$group?'group':'private'];

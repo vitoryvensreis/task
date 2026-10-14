@@ -54,6 +54,30 @@ try{
  aiCheck($row&&$row['chat_type']==='private'&&$row['sender_id']==='5585999991000@c.us','Private sender metadata mismatch.');
  aiCheck($row['status']==='received'&&$row['body']==='Crie uma task para Vorp','Inbox must store message content as received, without execution.');
 
+
+ // WPPConnect tambem envia envelope plano em algumas versoes:
+ // o campo body e texto, nao um objeto de mensagem.
+ $flat=[
+  'event'=>'onmessage','session'=>'taskesc',
+  'id'=>['_serialized'=>'false_5585999993000@c.us_FLAT01'],
+  'from'=>'5585999993000@c.us','body'=>'Teste privado no formato plano',
+  'type'=>'chat','fromMe'=>false
+ ];
+ $flatResult=WppWebhook::handle($flat);
+ aiCheck(($flatResult['stored']??false)&&$flatResult['chat_type']==='private','Flat private text envelope must be accepted.');
+ aiCheck(WppWebhook::handle($flat)['duplicate']===true,'Flat private retry must be deduplicated.');
+ $flatRow=DB::one("SELECT * FROM ai_whatsapp_inbox WHERE provider_message_id='false_5585999993000@c.us_FLAT01'");
+ aiCheck($flatRow&&$flatRow['body']==='Teste privado no formato plano'&&$flatRow['sender_id']==='5585999993000@c.us','Flat private payload must persist text and sender.');
+
+ $data=[
+  'event'=>'onmessage','session'=>'taskesc',
+  'data'=>['id'=>'false_5585999994000@c.us_DATA01','from'=>'5585999994000@c.us',
+           'body'=>'Teste privado em data','type'=>'chat','fromMe'=>false]
+ ];
+ aiCheck(WppWebhook::handle($data)['stored']===true,'Nested data private envelope must be accepted.');
+ $dataRow=DB::one("SELECT * FROM ai_whatsapp_inbox WHERE provider_message_id='false_5585999994000@c.us_DATA01'");
+ aiCheck($dataRow&&$dataRow['body']==='Teste privado em data','Private data payload must retain body.');
+
  $second=$private;$second['body']['id']='false_5585999991000@c.us_ABC124';
  aiCheck(WppWebhook::handle($second)['stored']===true,'Different provider ID with same body must be accepted.');
  $group=['event'=>'onmessage','body'=>[
@@ -89,7 +113,7 @@ try{
 
  $qr=WppWebhook::handle(['event'=>'status-find','status'=>'isLogged']);
  aiCheck(($qr['accepted']??false)&&($qr['connected']??false),'Existing WPP connection status must still work.');
- aiCheck((int)(DB::one('SELECT COUNT(*) n FROM ai_whatsapp_inbox')['n']??0)===4,'Expected 2 private + 1 group + 1 media message.');
+ aiCheck((int)(DB::one('SELECT COUNT(*) n FROM ai_whatsapp_inbox')['n']??0)===6,'Expected 4 private + 1 group + 1 media message.');
  aiCheck((int)(DB::one('SELECT COUNT(*) n FROM whatsapp_messages')['n']??0)===0,'Passive inbox must never send outbound WhatsApp messages.');
  aiCheck((int)(DB::one('SELECT COUNT(*) n FROM automation_runs')['n']??0)===0,'Passive inbox must never start automations.');
  aiCheck((int)(DB::one("SELECT COUNT(*) n FROM event_outbox WHERE event_type LIKE 'ai.%'")['n']??0)===0,'Message contents must not enter realtime/outbox.');

@@ -13,6 +13,7 @@ final class AiWhatsAppWorker
   $schema=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);
   return ['status'=>$schema===29?'ok':'error','schema'=>$schema,'enabled'=>AiWhatsAppProvider::enabled(),
    'admin_control_enabled'=>AiWhatsAppAdminActions::enabled(),
+   'agenda_control_enabled'=>AiWhatsAppAgendaTools::writeEnabled(),
    'queue'=>(int)(DB::one("SELECT COUNT(*) n FROM ai_whatsapp_inbox WHERE ai_state IN ('queued','retry')")['n']??0)];
  }
  public static function tick(int $limit=5,?callable $planner=null,?callable $verify=null,?callable $mentioned=null,?callable $send=null,bool $test=false): array {

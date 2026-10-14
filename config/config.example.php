@@ -19,7 +19,8 @@ return [
  ],
  'ai_whatsapp' => [
    'enabled' => false, // Ative somente na configuração privada da VPS.
-   'admin_control_enabled' => false, // Controle administrativo sensível: opt-in privado após testes.
+   'admin_control_enabled' => false, // Controle financeiro sensível, independente da agenda.
+   'agenda_control_enabled' => false, // Agenda: criação/edição/cancelamento privados com confirmação.
    'provider' => 'gemini',
    'fallback_provider' => 'groq',
    'gemini_api_key' => '',

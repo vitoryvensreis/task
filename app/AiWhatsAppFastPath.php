@@ -40,6 +40,17 @@ final class AiWhatsAppFastPath
         if($financialPrivate && preg_match('/\A(?:liste|mostre|ver|quais\s+sao)\s+(?:as\s+)?(?:minhas\s+)?(?:contas|cobrancas)\s+a\s+receber\s+(?:esse|este)\s+mes\z/u',$text)){
             return ['tool'=>'finance_receivables','arguments'=>['scope'=>'month']];
         }
+        // Other read-only admin queries also avoid the model, but NEVER bypass
+        // the opt-in flag, private-chat restriction, identity or tool allowlist.
+        if($financialPrivate && AiWhatsAppAdminActions::enabled()){
+            $adminCommands=[
+                'liste clientes'=>'list_clients','liste os clientes'=>'list_clients','mostre os clientes'=>'list_clients',
+                'liste projetos'=>'list_projects','liste os projetos'=>'list_projects',
+                'liste usuarios'=>'list_team','liste a equipe'=>'list_team','liste equipe'=>'list_team',
+                'liste agenda'=>'list_events','liste proximos eventos'=>'list_events'
+            ];
+            if(isset($adminCommands[$text]))return ['tool'=>$adminCommands[$text],'arguments'=>[]];
+        }
         // Explicit and complete phrases only. Never accept negations, additions
         // like "e exclua", or unspecified client/project filters in this path.
         if(preg_match('/\A(?:liste|listar|mostre|mostrar|consulte|consultar|ver)\s+(?:as\s+)?(?:minhas\s+)?(?:ultimas\s+)?(?:(\d{1,2})\s+)?(?:tarefas|tasks)\z/u',$text,$m)

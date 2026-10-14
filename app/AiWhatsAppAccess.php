@@ -20,6 +20,7 @@ final class AiWhatsAppAccess
         if($user['role']!=='admin'&&(int)$user['ai_assistant_enabled']!==1)return self::deny('permission_disabled');
         $id=(int)$user['id'];
         if($chatType==='private')return ['status'=>'authorized','reason'=>'user_authorized','user_id'=>$id];
+        if($user['role']!=='admin')return self::deny('group_admin_only');
 
         // Participants must come from a fresh authenticated WPPConnect request,
         // never the untrusted participant list of an inbound webhook event.

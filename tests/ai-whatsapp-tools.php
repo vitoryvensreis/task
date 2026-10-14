@@ -392,5 +392,74 @@ try{
  Auth::$user=DB::one('SELECT * FROM users WHERE id=?',[$customer]);Auth::$actor=Auth::$user;
  at(AiWhatsAppAdminActions::catalog(true)===[],'Client cannot request admin financial operations');
  Auth::$user=DB::one('SELECT * FROM users WHERE id=?',[$admin]);Auth::$actor=Auth::$user;
+
+ // Task named in group: exact command, no @metadata, zero LLM requests, admin-only.
+ $namedGroup=DB::insert('ai_whatsapp_inbox',['session_name'=>'taskesc','provider_message_id'=>'group-task-name-1',
+  'chat_id'=>$groupId,'sender_id'=>$chat,'chat_type'=>'group','message_type'=>'chat','body'=>'Task, liste minhas tarefas',
+  'status'=>'received','auth_status'=>'authorized','auth_reason'=>'group_admin_present','received_at'=>now(),
+  'ai_state'=>'queued','ai_mentions_json'=>'[]']);
+ $called=0;$noModel=static function()use(&$called):array{$called++;throw new RuntimeException('model called for name command');};
+ $sentBefore=count($sent);AiWhatsAppWorker::tick(1,$noModel,$verifier,fn()=>false,$sender,true);
+ at(DB::one('SELECT ai_state FROM ai_whatsapp_inbox WHERE id=?',[$namedGroup])['ai_state']==='sent','Task group message must be answered');
+ at($called===0&&count($sent)===$sentBefore+1&&$sent[$sentBefore][2]===true,'Task group reply without model');
+ $staffGroup=DB::insert('ai_whatsapp_inbox',['session_name'=>'taskesc','provider_message_id'=>'group-task-name-staff-1',
+  'chat_id'=>$groupId,'sender_id'=>'5585999990011@c.us','chat_type'=>'group','message_type'=>'chat','body'=>'Task, liste minhas tarefas',
+  'status'=>'received','auth_status'=>'authorized','auth_reason'=>'group_admin_present','received_at'=>now(),
+  'ai_state'=>'queued','ai_mentions_json'=>'[]']);
+ $staffCheck=static fn()=>['status'=>'authorized','user_id'=>$staff];
+ AiWhatsAppWorker::tick(1,$noModel,$staffCheck,fn()=>false,$sender,true);
+ at(DB::one('SELECT ai_state FROM ai_whatsapp_inbox WHERE id=?',[$staffGroup])['ai_state']==='ignored','Non-admin group request blocked');
+ at(count($sent)===$sentBefore+1,'No group response to non-admin');
+ Auth::$user=DB::one('SELECT * FROM users WHERE id=?',[$admin]);Auth::$actor=Auth::$user;
+
+ $cal=DB::insert('calendars',['name'=>'Agenda de validação AI','access_role'=>'owner','selected'=>1,'write_enabled'=>1]);
+ $day=(new DateTimeImmutable('+12 days',new DateTimeZone('America/Fortaleza')))->format('Y-m-d');
+ $secretEvent=DB::insert('events',['calendar_id'=>$cal,'title'=>'Reunião confidencial','starts_at'=>timestamp($day.'T08:00:00'),
+  'ends_at'=>timestamp($day.'T09:00:00'),'private'=>1,'created_at'=>now(),'updated_at'=>now()]);
+ $openEvent=DB::insert('events',['calendar_id'=>$cal,'title'=>'Reunião pública','starts_at'=>timestamp($day.'T10:00:00'),
+  'ends_at'=>timestamp($day.'T11:00:00'),'private'=>0,'created_at'=>now(),'updated_at'=>now()]);
+ $groupNames=array_column(array_column(AiWhatsAppAgendaTools::catalog(false),'function'),'name');
+ at($groupNames===['agenda_list'],'Group offers read-only public agenda');
+ $privateNames=array_column(array_column(AiWhatsAppAgendaTools::catalog(true),'function'),'name');
+ at(in_array('agenda_create',$privateNames,true)&&in_array('agenda_cancel',$privateNames,true),'Private ADM offers confirmed writes');
+ $publicAgenda=AiWhatsAppAgendaTools::run('agenda_list',['from'=>$day,'to'=>$day],false);
+ at(count($publicAgenda['rows'])===1&&(int)$publicAgenda['rows'][0]['id']===$openEvent,'Private event must never leak to group');
+ $privateAgenda=AiWhatsAppAgendaTools::run('agenda_list',['from'=>$day,'to'=>$day],true);
+ at(count($privateAgenda['rows'])===2,'Private admin can list both appointments');
+ try{AiWhatsAppAgendaTools::run('agenda_detail',['event_id'=>$secretEvent],false);throw new RuntimeException('Private leaked');}
+ catch(AppError $e){at($e->status===403,'Group cannot fetch event details');}
+ at(AiWhatsAppAgendaTools::run('agenda_conflicts',['starts_at'=>$day.'T10:10','ends_at'=>$day.'T10:40'],true)['kind']==='agenda_conflicts','Can check availability');
+
+ $agendaInput=['calendar_id'=>$cal,'title'=>'Compromisso por IA','starts_at'=>$day.'T14:00','ends_at'=>$day.'T15:00','private'=>true];
+ $requestAgenda=DB::insert('ai_whatsapp_inbox',['session_name'=>'taskesc','provider_message_id'=>'agenda-prepare-1','chat_id'=>$chat,'sender_id'=>$chat,
+  'chat_type'=>'private','message_type'=>'chat','body'=>'Criar reunião por IA','status'=>'received','auth_status'=>'authorized',
+  'auth_reason'=>'user_authorized','received_at'=>now(),'ai_state'=>'queued']);
+ $proposal=static fn()=>['tool'=>'agenda_create','arguments'=>$agendaInput];
+ $sentBefore=count($sent);AiWhatsAppWorker::tick(1,$proposal,$verifier,null,$sender,true);
+ at(!DB::one('SELECT id FROM events WHERE title=?',['Compromisso por IA']),'Agenda proposal does not persist before confirmation');
+ preg_match('/CONFIRMAR ([A-F0-9]{12})/',$sent[$sentBefore][1],$code);
+ at(isset($code[1]),'Agenda approval code generated');
+ DB::insert('ai_whatsapp_inbox',['session_name'=>'taskesc','provider_message_id'=>'agenda-confirm-1','chat_id'=>$chat,'sender_id'=>$chat,
+  'chat_type'=>'private','message_type'=>'chat','body'=>'CONFIRMAR '.$code[1],'status'=>'received',
+  'auth_status'=>'authorized','auth_reason'=>'user_authorized','received_at'=>now(),'ai_state'=>'queued']);
+ $calls=0;$noConfirmModel=static function()use(&$calls):array{$calls++;throw new RuntimeException('AI on confirmation');};
+ AiWhatsAppWorker::tick(1,$noConfirmModel,$verifier,null,$sender,true);
+ $created=DB::one('SELECT * FROM events WHERE title=?',['Compromisso por IA']);
+ at($created&&(int)$created['private']===1&&$calls===0,'Confirmed agenda event saved once without model');
+ $newId=(int)$created['id'];
+ [$changed,$summary]=AiWhatsAppAgendaTools::prepare('agenda_update',['event_id'=>$newId,'title'=>'Reunião ajustada pela IA']);
+ at((int)$changed['version']===(int)$created['version'],'Update uses optimistic version');
+ AiWhatsAppAgendaTools::runConfirmed('agenda_update',$changed);
+ at(DB::one('SELECT title FROM events WHERE id=?',[$newId])['title']==='Reunião ajustada pela IA','Agenda updated');
+ try{AiWhatsAppAgendaTools::runConfirmed('agenda_update',$changed);throw new RuntimeException('Stale edit accepted');}
+ catch(AppError $e){at($e->status===409,'Stale agenda edit rejected');}
+ [$cancel,$summary]=AiWhatsAppAgendaTools::prepare('agenda_cancel',['event_id'=>$newId]);
+ AiWhatsAppAgendaTools::runConfirmed('agenda_cancel',$cancel);
+ at(DB::one('SELECT status FROM events WHERE id=?',[$newId])['status']==='cancelled','Agenda cancelled via existing domain');
+ Auth::$user=DB::one('SELECT * FROM users WHERE id=?',[$staff]);Auth::$actor=Auth::$user;
+ at(AiWhatsAppAgendaTools::catalog(true)===[],'Non-admin has no agenda admin tools');
+ try{AiWhatsAppAgendaTools::run('agenda_list',[],true);throw new RuntimeException('Staff bypassed');}
+ catch(AppError $e){at($e->status===403,'Staff denied from admin calendar');}
+ Auth::$user=DB::one('SELECT * FROM users WHERE id=?',[$admin]);Auth::$actor=Auth::$user;
  echo "AI WhatsApp tools: schema, create once, edit once, protected fields, self assignment, category default, client denial, private reply, group guard OK\n";
 }finally{@unlink(ROOT.'/config/config.php');@unlink(ROOT.'/storage/installed.lock');}

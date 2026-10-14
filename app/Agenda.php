@@ -14,7 +14,7 @@ final class Agenda {
   return self::payload($r);
  }
  public static function conflicts(string $start,string $end,int $buffer,int $exclude=0): array {$s=gmdate('Y-m-d H:i:s',strtotime($start.' UTC')-$buffer*60);$e=gmdate('Y-m-d H:i:s',strtotime($end.' UTC')+$buffer*60);$rows=DB::all("SELECT e.id,e.title,e.starts_at,e.ends_at,e.private,c.name AS calendar_name FROM events e JOIN calendars c ON c.id=e.calendar_id WHERE c.selected=1 AND e.status<>'cancelled' AND e.id<>? AND DATE_SUB(e.starts_at,INTERVAL e.buffer_minutes MINUTE)<? AND DATE_ADD(e.ends_at,INTERVAL e.buffer_minutes MINUTE)>?",[$exclude,$e,$s]);return $rows;}
- public static function save(array $p): array {
+ public static function save(array $p,bool $deferGoogleSync=false): array {
   Auth::admin();
   $local=DB::tx(function() use($p): array {
    $id=(int)($p['id']??0);$old=$id?DB::one('SELECT * FROM events WHERE id=? FOR UPDATE',[$id]):null;if($id&&!$old)fail('Compromisso não encontrado.',404);if($old&&(int)$old['version']!==integer($p['version']??0,1))fail('O compromisso mudou. Atualize a agenda.',409);
@@ -26,18 +26,18 @@ final class Agenda {
    audit('event',$id,'save',$old,$row);$fresh=DB::one('SELECT * FROM events WHERE id=?',[$id])?:array_merge($old??[],$row,['id'=>$id]);AgendaRealtime::event($old?'agenda.event_updated':'agenda.event_created',$fresh,$old?'save.updated':'save.created',(int)Auth::$user['id']);
    return ['id'=>$id,'calendar_id'=>(int)$cal['id'],'has_google'=>!empty($cal['account_id']),'sync_status'=>$fresh['sync_status']??$row['sync_status']];
   });
-  $sync=$local['has_google']?Google::syncCalendarNow((int)$local['calendar_id']):['synced'=>true];
+  $sync=$local['has_google']&&!$deferGoogleSync?Google::syncCalendarNow((int)$local['calendar_id']):['synced'=>!$local['has_google']];
   $fresh=DB::one('SELECT * FROM events WHERE id=?',[(int)$local['id']]);
-  if($local['has_google']&&$fresh)EventOutbox::transaction(fn()=>AgendaRealtime::event('agenda.event_synced',$fresh,'google.push',(int)Auth::$user['id']));
+  if($local['has_google']&&$fresh&&!$deferGoogleSync)EventOutbox::transaction(fn()=>AgendaRealtime::event('agenda.event_synced',$fresh,'google.push',(int)Auth::$user['id']));
   return ['id'=>(int)$local['id'],'sync_status'=>$fresh['sync_status']??$local['sync_status'],'google_synced'=>(bool)($sync['synced']??false),'message'=>$local['has_google']?(($sync['synced']??false)?'Compromisso salvo no TaskEsc e no Google Agenda.':'Compromisso salvo; o Google será tentado novamente pelo cron.'):'Compromisso salvo.'];
  }
-  public static function cancel(array $p): array {
+  public static function cancel(array $p,bool $deferGoogleSync=false): array {
   Auth::admin();
   $local=DB::tx(function() use($p): array {
    $e=DB::one('SELECT e.*,c.account_id,c.write_enabled FROM events e JOIN calendars c ON c.id=e.calendar_id WHERE e.id=? FOR UPDATE',[integer($p['id'],1)]);if(!$e)fail('Compromisso não encontrado.',404);if(!$e['write_enabled'])fail('Agenda somente leitura.',403);if((int)$e['version']!==integer($p['version']??0,1))fail('O compromisso foi alterado. Atualize.',409);
    $row=['status'=>'cancelled','version'=>$e['version']+1,'sync_status'=>$e['account_id']?'pending':'local','updated_at'=>now()];DB::update('events',$e['id'],$row);audit('event',$e['id'],'cancelled');$fresh=array_merge($e,$row);AgendaRealtime::event('agenda.event_cancelled',$fresh,'cancelled',(int)Auth::$user['id']);return ['id'=>(int)$e['id'],'calendar_id'=>(int)$e['calendar_id'],'has_google'=>!empty($e['account_id'])];
   });
-  if($local['has_google']){Google::syncCalendarNow((int)$local['calendar_id']);$fresh=DB::one('SELECT * FROM events WHERE id=?',[$local['id']]);if($fresh)EventOutbox::transaction(fn()=>AgendaRealtime::event('agenda.event_synced',$fresh,'google.push.cancel',(int)Auth::$user['id']));}
+  if($local['has_google']&&!$deferGoogleSync){Google::syncCalendarNow((int)$local['calendar_id']);$fresh=DB::one('SELECT * FROM events WHERE id=?',[$local['id']]);if($fresh)EventOutbox::transaction(fn()=>AgendaRealtime::event('agenda.event_synced',$fresh,'google.push.cancel',(int)Auth::$user['id']));}
   return ['saved'=>true];
  }
   public static function calendarSave(array $p): array {

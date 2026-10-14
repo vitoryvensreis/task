@@ -10,7 +10,7 @@ final class AiWhatsAppAdminActions {
   return ['type'=>'function','function'=>['name'=>$name,'description'=>$description,'parameters'=>['type'=>'object','properties'=>$properties,'required'=>$required,'additionalProperties'=>false]]];
  }
  public static function sensitive(string $name): bool {
-  return in_array($name,['create_invoice','record_payment','create_expense','mark_expense_paid','cancel_invoice','create_project'],true);
+  return in_array($name,['create_invoice','record_payment','create_expense','mark_expense_paid','cancel_invoice','create_project','agenda_create','agenda_update','agenda_cancel'],true);
  }
  public static function catalog(bool $private): array {
   if(!self::enabled()||!$private||(Auth::$user['role']??'')!=='admin')return [];
@@ -36,6 +36,7 @@ final class AiWhatsAppAdminActions {
  public static function prepare(string $name,array $p): array {
   Auth::admin();if(!self::enabled())fail('Controle administrativo da IA desativado.',403);
   if(!self::sensitive($name))fail('Ação administrativa não autorizada.',403);
+  if(AiWhatsAppAgendaTools::sensitive($name))return AiWhatsAppAgendaTools::prepare($name,$p);
   switch($name){
    case 'create_invoice':
     self::keys($p,['client_id','description','amount_cents','due_on']);
@@ -102,6 +103,7 @@ final class AiWhatsAppAdminActions {
     self::keys($p,[]);return ['kind'=>'admin_list','heading'=>'Agenda','items'=>DB::all("SELECT id,CONCAT(title,' (',starts_at,')') name FROM events WHERE status<>'cancelled' AND starts_at>=UTC_TIMESTAMP() ORDER BY starts_at LIMIT 10")];
   }
   if(!self::sensitive($name))fail('Operação não autorizada.',403);
+  if(AiWhatsAppAgendaTools::sensitive($name))return AiWhatsAppAgendaTools::runConfirmed($name,$p);
   switch($name){
    case 'create_invoice':return ['kind'=>'admin_done','action'=>'Cobrança criada','id'=>(int)Finance::invoiceCreate($p)['id']];
    case 'record_payment':

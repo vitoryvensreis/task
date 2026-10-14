@@ -43,7 +43,8 @@ final class AiWhatsAppTools
     Auth::requireAbility('tasks.create');
     foreach(['title','brief','client_id','category_id'] as $key)if(!array_key_exists($key,$args))fail('Dados insuficientes para criar task.',422);
     $input=['client_id'=>integer($args['client_id'],1),'category_id'=>integer($args['category_id'],1),
-      'title'=>required($args,'title',190),'brief'=>required($args,'brief',3000),'priority'=>enumv($args['priority']??'normal',['low','normal','high','urgent'],'prioridade')];
+      'title'=>required($args,'title',190),'brief'=>required($args,'brief',3000),'priority'=>enumv($args['priority']??'normal',['low','normal','high','urgent'],'prioridade'),
+      'amount_cents'=>0,'billing_mode'=>'included'];
     // No finance, arbitrary WhatsApp recipient, deletions, bulk actions, or changes to existing tasks.
     if(isset($args['assigned_to']))$input['assigned_to']=integer($args['assigned_to'],1);
     if(isset($args['due_at'])){$dt=(string)$args['due_at'];if(!preg_match('/\\A\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}\\z/D',$dt))fail('Data inválida.',422);$input['due_at']=$dt;}

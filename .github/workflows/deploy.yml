@@ -46,6 +46,7 @@ jobs:
           php tests/ai-whatsapp-fast-path.php
           php tests/ai-admin-approval.php
           php tests/ai-whatsapp-group-trigger.php
+          php tests/ai-agenda-config.php
           php tests/realtime.php
           php tests/ai-whatsapp-providers.php
           php tests/wppconnect-contract.php

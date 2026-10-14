@@ -62,8 +62,13 @@ final class AiWhatsAppWorker
   if($body===''||!in_array((string)$row['message_type'],['chat','text'],true)){self::ignore($id,'unsupported_message');return;}
   self::actor((int)$first['user_id']);
   $tools=AiWhatsAppTools::catalog();
-  $context=AiWhatsAppTools::context();
-  $planned=$planner?$planner($body,$context,$tools):AiWhatsAppProvider::plan($body,$context,$tools);
+  // Read-only commands and exact greetings never contact a paid/quota-limited model.
+  // For everything else, preserve the original Gemini -> Groq route.
+  $planned=AiWhatsAppFastPath::plan($body);
+  if($planned===null){
+   $context=AiWhatsAppTools::context();
+   $planned=$planner?$planner($body,$context,$tools):AiWhatsAppProvider::plan($body,$context,$tools);
+  }
   if(!is_array($planned))throw new RuntimeException('ai_plan_invalid');
   $message='';
   if(isset($planned['tool'])){

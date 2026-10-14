@@ -6,7 +6,7 @@ final class AiWhatsAppTools
 {
  public static function catalog(): array {
   $tools=[
-   ['type'=>'function','function'=>['name'=>'list_tasks','description'=>'Listar tarefas visíveis ao usuário no TaskEsc.','parameters'=>['type'=>'object','properties'=>['query'=>['type'=>'string','description'=>'Busca por título ou cliente (opcional)'],'client_id'=>['type'=>'integer','description'=>'ID do cliente, se fornecido']], 'additionalProperties'=>false]]]
+   ['type'=>'function','function'=>['name'=>'list_tasks','description'=>'Listar tarefas visíveis ao usuário no TaskEsc.','parameters'=>['type'=>'object','properties'=>['query'=>['type'=>'string','description'=>'Busca por título ou cliente (opcional)'],'client_id'=>['type'=>'integer','description'=>'ID do cliente, se fornecido'],'limit'=>['type'=>'integer','description'=>'Mostrar até 10 tasks (opcional)']], 'additionalProperties'=>false]]]
   ];
   if(Auth::can('tasks.create'))$tools[]=['type'=>'function','function'=>['name'=>'create_task','description'=>'Criar uma task nova somente em cliente acessível; exige título, briefing, cliente e categoria. Prazo usa padrão mínimo do sistema se omitido.','parameters'=>['type'=>'object','properties'=>[
    'title'=>['type'=>'string'],'brief'=>['type'=>'string'],'client_id'=>['type'=>'integer'],
@@ -41,12 +41,13 @@ final class AiWhatsAppTools
     Auth::requireAbility('tasks.read');
     $query=$args['query']??'';
     if(!is_string($query)||mb_strlen($query)>90)fail('Busca inválida.',422);
+    $limit=integer($args['limit']??10,1,10);
     $params=['paginate'=>1,'per_page'=>10,'q'=>$query];
     if(array_key_exists('client_id',$args))$params['client_id']=integer($args['client_id'],1);
     $data=TaskEscTaskApi::list($params);
     return ['kind'=>'list','total'=>(int)$data['pagination']['total'],'tasks'=>array_map(static fn($d)=>[
       'id'=>(int)$d['id'],'title'=>$d['title'],'client'=>$d['client_name'],'stage'=>$d['stage_name'],'due_at'=>$d['due_at']
-    ],$data['rows'])];
+    ],array_slice($data['rows'],0,$limit))];
    case 'create_task':
     Auth::requireAbility('tasks.create');
     foreach(['title','brief','client_id','category_id'] as $key)if(!array_key_exists($key,$args))fail('Dados insuficientes para criar task.',422);

@@ -581,3 +581,7 @@ A API REST v1 tem `GET /api/v1/finance/summary` e `GET /api/v1/finance/invoices`
 ### TaskEsc AI — ferramentas administrativas com confirmação (revisão)
 
 Há uma implementação de operações administrativas privadas do WhatsApp com duas mensagens: primeiro uma proposta validada, depois `CONFIRMAR <código>` ou `CANCELAR <código>`. Fica **desativada por padrão** por `ai_whatsapp.admin_control_enabled=false`. Consulte [módulos, segurança, testes e limitações](docs/taskesc-ai-admin-control.md). Não autoriza acesso irrestrito à plataforma nem ignora as regras do domínio.
+
+### TaskEsc AI — agenda e grupos
+
+Em grupos, somente o ADM TaskEsc autenticado e confirmado como participante pode invocar o assistente escrevendo **Task** ou **TaskEsc** como palavra isolada, ou marcando a conta oficial. Mensagens comuns não acionam a IA. Consultas de agenda no grupo mostram apenas compromissos públicos. No privado, o ADM pode listar calendários, compromissos, horários ocupados e detalhes; com a flag administrativa privada ativada, também pode propor criação, edição e cancelamento, sempre sujeitos a código de confirmação em uma segunda mensagem. Eventos Google são sincronizados pelo cron existente após a transação. Veja [regras e testes](docs/taskesc-ai-agenda-groups.md).

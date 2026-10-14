@@ -116,5 +116,48 @@ try{
  at((int)DB::one('SELECT version FROM demands WHERE id=1')['version']===(int)$afterDue['version'],'Unauthorized edit cannot write');
  Auth::$user=DB::one('SELECT * FROM users WHERE id=?',[$admin]);Auth::$actor=Auth::$user;
 
- echo "AI WhatsApp tools: schema, create once, edit once, protected fields, private reply, group guard OK\n";
+
+ // Missing category owner: the existing business rule must use the current verified staff/admin.
+ $unassignedCategory=DB::insert('categories',['name'=>'Vídeo sem padrão','fields_json'=>'[]','default_amount_cents'=>80000]);
+ $body=['client_id'=>$clientId,'category_id'=>$unassignedCategory,'title'=>'TESTE IA - sem responsável padrão','brief'=>'Validar responsável automático','priority'=>'normal'];
+ $actorContext=AiWhatsAppTools::context()['current_user']??null;
+ at(is_array($actorContext)&&(int)$actorContext['id']===$admin&&$actorContext['name']==='Admin AI','Current user exposed to AI without credentials');
+ $selfDefault=AiWhatsAppTools::run('create_task',$body);
+ $createdDefault=DB::one('SELECT * FROM demands WHERE id=?',[$selfDefault['id']]);
+ at((int)$createdDefault['assigned_to']===$admin,'No default means assign to verified actor');
+ at((int)$createdDefault['amount_cents']===0,'Automatic assignment does not create any charges');
+
+ // Respect a valid category default when the request did NOT explicitly choose "me".
+ $secondAdmin=DB::insert('users',['name'=>'Outro responsável','email'=>'second-admin-ai@ci.invalid','whatsapp_phone'=>'5585999990022','password_hash'=>password_hash('test-password',PASSWORD_DEFAULT),'role'=>'admin','active'=>1,'created_at'=>now()]);
+ $anotherCategory=DB::insert('categories',['name'=>'Vídeo com padrão diferente','fields_json'=>'[]','default_assigned_to'=>$secondAdmin]);
+ $normal=AiWhatsAppTools::run('create_task',['client_id'=>$clientId,'category_id'=>$anotherCategory,'title'=>'Categoria usa padrão','brief'=>'Sem seleção']);
+ at((int)DB::one('SELECT assigned_to FROM demands WHERE id=?',[$normal['id']])['assigned_to']===$secondAdmin,'Preserve valid category default');
+
+ // Explicit self assignment must override the category default without trusting an LLM-supplied ID.
+ $explicit=AiWhatsAppTools::run('create_task',['client_id'=>$clientId,'category_id'=>$anotherCategory,'title'=>'Eu mesmo responsável','brief'=>'Eu mesmo','assign_to_me'=>true]);
+ at((int)DB::one('SELECT assigned_to FROM demands WHERE id=?',[$explicit['id']])['assigned_to']===$admin,'Self means authenticated actor');
+
+ $beforeUnsafe=(int)(DB::one('SELECT COUNT(*) n FROM demands')['n']??0);
+ foreach([
+  ['client_id'=>$clientId,'category_id'=>$anotherCategory,'title'=>'Incompatível','brief'=>'x','assign_to_me'=>true,'assigned_to'=>$admin],
+  ['client_id'=>$clientId,'category_id'=>$anotherCategory,'title'=>'Tipo inválido','brief'=>'x','assign_to_me'=>'true']
+ ] as $bad){
+  try{AiWhatsAppTools::run('create_task',$bad);throw new RuntimeException('Invalid assignee selection executed');}
+  catch(AppError $e){at($e->getMessage()!=='','Unsafe assignee rejected');}
+ }
+ at((int)DB::one('SELECT COUNT(*) n FROM demands')['n']===$beforeUnsafe,'Rejected selections created no tasks');
+
+ // A client cannot assign a task to themselves; only active staff/admin are valid assignees.
+ $customer=DB::insert('users',['name'=>'Cliente AI teste','email'=>'client-self-ai@ci.invalid','password_hash'=>password_hash('client-password',PASSWORD_DEFAULT),'role'=>'client','active'=>1,'created_at'=>now()]);
+ DB::insert('user_clients',['user_id'=>$customer,'client_id'=>$clientId]);
+ Auth::$user=DB::one('SELECT * FROM users WHERE id=?',[$customer]);Auth::$actor=Auth::$user;
+ at(AiWhatsAppTools::context()['current_user']===null,'Never expose clients as a responsible staff member');
+ try{
+  AiWhatsAppTools::run('create_task',['client_id'=>$clientId,'category_id'=>$unassignedCategory,'title'=>'Cliente não responsável','brief'=>'Teste','assign_to_me'=>true]);
+  throw new RuntimeException('Client was assigned as staff');
+ }catch(AppError $e){at($e->getMessage()!=='','Client assignment blocked');}
+ Auth::$user=DB::one('SELECT * FROM users WHERE id=?',[$admin]);Auth::$actor=Auth::$user;
+ at((int)DB::one('SELECT COUNT(*) n FROM demands')['n']===$beforeUnsafe,'Client self-assignment created no tasks');
+
+ echo "AI WhatsApp tools: schema, create once, edit once, protected fields, self assignment, category default, client denial, private reply, group guard OK\n";
 }finally{@unlink(ROOT.'/config/config.php');@unlink(ROOT.'/storage/installed.lock');}

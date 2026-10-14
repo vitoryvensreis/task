@@ -61,10 +61,11 @@ final class AiWhatsAppWorker
   $body=trim((string)($row['body']??''));
   if($body===''||!in_array((string)$row['message_type'],['chat','text'],true)){self::ignore($id,'unsupported_message');return;}
   self::actor((int)$first['user_id']);
-  $tools=AiWhatsAppTools::catalog();
+  $financialPrivate=$row['chat_type']==='private' && Auth::can('finance.read') && (Auth::$user['role']??'')==='admin';
+  $tools=AiWhatsAppTools::catalog($financialPrivate);
   // Read-only commands and exact greetings never contact a paid/quota-limited model.
   // For everything else, preserve the original Gemini -> Groq route.
-  $planned=AiWhatsAppFastPath::plan($body);
+  $planned=AiWhatsAppFastPath::plan($body,$financialPrivate);
   if($planned===null){
    $context=AiWhatsAppTools::context();
    $planned=$planner?$planner($body,$context,$tools):AiWhatsAppProvider::plan($body,$context,$tools);
@@ -129,7 +130,40 @@ final class AiWhatsAppWorker
    DB::run("UPDATE ai_whatsapp_inbox SET ai_state='delivery_uncertain',ai_error='provider_delivery_uncertain',ai_updated_at=? WHERE id=? AND ai_state='sending'",[self::now(),$id]);
   }
  }
+ private static function brl(int $cents): string {
+  return 'R$ '.number_format($cents/100,2,',','.');
+ }
  private static function formatResult(array $r): string {
+  if(($r['kind']??'')==='finance_summary'){
+   return 'Resumo financeiro ('.date('d/m/Y',strtotime($r['from'])).' a '.date('d/m/Y',strtotime($r['to'])).'):'."\n"
+    .'Faturado: '.self::brl((int)$r['billed_cents'])."\n"
+    .'Recebido: '.self::brl((int)$r['received_cents'])."\n"
+    .'Custos: '.self::brl((int)$r['expense_cents'])."\n"
+    .'Custos pagos: '.self::brl((int)$r['paid_expense_cents'])."\n"
+    .'Resultado de caixa: '.self::brl((int)$r['profit_cents'])."\n"
+    .'A receber (total registrado): '.self::brl((int)$r['open_all_cents'])."\n"
+    .'Vencido (total registrado): '.self::brl((int)$r['overdue_all_cents'])."\n"
+    .'Somente lançamentos já registrados; sem sincronizar novas cobranças.';
+  }
+  if(($r['kind']??'')==='finance_receivables'){
+   $period=$r['scope']==='all'?'Todas as datas':date('m/Y',strtotime($r['from']));
+   $lines=['Contas a receber ('.$period.'): '.self::brl((int)$r['total_cents']),
+    'Vencidas: '.self::brl((int)$r['overdue_cents']),'Cobranças pendentes: '.(int)$r['count']];
+   foreach($r['rows'] as $v){
+    $lines[]='#'.$v['id'].' '.$v['client'].' — '.self::brl((int)$v['balance_cents'])
+     .' ('.date('d/m/Y',strtotime($v['due_on'])).($v['overdue']?' vencida':'').')';
+   }
+   if((int)$r['count']>count($r['rows']))$lines[]='Exibindo '.count($r['rows']).' de '.$r['count'].' cobranças.';
+   $lines[]='Somente cobranças já registradas.';
+   return implode("\n",$lines);
+  }
+  if(($r['kind']??'')==='finance_expenses'){
+   $lines=['Despesas/custos registrados ('.date('d/m/Y',strtotime($r['from'])).' a '.date('d/m/Y',strtotime($r['to'])).'):'];
+   if(!$r['rows'])$lines[]='Nenhum custo registrado neste período.';
+   foreach($r['rows'] as $v)$lines[]=date('d/m/Y',strtotime($v['date'])).' '.$v['description'].' — '.self::brl((int)$v['amount_cents']).($v['paid']?' (pago)':' (pendente)');
+   $lines[]='Consulta somente leitura.';
+   return implode("\n",$lines);
+  }
   if(($r['kind']??'')==='created')return 'Task #'.$r['id'].' criada com sucesso.';
   if(($r['kind']??'')==='edited')return 'Task #'.$r['id'].' atualizada com sucesso.';
   if(($r['kind']??'')==='moved')return 'Task #'.$r['id'].' movida para '.mb_substr((string)$r['stage'],0,60).'.';

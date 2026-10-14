@@ -4,7 +4,7 @@ declare(strict_types=1);
 /** An LLM can propose only these four operations; the server authorizes each one. */
 final class AiWhatsAppTools
 {
- public static function catalog(): array {
+ public static function catalog(bool $privateChat=false): array {
   $tools=[
    ['type'=>'function','function'=>['name'=>'list_tasks','description'=>'Listar tarefas visíveis ao usuário no TaskEsc.','parameters'=>['type'=>'object','properties'=>['query'=>['type'=>'string','description'=>'Busca por título ou cliente (opcional)'],'client_id'=>['type'=>'integer','description'=>'ID do cliente, se fornecido'],'limit'=>['type'=>'integer','description'=>'Mostrar até 10 tasks (opcional)']], 'additionalProperties'=>false]]]
   ];
@@ -20,6 +20,22 @@ final class AiWhatsAppTools
    'priority'=>['type'=>'string','enum'=>['low','normal','high','urgent']]
   ],'required'=>['task_id'],'additionalProperties'=>false]]];
   if(Auth::can('tasks.move')&&Auth::$user['role']!=='client')$tools[]=['type'=>'function','function'=>['name'=>'move_task','description'=>'Mover task existente para uma etapa do Kanban.','parameters'=>['type'=>'object','properties'=>['task_id'=>['type'=>'integer'],'stage_id'=>['type'=>'integer']], 'required'=>['task_id','stage_id'],'additionalProperties'=>false]]];
+  // Financial details may only be sent to the verified ADM in a PRIVATE chat.
+  // In groups, everyone can read the response; never expose finance tools there.
+  if($privateChat&&Auth::can('finance.read')&&(Auth::$user['role']??'')==='admin'){
+   $range=['from'=>['type'=>'string','description'=>'Data inicial YYYY-MM-DD, opcional; padrão início do mês'],
+           'to'=>['type'=>'string','description'=>'Data final YYYY-MM-DD, opcional; padrão fim do mês']];
+   $tools[]=['type'=>'function','function'=>['name'=>'finance_summary','description'=>'Consultar resumo financeiro da empresa no período: faturamento, recebidos, custos, lucro de caixa, contas a receber e vencidas. Apenas ADM em conversa privada. Nenhum lançamento é criado.','parameters'=>['type'=>'object','properties'=>$range,'additionalProperties'=>false]]];
+   $tools[]=['type'=>'function','function'=>['name'=>'finance_receivables','description'=>'Consultar quanto falta RECEBER de clientes, cobranças pendentes e vencidas. scope=month usa o mês atual; scope=all mostra todas as cobranças registradas. Não registra pagamentos. Apenas ADM em conversa privada.','parameters'=>['type'=>'object','properties'=>[
+     'scope'=>['type'=>'string','enum'=>['month','all']],
+     'from'=>$range['from'],'to'=>$range['to'],
+     'client_id'=>['type'=>'integer','description'=>'Cliente específico, somente ID existente'],
+     'limit'=>['type'=>'integer','description'=>'Até 10 cobranças detalhadas']
+    ],'additionalProperties'=>false]]];
+   $tools[]=['type'=>'function','function'=>['name'=>'finance_expenses','description'=>'Consultar despesas e custos de tarefas registrados no período, sem alterar lançamentos. Apenas ADM em conversa privada.','parameters'=>['type'=>'object','properties'=>[
+     'from'=>$range['from'],'to'=>$range['to'],'limit'=>['type'=>'integer','description'=>'Até 10 custos']
+    ],'additionalProperties'=>false]]];
+  }
   return $tools;
  }
 
@@ -37,6 +53,9 @@ final class AiWhatsAppTools
 
  public static function run(string $name,array $args): array {
   switch($name){
+   case 'finance_summary': return TaskEscFinanceReadApi::summary($args);
+   case 'finance_receivables': return TaskEscFinanceReadApi::receivables($args);
+   case 'finance_expenses': return TaskEscFinanceReadApi::expenses($args);
    case 'list_tasks':
     Auth::requireAbility('tasks.read');
     $query=$args['query']??'';

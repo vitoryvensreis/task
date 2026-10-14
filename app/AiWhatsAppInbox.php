@@ -13,7 +13,11 @@ final class AiWhatsAppInbox
         if(!in_array($event,['onmessage','on-message','message','message.received'],true)){
             return ['accepted'=>false,'reason'=>'event_ignored'];
         }
-        $message=$payload['body']??$payload['data']??$payload;
+        // O WPPConnect pode entregar a mensagem encapsulada em body/data
+        // OU diretamente no envelope (body nesse caso e' o texto da mensagem).
+        // Nunca tratar o corpo textual como se fosse o objeto da mensagem.
+        $message=is_array($payload['body']??null)?$payload['body']
+            :(is_array($payload['data']??null)?$payload['data']:$payload);
         if(!is_array($message))return ['accepted'=>false,'reason'=>'invalid_message'];
 
         $session=WppConnect::sessionName();
@@ -48,6 +52,7 @@ final class AiWhatsAppInbox
         if(!$group&&!self::validPerson($sender))return ['accepted'=>false,'reason'=>'invalid_sender'];
 
         $type=$message['type']??$message['mimetype']??'chat';
+        if($message===$payload&&is_string($type)&&$type===$event)$type='chat';
         if(!is_string($type))$type='unknown';
         $type=strtolower(trim($type));
         if(!preg_match('/\A[a-z0-9_.-]{1,32}\z/D',$type))$type='unknown';

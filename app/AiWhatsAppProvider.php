@@ -54,7 +54,7 @@ final class AiWhatsAppProvider
             }catch(RuntimeException $e){
                 // Fallback only on transport/provider outage. A malformed or unsafe tool
                 // response fails closed instead of being retried against another model.
-                if(!in_array($e->getMessage(),['ai_provider_unavailable','ai_connection_failed'],true))throw $e;
+                if(!in_array($e->getMessage(),['ai_provider_unavailable','ai_connection_failed','ai_provider_rate_limit'],true))throw $e;
                 $first??=$e;
             }
         }

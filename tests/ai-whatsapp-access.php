@@ -44,7 +44,7 @@ try{
  ac(AiWhatsAppAccess::decide('5585999993000@s.whatsapp.net','private','5585999993000@s.whatsapp.net')['status']==='authorized','Explicit client permission works');
  ac(AiWhatsAppAccess::decide('5585999994000@c.us','private','5585999994000@c.us')['status']==='denied','Inactive admin must never access');
  ac(AiWhatsAppAccess::decide('5585999990009@c.us','private','5585999990009@c.us')['status']==='denied','Unknown sender must be denied');
- ac(AiWhatsAppAccess::decide('5585999993000@lid','private','5585999993000@lid')['status']==='denied','LID must never be treated as a phone');
+ ac(AiWhatsAppAccess::decide('5585999993000@lid','private','5585999993000@lid',null,static fn()=>null)['status']==='denied','Unresolved LID must never be treated as a phone');
  ac(AiWhatsAppAccess::decide('5585999993000@g.us','private','5585999993000@g.us')['status']==='denied','Group jid must not resolve to phone');
 
  $members=['5585999990001@c.us','5585999993000@c.us'];
@@ -54,7 +54,36 @@ try{
  ac(AiWhatsAppAccess::decide('5585999993000@c.us','group',$gid,static fn()=>['5585999990001@c.us'])['reason']==='sender_not_in_group','Sender must be a current member');
  ac(AiWhatsAppAccess::decide('5585999993000@c.us','group',$gid,static function(){throw new RuntimeException('Provider down');})['reason']==='group_members_unavailable','Provider failure must deny');
  ac(AiWhatsAppAccess::decide('5585999992000@c.us','group',$gid,$provider)['reason']==='permission_disabled','Disabled staff in group must be denied');
- ac(AiWhatsAppAccess::decide('5585999993000@lid','group',$gid,$provider)['status']==='denied','Opaque group sender LID must be denied');
+ ac(AiWhatsAppAccess::decide('5585999993000@lid','group',$gid,$provider,static fn()=>null)['status']==='denied','Unresolved group sender LID must be denied');
+
+
+ // Authoritative WPPConnect PN-LID mapping: never infer phone digits from @lid.
+ $lid='125987654321012@lid';
+ $adminLid='125987654321099@lid';
+ $mapping=static function(string $jid) use($lid,$adminLid): ?array {
+     return match($jid){
+       $lid,'5585999993000@c.us'=>['lid'=>$lid,'phone'=>'5585999993000@c.us'],
+       $adminLid,'5585999990001@c.us'=>['lid'=>$adminLid,'phone'=>'5585999990001@c.us'],
+       default=>null
+     };
+ };
+ ac(AiWhatsAppAccess::resolveUser($lid,$mapping)['id']===$client,'Verified LID maps to exactly one active client');
+ ac(AiWhatsAppAccess::decide($lid,'private',$lid,null,$mapping)['status']==='authorized','Verified private LID may be authorized');
+ $lidMembers=static fn(string $group)=>$group===$gid?[$lid,$adminLid]:[];
+ ac(AiWhatsAppAccess::decide($lid,'group',$gid,$lidMembers,$mapping)['status']==='authorized','Both sender and TaskEsc ADM may be LID participants');
+ ac(AiWhatsAppAccess::decide('5585999993000@c.us','group',$gid,$lidMembers,$mapping)['status']==='authorized','Phone sender may match verified member LID');
+ ac(AiWhatsAppAccess::decide($lid,'group',$gid,static fn()=>[$lid],$mapping)['reason']==='group_admin_absent','Group without TaskEsc ADM must stay denied');
+ ac(AiWhatsAppAccess::decide($lid,'group',$gid,static fn()=>[$adminLid],$mapping)['reason']==='sender_not_in_group','LID sender must be an actual participant');
+ ac(AiWhatsAppAccess::resolveUser($lid,static fn($jid)=>['lid'=>'999999999@lid','phone'=>'5585999993000@c.us'])===null,'Mismatch LID cannot authorize any account');
+ ac(AiWhatsAppAccess::resolveUser($lid,static fn($jid)=>['lid'=>$jid,'phone'=>'5585999999999@lid'])===null,'Provider must return a real phone JID, never another LID');
+ ac(AiWhatsAppAccess::resolveUser($lid,static function(){throw new RuntimeException('provider offline');})===null,'Provider outage must fail closed');
+
+ $wire=['status'=>'success','response'=>['lid'=>['_serialized'=>$lid],'phoneNumber'=>['_serialized'=>'5585999993000@c.us']]];
+ ac(WppConnect::normalizePnLidMapping($wire,$lid)['phone']==='5585999993000@c.us','Wrapped provider PN-LID data normalized');
+ ac(WppConnect::normalizePnLidMapping($wire,'5585999993000@c.us')['lid']===$lid,'Provider PN lookup must agree with sender');
+ ac(WppConnect::normalizePnLidMapping($wire,'5585999999000@c.us')===null,'Unrelated PN-LID mapping rejected');
+ ac(WppConnect::normalizePnLidMapping(['status'=>'error','response'=>$wire['response']],$lid)===null,'Error status cannot grant identity');
+ ac(WppConnect::normalizePnLidMapping(['lid'=>['_serialized'=>$lid],'phoneNumber'=>['_serialized'=>$lid]],$lid)===null,'Invalid mapping phone type rejected');
 
  $parsed=WppConnect::normalizeMemberIds(['status'=>'success','response'=>[['id'=>['_serialized'=>'5585999990001@c.us'],'isAdmin'=>false],['id'=>'5585999993000@c.us'],['id'=>'not-a-jid']]]);
  ac($parsed===['5585999990001@c.us','5585999993000@c.us'],'Normalize group members and ignore WhatsApp admin status');

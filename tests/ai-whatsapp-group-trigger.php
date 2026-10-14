@@ -6,7 +6,7 @@ foreach(['Task, liste minhas tarefas','Ei Task, me ajuda','@Task mostre agenda h
  gr(AiWhatsAppGroupTrigger::named($body),'Must detect name '.$body);
  gr(AiWhatsAppGroupTrigger::addressed($body,[]),'Name text works without WhatsApp metadata');
 }
-foreach(['tasks de hoje','TaskEscapou','task_123','contatos/tasks aqui','outask'] as $body){
+foreach(['Criar uma task','tasks de hoje','TaskEscapou','task_123','contatos/tasks aqui','outask'] as $body){
  gr(!AiWhatsAppGroupTrigger::named($body),'Must ignore unrelated word '.$body);
  gr(!AiWhatsAppGroupTrigger::addressed($body,[]),'Group must remain silent');
 }

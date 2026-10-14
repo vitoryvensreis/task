@@ -21,7 +21,7 @@ $demand=file_get_contents(ROOT.'/app/Demands.php');
 
 foreach([$schema,$migration,$migrations,$automation,$worker,$businessEvents,$actions,$catalog,$cli,$unit,$installer,$wpp,$app,$demand] as $source)contractCheck(is_string($source)&&$source!=='','Automation contract file missing.');
 
-contractCheck(str_contains($schema,"('schema_version','27')"),'Fresh schema must be marked 27.');
+contractCheck(str_contains($schema,"('schema_version','28')"),'Fresh schema must be marked 28.');
 foreach(['automations','automation_runs','automation_run_steps','automation_worker_state','whatsapp_messages'] as $table)contractCheck(str_contains($schema,'CREATE TABLE '.$table),'Fresh schema missing '.$table);
 contractCheck(str_contains($schema,'whatsapp_phone VARCHAR(20)')&&str_contains($schema,"whatsapp_recipient_mode VARCHAR(20) NOT NULL DEFAULT 'none'"),'Fresh schema missing WhatsApp contact/task fields.');
 contractCheck(str_contains($migrations,'AUTOMATION_VERSION=24')&&str_contains($migrations,'public static function automation()'),'Scoped schema 24 migration missing.');

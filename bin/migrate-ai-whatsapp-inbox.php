@@ -12,7 +12,7 @@ try{
  $manifest=file_get_contents($manifestPath);
  if(!preg_match('/^Arquivo do banco: (taskesc-predeploy-[A-Za-z0-9-]+\.sql\.gz)$/m',(string)$manifest,$file)
   || !preg_match('/^SHA256: ([a-f0-9]{64})$/m',(string)$manifest,$sha)
-  || !preg_match('/^Schema do banco: (26|27)$/m',(string)$manifest,$backupSchema))throw new RuntimeException('backup_manifest_invalid');
+  || !preg_match('/^Schema do banco: (26|27|28)$/m',(string)$manifest,$backupSchema))throw new RuntimeException('backup_manifest_invalid');
  $backup=dirname($manifestPath).'/'.$file[1];
  if(!is_file($backup)||is_link($backup)||filesize($backup)===0||!hash_equals($sha[1],hash_file('sha256',$backup)))throw new RuntimeException('backup_verification_failed');
  $saasTables=DB::all("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('workspaces','workspace_members','workspace_settings')");
@@ -20,11 +20,11 @@ try{
  $saasFlags=DB::all("SELECT `key` FROM settings WHERE `key` IN ('saas_enabled','workspace_context_enabled','workspace_permissions_enabled','workspace_settings_enabled','signup_enabled','billing_enabled')");
  if($saasTables||$saasColumns||$saasFlags)throw new RuntimeException('removed_saas_detected');
  $before=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);
- if(!in_array($before,[26,27],true))throw new RuntimeException('ai_inbox_schema_source_invalid');
+ if(!in_array($before,[26,27,28],true))throw new RuntimeException('ai_inbox_schema_source_invalid');
  $migration=Migrations::assistantInbox();
  if(Migrations::assistantInboxIssues())throw new RuntimeException('ai_inbox_schema_invalid');
  echo json(['migration'=>$migration,'backup_verified'=>true,'backup_schema'=>(int)$backupSchema[1],
-   'schema_before'=>$before,'schema_after'=>27,'saas_absent'=>true]).PHP_EOL;
+   'schema_before'=>$before,'schema_after'=>$migration['current'],'saas_absent'=>true]).PHP_EOL;
 }catch(Throwable $e){
  $msg=$e->getMessage();
  $code=$e instanceof RuntimeException&&preg_match('/\A[a-z0-9_]+\z/D',$msg)?$msg:'ai_inbox_migration_failed';

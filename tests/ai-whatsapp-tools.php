@@ -172,6 +172,26 @@ try{
  at(substr_count($sent[$sentBefore][1],"\n")<=5,'Requested result limit applies');
  at((int)(DB::one('SELECT COUNT(*) n FROM demands')['n']??0)===$tasksBefore,'Read-only fast path cannot mutate demands');
 
+ // Private vocatives/calendar inventories are read-only and never invoke the provider.
+ $prefixed=DB::insert('ai_whatsapp_inbox',['session_name'=>'taskesc','provider_message_id'=>'fast-task-prefix-1',
+  'chat_id'=>$chat,'sender_id'=>$chat,'chat_type'=>'private','message_type'=>'chat','body'=>'Task, liste minhas tarefas',
+  'status'=>'received','auth_status'=>'authorized','auth_reason'=>'user_authorized','received_at'=>now(),'ai_state'=>'queued']);
+ $before=count($sent);
+ AiWhatsAppWorker::tick(1,$rejectPlanner,$verifier,null,$sender,true);
+ at($calls===0&&DB::one('SELECT ai_state FROM ai_whatsapp_inbox WHERE id=?',[$prefixed])['ai_state']==='sent',
+  'Private Task prefix uses local list route');
+ at(count($sent)===$before+1&&str_starts_with($sent[$before][1],'Tasks ('),'Private task reply sent');
+
+ $calendarMsg=DB::insert('ai_whatsapp_inbox',['session_name'=>'taskesc','provider_message_id'=>'fast-calendar-1',
+  'chat_id'=>$chat,'sender_id'=>$chat,'chat_type'=>'private','message_type'=>'chat','body'=>'Liste minhas agendas disponíveis',
+  'status'=>'received','auth_status'=>'authorized','auth_reason'=>'user_authorized','received_at'=>now(),'ai_state'=>'queued']);
+ $before=count($sent);
+ AiWhatsAppWorker::tick(1,$rejectPlanner,$verifier,null,$sender,true);
+ at($calls===0&&DB::one('SELECT ai_state FROM ai_whatsapp_inbox WHERE id=?',[$calendarMsg])['ai_state']==='sent',
+  'Private calendars without model');
+ at(count($sent)===$before+1&&preg_match('/Agendas:|Nenhuma agenda disponível/u',$sent[$before][1]),
+  'Private calendar inventory delivered');
+
  $hello=DB::insert('ai_whatsapp_inbox',['session_name'=>'taskesc','provider_message_id'=>'fast-greeting-1','chat_id'=>$chat,'sender_id'=>$chat,'chat_type'=>'private','message_type'=>'chat','body'=>'Oi','status'=>'received','auth_status'=>'authorized','auth_reason'=>'user_authorized','received_at'=>now(),'ai_state'=>'queued']);
  AiWhatsAppWorker::tick(1,$rejectPlanner,$verifier,null,$sender,true);
  at($calls===0,'Greeting must never invoke LLM');

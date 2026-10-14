@@ -40,7 +40,7 @@ final class AiWhatsAppTools
     if(!is_string($query)||mb_strlen($query)>90)fail('Busca inválida.',422);
     $params=['paginate'=>1,'per_page'=>10,'q'=>$query];
     if(array_key_exists('client_id',$args))$params['client_id']=integer($args['client_id'],1);
-    $data=Demands::list($params);
+    $data=TaskEscTaskApi::list($params);
     return ['kind'=>'list','total'=>(int)$data['pagination']['total'],'tasks'=>array_map(static fn($d)=>[
       'id'=>(int)$d['id'],'title'=>$d['title'],'client'=>$d['client_name'],'stage'=>$d['stage_name'],'due_at'=>$d['due_at']
     ],$data['rows'])];
@@ -53,7 +53,7 @@ final class AiWhatsAppTools
     // No finance, arbitrary WhatsApp recipient, deletions, bulk actions, or changes to existing tasks.
     if(isset($args['assigned_to']))$input['assigned_to']=integer($args['assigned_to'],1);
     if(isset($args['due_at'])){$dt=(string)$args['due_at'];if(!preg_match('/\\A\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}\\z/D',$dt))fail('Data inválida.',422);$input['due_at']=$dt;}
-    $result=Demands::save($input);
+    $result=TaskEscTaskApi::create($input);
     return ['kind'=>'created','id'=>(int)$result['id'],'url'=>$result['url']];
    case 'edit_task':
     Auth::requireAbility('tasks.edit');
@@ -86,7 +86,7 @@ final class AiWhatsAppTools
      }
      // Preserve financial snapshot exactly; changes to billing are never authorized here.
      $before=[(string)$old['billing_mode'],(int)$old['amount_cents'],(string)$old['commercial_status']];
-     $result=Demands::save($input);
+     $result=TaskEscTaskApi::update($input);
      $after=DB::one('SELECT billing_mode,amount_cents,commercial_status,draft,client_id,category_id,assigned_to,project_id,stage_id FROM demands WHERE id=?',[$id]);
      if(!$after||$before!==[(string)$after['billing_mode'],(int)$after['amount_cents'],(string)$after['commercial_status']]
       ||(int)$after['draft']!==(int)$old['draft']||(int)$after['client_id']!==(int)$old['client_id']
@@ -100,7 +100,7 @@ final class AiWhatsAppTools
     Auth::staff(); // matches the existing Kanban stage endpoint for client users
     $id=integer($args['task_id']??null,1);$stageId=integer($args['stage_id']??null,1);
     $d=Auth::demand($id);
-    $result=Demands::stage(['id'=>$id,'stage_id'=>$stageId,'version'=>(int)$d['version']]);
+    $result=TaskEscTaskApi::move(['id'=>$id,'stage_id'=>$stageId,'version'=>(int)$d['version']]);
     $stage=DB::one('SELECT name FROM stages WHERE id=?',[$stageId]);
     return ['kind'=>'moved','id'=>$id,'stage'=>$stage['name']??'','version'=>$result['version']];
   }

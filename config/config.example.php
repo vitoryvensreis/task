@@ -17,6 +17,14 @@ return [
    'secret' => '',
    'webhook_url' => '',
  ],
- 'ai_whatsapp' => ['enabled'=>false,'groq_api_key'=>'','model'=>'llama-3.3-70b-versatile'], // Configure APENAS em config/config.php da VPS.
+ 'ai_whatsapp' => [
+   'enabled' => false, // Ative somente na configuração privada da VPS.
+   'provider' => 'gemini',
+   'fallback_provider' => 'groq',
+   'gemini_api_key' => '',
+   'gemini_model' => 'gemini-3.8-flash',
+   'groq_api_key' => '',
+   'groq_model' => 'llama-3.3-70b-versatile',
+ ],
  'trusted_origins' => ['https://chatgpt.com','https://chat.openai.com'],
 ];

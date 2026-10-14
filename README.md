@@ -569,3 +569,7 @@ Integração de IA via Groq com ações limitadas a **listar, criar e mover task
 ### TaskEsc AI — Passo 4 (edição segura de tasks)
 
 O assistente pode editar **título, briefing, prioridade e prazo** de uma task existente pelo WhatsApp, desde que o usuário tenha permissão `tasks.edit` e identifique a task sem ambiguidade. Campos financeiros, clientes, responsáveis, status, uploads e automações não podem ser alterados por essa ferramenta. A transação protege o rascunho e demais atributos, exige prazo válido e mantém autorização revalidada por operação. **Schema 29 permanece inalterado** e Groq continua desativado por padrão. Consulte `docs/taskesc-ai-step4.md`.
+
+### TaskEsc AI — Gemini principal / Groq alternativa
+
+O motor de IA recebe mensagens autorizadas pelo WhatsApp e utiliza **Gemini 3.8 Flash** como interpretador principal, com **Groq** como alternativa em falhas do provedor. Operações são executadas somente pelo gateway de tarefas do próprio TaskEsc, compartilhando regras com a API v1. Por segurança, as chaves não são incluídas no GitHub nem no ZIP. Para ativar pela VPS, use `php bin/configure-taskesc-ai.php` num terminal SSH interativo e reinicie o worker. Veja [guia de integração e ativação](docs/taskesc-ai-gemini-primary.md).

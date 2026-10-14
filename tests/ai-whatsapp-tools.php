@@ -19,6 +19,13 @@ try{
  at(AiWhatsAppWorker::health()['status']==='ok','Worker must be healthy when disabled');
 
  $admin=DB::insert('users',['name'=>'Admin AI','email'=>'admin-ai@ci.invalid','whatsapp_phone'=>'5585999990001','password_hash'=>password_hash('ci-test-password',PASSWORD_DEFAULT),'role'=>'admin','active'=>1,'created_at'=>now()]);
+ $ignoredWhileDisabled=WppWebhook::handle(['event'=>'onmessage','session'=>'taskesc','body'=>[
+  'id'=>'disabled-key-1','from'=>'5585999990001@c.us','body'=>'Criar task antes de habilitar Groq','type'=>'chat','fromMe'=>false
+ ]]);
+ at(($ignoredWhileDisabled['stored']??false)===true,'Authenticated test message stored');
+ $disabledRow=DB::one("SELECT auth_status,ai_state FROM ai_whatsapp_inbox WHERE provider_message_id='disabled-key-1'");
+ at(($disabledRow['auth_status']??'')==='authorized'&&($disabledRow['ai_state']??'')==='ignored','Disabled AI must not enqueue authorized messages for replay after activation');
+
  $clientId=DB::insert('clients',['name'=>'Cliente AI','created_at'=>now()]);
  $categoryId=DB::insert('categories',['name'=>'Vídeo AI','fields_json'=>'[]','default_assigned_to'=>$admin,'default_amount_cents'=>29900]);
  $chat='5585999990001@c.us';

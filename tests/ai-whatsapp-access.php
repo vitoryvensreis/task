@@ -52,10 +52,11 @@ try{
 
  $members=['5585999990001@c.us','5585999993000@c.us'];
  $gid='120363012345678901@g.us';$provider=static fn(string $v)=>$v===$gid?$members:[];
- ac(AiWhatsAppAccess::decide('5585999993000@c.us','group',$gid,$provider)['status']==='authorized','Group with active TaskEsc admin grants permitted sender');
- ac(AiWhatsAppAccess::decide('5585999993000@c.us','group',$gid,static fn()=>['5585999993000@c.us'])['reason']==='group_admin_absent','Cannot grant access without a TaskEsc admin member');
- ac(AiWhatsAppAccess::decide('5585999993000@c.us','group',$gid,static fn()=>['5585999990001@c.us'])['reason']==='sender_not_in_group','Sender must be a current member');
- ac(AiWhatsAppAccess::decide('5585999993000@c.us','group',$gid,static function(){throw new RuntimeException('Provider down');})['reason']==='group_members_unavailable','Provider failure must deny');
+ ac(AiWhatsAppAccess::decide('5585999993000@c.us','group',$gid,$provider)['reason']==='group_admin_only','Client in admin group denied');
+ ac(AiWhatsAppAccess::decide('5585999990001@c.us','group',$gid,$provider)['status']==='authorized','Verified ADM authorized in group');
+ ac(AiWhatsAppAccess::decide('5585999990001@c.us','group',$gid,static fn()=>['5585999993000@c.us'])['reason']==='sender_not_in_group','Cannot grant access without a TaskEsc admin member');
+ ac(AiWhatsAppAccess::decide('5585999990001@c.us','group',$gid,static fn()=>['5585999993000@c.us'])['reason']==='sender_not_in_group','Sender must be a current member');
+ ac(AiWhatsAppAccess::decide('5585999990001@c.us','group',$gid,static function(){throw new RuntimeException('Provider down');})['reason']==='group_members_unavailable','Provider failure must deny');
  ac(AiWhatsAppAccess::decide('5585999992000@c.us','group',$gid,$provider)['reason']==='permission_disabled','Disabled staff in group must be denied');
  ac(AiWhatsAppAccess::decide('5585999993000@lid','group',$gid,$provider,static fn()=>null)['status']==='denied','Unresolved group sender LID must be denied');
 
@@ -73,10 +74,11 @@ try{
  ac(AiWhatsAppAccess::resolveUser($lid,$mapping)['id']===$client,'Verified LID maps to exactly one active client');
  ac(AiWhatsAppAccess::decide($lid,'private',$lid,null,$mapping)['status']==='authorized','Verified private LID may be authorized');
  $lidMembers=static fn(string $group)=>$group===$gid?[$lid,$adminLid]:[];
- ac(AiWhatsAppAccess::decide($lid,'group',$gid,$lidMembers,$mapping)['status']==='authorized','Both sender and TaskEsc ADM may be LID participants');
- ac(AiWhatsAppAccess::decide('5585999993000@c.us','group',$gid,$lidMembers,$mapping)['status']==='authorized','Phone sender may match verified member LID');
- ac(AiWhatsAppAccess::decide($lid,'group',$gid,static fn()=>[$lid],$mapping)['reason']==='group_admin_absent','Group without TaskEsc ADM must stay denied');
- ac(AiWhatsAppAccess::decide($lid,'group',$gid,static fn()=>[$adminLid],$mapping)['reason']==='sender_not_in_group','LID sender must be an actual participant');
+ ac(AiWhatsAppAccess::decide($lid,'group',$gid,$lidMembers,$mapping)['reason']==='group_admin_only','Client LID denied even with admin present');
+ ac(AiWhatsAppAccess::decide($adminLid,'group',$gid,$lidMembers,$mapping)['status']==='authorized','Verified ADM LID may command group');
+ ac(AiWhatsAppAccess::decide('5585999990001@c.us','group',$gid,$lidMembers,$mapping)['status']==='authorized','Phone sender may match verified member LID');
+ ac(AiWhatsAppAccess::decide($adminLid,'group',$gid,static fn()=>[$lid],$mapping)['reason']==='sender_not_in_group','Group without TaskEsc ADM must stay denied');
+ ac(AiWhatsAppAccess::decide($adminLid,'group',$gid,static fn()=>[$lid],$mapping)['reason']==='sender_not_in_group','LID sender must be an actual participant');
  ac(AiWhatsAppAccess::resolveUser($lid,static fn($jid)=>['lid'=>'999999999@lid','phone'=>'5585999993000@c.us'])===null,'Mismatch LID cannot authorize any account');
  ac(AiWhatsAppAccess::resolveUser($lid,static fn($jid)=>['lid'=>$jid,'phone'=>'5585999999999@lid'])===null,'Provider must return a real phone JID, never another LID');
  ac(AiWhatsAppAccess::resolveUser($lid,static function(){throw new RuntimeException('provider offline');})===null,'Provider outage must fail closed');

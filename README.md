@@ -577,3 +577,7 @@ O motor de IA recebe mensagens autorizadas pelo WhatsApp e utiliza **Gemini 3.8 
 ### TaskEsc AI — consulta financeira com permissões
 
 A API REST v1 tem `GET /api/v1/finance/summary` e `GET /api/v1/finance/invoices` para administradores. O agente de WhatsApp também pode **consultar** o resumo financeiro, contas a receber e despesas registradas, exclusivamente em conversa privada de um ADM autorizado. Os endpoints novos `GET /api/v1/finance/receivables` e `GET /api/v1/finance/expenses` compartilham o mesmo gateway somente leitura com a IA. Essas consultas não geram lançamentos, pagamentos ou despesas; valores ainda não sincronizados não aparecem. Todas as operações financeiras de escrita permanecem bloqueadas para a IA. Veja [cobertura, regras e limites](docs/taskesc-ai-finance.md).
+
+### TaskEsc AI — ferramentas administrativas com confirmação (revisão)
+
+Há uma implementação de operações administrativas privadas do WhatsApp com duas mensagens: primeiro uma proposta validada, depois `CONFIRMAR <código>` ou `CANCELAR <código>`. Fica **desativada por padrão** por `ai_whatsapp.admin_control_enabled=false`. Consulte [módulos, segurança, testes e limitações](docs/taskesc-ai-admin-control.md). Não autoriza acesso irrestrito à plataforma nem ignora as regras do domínio.

@@ -12,6 +12,7 @@ final class AiWhatsAppWorker
  public static function health(): array {
   $schema=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);
   return ['status'=>$schema===29?'ok':'error','schema'=>$schema,'enabled'=>AiWhatsAppProvider::enabled(),
+   'admin_control_enabled'=>AiWhatsAppAdminActions::enabled(),
    'queue'=>(int)(DB::one("SELECT COUNT(*) n FROM ai_whatsapp_inbox WHERE ai_state IN ('queued','retry')")['n']??0)];
  }
  public static function tick(int $limit=5,?callable $planner=null,?callable $verify=null,?callable $mentioned=null,?callable $send=null,bool $test=false): array {
@@ -62,10 +63,12 @@ final class AiWhatsAppWorker
   if($body===''||!in_array((string)$row['message_type'],['chat','text'],true)){self::ignore($id,'unsupported_message');return;}
   self::actor((int)$first['user_id']);
   $financialPrivate=$row['chat_type']==='private' && Auth::can('finance.read') && (Auth::$user['role']??'')==='admin';
-  $tools=AiWhatsAppTools::catalog($financialPrivate);
+  $tools=array_merge(AiWhatsAppTools::catalog($financialPrivate),AiWhatsAppAdminActions::catalog($financialPrivate));
+  // Confirmation codes are parsed locally; never expose approval operation to a model.
   // Read-only commands and exact greetings never contact a paid/quota-limited model.
   // For everything else, preserve the original Gemini -> Groq route.
-  $planned=AiWhatsAppFastPath::plan($body,$financialPrivate);
+  $localConfirmation=$financialPrivate?AiWhatsAppApproval::command($body):null;
+  $planned=$localConfirmation??AiWhatsAppFastPath::plan($body,$financialPrivate);
   if($planned===null){
    $context=AiWhatsAppTools::context();
    $planned=$planner?$planner($body,$context,$tools):AiWhatsAppProvider::plan($body,$context,$tools);
@@ -76,16 +79,20 @@ final class AiWhatsAppWorker
    $name=(string)$planned['tool'];$args=$planned['arguments']??null;
    if(!is_array($args))throw new RuntimeException('ai_arguments_invalid');
    // Lock inbox row and revalidate identity+group membership before EACH write/read tool.
-   try{$message=DB::tx(function() use($id,$row,$first,$name,$args,$tools,$verify): string {
+   try{$message=DB::tx(function() use($id,$row,$first,$name,$args,$tools,$verify,$localConfirmation): string {
     $locked=DB::one('SELECT ai_state FROM ai_whatsapp_inbox WHERE id=? FOR UPDATE',[$id]);
     if(($locked['ai_state']??'')!=='processing')throw new RuntimeException('ai_operation_already_handled');
     $again=self::decision($row,$verify);
     if(!self::sameUser($first,$again))throw new RuntimeException('ai_access_revoked');
     self::actor((int)$again['user_id']);
     $allowed=array_column(array_column($tools,'function'),'name');
-    if(!in_array($name,$allowed,true))throw new RuntimeException('ai_tool_not_allowed');
+    $isLocalApproval=$localConfirmation!==null && AiWhatsAppApproval::internal($name);
+    if(!in_array($name,$allowed,true)&&!$isLocalApproval)throw new RuntimeException('ai_tool_not_allowed');
     // Do not swallow business exceptions inside this transaction: they must roll back.
-    $result=AiWhatsAppTools::run($name,$args);
+    if($isLocalApproval)$result=AiWhatsAppApproval::decide($name,$args,$row);
+    elseif(AiWhatsAppAdminActions::sensitive($name))$result=AiWhatsAppApproval::propose($name,$args,$row);
+    elseif(in_array($name,['list_clients','list_projects','list_team','list_events'],true))$result=AiWhatsAppAdminActions::run($name,$args);
+    else $result=AiWhatsAppTools::run($name,$args);
     $reply=self::formatResult($result);
     DB::run("UPDATE ai_whatsapp_inbox SET ai_state='reply_pending',ai_reply=?,ai_processed_at=?,ai_updated_at=? WHERE id=?",[$reply,self::now(),self::now(),$id]);
     return $reply;
@@ -134,6 +141,13 @@ final class AiWhatsAppWorker
   return 'R$ '.number_format($cents/100,2,',','.');
  }
  private static function formatResult(array $r): string {
+  if(($r['kind']??'')==='approval_pending')return "Operação preparada (AINDA NÃO EXECUTADA):\n".$r['summary']."\nPara autorizar, responda exatamente: CONFIRMAR ".$r['code']."\nPara desistir: CANCELAR ".$r['code']."\nCódigo válido por 10 minutos. Apenas no privado.";
+  if(($r['kind']??'')==='approval_status')return (string)$r['message'];
+  if(($r['kind']??'')==='admin_done')return $r['action'].' com sucesso (#'.$r['id'].').';
+  if(($r['kind']??'')==='admin_list'){
+   $lines=[(string)$r['heading'].':'];foreach($r['items'] as $item)$lines[]='#'.$item['id'].' '.mb_substr((string)$item['name'],0,85);
+   return count($lines)>1?implode("\n",$lines):'Nenhum registro encontrado.';
+  }
   if(($r['kind']??'')==='finance_summary'){
    return 'Resumo financeiro ('.date('d/m/Y',strtotime($r['from'])).' a '.date('d/m/Y',strtotime($r['to'])).'):'."\n"
     .'Faturado: '.self::brl((int)$r['billed_cents'])."\n"

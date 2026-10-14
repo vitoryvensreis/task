@@ -410,6 +410,7 @@ try{
  AiWhatsAppWorker::tick(1,$noModel,$staffCheck,fn()=>false,$sender,true);
  at(DB::one('SELECT ai_state FROM ai_whatsapp_inbox WHERE id=?',[$staffGroup])['ai_state']==='ignored','Non-admin group request blocked');
  at(count($sent)===$sentBefore+1,'No group response to non-admin');
+ Auth::$user=DB::one('SELECT * FROM users WHERE id=?',[$admin]);Auth::$actor=Auth::$user;
 
  $cal=DB::insert('calendars',['name'=>'Agenda de validação AI','access_role'=>'owner','selected'=>1,'write_enabled'=>1]);
  $day=(new DateTimeImmutable('+12 days',new DateTimeZone('America/Fortaleza')))->format('Y-m-d');

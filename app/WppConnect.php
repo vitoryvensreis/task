@@ -174,6 +174,36 @@ final class WppConnect
     }
 
     /**
+     * Resolve WhatsApp's opaque LID only with an authenticated provider
+     * assertion. Missing endpoint, unknown mapping or conflicting JIDs deny.
+     * Never guess that digits before @lid are a phone number.
+     */
+    public static function pnLidMapping(string $jid): ?array
+    {
+        if(!preg_match('/\\A(?:[0-9]{6,32}@lid|[0-9]{10,15}@c\\.us)\\z/D',$jid))return null;
+        $cfg=self::requireConfigured();
+        $path='/api/'.rawurlencode($cfg['session']).'/contact/pn-lid/'.rawurlencode($jid);
+        $response=self::request('GET',$path,null,true,true);
+        if(!$response['ok'])return null;
+        return self::normalizePnLidMapping($response['body'],$jid);
+    }
+
+    /** Public only for isolated contract tests; no user-controlled URL/path. */
+    public static function normalizePnLidMapping(mixed $response,string $requestedJid): ?array
+    {
+        if(!is_array($response)||($response['status']??'success')==='error')return null;
+        $data=$response['response']??$response['data']??$response;
+        if(!is_array($data))return null;
+        $lid=$data['lid']['_serialized']??null;
+        $phone=$data['phoneNumber']['_serialized']??null;
+        if(!is_string($lid)||!is_string($phone))return null;
+        if(!preg_match('/\\A[0-9]{6,32}@lid\\z/D',$lid)
+            ||!preg_match('/\\A[0-9]{10,15}@c\\.us\\z/D',$phone))return null;
+        if($requestedJid!==$lid&&$requestedJid!==$phone)return null;
+        return ['lid'=>$lid,'phone'=>$phone];
+    }
+
+    /**
      * Query current group membership on the private WPPConnect API.
      * A failed/ambiguous response MUST NOT grant access to the AI assistant.
      * Phone JIDs and opaque LIDs stay separate; do not infer LID => phone.

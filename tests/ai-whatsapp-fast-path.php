@@ -13,6 +13,8 @@ $phrases=[
  'Liste minhas últimas 5 tarefas'=>['tool'=>'list_tasks','arguments'=>['limit'=>5]],
  'Mostre as minhas tasks'=>['tool'=>'list_tasks','arguments'=>['limit'=>10]],
  'listar tarefas 2'=>['tool'=>'list_tasks','arguments'=>['limit'=>2]],
+ 'Task, liste minhas tarefas'=>['tool'=>'list_tasks','arguments'=>['limit'=>10]],
+ 'TaskEsc: liste minhas tarefas'=>['tool'=>'list_tasks','arguments'=>['limit'=>10]],
 ];
 foreach($phrases as $text=>$expected){
  $result=AiWhatsAppFastPath::plan($text);
@@ -48,5 +50,15 @@ foreach($finance as $phrase=>$expected){
 }
 foreach(['nao me diga quanto tenho a receber esse mes','quanto tenho a receber esse mes e apague as cobrancas'] as $bad){
  checkFast(AiWhatsAppFastPath::plan($bad,true)===null,'Ambiguous finance statement goes to regular planner');
+}
+// Inventory of Google/local calendars is restricted to ADM private chat.
+foreach(['Liste minhas agendas disponíveis','Task, mostre minhas agendas','listar os calendarios disponíveis'] as $phrase){
+ $expected=['tool'=>'agenda_calendars','arguments'=>[]];
+ checkFast(AiWhatsAppFastPath::plan($phrase,false,true,true)===$expected,'Private calendar list without LLM');
+ checkFast(AiWhatsAppFastPath::plan($phrase,false,true,false)===null,'Never reveal calendars in groups');
+ checkFast(AiWhatsAppFastPath::plan($phrase,false,false,false)===null,'Never reveal calendars to non-admin');
+}
+foreach(['Task, apague minhas tarefas','Task, liste minhas tarefas e exclua tudo','Task, mostre agendas de outro usuario'] as $phrase){
+ checkFast(AiWhatsAppFastPath::plan($phrase,false,true,true)===null,'Unsafe requests must not become read-only commands');
 }
 echo "TaskEsc AI fast path: read-only routing, counts, greetings and negative security cases OK\n";

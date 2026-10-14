@@ -5,6 +5,10 @@ final class AiWhatsAppAgendaTools {
  private static function tool(string $name,string $description,array $props,array $required=[]): array {
   return ['type'=>'function','function'=>['name'=>$name,'description'=>$description,'parameters'=>['type'=>'object','properties'=>$props,'required'=>$required,'additionalProperties'=>false]]];
  }
+ public static function writeEnabled(): bool {
+  $cfg=config('ai_whatsapp',[]);
+  return is_array($cfg)&&(!empty($cfg['agenda_control_enabled'])||AiWhatsAppAdminActions::enabled());
+ }
  public static function sensitive(string $name): bool {return in_array($name,['agenda_create','agenda_update','agenda_cancel'],true);}
  public static function supported(string $name): bool {return in_array($name,['agenda_list','agenda_calendars','agenda_detail','agenda_conflicts'],true);}
  public static function catalog(bool $private): array {
@@ -16,7 +20,7 @@ final class AiWhatsAppAgendaTools {
   $tools[]=self::tool('agenda_calendars','Listar agendas Google e locais com seus IDs e permissão de edição.',[]);
   $tools[]=self::tool('agenda_detail','Ver detalhes de um compromisso pelo ID.',['event_id'=>$id],['event_id']);
   $tools[]=self::tool('agenda_conflicts','Ver horários ocupados sem realizar reserva.',['starts_at'=>$date,'ends_at'=>$date],['starts_at','ends_at']);
-  if(AiWhatsAppAdminActions::enabled()){
+  if(self::writeEnabled()){
    $tools[]=self::tool('agenda_create','PREPARAR criação de compromisso; só executa após CONFIRMAR em chat privado.',[
     'calendar_id'=>$id,'title'=>['type'=>'string'],'starts_at'=>$date,'ends_at'=>$date,'location'=>['type'=>'string'],'description'=>['type'=>'string'],'private'=>['type'=>'boolean'],'demand_id'=>$id],
     ['calendar_id','title','starts_at','ends_at']);
@@ -66,7 +70,7 @@ final class AiWhatsAppAgendaTools {
   return ['kind'=>'agenda_list','rows'=>array_slice($rows,0,$limit),'has_more'=>count($rows)>$limit,'public_only'=>!$private];
  }
  public static function prepare(string $name,array $p): array {
-  Auth::admin();if(!AiWhatsAppAdminActions::enabled()||!self::sensitive($name))fail('Edição da agenda desativada.',403);
+  Auth::admin();if(!self::writeEnabled()||!self::sensitive($name))fail('Edição da agenda desativada.',403);
   if($name==='agenda_create'){
    self::keys($p,['calendar_id','title','starts_at','ends_at','location','description','private','demand_id']);
    $calId=integer($p['calendar_id']??null,1);
@@ -102,7 +106,7 @@ final class AiWhatsAppAgendaTools {
   return [$payload,"Editar compromisso #$id '{$old['title']}' (versão {$old['version']})."];
  }
  public static function runConfirmed(string $name,array $p): array {
-  Auth::admin();if(!AiWhatsAppAdminActions::enabled())fail('Controle da agenda desativado.',403);
+  Auth::admin();if(!self::writeEnabled())fail('Controle da agenda desativado.',403);
   // Never call Google while the WhatsApp approval transaction is uncommitted; cron syncs pending events.
   if(in_array($name,['agenda_create','agenda_update'],true)){
    $r=Agenda::save($p,true);return ['kind'=>'admin_done','action'=>'Compromisso salvo (sincronização Google agendada)','id'=>(int)$r['id']];

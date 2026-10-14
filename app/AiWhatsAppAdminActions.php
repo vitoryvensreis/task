@@ -34,9 +34,10 @@ final class AiWhatsAppAdminActions {
  }
  private static function brl(int $cents): string {return 'R$ '.number_format($cents/100,2,',','.');}
  public static function prepare(string $name,array $p): array {
-  Auth::admin();if(!self::enabled())fail('Controle administrativo da IA desativado.',403);
-  if(!self::sensitive($name))fail('Ação administrativa não autorizada.',403);
+  Auth::admin();
   if(AiWhatsAppAgendaTools::sensitive($name))return AiWhatsAppAgendaTools::prepare($name,$p);
+  if(!self::enabled())fail('Controle administrativo da IA desativado.',403);
+  if(!self::sensitive($name))fail('Ação administrativa não autorizada.',403);
   switch($name){
    case 'create_invoice':
     self::keys($p,['client_id','description','amount_cents','due_on']);
@@ -88,7 +89,9 @@ final class AiWhatsAppAdminActions {
   fail('Ação não autorizada.',403);
  }
  public static function run(string $name,array $p): array {
-  Auth::admin();if(!self::enabled())fail('Controle administrativo da IA desativado.',403);
+  Auth::admin();
+  if(AiWhatsAppAgendaTools::sensitive($name))return AiWhatsAppAgendaTools::runConfirmed($name,$p);
+  if(!self::enabled())fail('Controle administrativo da IA desativado.',403);
   switch($name){
    case 'list_clients':
     self::keys($p,['query']);$q=mb_substr(trim((string)($p['query']??'')),0,70);

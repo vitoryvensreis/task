@@ -12,7 +12,7 @@ final class AiWhatsAppGroq
   $cfg=config('ai_whatsapp',[]);
   $key=(string)($cfg['groq_api_key']??'');
   if(!self::enabled())throw new RuntimeException('ai_not_configured');
-  $model=(string)($cfg['model']??'llama-3.3-70b-versatile');
+  $model=(string)($cfg['groq_model']??$cfg['model']??'llama-3.3-70b-versatile');
   if(!preg_match('/\\A[a-z0-9][a-z0-9._\\/-]{2,90}\\z/D',$model))throw new RuntimeException('ai_model_invalid');
   $request=[
    'model'=>$model,'temperature'=>0,'max_completion_tokens'=>480,'parallel_tool_calls'=>false,

@@ -11,11 +11,11 @@ final class AiWhatsAppWorker
  private static function now(): string {return (new DateTimeImmutable('now',new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u');}
  public static function health(): array {
   $schema=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);
-  return ['status'=>$schema===29?'ok':'error','schema'=>$schema,'enabled'=>AiWhatsAppGroq::enabled(),
+  return ['status'=>$schema===29?'ok':'error','schema'=>$schema,'enabled'=>AiWhatsAppProvider::enabled(),
    'queue'=>(int)(DB::one("SELECT COUNT(*) n FROM ai_whatsapp_inbox WHERE ai_state IN ('queued','retry')")['n']??0)];
  }
  public static function tick(int $limit=5,?callable $planner=null,?callable $verify=null,?callable $mentioned=null,?callable $send=null,bool $test=false): array {
-  if(!$test&&!AiWhatsAppGroq::enabled())return ['enabled'=>false,'processed'=>0];
+  if(!$test&&!AiWhatsAppProvider::enabled())return ['enabled'=>false,'processed'=>0];
   $done=0;
   for($i=0;$i<max(1,min($limit,20));$i++){
    $item=self::claim();
@@ -63,7 +63,7 @@ final class AiWhatsAppWorker
   self::actor((int)$first['user_id']);
   $tools=AiWhatsAppTools::catalog();
   $context=AiWhatsAppTools::context();
-  $planned=$planner?$planner($body,$context,$tools):AiWhatsAppGroq::plan($body,$context,$tools);
+  $planned=$planner?$planner($body,$context,$tools):AiWhatsAppProvider::plan($body,$context,$tools);
   if(!is_array($planned))throw new RuntimeException('ai_plan_invalid');
   $message='';
   if(isset($planned['tool'])){

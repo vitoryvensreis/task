@@ -183,5 +183,83 @@ try{
  at(DB::one('SELECT ai_state FROM ai_whatsapp_inbox WHERE id=?',[$rejected])['ai_state']==='ignored','Revoked sender ignored');
  at(count($sent)===$sentBefore&&$calls===0,'No reply or model after revoked authorization');
 
+
+ // Finance read-only: exact accounting, no write side-effects, ACL and private-only exposure.
+ $tz=new DateTimeZone('America/Fortaleza');
+ $today=(new DateTimeImmutable('now',$tz))->format('Y-m-d');
+ $start=(new DateTimeImmutable('first day of this month',$tz))->format('Y-m-d');
+ $last=(new DateTimeImmutable('last day of this month',$tz))->format('Y-m-d');
+ $previous=(new DateTimeImmutable('first day of last month',$tz))->format('Y-m-d');
+ $monthly=DB::insert('clients',['name'=>'Mensalidade não sincronizada','commercial_type'=>'monthly',
+  'monthly_amount_cents'=>5000,'monthly_payment_day'=>15,'created_at'=>now()]);
+ $invoice=DB::insert('invoices',['client_id'=>$clientId,'description'=>'Fatura teste financeiro','amount_cents'=>25000,'due_on'=>$today,'created_at'=>now()]);
+ $older=DB::insert('invoices',['client_id'=>$clientId,'description'=>'Saldo anterior','amount_cents'=>9000,'due_on'=>$previous,'created_at'=>now()]);
+ $cancelled=DB::insert('invoices',['client_id'=>$clientId,'description'=>'Cancelada','amount_cents'=>7000,'due_on'=>$today,'status'=>'cancelled','created_at'=>now()]);
+ DB::insert('payments',['invoice_id'=>$invoice,'amount_cents'=>10000,'discount_cents'=>2000,'paid_on'=>$today,
+  'method'=>'Pix','created_by'=>$admin,'created_at'=>now()]);
+ DB::insert('expenses',['description'=>'Custo operacional teste','vendor'=>'Fornecedor teste','category'=>'Outros',
+  'amount_cents'=>3000,'spent_on'=>$today,'payment_status'=>'paid','paid_on'=>$today,'created_by'=>$admin,
+  'created_at'=>now(),'updated_at'=>now()]);
+ DB::insert('expenses',['description'=>'Custo pendente teste','vendor'=>'Fornecedor teste','category'=>'Outros',
+  'amount_cents'=>2000,'spent_on'=>$today,'payment_status'=>'pending','created_by'=>$admin,
+  'created_at'=>now(),'updated_at'=>now()]);
+ $invoiceCountBefore=(int)DB::one('SELECT COUNT(*) n FROM invoices')['n'];
+ $expenseCountBefore=(int)DB::one('SELECT COUNT(*) n FROM expenses')['n'];
+ $adminPrivateTools=array_column(array_column(AiWhatsAppTools::catalog(true),'function'),'name');
+ at(in_array('finance_receivables',$adminPrivateTools,true)&&in_array('finance_summary',$adminPrivateTools,true)
+  &&in_array('finance_expenses',$adminPrivateTools,true),'Admin private exposes read-only finances');
+ $adminGroupTools=array_column(array_column(AiWhatsAppTools::catalog(false),'function'),'name');
+ at(!in_array('finance_receivables',$adminGroupTools,true),'Financial tools never exposed in groups');
+ $receivable=TaskEscFinanceReadApi::receivables(['scope'=>'month','from'=>$start,'to'=>$last]);
+ at($receivable['kind']==='finance_receivables'&&$receivable['total_cents']===13000
+  &&(int)$receivable['count']===1,'Monthly balance accounts for payments and discounts');
+ at((int)$receivable['rows'][0]['id']===$invoice,'Receivables expose only registered open invoice');
+ $allReceivables=TaskEscFinanceReadApi::receivables(['scope'=>'all']);
+ at($allReceivables['total_cents']===22000&&$allReceivables['count']===2,'All open invoices across months');
+ $summary=TaskEscFinanceReadApi::summary(['from'=>$start,'to'=>$last]);
+ at($summary['billed_cents']===25000&&$summary['received_cents']===10000,'Faturamento versus recebimento');
+ at($summary['expense_cents']===5000&&$summary['paid_expense_cents']===3000
+  &&$summary['profit_cents']===7000,'Cash profit follows existing Finance::analysis definitions');
+ at($summary['open_all_cents']===22000,'Global open balance includes previous month');
+ $expenseDetails=TaskEscFinanceReadApi::expenses(['from'=>$start,'to'=>$last]);
+ at(count($expenseDetails['rows'])===2,'Expenses read-only list');
+
+ foreach([
+  fn()=>TaskEscFinanceReadApi::summary(['from'=>'2026-02-30']),
+  fn()=>TaskEscFinanceReadApi::receivables(['scope'=>'all','from'=>$start]),
+  fn()=>TaskEscFinanceReadApi::receivables(['limit'=>11]),
+  fn()=>TaskEscFinanceReadApi::summary(['delete_all'=>true])
+ ] as $bad){
+  try{$bad();throw new RuntimeException('Unvalidated finance query executed');}
+  catch(AppError $e){at($e->getMessage()!=='','Invalid finance query rejected');}
+ }
+ at((int)DB::one('SELECT COUNT(*) n FROM invoices')['n']===$invoiceCountBefore
+  &&(int)DB::one('SELECT COUNT(*) n FROM expenses')['n']===$expenseCountBefore,
+  'Finance reads must not sync or create invoices/expenses');
+ at(!DB::one('SELECT id FROM invoices WHERE client_id=?',[$monthly]),'Financial read must not sync monthly client');
+
+ // A private authorized user can query financial balances without consuming tokens.
+ $financeMsg=DB::insert('ai_whatsapp_inbox',['session_name'=>'taskesc','provider_message_id'=>'finance-fast-1',
+  'chat_id'=>$chat,'sender_id'=>$chat,'chat_type'=>'private','message_type'=>'chat',
+  'body'=>'me fala o que ainda tenho a receber esse mês','status'=>'received',
+  'auth_status'=>'authorized','auth_reason'=>'user_authorized','received_at'=>now(),'ai_state'=>'queued']);
+ $financeCalls=0;
+ $noFinanceModel=static function()use(&$financeCalls):array{$financeCalls++;throw new RuntimeException('LLM invoked');};
+ $beforeFinanceSent=count($sent);
+ AiWhatsAppWorker::tick(1,$noFinanceModel,$verifier,null,$sender,true);
+ at($financeCalls===0&&DB::one('SELECT ai_state FROM ai_whatsapp_inbox WHERE id=?',[$financeMsg])['ai_state']==='sent',
+  'Authorized finance private fast-path sends once without LLM');
+ at(str_contains($sent[$beforeFinanceSent][1],'R$ 130,00'),'Finance reply formats accurate cents');
+
+ Auth::$user=DB::one('SELECT * FROM users WHERE id=?',[$staff]);Auth::$actor=Auth::$user;
+ at(!in_array('finance_summary',array_column(array_column(AiWhatsAppTools::catalog(true),'function'),'name'),true),
+  'Staff cannot access finance tool');
+ try{TaskEscFinanceReadApi::summary();throw new RuntimeException('Staff finance bypass');}
+ catch(AppError $e){at($e->getMessage()!=='','Staff denied by finance gateway');}
+ Auth::$user=DB::one('SELECT * FROM users WHERE id=?',[$customer]);Auth::$actor=Auth::$user;
+ try{TaskEscFinanceReadApi::receivables();throw new RuntimeException('Client finance bypass');}
+ catch(AppError $e){at($e->getMessage()!=='','Client denied by finance gateway');}
+ Auth::$user=DB::one('SELECT * FROM users WHERE id=?',[$admin]);Auth::$actor=Auth::$user;
+
  echo "AI WhatsApp tools: schema, create once, edit once, protected fields, self assignment, category default, client denial, private reply, group guard OK\n";
 }finally{@unlink(ROOT.'/config/config.php');@unlink(ROOT.'/storage/installed.lock');}

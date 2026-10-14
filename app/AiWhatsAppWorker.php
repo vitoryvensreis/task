@@ -53,24 +53,26 @@ final class AiWhatsAppWorker
   $id=(int)$row['id'];
   if($row['chat_type']==='group'){
    $jids=decode($row['ai_mentions_json']??null,[]);
-   if(!is_array($jids)||!$jids){self::ignore($id,'group_not_mentioned');return;}
-   $isMention=$mentioned?$mentioned($jids):WppConnect::isBotMentioned($jids);
-   if(!$isMention){self::ignore($id,'group_not_mentioned');return;}
+   if(!is_array($jids))$jids=[];
+   if(!AiWhatsAppGroupTrigger::addressed((string)($row['body']??''),$jids,$mentioned)){self::ignore($id,'group_not_addressed');return;}
   }
   $first=self::decision($row,$verify);
   if(($first['status']??'')!=='authorized'){self::ignore($id,'access_denied');return;}
   $body=trim((string)($row['body']??''));
   if($body===''||!in_array((string)$row['message_type'],['chat','text'],true)){self::ignore($id,'unsupported_message');return;}
   self::actor((int)$first['user_id']);
+  if($row['chat_type']==='group'&&(Auth::$user['role']??'')!=='admin'){self::ignore($id,'group_admin_only');return;}
+  if($row['chat_type']==='group')$body=AiWhatsAppGroupTrigger::command($body);
+  if($body==='')$body='ajuda';
   $financialPrivate=$row['chat_type']==='private' && Auth::can('finance.read') && (Auth::$user['role']??'')==='admin';
-  $tools=array_merge(AiWhatsAppTools::catalog($financialPrivate),AiWhatsAppAdminActions::catalog($financialPrivate));
+  $tools=array_merge(AiWhatsAppTools::catalog($financialPrivate),AiWhatsAppAdminActions::catalog($financialPrivate),AiWhatsAppAgendaTools::catalog($row['chat_type']==='private'));
   // Confirmation codes are parsed locally; never expose approval operation to a model.
   // Read-only commands and exact greetings never contact a paid/quota-limited model.
   // For everything else, preserve the original Gemini -> Groq route.
   $localConfirmation=$financialPrivate?AiWhatsAppApproval::command($body):null;
-  $planned=$localConfirmation??AiWhatsAppFastPath::plan($body,$financialPrivate);
+  $planned=$localConfirmation??AiWhatsAppFastPath::plan($body,$financialPrivate,(Auth::$user['role']??'')==='admin');
   if($planned===null){
-   $context=AiWhatsAppTools::context();
+   $context=AiWhatsAppTools::context()+AiWhatsAppAgendaTools::context($row['chat_type']==='private');
    $planned=$planner?$planner($body,$context,$tools):AiWhatsAppProvider::plan($body,$context,$tools);
   }
   if(!is_array($planned))throw new RuntimeException('ai_plan_invalid');
@@ -85,6 +87,7 @@ final class AiWhatsAppWorker
     $again=self::decision($row,$verify);
     if(!self::sameUser($first,$again))throw new RuntimeException('ai_access_revoked');
     self::actor((int)$again['user_id']);
+    if($row['chat_type']==='group'&&(Auth::$user['role']??'')!=='admin')throw new RuntimeException('ai_access_revoked');
     $allowed=array_column(array_column($tools,'function'),'name');
     $isLocalApproval=$localConfirmation!==null && AiWhatsAppApproval::internal($name);
     if(!in_array($name,$allowed,true)&&!$isLocalApproval)throw new RuntimeException('ai_tool_not_allowed');
@@ -92,6 +95,7 @@ final class AiWhatsAppWorker
     if($isLocalApproval)$result=AiWhatsAppApproval::decide($name,$args,$row);
     elseif(AiWhatsAppAdminActions::sensitive($name))$result=AiWhatsAppApproval::propose($name,$args,$row);
     elseif(in_array($name,['list_clients','list_projects','list_team','list_events'],true))$result=AiWhatsAppAdminActions::run($name,$args);
+    elseif(AiWhatsAppAgendaTools::supported($name))$result=AiWhatsAppAgendaTools::run($name,$args,$row['chat_type']==='private');
     else $result=AiWhatsAppTools::run($name,$args);
     $reply=self::formatResult($result);
     DB::run("UPDATE ai_whatsapp_inbox SET ai_state='reply_pending',ai_reply=?,ai_processed_at=?,ai_updated_at=? WHERE id=?",[$reply,self::now(),self::now(),$id]);
@@ -117,7 +121,10 @@ final class AiWhatsAppWorker
   if(!self::sameUser($first,$final)){self::ignore($id,'access_revoked_before_reply');return;}
   if($row['chat_type']==='group'){
    $jids=decode($row['ai_mentions_json']??null,[]);
-   if(!($mentioned?$mentioned($jids):WppConnect::isBotMentioned($jids))){self::ignore($id,'mention_unverified');return;}
+   if(!is_array($jids))$jids=[];
+   if(!AiWhatsAppGroupTrigger::addressed((string)($row['body']??''),$jids,$mentioned)){self::ignore($id,'mention_unverified');return;}
+   self::actor((int)$final['user_id']);
+   if((Auth::$user['role']??'')!=='admin'){self::ignore($id,'group_admin_only');return;}
   }
   $recipient=$row['chat_id'];
   if($row['chat_type']==='private'){
@@ -144,6 +151,7 @@ final class AiWhatsAppWorker
   if(($r['kind']??'')==='approval_pending')return "Operação preparada (AINDA NÃO EXECUTADA):\n".$r['summary']."\nPara autorizar, responda exatamente: CONFIRMAR ".$r['code']."\nPara desistir: CANCELAR ".$r['code']."\nCódigo válido por 10 minutos. Apenas no privado.";
   if(($r['kind']??'')==='approval_status')return (string)$r['message'];
   if(($r['kind']??'')==='admin_done')return $r['action'].' com sucesso (#'.$r['id'].').';
+  if(str_starts_with((string)($r['kind']??''),'agenda_'))return AiWhatsAppAgendaTools::format($r);
   if(($r['kind']??'')==='admin_list'){
    $lines=[(string)$r['heading'].':'];foreach($r['items'] as $item)$lines[]='#'.$item['id'].' '.mb_substr((string)$item['name'],0,85);
    return count($lines)>1?implode("\n",$lines):'Nenhum registro encontrado.';

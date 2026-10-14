@@ -66,7 +66,17 @@ final class AiWhatsAppInbox
              ON DUPLICATE KEY UPDATE id=id",
             [$session,$providerId,$chatId,$sender,$group?'group':'private',$type,$body,(new DateTimeImmutable('now',new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u')]
         );
-        return ['accepted'=>true,'stored'=>$stmt->rowCount()===1,'duplicate'=>$stmt->rowCount()!==1,
+        $stored=$stmt->rowCount()===1;
+        if($stored){
+            // The inbox is persisted before potentially slow group-member verification.
+            // If the verification cannot complete, pending is NOT an authorization.
+            $decision=AiWhatsAppAccess::decide($sender,$group?'group':'private',$chatId);
+            DB::run('UPDATE ai_whatsapp_inbox SET auth_user_id=?,auth_status=?,auth_reason=?,auth_checked_at=? WHERE session_name=? AND provider_message_id=? AND auth_status=\'pending\'',
+                [$decision['user_id'],$decision['status'],$decision['reason'],
+                 (new DateTimeImmutable('now',new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u'),
+                 $session,$providerId]);
+        }
+        return ['accepted'=>true,'stored'=>$stored,'duplicate'=>!$stored,
             'chat_type'=>$group?'group':'private'];
     }
 

@@ -7,7 +7,8 @@ final class Migrations {
  public const WHATSAPP_GROUPS_VERSION=25;
  public const WHATSAPP_TASK_PHONE_VERSION=26;
  public const ASSISTANT_INBOX_VERSION=27;
- public const CURRENT_VERSION=27;
+ public const ASSISTANT_ACCESS_VERSION=28;
+ public const CURRENT_VERSION=28;
  public static function run(): void {
   static $ran=false;if($ran)return;$ran=true;
   try{$version=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??1);}catch(Throwable){return;}
@@ -283,7 +284,7 @@ final class Migrations {
   $timeout=null;
   try{
    $before=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);
-   if(!in_array($before,[19,self::OUTBOX_VERSION,self::CHAT_VERSION,self::CHAT_TASK_VERSION,self::AUTOMATION_VERSION,self::WHATSAPP_GROUPS_VERSION,self::WHATSAPP_TASK_PHONE_VERSION,self::ASSISTANT_INBOX_VERSION],true))throw new RuntimeException('A migração Outbox requer schema 19, 21, 22, 23, 24, 25 ou 26; schema 20 não é suportado.');
+   if(!in_array($before,[19,self::OUTBOX_VERSION,self::CHAT_VERSION,self::CHAT_TASK_VERSION,self::AUTOMATION_VERSION,self::WHATSAPP_GROUPS_VERSION,self::WHATSAPP_TASK_PHONE_VERSION,self::ASSISTANT_INBOX_VERSION,self::ASSISTANT_ACCESS_VERSION],true))throw new RuntimeException('A migração Outbox requer schema 19, 21, 22, 23, 24, 25 ou 26; schema 20 não é suportado.');
    if($before===19){
     $timeout=(int)(DB::one('SELECT @@SESSION.lock_wait_timeout AS timeout')['timeout']??0);
     $db->exec('SET SESSION lock_wait_timeout=10');
@@ -354,7 +355,7 @@ final class Migrations {
   $timeout=null;
   try{
    $before=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);
-   if(!in_array($before,[self::OUTBOX_VERSION,self::CHAT_VERSION,self::CHAT_TASK_VERSION,self::AUTOMATION_VERSION,self::WHATSAPP_GROUPS_VERSION,self::WHATSAPP_TASK_PHONE_VERSION,self::ASSISTANT_INBOX_VERSION],true))throw new RuntimeException('A migração do chat requer schema 21, 22, 23, 24, 25 ou 26.');
+   if(!in_array($before,[self::OUTBOX_VERSION,self::CHAT_VERSION,self::CHAT_TASK_VERSION,self::AUTOMATION_VERSION,self::WHATSAPP_GROUPS_VERSION,self::WHATSAPP_TASK_PHONE_VERSION,self::ASSISTANT_INBOX_VERSION,self::ASSISTANT_ACCESS_VERSION],true))throw new RuntimeException('A migração do chat requer schema 21, 22, 23, 24, 25 ou 26.');
    if($before<self::CHAT_TASK_VERSION){
     $timeout=(int)(DB::one('SELECT @@SESSION.lock_wait_timeout AS timeout')['timeout']??0);
     $db->exec('SET SESSION lock_wait_timeout=10');
@@ -371,7 +372,7 @@ final class Migrations {
    if($issues)throw new RuntimeException('Estrutura do chat incompatível: '.implode(',',$issues));
    if($before<self::CHAT_TASK_VERSION)DB::run("UPDATE settings SET value=? WHERE `key`='schema_version' AND value=?",[(string)self::CHAT_TASK_VERSION,(string)$before]);
    $after=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);
-   if(!in_array($after,[self::CHAT_TASK_VERSION,self::AUTOMATION_VERSION,self::WHATSAPP_GROUPS_VERSION,self::WHATSAPP_TASK_PHONE_VERSION,self::ASSISTANT_INBOX_VERSION],true))throw new RuntimeException('Marcador de schema divergente após migração do chat.');
+   if(!in_array($after,[self::CHAT_TASK_VERSION,self::AUTOMATION_VERSION,self::WHATSAPP_GROUPS_VERSION,self::WHATSAPP_TASK_PHONE_VERSION,self::ASSISTANT_INBOX_VERSION,self::ASSISTANT_ACCESS_VERSION],true))throw new RuntimeException('Marcador de schema divergente após migração do chat.');
    return ['previous'=>$before,'current'=>$after,'tables'=>['chat_threads','chat_messages','chat_message_tasks'],'changed'=>$before!==$after];
   }finally{
    try{if($timeout!==null)$db->exec('SET SESSION lock_wait_timeout='.$timeout);}finally{DB::run('SELECT RELEASE_LOCK(?)',[$lock]);}
@@ -430,7 +431,7 @@ final class Migrations {
   $timeout=null;
   try{
    $before=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);
-   if(!in_array($before,[self::CHAT_TASK_VERSION,self::AUTOMATION_VERSION,self::WHATSAPP_GROUPS_VERSION,self::WHATSAPP_TASK_PHONE_VERSION,self::ASSISTANT_INBOX_VERSION],true))throw new RuntimeException('A migração de automações requer schema 23, 24, 25 ou 26.');
+   if(!in_array($before,[self::CHAT_TASK_VERSION,self::AUTOMATION_VERSION,self::WHATSAPP_GROUPS_VERSION,self::WHATSAPP_TASK_PHONE_VERSION,self::ASSISTANT_INBOX_VERSION,self::ASSISTANT_ACCESS_VERSION],true))throw new RuntimeException('A migração de automações requer schema 23, 24, 25 ou 26.');
    if($before<self::AUTOMATION_VERSION){
     $timeout=(int)(DB::one('SELECT @@SESSION.lock_wait_timeout AS timeout')['timeout']??0);
     $db->exec('SET SESSION lock_wait_timeout=10');
@@ -467,7 +468,7 @@ final class Migrations {
    if($issues)throw new RuntimeException('Estrutura de automações incompatível: '.implode(',',$issues));
    if($before<self::WHATSAPP_TASK_PHONE_VERSION)DB::run("UPDATE settings SET value=? WHERE `key`='schema_version' AND value=?",[(string)self::WHATSAPP_TASK_PHONE_VERSION,(string)$before]);
    $after=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);
-   if(!in_array($after,[self::WHATSAPP_TASK_PHONE_VERSION,self::ASSISTANT_INBOX_VERSION],true))throw new RuntimeException('Marcador de schema divergente após migração de automações.');
+   if(!in_array($after,[self::WHATSAPP_TASK_PHONE_VERSION,self::ASSISTANT_INBOX_VERSION,self::ASSISTANT_ACCESS_VERSION],true))throw new RuntimeException('Marcador de schema divergente após migração de automações.');
    return ['previous'=>$before,'current'=>$after,'tables'=>['automations','automation_runs','automation_run_steps','automation_worker_state','whatsapp_messages'],'changed'=>$before!==$after];
   }finally{
    try{if($timeout!==null)$db->exec('SET SESSION lock_wait_timeout='.$timeout);}finally{DB::run('SELECT RELEASE_LOCK(?)',[$lock]);}
@@ -520,7 +521,7 @@ final class Migrations {
   $timeout=null;
   try{
    $before=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);
-   if(!in_array($before,[self::WHATSAPP_TASK_PHONE_VERSION,self::ASSISTANT_INBOX_VERSION],true))throw new RuntimeException('Inbox AI requer schema 26 ou 27.');
+   if(!in_array($before,[self::WHATSAPP_TASK_PHONE_VERSION,self::ASSISTANT_INBOX_VERSION,self::ASSISTANT_ACCESS_VERSION],true))throw new RuntimeException('Inbox AI requer schema 26 ou 27.');
    if($before===self::WHATSAPP_TASK_PHONE_VERSION){
     $timeout=(int)(DB::one('SELECT @@SESSION.lock_wait_timeout AS timeout')['timeout']??0);
     $db->exec('SET SESSION lock_wait_timeout=10');
@@ -532,7 +533,7 @@ final class Migrations {
    if($issues)throw new RuntimeException('Estrutura do inbox incompatível: '.implode(',',$issues));
    if($before===self::WHATSAPP_TASK_PHONE_VERSION)DB::run("UPDATE settings SET value=? WHERE `key`='schema_version' AND value=?",[(string)self::ASSISTANT_INBOX_VERSION,(string)$before]);
    $after=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);
-   if($after!==self::ASSISTANT_INBOX_VERSION)throw new RuntimeException('Marcador de schema divergente após inbox.');
+   if(!in_array($after,[self::ASSISTANT_INBOX_VERSION,self::ASSISTANT_ACCESS_VERSION],true))throw new RuntimeException('Marcador de schema divergente após inbox.');
    return ['previous'=>$before,'current'=>$after,'tables'=>['ai_whatsapp_inbox'],'changed'=>$before!==$after];
   }finally{
    try{if($timeout!==null)$db->exec('SET SESSION lock_wait_timeout='.$timeout);}finally{DB::run('SELECT RELEASE_LOCK(?)',[$lock]);}
@@ -563,6 +564,49 @@ final class Migrations {
    'idx_ai_inbox_sender'=>[['sender_id','id'],false]] as $name=>[$fields,$unique]){
    if(($indexes[$name]['columns']??[])!==$fields||($indexes[$name]['unique']??null)!==$unique)$issues[]='index_'.$name;
   }
+  return array_values(array_unique($issues));
+ }
+
+ /** Isolated schema 28 authorization migration; requires verified deploy backup. */
+ public static function assistantAccess(): array {
+  $db=DB::conn();
+  if($db->inTransaction())throw new LogicException('Execute migração de permissões fora de transações.');
+  $lock=(string)(DB::one("SELECT CONCAT('taskesc-ai-access-28:',SHA1(DATABASE())) AS name")['name']??'');
+  if((int)(DB::one('SELECT GET_LOCK(?,10) AS acquired',[$lock])['acquired']??0)!==1)throw new RuntimeException('Migração AI já está em execução.');
+  $timeout=null;
+  try{
+   $before=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);
+   if(!in_array($before,[self::ASSISTANT_INBOX_VERSION,self::ASSISTANT_ACCESS_VERSION],true))throw new RuntimeException('AI exige schema 27 ou 28.');
+   if($before===self::ASSISTANT_INBOX_VERSION){
+    $timeout=(int)(DB::one('SELECT @@SESSION.lock_wait_timeout AS timeout')['timeout']??0);
+    $db->exec('SET SESSION lock_wait_timeout=10');
+    self::column('users','ai_assistant_enabled',"ALTER TABLE users ADD COLUMN ai_assistant_enabled TINYINT NOT NULL DEFAULT 0 AFTER whatsapp_phone");
+    self::column('ai_whatsapp_inbox','auth_user_id',"ALTER TABLE ai_whatsapp_inbox ADD COLUMN auth_user_id INT NULL AFTER sender_id");
+    self::column('ai_whatsapp_inbox','auth_status',"ALTER TABLE ai_whatsapp_inbox ADD COLUMN auth_status VARCHAR(20) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'pending' AFTER status");
+    self::column('ai_whatsapp_inbox','auth_reason',"ALTER TABLE ai_whatsapp_inbox ADD COLUMN auth_reason VARCHAR(50) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'pending' AFTER auth_status");
+    self::column('ai_whatsapp_inbox','auth_checked_at',"ALTER TABLE ai_whatsapp_inbox ADD COLUMN auth_checked_at DATETIME(6) NULL AFTER auth_reason");
+    self::index('ai_whatsapp_inbox','idx_ai_inbox_auth',"ALTER TABLE ai_whatsapp_inbox ADD KEY idx_ai_inbox_auth (auth_status,received_at,id)");
+    self::index('ai_whatsapp_inbox','idx_ai_inbox_auth_user',"ALTER TABLE ai_whatsapp_inbox ADD KEY idx_ai_inbox_auth_user (auth_user_id,id)");
+   }
+   $issues=self::assistantAccessIssues();
+   if($issues)throw new RuntimeException('Estrutura AI incompatível: '.implode(',',$issues));
+   if($before===self::ASSISTANT_INBOX_VERSION)DB::run("UPDATE settings SET value=? WHERE `key`='schema_version' AND value=?",[(string)self::ASSISTANT_ACCESS_VERSION,(string)$before]);
+   $after=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);
+   if($after!==self::ASSISTANT_ACCESS_VERSION)throw new RuntimeException('Marcador de schema AI divergente.');
+   return ['previous'=>$before,'current'=>$after,'changed'=>$before!==$after];
+  }finally{
+   try{if($timeout!==null)$db->exec('SET SESSION lock_wait_timeout='.$timeout);}finally{DB::run('SELECT RELEASE_LOCK(?)',[$lock]);}
+  }
+ }
+ public static function assistantAccessIssues(): array {
+  $issues=self::assistantInboxIssues();
+  $cols=[];
+  foreach(DB::all("SELECT TABLE_NAME,COLUMN_NAME,DATA_TYPE,IS_NULLABLE,COLUMN_DEFAULT,COLLATION_NAME,DATETIME_PRECISION FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND ((TABLE_NAME='users' AND COLUMN_NAME='ai_assistant_enabled') OR (TABLE_NAME='ai_whatsapp_inbox' AND COLUMN_NAME IN ('auth_user_id','auth_status','auth_reason','auth_checked_at')))") as $c)$cols[$c['TABLE_NAME'].'.'.$c['COLUMN_NAME']]=$c;
+  foreach(['users.ai_assistant_enabled'=>'tinyint','ai_whatsapp_inbox.auth_user_id'=>'int','ai_whatsapp_inbox.auth_status'=>'varchar','ai_whatsapp_inbox.auth_reason'=>'varchar','ai_whatsapp_inbox.auth_checked_at'=>'datetime'] as $name=>$type)if(($cols[$name]['DATA_TYPE']??null)!==$type)$issues[]='column_'.str_replace('.','_',$name);
+  if(($cols['users.ai_assistant_enabled']['IS_NULLABLE']??'YES')!=='NO'||(int)($cols['users.ai_assistant_enabled']['COLUMN_DEFAULT']??-1)!==0)$issues[]='permission_default';
+  foreach(['auth_status','auth_reason'] as $name){$c=$cols['ai_whatsapp_inbox.'.$name]??[];if(($c['COLLATION_NAME']??'')!=='ascii_bin'||($c['IS_NULLABLE']??'YES')!=='NO'||trim((string)($c['COLUMN_DEFAULT']??''),"'\"")!=='pending')$issues[]='definition_'.$name;}
+  if((int)($cols['ai_whatsapp_inbox.auth_checked_at']['DATETIME_PRECISION']??-1)!==6)$issues[]='precision_auth_checked';
+  foreach(['idx_ai_inbox_auth','idx_ai_inbox_auth_user'] as $name)if(!self::hasIndex('ai_whatsapp_inbox',$name))$issues[]='index_'.$name;
   return array_values(array_unique($issues));
  }
 

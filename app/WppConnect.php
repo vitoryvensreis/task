@@ -173,6 +173,43 @@ final class WppConnect
         return $id;
     }
 
+    /**
+     * Query current group membership on the private WPPConnect API.
+     * A failed/ambiguous response MUST NOT grant access to the AI assistant.
+     * Phone JIDs and opaque LIDs stay separate; do not infer LID => phone.
+     */
+    public static function groupMemberIds(string $groupId): array
+    {
+        $groupId=self::normalizeGroupId($groupId);
+        $cfg=self::requireConfigured();
+        $path='/api/'.rawurlencode($cfg['session']).'/group-members/'.rawurlencode($groupId);
+        $response=self::request('GET',$path,null,true,true);
+        if(!$response['ok'])throw new RuntimeException('Group participants unavailable.');
+        $ids=self::normalizeMemberIds($response['body']);
+        if(!$ids)throw new RuntimeException('Group participants could not be verified.');
+        return $ids;
+    }
+
+    /** Strict WPPConnect participant-list parser; no group-admin flag is required. */
+    public static function normalizeMemberIds(mixed $payload): array
+    {
+        if(!is_array($payload))return [];
+        if(isset($payload['status'])&&$payload['status']!=='success')return [];
+        $rows=$payload['response']??$payload['participants']??$payload['members']??$payload;
+        if(is_array($rows)&&isset($rows['participants']))$rows=$rows['participants'];
+        if(is_array($rows)&&isset($rows['data']))$rows=$rows['data'];
+        if(!is_array($rows)||!array_is_list($rows))return [];
+        $ids=[];
+        foreach($rows as $member){
+            $id=is_array($member)?($member['id']??$member['wid']??null):$member;
+            if(is_array($id))$id=$id['_serialized']??$id['id']??null;
+            if(!is_string($id)||!preg_match('/\\A[0-9]{6,32}@(c\\.us|s\\.whatsapp\\.net|lid)\\z/D',$id))continue;
+            $ids[$id]=$id;
+            if(count($ids)>2000)throw new RuntimeException('Group size exceeds safe verification limit.');
+        }
+        return array_values($ids);
+    }
+
     private static function fetchGroups(): array
     {
         $cfg=self::requireConfigured();

@@ -71,7 +71,8 @@ final class AiWhatsAppWorker
   // Read-only commands and exact greetings never contact a paid/quota-limited model.
   // For everything else, preserve the original Gemini -> Groq route.
   $localConfirmation=$financialPrivate?AiWhatsAppApproval::command($body):null;
-  $planned=$localConfirmation??AiWhatsAppFastPath::plan($body,$financialPrivate,(Auth::$user['role']??'')==='admin');
+  $planned=$localConfirmation??AiWhatsAppFastPath::plan($body,$financialPrivate,(Auth::$user['role']??'')==='admin',
+    $row['chat_type']==='private' && (Auth::$user['role']??'')==='admin');
   if($planned===null){
    $context=AiWhatsAppTools::context()+AiWhatsAppAgendaTools::context($row['chat_type']==='private');
    $planned=$planner?$planner($body,$context,$tools):AiWhatsAppProvider::plan($body,$context,$tools);

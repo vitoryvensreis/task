@@ -43,6 +43,7 @@ jobs:
       - name: Validar isolamento e fallback realtime
         run: |
           set -e
+          php tests/ai-whatsapp-fast-path.php
           php tests/realtime.php
           php tests/ai-whatsapp-providers.php
           php tests/wppconnect-contract.php

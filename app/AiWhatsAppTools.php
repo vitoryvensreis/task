@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-/** An LLM can propose only these three operations; the server authorizes each one. */
+/** An LLM can propose only these four operations; the server authorizes each one. */
 final class AiWhatsAppTools
 {
  public static function catalog(): array {
@@ -14,6 +14,11 @@ final class AiWhatsAppTools
    'due_at'=>['type'=>'string','description'=>'Data e hora local YYYY-MM-DDTHH:mm; não invente prazo'],
    'priority'=>['type'=>'string','enum'=>['low','normal','high','urgent']]
   ],'required'=>['title','brief','client_id','category_id'],'additionalProperties'=>false]]];
+  if(Auth::can('tasks.edit'))$tools[]=['type'=>'function','function'=>['name'=>'edit_task','description'=>'Editar SOMENTE título, briefing, prioridade ou prazo de uma task existente. Exige task_id inequívoco e ao menos um campo a alterar; não modifica valores, clientes, responsáveis, status, disparos ou acessos.','parameters'=>['type'=>'object','properties'=>[
+   'task_id'=>['type'=>'integer'],'title'=>['type'=>'string'],'brief'=>['type'=>'string'],
+   'due_at'=>['type'=>'string','description'=>'Novo prazo local exato YYYY-MM-DDTHH:mm; não invente data'],
+   'priority'=>['type'=>'string','enum'=>['low','normal','high','urgent']]
+  ],'required'=>['task_id'],'additionalProperties'=>false]]];
   if(Auth::can('tasks.move')&&Auth::$user['role']!=='client')$tools[]=['type'=>'function','function'=>['name'=>'move_task','description'=>'Mover task existente para uma etapa do Kanban.','parameters'=>['type'=>'object','properties'=>['task_id'=>['type'=>'integer'],'stage_id'=>['type'=>'integer']], 'required'=>['task_id','stage_id'],'additionalProperties'=>false]]];
   return $tools;
  }
@@ -50,6 +55,46 @@ final class AiWhatsAppTools
     if(isset($args['due_at'])){$dt=(string)$args['due_at'];if(!preg_match('/\\A\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}\\z/D',$dt))fail('Data inválida.',422);$input['due_at']=$dt;}
     $result=Demands::save($input);
     return ['kind'=>'created','id'=>(int)$result['id'],'url'=>$result['url']];
+   case 'edit_task':
+    Auth::requireAbility('tasks.edit');
+    // The model cannot smuggle administrative fields through Demands::save.
+    $allowed=['task_id','title','brief','priority','due_at'];
+    foreach(array_keys($args) as $key)if(!in_array($key,$allowed,true))fail('Campo não permitido para edição via WhatsApp.',422);
+    $changes=array_diff(array_keys($args),['task_id']);
+    if(!$changes)fail('Informe o que deseja alterar na task.',422);
+    $id=integer($args['task_id']??null,1);
+    return DB::tx(static function() use($id,$args,$changes): array {
+     $old=Auth::demand($id,true); // Confere autorização e versão sob lock.
+     $tz=new DateTimeZone((string)config('timezone','America/Fortaleza'));
+     $oldDue=(new DateTimeImmutable((string)$old['due_at'],new DateTimeZone('UTC')))->setTimezone($tz)->format('Y-m-d\TH:i:s');
+     $input=[
+      'id'=>$id,'version'=>(int)$old['version'],
+      'client_id'=>(int)$old['client_id'],'category_id'=>(int)$old['category_id'],
+      'draft'=>(int)$old['draft'], // Never publish an existing draft implicitly.
+      'title'=>(string)$old['title'],'brief'=>(string)$old['brief'],
+      'due_at'=>$oldDue,'priority'=>(string)$old['priority']
+     ];
+     if(array_key_exists('title',$args))$input['title']=required($args,'title',190);
+     if(array_key_exists('brief',$args))$input['brief']=required($args,'brief',3000);
+     if(array_key_exists('priority',$args))$input['priority']=enumv($args['priority'],['low','normal','high','urgent'],'prioridade');
+     if(array_key_exists('due_at',$args)){
+      $due=$args['due_at'];
+      if(!is_string($due)||!preg_match('/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}\z/D',$due))fail('Data inválida. Use AAAA-MM-DDTHH:mm.',422);
+      $parsed=DateTimeImmutable::createFromFormat('!Y-m-d\TH:i',$due,$tz);
+      if(!$parsed||$parsed->format('Y-m-d\TH:i')!==$due)fail('Data de entrega inválida.',422);
+      $input['due_at']=$due;
+     }
+     // Preserve financial snapshot exactly; changes to billing are never authorized here.
+     $before=[(string)$old['billing_mode'],(int)$old['amount_cents'],(string)$old['commercial_status']];
+     $result=Demands::save($input);
+     $after=DB::one('SELECT billing_mode,amount_cents,commercial_status,draft,client_id,category_id,assigned_to,project_id,stage_id FROM demands WHERE id=?',[$id]);
+     if(!$after||$before!==[(string)$after['billing_mode'],(int)$after['amount_cents'],(string)$after['commercial_status']]
+      ||(int)$after['draft']!==(int)$old['draft']||(int)$after['client_id']!==(int)$old['client_id']
+      ||(int)$after['category_id']!==(int)$old['category_id']||(int)($after['assigned_to']??0)!==(int)($old['assigned_to']??0)
+      ||(int)($after['project_id']??0)!==(int)($old['project_id']??0)
+      ||(int)$after['stage_id']!==(int)$old['stage_id'])fail('A edição envolveria campos não autorizados; nenhuma alteração foi salva.',409);
+     return ['kind'=>'edited','id'=>$id,'version'=>(int)$result['version'],'fields'=>array_values($changes)];
+    });
    case 'move_task':
     Auth::requireAbility('tasks.move');
     Auth::staff(); // matches the existing Kanban stage endpoint for client users

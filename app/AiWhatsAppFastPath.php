@@ -27,7 +27,7 @@ final class AiWhatsAppFastPath
         $text=preg_replace('/\A(?:ola|oi)[,!.\s]+(?:taskesc[,!.\s]+)?(?=(?:liste|listar|mostre|mostrar|consulte|consultar|ver|ajuda)\b)/u','',$text)??$text;
         $text=trim($text," \t\n\r\0\x0B.!?");
 
-        if(preg_match('/\A(?:oi|ola|bom dia|boa tarde|boa noite)(?:\s+taskesc)?\z/u',$text)){
+        if(preg_match('/\A(?:oi|ola|bom dia|boa tarde|boa noite)(?:[,\s]+taskesc)?\z/u',$text)){
             return ['text'=>'Olá! Sou o assistente do TaskEsc. Para começar, envie "Liste minhas tarefas". Também posso ajudar com operações autorizadas.'];
         }
         if(preg_match('/\A(?:ajuda|menu|o que voce faz|o que voce pode fazer|como voce pode me ajudar)\z/u',$text)){

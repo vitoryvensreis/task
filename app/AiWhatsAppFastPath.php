@@ -10,7 +10,7 @@ declare(strict_types=1);
  */
 final class AiWhatsAppFastPath
 {
-    public static function plan(string $message,bool $financialPrivate=false,bool $agendaAdmin=false): ?array
+    public static function plan(string $message,bool $financialPrivate=false,bool $agendaAdmin=false,bool $agendaPrivate=false): ?array
     {
         if(mb_strlen($message,'UTF-8')>180)return null;
         $text=mb_strtolower(trim($message),'UTF-8');
@@ -23,6 +23,8 @@ final class AiWhatsAppFastPath
         ]);
         $text=preg_replace('/\s+/u',' ',$text)??'';
         $text=trim($text);
+        // Remove only a leading vocative, never a reference to a task in the sentence.
+        $text=preg_replace('/\A@?(?:taskesc|task)[,:.!?\s]+(?=\S)/u','',$text)??$text;
         // Only remove an explicit, harmless greeting at the start.
         $text=preg_replace('/\A(?:ola|oi)[,!.\s]+(?:taskesc[,!.\s]+)?(?=(?:liste|listar|mostre|mostrar|consulte|consultar|ver|ajuda)\b)/u','',$text)??$text;
         $text=trim($text," \t\n\r\0\x0B.!?");
@@ -32,6 +34,10 @@ final class AiWhatsAppFastPath
         }
         if(preg_match('/\A(?:ajuda|menu|o que voce faz|o que voce pode fazer|como voce pode me ajudar)\z/u',$text)){
             return ['text'=>'Posso listar suas tarefas ou ajudar a criar, editar e mover demandas, conforme suas permissões. Experimente "Liste minhas tarefas".'];
+        }
+        // Calendar inventory is private information: only verified ADM in private chat.
+        if($agendaPrivate && preg_match('/\A(?:liste|listar|mostre|mostrar|ver|quais sao)\s+(?:as\s+|os\s+)?(?:minhas\s+|meus\s+)?(?:agendas|calendarios)(?:\s+disponiveis)?\z/u',$text)){
+            return ['tool'=>'agenda_calendars','arguments'=>[]];
         }
         // Fast path: simple agenda question without Gemini/Groq, only for verified ADM.
         if($agendaAdmin && preg_match('/\A(?:liste|mostre|ver|qual e|quais sao)\s+(?:os\s+)?(?:meus\s+)?(?:compromissos|eventos|agenda)\s+(?:de\s+)?hoje\z/u',$text)){

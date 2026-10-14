@@ -159,5 +159,29 @@ try{
  Auth::$user=DB::one('SELECT * FROM users WHERE id=?',[$admin]);Auth::$actor=Auth::$user;
  at((int)DB::one('SELECT COUNT(*) n FROM demands')['n']===$beforeUnsafe,'Client self-assignment created no tasks');
 
+ // Quota optimization: exact read-only request must run without Groq/Gemini.
+ $fastMsg=DB::insert('ai_whatsapp_inbox',['session_name'=>'taskesc','provider_message_id'=>'fast-list-1','chat_id'=>$chat,'sender_id'=>$chat,'chat_type'=>'private','message_type'=>'chat','body'=>'Olá, TaskEsc! Liste minhas últimas 5 tarefas.','status'=>'received','auth_status'=>'authorized','auth_reason'=>'user_authorized','received_at'=>now(),'ai_state'=>'queued']);
+ $calls=0;
+ $rejectPlanner=static function() use (&$calls): array {$calls++;throw new RuntimeException('Model invoked on local request');};
+ $sentBefore=count($sent);
+ $tasksBefore=(int)(DB::one('SELECT COUNT(*) n FROM demands')['n']??0);
+ AiWhatsAppWorker::tick(1,$rejectPlanner,$verifier,null,$sender,true);
+ at($calls===0,'Read-only fast path must never invoke LLM');
+ at(DB::one('SELECT ai_state FROM ai_whatsapp_inbox WHERE id=?',[$fastMsg])['ai_state']==='sent','Read-only fast path replied once');
+ at(count($sent)===$sentBefore+1&&str_starts_with($sent[$sentBefore][1],'Tasks ('),'Fast path uses authorized TaskEsc task API');
+ at(substr_count($sent[$sentBefore][1],"\n")<=5,'Requested result limit applies');
+ at((int)(DB::one('SELECT COUNT(*) n FROM demands')['n']??0)===$tasksBefore,'Read-only fast path cannot mutate demands');
+
+ $hello=DB::insert('ai_whatsapp_inbox',['session_name'=>'taskesc','provider_message_id'=>'fast-greeting-1','chat_id'=>$chat,'sender_id'=>$chat,'chat_type'=>'private','message_type'=>'chat','body'=>'Oi','status'=>'received','auth_status'=>'authorized','auth_reason'=>'user_authorized','received_at'=>now(),'ai_state'=>'queued']);
+ AiWhatsAppWorker::tick(1,$rejectPlanner,$verifier,null,$sender,true);
+ at($calls===0,'Greeting must never invoke LLM');
+ at(DB::one('SELECT ai_state FROM ai_whatsapp_inbox WHERE id=?',[$hello])['ai_state']==='sent','Greeting replied once');
+
+ $rejected=DB::insert('ai_whatsapp_inbox',['session_name'=>'taskesc','provider_message_id'=>'fast-denied-1','chat_id'=>$chat,'sender_id'=>$chat,'chat_type'=>'private','message_type'=>'chat','body'=>'Liste minhas tarefas','status'=>'received','auth_status'=>'authorized','auth_reason'=>'user_authorized','received_at'=>now(),'ai_state'=>'queued']);
+ $sentBefore=count($sent);
+ AiWhatsAppWorker::tick(1,$rejectPlanner,fn()=>['status'=>'denied','user_id'=>null],null,$sender,true);
+ at(DB::one('SELECT ai_state FROM ai_whatsapp_inbox WHERE id=?',[$rejected])['ai_state']==='ignored','Revoked sender ignored');
+ at(count($sent)===$sentBefore&&$calls===0,'No reply or model after revoked authorization');
+
  echo "AI WhatsApp tools: schema, create once, edit once, protected fields, self assignment, category default, client denial, private reply, group guard OK\n";
 }finally{@unlink(ROOT.'/config/config.php');@unlink(ROOT.'/storage/installed.lock');}

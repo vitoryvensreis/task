@@ -556,3 +556,7 @@ Somente o perfil **ADM** vê e pode editar os controles de WhatsApp na criação
 ### Canvas livre de automações
 
 O editor visual permite arrastar os cards, salvar as posições no JSON da automação e conectar um gatilho/ação a vários destinos. O worker executa cada ramo uma vez por execução, preservando a proteção contra reenvios. Os fluxos antigos continuam compatíveis, sem migração SQL. Consulte `docs/automation-triggers-recipients.md`.
+
+### TaskEsc AI — Passo 1: recebimento passivo do WhatsApp
+
+O webhook autenticado do WPPConnect agora registra eventos `onmessage` de conversas privadas e grupos na tabela `ai_whatsapp_inbox` (schema 27), com índice único por sessão/ID da mensagem, sem respostas automáticas. Eventos de conexão, QR Code e envio de automações permanecem inalterados. A migração é aplicada via `bin/migrate-ai-whatsapp-inbox.php` apenas após backup verificado na CI/deploy. Consulte `docs/taskesc-ai-step1.md`.

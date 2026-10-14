@@ -223,6 +223,15 @@ try{
  at($summary['open_all_cents']===22000,'Global open balance includes previous month');
  $expenseDetails=TaskEscFinanceReadApi::expenses(['from'=>$start,'to'=>$last]);
  at(count($expenseDetails['rows'])===2,'Expenses read-only list');
+ // Public REST v1 and WhatsApp AI share the same read-only, admin-protected gateway.
+ Auth::$origin='api';Auth::$scopes='api.read api.write';
+ $restReceivables=ApiV1::handle('GET','finance/receivables',['scope'=>'month','from'=>$start,'to'=>$last]);
+ at($restReceivables['total_cents']===13000,'REST v1 receivables matches AI amounts');
+ $restExpenses=ApiV1::handle('GET','finance/expenses',['from'=>$start,'to'=>$last]);
+ at(count($restExpenses['rows'])===2,'REST v1 expense query matches AI amounts');
+ try{ApiV1::handle('POST','finance/receivables',[]);throw new RuntimeException('Finance write exposed through REST');}
+ catch(AppError $e){at($e->getMessage()!=='','REST v1 blocks finance write');}
+ Auth::$origin='whatsapp';
 
  foreach([
   fn()=>TaskEscFinanceReadApi::summary(['from'=>'2026-02-30']),

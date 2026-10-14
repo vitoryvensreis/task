@@ -19,6 +19,7 @@ return [
  ],
  'ai_whatsapp' => [
    'enabled' => false, // Ative somente na configuração privada da VPS.
+   'admin_control_enabled' => false, // Controle administrativo sensível: opt-in privado após testes.
    'provider' => 'gemini',
    'fallback_provider' => 'groq',
    'gemini_api_key' => '',

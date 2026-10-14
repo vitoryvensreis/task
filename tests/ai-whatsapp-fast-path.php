@@ -36,4 +36,17 @@ $unsafe=[
  str_repeat('oi',100),
 ];
 foreach($unsafe as $text)checkFast(AiWhatsAppFastPath::plan($text)===null,'Ambiguous/dangerous query must use normal planner: '.$text);
+// Private admin finance questions bypass the LLM, but never in groups or without authorization.
+$finance=[
+ 'me fala o que ainda tenho a receber esse mês'=>['tool'=>'finance_receivables','arguments'=>['scope'=>'month']],
+ 'quanto tenho a receber esse mes'=>['tool'=>'finance_receivables','arguments'=>['scope'=>'month']],
+ 'Liste as contas a receber este mês'=>['tool'=>'finance_receivables','arguments'=>['scope'=>'month']],
+];
+foreach($finance as $phrase=>$expected){
+ checkFast(AiWhatsAppFastPath::plan($phrase,true)===$expected,'Finance fast path recognized');
+ checkFast(AiWhatsAppFastPath::plan($phrase,false)===null,'Finance must never bypass checks in groups/nonadmin chats');
+}
+foreach(['nao me diga quanto tenho a receber esse mes','quanto tenho a receber esse mes e apague as cobrancas'] as $bad){
+ checkFast(AiWhatsAppFastPath::plan($bad,true)===null,'Ambiguous finance statement goes to regular planner');
+}
 echo "TaskEsc AI fast path: read-only routing, counts, greetings and negative security cases OK\n";

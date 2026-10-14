@@ -604,7 +604,7 @@ final class Migrations {
   foreach(DB::all("SELECT TABLE_NAME,COLUMN_NAME,DATA_TYPE,IS_NULLABLE,COLUMN_DEFAULT,COLLATION_NAME,DATETIME_PRECISION FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND ((TABLE_NAME='users' AND COLUMN_NAME='ai_assistant_enabled') OR (TABLE_NAME='ai_whatsapp_inbox' AND COLUMN_NAME IN ('auth_user_id','auth_status','auth_reason','auth_checked_at')))") as $c)$cols[$c['TABLE_NAME'].'.'.$c['COLUMN_NAME']]=$c;
   foreach(['users.ai_assistant_enabled'=>'tinyint','ai_whatsapp_inbox.auth_user_id'=>'int','ai_whatsapp_inbox.auth_status'=>'varchar','ai_whatsapp_inbox.auth_reason'=>'varchar','ai_whatsapp_inbox.auth_checked_at'=>'datetime'] as $name=>$type)if(($cols[$name]['DATA_TYPE']??null)!==$type)$issues[]='column_'.str_replace('.','_',$name);
   if(($cols['users.ai_assistant_enabled']['IS_NULLABLE']??'YES')!=='NO'||(int)($cols['users.ai_assistant_enabled']['COLUMN_DEFAULT']??-1)!==0)$issues[]='permission_default';
-  foreach(['auth_status','auth_reason'] as $name){$c=$cols['ai_whatsapp_inbox.'.$name]??[];if(($c['COLLATION_NAME']??'')!=='ascii_bin'||($c['IS_NULLABLE']??'YES')!=='NO'||($c['COLUMN_DEFAULT']??'')!=='pending')$issues[]='definition_'.$name;}
+  foreach(['auth_status','auth_reason'] as $name){$c=$cols['ai_whatsapp_inbox.'.$name]??[];if(($c['COLLATION_NAME']??'')!=='ascii_bin'||($c['IS_NULLABLE']??'YES')!=='NO'||trim((string)($c['COLUMN_DEFAULT']??''),"'\"")!=='pending')$issues[]='definition_'.$name;}
   if((int)($cols['ai_whatsapp_inbox.auth_checked_at']['DATETIME_PRECISION']??-1)!==6)$issues[]='precision_auth_checked';
   foreach(['idx_ai_inbox_auth','idx_ai_inbox_auth_user'] as $name)if(!self::hasIndex('ai_whatsapp_inbox',$name))$issues[]='index_'.$name;
   return array_values(array_unique($issues));

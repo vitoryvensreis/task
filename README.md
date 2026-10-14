@@ -573,3 +573,7 @@ O assistente pode editar **título, briefing, prioridade e prazo** de uma task e
 ### TaskEsc AI — Gemini principal / Groq alternativa
 
 O motor de IA recebe mensagens autorizadas pelo WhatsApp e utiliza **Gemini 3.8 Flash** como interpretador principal, com **Groq** como alternativa em falhas do provedor. Operações são executadas somente pelo gateway de tarefas do próprio TaskEsc, compartilhando regras com a API v1. Por segurança, as chaves não são incluídas no GitHub nem no ZIP. Para ativar pela VPS, use `php bin/configure-taskesc-ai.php` num terminal SSH interativo e reinicie o worker. Veja [guia de integração e ativação](docs/taskesc-ai-gemini-primary.md).
+
+### TaskEsc AI — consulta financeira com permissões
+
+A API REST v1 tem `GET /api/v1/finance/summary` e `GET /api/v1/finance/invoices` para administradores. O agente de WhatsApp também pode **consultar** o resumo financeiro, contas a receber e despesas registradas, exclusivamente em conversa privada de um ADM autorizado. Os endpoints novos `GET /api/v1/finance/receivables` e `GET /api/v1/finance/expenses` compartilham o mesmo gateway somente leitura com a IA. Essas consultas não geram lançamentos, pagamentos ou despesas; valores ainda não sincronizados não aparecem. Todas as operações financeiras de escrita permanecem bloqueadas para a IA. Veja [cobertura, regras e limites](docs/taskesc-ai-finance.md).

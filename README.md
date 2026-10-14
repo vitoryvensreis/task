@@ -564,3 +564,8 @@ O webhook autenticado do WPPConnect agora registra eventos `onmessage` de conver
 ### TaskEsc AI — Passo 3 (Groq e ferramentas autorizadas)
 
 Integração de IA via Groq com ações limitadas a **listar, criar e mover tasks** através das rotinas existentes do TaskEsc. Worker isolado `taskesc-ai-whatsapp-worker.service`, sem impactar automações. Proteções: menção real no grupo, autorização e membros do grupo verificados antes da operação, filas idempotentes e nenhuma repetição automática de envio incerto. Mensagens antigas não são processadas. Para habilitar, definir somente na configuração privada da VPS `ai_whatsapp.enabled=true` e `ai_whatsapp.groq_api_key`. Consulte `docs/taskesc-ai-step3.md`.
+
+
+### TaskEsc AI — Passo 4 (edição segura de tasks)
+
+O assistente pode editar **título, briefing, prioridade e prazo** de uma task existente pelo WhatsApp, desde que o usuário tenha permissão `tasks.edit` e identifique a task sem ambiguidade. Campos financeiros, clientes, responsáveis, status, uploads e automações não podem ser alterados por essa ferramenta. A transação protege o rascunho e demais atributos, exige prazo válido e mantém autorização revalidada por operação. **Schema 29 permanece inalterado** e Groq continua desativado por padrão. Consulte `docs/taskesc-ai-step4.md`.

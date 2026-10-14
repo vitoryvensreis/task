@@ -10,7 +10,7 @@ declare(strict_types=1);
  */
 final class AiWhatsAppFastPath
 {
-    public static function plan(string $message,bool $financialPrivate=false): ?array
+    public static function plan(string $message,bool $financialPrivate=false,bool $agendaAdmin=false): ?array
     {
         if(mb_strlen($message,'UTF-8')>180)return null;
         $text=mb_strtolower(trim($message),'UTF-8');
@@ -32,6 +32,11 @@ final class AiWhatsAppFastPath
         }
         if(preg_match('/\A(?:ajuda|menu|o que voce faz|o que voce pode fazer|como voce pode me ajudar)\z/u',$text)){
             return ['text'=>'Posso listar suas tarefas ou ajudar a criar, editar e mover demandas, conforme suas permissões. Experimente "Liste minhas tarefas".'];
+        }
+        // Fast path: simple agenda question without Gemini/Groq, only for verified ADM.
+        if($agendaAdmin && preg_match('/\A(?:liste|mostre|ver|qual e|quais sao)\s+(?:os\s+)?(?:meus\s+)?(?:compromissos|eventos|agenda)\s+(?:de\s+)?hoje\z/u',$text)){
+            $today=(new DateTimeImmutable('today',new DateTimeZone((string)config('timezone','America/Fortaleza'))))->format('Y-m-d');
+            return ['tool'=>'agenda_list','arguments'=>['from'=>$today,'to'=>$today]];
         }
         // Exact financial read intents for ADM/private only, with no model request.
         if($financialPrivate && preg_match('/\A(?:(?:me\s+)?(?:fala|diga|diz)\s+)?(?:quanto|o\s+que)\s+(?:ainda\s+)?(?:eu\s+)?(?:tenho\s+)?a\s+receber\s+(?:esse|este)\s+mes\z/u',$text)){

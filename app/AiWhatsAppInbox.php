@@ -80,7 +80,9 @@ final class AiWhatsAppInbox
         if($stored){
             // The inbox is persisted before potentially slow group-member verification.
             // If the verification cannot complete, pending is NOT an authorization.
-            $decision=AiWhatsAppAccess::decide($sender,$group?'group':'private',$chatId);
+            $addressed=!$group || AiWhatsAppGroupTrigger::named((string)($body??'')) || count($mentions)>0;
+            $decision=$addressed ? AiWhatsAppAccess::decide($sender,$group?'group':'private',$chatId)
+                : ['status'=>'denied','reason'=>'group_not_addressed','user_id'=>null];
             $checked=(new DateTimeImmutable('now',new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u');
             $queue=AiWhatsAppProvider::enabled()&&($decision['status']??'')==='authorized'&&$body!==null&&in_array($type,['chat','text'],true);
             DB::run('UPDATE ai_whatsapp_inbox SET auth_user_id=?,auth_status=?,auth_reason=?,auth_checked_at=?,ai_state=?,ai_mentions_json=?,ai_updated_at=? WHERE session_name=? AND provider_message_id=? AND auth_status=\'pending\'',

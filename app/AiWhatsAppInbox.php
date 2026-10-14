@@ -59,6 +59,16 @@ final class AiWhatsAppInbox
         $body=$message['body']??$message['text']??null;
         if(!is_string($body))$body=null;
         if($body!==null)$body=mb_substr($body,0,8000,'UTF-8');
+        // Metadata supplied by WPPConnect, not literal text such as "@TaskEsc".
+        $rawMentions=$message['mentionedJidList']??$message['mentionedIds']??$message['mentionedJids']??$message['mentions']??[];
+        $mentions=[];
+        if(is_array($rawMentions)){
+            foreach(array_slice($rawMentions,0,20) as $mentioned){
+                if(is_array($mentioned))$mentioned=$mentioned['_serialized']??$mentioned['id']??null;
+                if(is_string($mentioned)&&preg_match('/\\A[0-9]{6,32}@(c\\.us|s\\.whatsapp\\.net|lid)\\z/D',$mentioned))$mentions[$mentioned]=$mentioned;
+            }
+        }
+        $mentionsJson=json(array_values($mentions));
 
         $stmt=DB::run(
             "INSERT INTO ai_whatsapp_inbox (session_name,provider_message_id,chat_id,sender_id,chat_type,message_type,body,status,received_at)
@@ -71,10 +81,11 @@ final class AiWhatsAppInbox
             // The inbox is persisted before potentially slow group-member verification.
             // If the verification cannot complete, pending is NOT an authorization.
             $decision=AiWhatsAppAccess::decide($sender,$group?'group':'private',$chatId);
-            DB::run('UPDATE ai_whatsapp_inbox SET auth_user_id=?,auth_status=?,auth_reason=?,auth_checked_at=? WHERE session_name=? AND provider_message_id=? AND auth_status=\'pending\'',
-                [$decision['user_id'],$decision['status'],$decision['reason'],
-                 (new DateTimeImmutable('now',new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u'),
-                 $session,$providerId]);
+            $checked=(new DateTimeImmutable('now',new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u');
+            $queue=($decision['status']??'')==='authorized'&&$body!==null&&in_array($type,['chat','text'],true);
+            DB::run('UPDATE ai_whatsapp_inbox SET auth_user_id=?,auth_status=?,auth_reason=?,auth_checked_at=?,ai_state=?,ai_mentions_json=?,ai_updated_at=? WHERE session_name=? AND provider_message_id=? AND auth_status=\'pending\'',
+                [$decision['user_id'],$decision['status'],$decision['reason'],$checked,
+                 $queue?'queued':'ignored',$mentionsJson,$checked,$session,$providerId]);
         }
         return ['accepted'=>true,'stored'=>$stored,'duplicate'=>!$stored,
             'chat_type'=>$group?'group':'private'];

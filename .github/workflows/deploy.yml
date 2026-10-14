@@ -46,7 +46,7 @@ jobs:
           php tests/realtime.php
           php tests/wppconnect-contract.php
           php tests/automation-contract.php
-          python3 -m py_compile ops/realtime-step1.py ops/realtime-step3.py ops/realtime-step4.py ops/automation-worker.py
+          python3 -m py_compile ops/realtime-step1.py ops/realtime-step3.py ops/realtime-step4.py ops/automation-worker.py ops/ai-whatsapp-worker.py
           python3 tests/realtime-ops.py
           rm -rf ops/__pycache__
 
@@ -157,6 +157,7 @@ jobs:
           php tests/chat.php
           php tests/ai-whatsapp-inbox.php
           php tests/ai-whatsapp-access.php
+          php tests/ai-whatsapp-tools.php
 
   deploy:
     name: Deploy na VPS
@@ -423,6 +424,7 @@ jobs:
             php bin/migrate-automation.php "--backup-manifest=$BACKUP_MANIFEST"
             php bin/migrate-ai-whatsapp-inbox.php "--backup-manifest=$BACKUP_MANIFEST"
             php bin/migrate-ai-whatsapp-access.php "--backup-manifest=$BACKUP_MANIFEST"
+            php bin/migrate-ai-whatsapp-tools.php "--backup-manifest=$BACKUP_MANIFEST"
           REMOTE
 
       - name: Auditoria de integridade sem alterações de dados
@@ -438,9 +440,9 @@ jobs:
             set -euo pipefail
             cd "$DEPLOY_PATH"
             umask 077
-            AUDIT_FILE="$DEPLOY_PATH/storage/backups/taskesc-schema28-audit-$(date -u +%Y%m%dT%H%M%SZ).json"
+            AUDIT_FILE="$DEPLOY_PATH/storage/backups/taskesc-schema29-audit-$(date -u +%Y%m%dT%H%M%SZ).json"
             AUDIT_EXIT=0
-            php bin/system-audit.php --strict --offline --expect-schema=28 > "$AUDIT_FILE" || AUDIT_EXIT=$?
+            php bin/system-audit.php --strict --offline --expect-schema=29 > "$AUDIT_FILE" || AUDIT_EXIT=$?
             php -r '
               $r=json_decode(file_get_contents($argv[1]),true,512,JSON_THROW_ON_ERROR);
               echo json_encode(["audit"=>["ok"=>$r["ok"],"schema"=>$r["schema"],"critical_count"=>count($r["critical"]),"warning_count"=>count($r["warnings"]),"warning_keys"=>array_column($r["warnings"],"key"),"cleanup_saas"=>$r["cleanup_saas"],"offline"=>$r["offline"]]],JSON_UNESCAPED_SLASHES).PHP_EOL;
@@ -481,6 +483,40 @@ jobs:
               python3 "$DEPLOY_PATH/ops/automation-worker.py" install --deploy-path "$DEPLOY_PATH"
             else
               sudo -n python3 "$DEPLOY_PATH/ops/automation-worker.py" install --deploy-path "$DEPLOY_PATH"
+            fi
+          REMOTE
+
+      - name: Instalar worker TaskEsc AI
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
+            set -euo pipefail
+            if [ "$(id -u)" -eq 0 ]; then
+              python3 "$DEPLOY_PATH/ops/ai-whatsapp-worker.py" install --deploy-path "$DEPLOY_PATH"
+            else
+              sudo -n python3 "$DEPLOY_PATH/ops/ai-whatsapp-worker.py" install --deploy-path "$DEPLOY_PATH"
+            fi
+          REMOTE
+
+      - name: Health worker TaskEsc AI
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
+            set -euo pipefail
+            if [ "$(id -u)" -eq 0 ]; then
+              python3 "$DEPLOY_PATH/ops/ai-whatsapp-worker.py" check --deploy-path "$DEPLOY_PATH"
+            else
+              sudo -n python3 "$DEPLOY_PATH/ops/ai-whatsapp-worker.py" check --deploy-path "$DEPLOY_PATH"
             fi
           REMOTE
 

@@ -208,6 +208,29 @@ final class WppConnect
      * A failed/ambiguous response MUST NOT grant access to the AI assistant.
      * Phone JIDs and opaque LIDs stay separate; do not infer LID => phone.
      */
+    /** Only an actual WhatsApp @mention of this connected session activates a group command. */
+    public static function isBotMentioned(array $mentionedJids): bool
+    {
+        $cfg=self::requireConfigured();
+        $r=self::request('GET','/api/'.rawurlencode($cfg['session']).'/get-phone-number',null,true,true);
+        if(!$r['ok']||!is_array($r['body']))return false;
+        $value=$r['body']['response']??$r['body']['number']??$r['body']['phone']??null;
+        if(is_array($value))$value=$value['_serialized']??$value['user']??null;
+        if(!is_string($value))return false;
+        $phone=preg_replace('/@(?:c\\.us|s\\.whatsapp\\.net)$/','',$value);
+        if(!is_string($phone)||!preg_match('/\\A[0-9]{10,15}\\z/D',$phone))return false;
+        foreach($mentionedJids as $mention){
+            if(!is_string($mention))continue;
+            if(in_array($mention,[$phone.'@c.us',$phone.'@s.whatsapp.net'],true))return true;
+            if(preg_match('/\\A[0-9]{6,32}@lid\\z/D',$mention)){
+                try{$mapping=self::pnLidMapping($mention);}
+                catch(Throwable){continue;}
+                if(($mapping['phone']??null)===$phone.'@c.us')return true;
+            }
+        }
+        return false;
+    }
+
     public static function groupMemberIds(string $groupId): array
     {
         $groupId=self::normalizeGroupId($groupId);

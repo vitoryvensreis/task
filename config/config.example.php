@@ -17,5 +17,6 @@ return [
    'secret' => '',
    'webhook_url' => '',
  ],
+ 'ai_whatsapp' => ['enabled'=>false,'groq_api_key'=>'','model'=>'llama-3.3-70b-versatile'], // Configure APENAS em config/config.php da VPS.
  'trusted_origins' => ['https://chatgpt.com','https://chat.openai.com'],
 ];

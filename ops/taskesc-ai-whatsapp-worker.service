@@ -1,0 +1,23 @@
+[Unit]
+Description=TaskEsc AI WhatsApp Worker
+After=network-online.target taskesc-automation-worker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@TASKESC_USER@
+Group=@TASKESC_GROUP@
+WorkingDirectory=@DEPLOY_PATH@
+ExecStart=@PHP_BIN@ @DEPLOY_PATH@/bin/ai-whatsapp-worker.php
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=40s
+KillSignal=SIGTERM
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=@DEPLOY_PATH@/storage
+
+[Install]
+WantedBy=multi-user.target

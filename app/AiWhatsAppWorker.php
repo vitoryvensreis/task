@@ -1,0 +1,145 @@
+<?php
+declare(strict_types=1);
+
+/**
+ * Separate, durable WhatsApp AI processor. Business action and outcome are
+ * committed in the same transaction, so inbox retries cannot repeat writes.
+ * Outbound is intentionally at-most-once (unknown sends require manual review).
+ */
+final class AiWhatsAppWorker
+{
+ private static function now(): string {return (new DateTimeImmutable('now',new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u');}
+ public static function health(): array {
+  $schema=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);
+  return ['status'=>$schema===29?'ok':'error','schema'=>$schema,'enabled'=>AiWhatsAppGroq::enabled(),
+   'queue'=>(int)(DB::one("SELECT COUNT(*) n FROM ai_whatsapp_inbox WHERE ai_state IN ('queued','retry')")['n']??0)];
+ }
+ public static function tick(int $limit=5,?callable $planner=null,?callable $verify=null,?callable $mentioned=null,?callable $send=null,bool $test=false): array {
+  if(!$test&&!AiWhatsAppGroq::enabled())return ['enabled'=>false,'processed'=>0];
+  $done=0;
+  for($i=0;$i<max(1,min($limit,20));$i++){
+   $item=self::claim();
+   if(!$item)break;
+   try{self::process($item,$planner,$verify,$mentioned,$send);}
+   catch(Throwable $e){self::retry((int)$item['id']);error_log('TaskEsc AI worker #'.$item['id'].' processing error ['.get_class($e).']');}
+   $done++;
+  }
+  return ['enabled'=>true,'processed'=>$done];
+ }
+ private static function claim(): ?array {
+  return DB::tx(static function(): ?array {
+   // Reclaim abandoned inference, but not actions already committed or uncertain sends.
+   DB::run("UPDATE ai_whatsapp_inbox SET ai_state='retry' WHERE ai_state='processing' AND ai_updated_at<DATE_SUB(UTC_TIMESTAMP(6),INTERVAL 3 MINUTE) AND ai_attempts<3");
+   $row=DB::one("SELECT * FROM ai_whatsapp_inbox WHERE ai_state IN ('queued','retry') AND (ai_available_at IS NULL OR ai_available_at<=UTC_TIMESTAMP(6)) AND ai_attempts<3 ORDER BY id LIMIT 1 FOR UPDATE");
+   if(!$row)return null;
+   DB::run("UPDATE ai_whatsapp_inbox SET ai_state='processing',ai_updated_at=?,ai_attempts=ai_attempts+1 WHERE id=?",[self::now(),$row['id']]);
+   return $row;
+  });
+ }
+ private static function decision(array $row,?callable $verify): array {
+  return $verify? $verify($row):AiWhatsAppAccess::decide((string)$row['sender_id'],(string)$row['chat_type'],(string)$row['chat_id']);
+ }
+ private static function sameUser(array $first,array $current): bool {
+  return ($current['status']??'')==='authorized' && (int)($first['user_id']??0)>0
+   && (int)$current['user_id']===(int)$first['user_id'];
+ }
+ private static function actor(int $id): void {
+  $user=DB::one("SELECT * FROM users WHERE id=? AND active=1",[$id]);
+  if(!$user)throw new RuntimeException('ai_actor_unavailable');
+  Auth::$user=$user;Auth::$actor=$user;Auth::$previewClientId=null;Auth::$origin='whatsapp';
+ }
+ private static function process(array $row,?callable $planner,?callable $verify,?callable $mentioned,?callable $send): void {
+  $id=(int)$row['id'];
+  if($row['chat_type']==='group'){
+   $jids=decode($row['ai_mentions_json']??null,[]);
+   if(!is_array($jids)||!$jids){self::ignore($id,'group_not_mentioned');return;}
+   $isMention=$mentioned?$mentioned($jids):WppConnect::isBotMentioned($jids);
+   if(!$isMention){self::ignore($id,'group_not_mentioned');return;}
+  }
+  $first=self::decision($row,$verify);
+  if(($first['status']??'')!=='authorized'){self::ignore($id,'access_denied');return;}
+  $body=trim((string)($row['body']??''));
+  if($body===''||!in_array((string)$row['message_type'],['chat','text'],true)){self::ignore($id,'unsupported_message');return;}
+  self::actor((int)$first['user_id']);
+  $tools=AiWhatsAppTools::catalog();
+  $context=AiWhatsAppTools::context();
+  $planned=$planner?$planner($body,$context,$tools):AiWhatsAppGroq::plan($body,$context,$tools);
+  if(!is_array($planned))throw new RuntimeException('ai_plan_invalid');
+  $message='';
+  if(isset($planned['tool'])){
+   $name=(string)$planned['tool'];$args=$planned['arguments']??null;
+   if(!is_array($args))throw new RuntimeException('ai_arguments_invalid');
+   // Lock inbox row and revalidate identity+group membership before EACH write/read tool.
+   try{$message=DB::tx(function() use($id,$row,$first,$name,$args,$tools,$verify): string {
+    $locked=DB::one('SELECT ai_state FROM ai_whatsapp_inbox WHERE id=? FOR UPDATE',[$id]);
+    if(($locked['ai_state']??'')!=='processing')throw new RuntimeException('ai_operation_already_handled');
+    $again=self::decision($row,$verify);
+    if(!self::sameUser($first,$again))throw new RuntimeException('ai_access_revoked');
+    self::actor((int)$again['user_id']);
+    $allowed=array_column(array_column($tools,'function'),'name');
+    if(!in_array($name,$allowed,true))throw new RuntimeException('ai_tool_not_allowed');
+    // Do not swallow business exceptions inside this transaction: they must roll back.
+    $result=AiWhatsAppTools::run($name,$args);
+    $reply=self::formatResult($result);
+    DB::run("UPDATE ai_whatsapp_inbox SET ai_state='reply_pending',ai_reply=?,ai_processed_at=?,ai_updated_at=? WHERE id=?",[$reply,self::now(),self::now(),$id]);
+    return $reply;
+   });}catch(AppError $e){
+    // The business transaction has rolled back; only an error reply is queued.
+    $message=mb_substr($e->getMessage(),0,280);
+    DB::run("UPDATE ai_whatsapp_inbox SET ai_state='reply_pending',ai_reply=?,ai_processed_at=?,ai_updated_at=? WHERE id=? AND ai_state='processing'",[$message,self::now(),self::now(),$id]);
+   }catch(RuntimeException $e){
+    if($e->getMessage()==='ai_access_revoked'){self::ignore($id,'access_revoked');return;}
+    throw $e;
+   }
+  }else{
+   $message=trim((string)($planned['text']??''));
+   if($message==='')throw new RuntimeException('ai_no_reply');
+   $again=self::decision($row,$verify);
+   if(!self::sameUser($first,$again)){self::ignore($id,'access_revoked');return;}
+   $message=mb_substr($message,0,550);
+   DB::run("UPDATE ai_whatsapp_inbox SET ai_state='reply_pending',ai_reply=?,ai_processed_at=?,ai_updated_at=? WHERE id=? AND ai_state='processing'",[$message,self::now(),self::now(),$id]);
+  }
+  // No additional business operation after this point, only outbound delivery.
+  $final=self::decision($row,$verify);
+  if(!self::sameUser($first,$final)){self::ignore($id,'access_revoked_before_reply');return;}
+  if($row['chat_type']==='group'){
+   $jids=decode($row['ai_mentions_json']??null,[]);
+   if(!($mentioned?$mentioned($jids):WppConnect::isBotMentioned($jids))){self::ignore($id,'mention_unverified');return;}
+  }
+  $recipient=$row['chat_id'];
+  if($row['chat_type']==='private'){
+   $phone=(string)(DB::one('SELECT whatsapp_phone FROM users WHERE id=? AND active=1',[(int)$final['user_id']])['whatsapp_phone']??'');
+   if(!preg_match('/\\A[0-9]{10,15}\\z/D',$phone)){self::ignore($id,'recipient_unavailable');return;}
+   $recipient=$phone;
+  }
+  // Reserve the one outbound attempt before calling WPPConnect. If PHP dies
+  // after remote send, the record remains 'sending', never automatically replayed.
+  $claimed=DB::run("UPDATE ai_whatsapp_inbox SET ai_state='sending',ai_updated_at=? WHERE id=? AND ai_state='reply_pending'",[self::now(),$id]);
+  if($claimed->rowCount()!==1)return;
+  try{
+   if($send)$send($recipient,$message,$row['chat_type']==='group');
+   else WppConnect::sendAutomationMessage($recipient,$message,$row['chat_type']==='group');
+   DB::run("UPDATE ai_whatsapp_inbox SET ai_state='sent',ai_sent_at=?,ai_updated_at=? WHERE id=? AND ai_state='sending'",[self::now(),self::now(),$id]);
+  }catch(Throwable){
+   DB::run("UPDATE ai_whatsapp_inbox SET ai_state='delivery_uncertain',ai_error='provider_delivery_uncertain',ai_updated_at=? WHERE id=? AND ai_state='sending'",[self::now(),$id]);
+  }
+ }
+ private static function formatResult(array $r): string {
+  if(($r['kind']??'')==='created')return 'Task #'.$r['id'].' criada com sucesso.';
+  if(($r['kind']??'')==='moved')return 'Task #'.$r['id'].' movida para '.mb_substr((string)$r['stage'],0,60).'.';
+  if(($r['kind']??'')==='list'){
+   if(!$r['tasks'])return 'Nenhuma task encontrada.';
+   $lines=array_map(static fn($d)=>'#'.$d['id'].' '.mb_substr((string)$d['title'],0,60).' — '.mb_substr((string)$d['stage'],0,35),$r['tasks']);
+   return 'Tasks ('.$r['total'].' encontradas):'."\n".implode("\n",$lines);
+  }
+  throw new RuntimeException('ai_unknown_result');
+ }
+ private static function ignore(int $id,string $reason): void {
+  DB::run("UPDATE ai_whatsapp_inbox SET ai_state='ignored',ai_error=?,ai_updated_at=? WHERE id=? AND ai_state IN ('processing','reply_pending')",[$reason,self::now(),$id]);
+ }
+ private static function retry(int $id): void {
+  $attempt=(int)(DB::one('SELECT ai_attempts FROM ai_whatsapp_inbox WHERE id=?',[$id])['ai_attempts']??3);
+  DB::run("UPDATE ai_whatsapp_inbox SET ai_state=?,ai_error='processing_failed',ai_available_at=?,ai_updated_at=? WHERE id=? AND ai_state='processing'",
+    [$attempt>=3?'failed':'retry',gmdate('Y-m-d H:i:s',time()+120),self::now(),$id]);
+ }
+}

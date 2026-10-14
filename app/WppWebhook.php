@@ -9,11 +9,14 @@ final class WppWebhook
         if(empty($source['event'])&&isset($source['body'])&&is_array($source['body']))$source=$source['body'];
 
         $event=strtolower(trim((string)($source['event']??$source['type']??'')));
+        // Step 1: authenticated inbound events go to a passive, deduplicated inbox.
+        // No AI, task changes, outbound messages or realtime publication here.
+        if(in_array($event,['onmessage','on-message','message','message.received'],true))return AiWhatsAppInbox::receive($source);
         $status=trim((string)($source['status']??$source['state']??$source['sessionStatus']??''));
         $needle=strtolower($event.' '.$status);
 
         // Only session lifecycle/QR events belong in the administration panel.
-        // Message/contact payloads are intentionally ignored here.
+        // Unknown/contact/delivery events remain ignored (inbound messages are handled above).
         $lifecycle=$needle!==''&&(bool)preg_match('/(?:qr|status|state|session|stream|interface|connection|connect|logged|logout|close|pair|unlaunch|opening|inchat)/',$needle);
         if(!$lifecycle)return ['accepted'=>false,'reason'=>'event_ignored'];
 

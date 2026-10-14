@@ -155,6 +155,7 @@ jobs:
           php tests/automation-core.php
           php tests/google-health.php
           php tests/chat.php
+          php tests/ai-whatsapp-inbox.php
 
   deploy:
     name: Deploy na VPS
@@ -419,6 +420,7 @@ jobs:
             php bin/migrate-outbox.php "--backup-manifest=$BACKUP_MANIFEST"
             php bin/migrate-chat.php "--backup-manifest=$BACKUP_MANIFEST"
             php bin/migrate-automation.php "--backup-manifest=$BACKUP_MANIFEST"
+            php bin/migrate-ai-whatsapp-inbox.php "--backup-manifest=$BACKUP_MANIFEST"
           REMOTE
 
       - name: Auditoria de integridade sem alterações de dados
@@ -434,9 +436,9 @@ jobs:
             set -euo pipefail
             cd "$DEPLOY_PATH"
             umask 077
-            AUDIT_FILE="$DEPLOY_PATH/storage/backups/taskesc-schema26-audit-$(date -u +%Y%m%dT%H%M%SZ).json"
+            AUDIT_FILE="$DEPLOY_PATH/storage/backups/taskesc-schema27-audit-$(date -u +%Y%m%dT%H%M%SZ).json"
             AUDIT_EXIT=0
-            php bin/system-audit.php --strict --offline --expect-schema=26 > "$AUDIT_FILE" || AUDIT_EXIT=$?
+            php bin/system-audit.php --strict --offline --expect-schema=27 > "$AUDIT_FILE" || AUDIT_EXIT=$?
             php -r '
               $r=json_decode(file_get_contents($argv[1]),true,512,JSON_THROW_ON_ERROR);
               echo json_encode(["audit"=>["ok"=>$r["ok"],"schema"=>$r["schema"],"critical_count"=>count($r["critical"]),"warning_count"=>count($r["warnings"]),"warning_keys"=>array_column($r["warnings"],"key"),"cleanup_saas"=>$r["cleanup_saas"],"offline"=>$r["offline"]]],JSON_UNESCAPED_SLASHES).PHP_EOL;

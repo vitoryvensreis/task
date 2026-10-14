@@ -47,6 +47,6 @@ final class AiWhatsAppGroq
   }
   if(is_array($calls)&&count($calls)>1)throw new RuntimeException('ai_multiple_tools');
   $text=is_string($msg['content']??null)?trim($msg['content']):'';
-  return ['text'=>mb_substr($text!==''?$text:'Não consegui entender. Peça para listar, criar ou mover uma task.',0,550)];
+  return ['text'=>mb_substr($text!==''?$text:'Não consegui entender. Peça para listar, criar, editar ou mover uma task.',0,550)];
  }
 }

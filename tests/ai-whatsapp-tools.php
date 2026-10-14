@@ -70,5 +70,51 @@ try{
  at(DB::one('SELECT ai_state FROM ai_whatsapp_inbox WHERE id=?',[$privateMove])['ai_state']==='sent','Authorized move confirms reply');
  at(count($sent)===2,'Only the two authorized commands may reply');
 
- echo "AI WhatsApp tools: schema, create once, private reply, group mention guard OK\n";
+ // Passo 4: uma única edição por mensagem, whitelist rígida e preservação de dados protegidos.
+ $editCatalog=AiWhatsAppTools::catalog();
+ at(in_array('edit_task',array_column(array_column($editCatalog,'function'),'name'),true),'Edit exposed to authorized users');
+ $beforeEdit=DB::one('SELECT * FROM demands WHERE id=1');
+ $editMsg=DB::insert('ai_whatsapp_inbox',['session_name'=>'taskesc','provider_message_id'=>'ai-test-edit-1','chat_id'=>$chat,'sender_id'=>$chat,'chat_type'=>'private','message_type'=>'chat','body'=>'Editar o briefing e prioridade da task 1','status'=>'received','auth_status'=>'authorized','auth_reason'=>'user_authorized','received_at'=>now(),'ai_state'=>'queued']);
+ $editPlan=fn($text,$context,$tools)=>['tool'=>'edit_task','arguments'=>['task_id'=>1,'brief'=>'Novo briefing pelo WhatsApp','priority'=>'high']];
+ AiWhatsAppWorker::tick(1,$editPlan,$allowed,null,$sender,true);
+ $afterEdit=DB::one('SELECT * FROM demands WHERE id=1');
+ at($afterEdit['brief']==='Novo briefing pelo WhatsApp'&&$afterEdit['priority']==='high','Edit changes only allowed fields');
+ foreach(['due_at','title','client_id','project_id','category_id','stage_id','assigned_to','draft','billing_mode','amount_cents','commercial_status'] as $key)
+  at((string)($afterEdit[$key]??'')===(string)($beforeEdit[$key]??''),'Protected field changed: '.$key);
+ at((int)$afterEdit['version']===(int)$beforeEdit['version']+1,'Version increased once');
+ at(DB::one('SELECT ai_state FROM ai_whatsapp_inbox WHERE id=?',[$editMsg])['ai_state']==='sent','Edit reply sent');
+ at(count($sent)===3&&str_contains($sent[2][1],'atualizada'),'Edit confirmation');
+ AiWhatsAppWorker::tick(1,$editPlan,$allowed,null,$sender,true);
+ at((int)DB::one('SELECT version FROM demands WHERE id=1')['version']===(int)$afterEdit['version'],'Edit cannot replay');
+
+ $dueLocal=businessDeadline(72)->format('Y-m-d\TH:i');
+ $editDue=AiWhatsAppTools::run('edit_task',['task_id'=>1,'due_at'=>$dueLocal]);
+ at($editDue['kind']==='edited','Due date can be edited');
+ $utc=(new DateTimeImmutable($dueLocal,new DateTimeZone('America/Fortaleza')))->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+ at(DB::one('SELECT due_at FROM demands WHERE id=1')['due_at']===$utc,'Due date timezone correctly converted');
+ $afterDue=DB::one('SELECT * FROM demands WHERE id=1');
+ $invalid=[
+   ['task_id'=>1], // Empty edit.
+   ['task_id'=>1,'amount_cents'=>999999],
+   ['task_id'=>1,'client_id'=>999,'title'=>'Malicious'],
+   ['task_id'=>1,'assigned_to'=>999,'brief'=>'Malicious'],
+   ['task_id'=>1,'draft'=>0,'title'=>'Publish'],
+   ['task_id'=>1,'priority'=>'untrusted'],
+   ['task_id'=>1,'due_at'=>'2026-02-30T09:30'],
+   ['task_id'=>1,'title'=>''],
+ ];
+ foreach($invalid as $request){
+  try{AiWhatsAppTools::run('edit_task',$request);throw new RuntimeException('Rejected edit was executed');}
+  catch(AppError $e){at($e->getMessage()!=='','Unsafe edit rejected');}
+ }
+ at((int)DB::one('SELECT version FROM demands WHERE id=1')['version']===(int)$afterDue['version'],'Invalid edits cannot write');
+ $staff=DB::insert('users',['name'=>'Staff sem acesso','email'=>'staff-ai@ci.invalid','whatsapp_phone'=>'5585999990011','password_hash'=>password_hash('staff-password',PASSWORD_DEFAULT),'role'=>'staff','active'=>1,'ai_assistant_enabled'=>1,'created_at'=>now()]);
+ Auth::$user=DB::one('SELECT * FROM users WHERE id=?',[$staff]);Auth::$actor=Auth::$user;Auth::$previewClientId=null;
+ at(Auth::can('tasks.edit')===true,'Staff has edit ability');
+ try{AiWhatsAppTools::run('edit_task',['task_id'=>1,'title'=>'Cross client']);throw new RuntimeException('Unauthorized edit executed');}
+ catch(AppError $e){at($e->getMessage()!=='','Unlinked staff denied');}
+ at((int)DB::one('SELECT version FROM demands WHERE id=1')['version']===(int)$afterDue['version'],'Unauthorized edit cannot write');
+ Auth::$user=DB::one('SELECT * FROM users WHERE id=?',[$admin]);Auth::$actor=Auth::$user;
+
+ echo "AI WhatsApp tools: schema, create once, edit once, protected fields, private reply, group guard OK\n";
 }finally{@unlink(ROOT.'/config/config.php');@unlink(ROOT.'/storage/installed.lock');}

@@ -126,6 +126,7 @@ final class AiWhatsAppWorker
  }
  private static function formatResult(array $r): string {
   if(($r['kind']??'')==='created')return 'Task #'.$r['id'].' criada com sucesso.';
+  if(($r['kind']??'')==='edited')return 'Task #'.$r['id'].' atualizada com sucesso.';
   if(($r['kind']??'')==='moved')return 'Task #'.$r['id'].' movida para '.mb_substr((string)$r['stage'],0,60).'.';
   if(($r['kind']??'')==='list'){
    if(!$r['tasks'])return 'Nenhuma task encontrada.';

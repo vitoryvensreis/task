@@ -38,7 +38,7 @@ try{
  $db->exec('SET FOREIGN_KEY_CHECKS=1');
  $db->exec(file_get_contents(ROOT.'/database/schema.sql'));
 
- autoCheck((int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0)===28,'Fresh schema must be 28.');
+ autoCheck((int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0)===29,'Fresh schema must be 29.');
  // Verify 24 -> 26 schema upgrade and preservation of WhatsApp data.
  $db->exec('ALTER TABLE demands DROP COLUMN whatsapp_custom_phone');
  $db->exec('ALTER TABLE whatsapp_messages MODIFY recipient_phone VARCHAR(20) CHARACTER SET ascii COLLATE ascii_bin NOT NULL');

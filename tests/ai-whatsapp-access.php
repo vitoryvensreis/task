@@ -18,7 +18,7 @@ try{
  $db=DB::conn();$db->exec('SET FOREIGN_KEY_CHECKS=0');
  foreach(DB::all('SHOW TABLES') as $row){$table=(string)array_values($row)[0];if(!preg_match('/\A[A-Za-z0-9_]+\z/D',$table))throw new RuntimeException('Unexpected DB table.');$db->exec('DROP TABLE `'.$table.'`');}
  $db->exec('SET FOREIGN_KEY_CHECKS=1');$db->exec(file_get_contents(ROOT.'/database/schema.sql'));
- ac((string)DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']==='28','Fresh schema is 28');
+ ac((string)DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']==='29','Fresh schema is 29');
  ac(Migrations::assistantAccessIssues()===[],'Fresh access columns/indexes valid');
  ac(Migrations::assistantAccess()['changed']===false,'Schema 28 migration idempotent');
 
@@ -31,6 +31,9 @@ try{
  $r=Migrations::assistantAccess();
  ac($r['previous']===27&&$r['current']===28&&$r['changed'],'Upgrade 27->28');
  ac(Migrations::assistantAccessIssues()===[]&&Migrations::assistantAccess()['changed']===false,'Re-running migration is safe');
+ ac(Migrations::assistantTools()['current']===29,'Step 3 migration must follow access upgrade');
+ ac(Migrations::assistantToolsIssues()===[],'Tools queue schema valid');
+ ac(Migrations::assistantTools()['current']===29,'Step 3 migration must run');
  $historical=DB::one("SELECT body,auth_status,auth_reason FROM ai_whatsapp_inbox WHERE provider_message_id='before-access'");
  ac($historical['body']==='historical'&&$historical['auth_status']==='pending','Prior messages preserved, never implicitly authorized');
  ac(Migrations::assistantInbox()['changed']===false&&Migrations::automation()['changed']===false&&Migrations::chat()['changed']===false&&Migrations::outbox()['changed']===false,'All previous migration stages must accept 28');

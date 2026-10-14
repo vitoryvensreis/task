@@ -560,3 +560,7 @@ O editor visual permite arrastar os cards, salvar as posições no JSON da autom
 ### TaskEsc AI — Passo 1: recebimento passivo do WhatsApp
 
 O webhook autenticado do WPPConnect agora registra eventos `onmessage` de conversas privadas e grupos na tabela `ai_whatsapp_inbox` (schema 27), com índice único por sessão/ID da mensagem, sem respostas automáticas. Eventos de conexão, QR Code e envio de automações permanecem inalterados. A migração é aplicada via `bin/migrate-ai-whatsapp-inbox.php` apenas após backup verificado na CI/deploy. Consulte `docs/taskesc-ai-step1.md`.
+
+### TaskEsc AI — Passo 3 (Groq e ferramentas autorizadas)
+
+Integração de IA via Groq com ações limitadas a **listar, criar e mover tasks** através das rotinas existentes do TaskEsc. Worker isolado `taskesc-ai-whatsapp-worker.service`, sem impactar automações. Proteções: menção real no grupo, autorização e membros do grupo verificados antes da operação, filas idempotentes e nenhuma repetição automática de envio incerto. Mensagens antigas não são processadas. Para habilitar, definir somente na configuração privada da VPS `ai_whatsapp.enabled=true` e `ai_whatsapp.groq_api_key`. Consulte `docs/taskesc-ai-step3.md`.

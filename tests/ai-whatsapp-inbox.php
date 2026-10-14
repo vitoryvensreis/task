@@ -26,7 +26,7 @@ try{
  }
  $db->exec('SET FOREIGN_KEY_CHECKS=1');
  $db->exec(file_get_contents(ROOT.'/database/schema.sql'));
- aiCheck((string)DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']==='28','Fresh schema must be 28.');
+ aiCheck((string)DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']==='29','Fresh schema must be 29.');
  aiCheck(Migrations::assistantInboxIssues()===[],'Fresh inbox schema must be structurally valid.');
  aiCheck(Migrations::assistantInbox()['changed']===false,'Schema 27 migration must be idempotent.');
 
@@ -39,6 +39,7 @@ try{
  aiCheck(Migrations::assistantInbox()['changed']===false,'Schema 27 migration retry must not change anything.');
  aiCheck(Migrations::assistantAccess()['current']===28,'Schema 27->28 permissions migration must succeed.');
  aiCheck(Migrations::assistantAccessIssues()===[],'Auth permissions must be structurally valid.');
+ aiCheck(Migrations::assistantTools()['current']===29,'Schema 29 step 3 migration must run.');
  aiCheck(Migrations::automation()['changed']===false,'Automation migration must be a no-op on schema 28.');
  aiCheck(Migrations::chat()['changed']===false,'Chat migration must be a no-op on schema 27.');
  aiCheck(Migrations::outbox()['changed']===false,'Outbox migration must be a no-op on schema 27.');

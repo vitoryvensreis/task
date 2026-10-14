@@ -19,7 +19,7 @@ try{
  at(AiWhatsAppWorker::health()['status']==='ok','Worker must be healthy when disabled');
 
  $admin=DB::insert('users',['name'=>'Admin AI','email'=>'admin-ai@ci.invalid','whatsapp_phone'=>'5585999990001','password_hash'=>password_hash('ci-test-password',PASSWORD_DEFAULT),'role'=>'admin','active'=>1,'created_at'=>now()]);
- $clientId=DB::insert('clients',['name'=>'Cliente AI']);
+ $clientId=DB::insert('clients',['name'=>'Cliente AI','created_at'=>now()]);
  $categoryId=DB::insert('categories',['name'=>'Vídeo AI','fields_json'=>'[]','default_assigned_to'=>$admin]);
  $chat='5585999990001@c.us';
  $msg=DB::insert('ai_whatsapp_inbox',['session_name'=>'taskesc','provider_message_id'=>'ai-test-1','chat_id'=>$chat,'sender_id'=>$chat,'chat_type'=>'private','message_type'=>'chat','body'=>'Criar uma task','status'=>'received','auth_status'=>'authorized','auth_reason'=>'user_authorized','received_at'=>now(),'ai_state'=>'queued']);

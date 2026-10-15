@@ -1147,5 +1147,94 @@ try{
  at(AiWhatsAppAnswerCache::recall($ansQuestion,$ansRow,$admin,$ansTools,$ansSamePlanDifferentArgs,$ansLive)===null,
   'Same question but different inferred intent cannot replay a mismatched response');
  at($previousAnswer===$ansReply,'Unchanged authorized result survives independent cache entries');
+
+ // Financial assistant: keep most recent confirmed expense while filling paid_on.
+ // Must NOT mark anything paid until a fresh one-time CONFIRMAR command.
+ Auth::$user=DB::one('SELECT * FROM users WHERE id=?',[$admin]);Auth::$actor=Auth::$user;
+ Auth::$origin='whatsapp';Auth::$previewClientId=null;
+ $paidDialogCatalog=array_merge(AiWhatsAppTools::catalog(true),AiWhatsAppAdminActions::catalog(true),AiWhatsAppAgendaTools::catalog(true));
+ at(in_array('mark_expense_paid',array_column(array_column($paidDialogCatalog,'function'),'name'),true),
+  'ADM can prepare but not silently execute a paid expense action');
+ $dialogId=DB::insert('expenses',[
+  'description'=>'Uber pagamento contextual','vendor'=>'Uber','category'=>'Outros',
+  'amount_cents'=>2260,'spent_on'=>(new DateTimeImmutable('today',new DateTimeZone('America/Fortaleza')))->format('Y-m-d'),
+  'payment_status'=>'pending','created_by'=>$admin,'created_at'=>now(),'updated_at'=>now()
+ ]);
+ $dialogChat='5585999990001@c.us';
+ $dialogBase=['session_name'=>'taskesc','chat_id'=>$dialogChat,'sender_id'=>$dialogChat,
+  'chat_type'=>'private','message_type'=>'chat','status'=>'received',
+  'auth_user_id'=>$admin,'auth_status'=>'authorized','auth_reason'=>'user_authorized','received_at'=>now()];
+ $dialogSourceId=DB::insert('ai_whatsapp_inbox',array_merge($dialogBase,[
+  'provider_message_id'=>'paid-dialog-confirmed-create','body'=>'CONFIRMAR ABCDEF123456',
+  'ai_reply'=>'Despesa criada (pendente) com sucesso (#'.$dialogId.').','ai_state'=>'sent']));
+ $dialogRow=DB::one('SELECT * FROM ai_whatsapp_inbox WHERE id=?',[$dialogSourceId]);
+ $dialogWrong=$dialogRow;$dialogWrong['id']=$dialogSourceId+1;
+ $dialogWrong['chat_id']='5585000000000@c.us';
+ $isolation=AiWhatsAppExpensePaidDialogue::plan('pode colocar ela como pago',$dialogWrong,$admin,$paidDialogCatalog);
+ at(($isolation['text']??'')==='Qual é o ID da despesa que deseja marcar como paga? Ainda não alterei nenhuma despesa.',
+  'Expense reference must not cross private WhatsApp conversations');
+ at(AiWhatsAppExpensePaidDialogue::plan('pode colocar ela como pago',$dialogWrong,$admin+10,$paidDialogCatalog)['tool']??null===null,
+  'Expense reference must not imply authority for different users');
+ $wrongGroup=$dialogRow;$wrongGroup['id']=$dialogSourceId+1;$wrongGroup['chat_type']='group';
+ at(AiWhatsAppExpensePaidDialogue::plan('pode colocar ela como pago',$wrongGroup,$admin,$paidDialogCatalog)===null,
+  'Financial write dialogue is never enabled for groups');
+ $dialogDirect=AiWhatsAppExpensePaidDialogue::plan(
+  'Task, marque a despesa #'.$dialogId.' como paga hoje',
+  $dialogWrong,$admin,$paidDialogCatalog);
+ $expectedToday=(new DateTimeImmutable('today',new DateTimeZone('America/Fortaleza')))->format('Y-m-d');
+ at(($dialogDirect['tool']??null)==='mark_expense_paid'&&($dialogDirect['arguments']['paid_on']??null)===$expectedToday,
+  'Explicit ID and date can prepare a proposal without previous conversation');
+ at(AiWhatsAppExpensePaidDialogue::plan('marque a despesa #'.$dialogId.' como paga e apague tudo',
+  $dialogWrong,$admin,$paidDialogCatalog)===null,'Mixed financial requests never shortcut approvals');
+ $dialogNoModelCalls=0;$dialogNoModel=static function()use(&$dialogNoModelCalls){
+  $dialogNoModelCalls++;throw new RuntimeException('No model should be called in local financial dialogue');
+ };
+ $dialogAsk=DB::insert('ai_whatsapp_inbox',array_merge($dialogBase,[
+  'provider_message_id'=>'paid-dialog-request','body'=>'pode colocar ela como pago','ai_state'=>'queued']));
+ $dialogSentBefore=count($sent);
+ AiWhatsAppWorker::tick(1,$dialogNoModel,$verifier,null,$sender,true);
+ $askedDate=DB::one('SELECT ai_state,ai_reply FROM ai_whatsapp_inbox WHERE id=?',[$dialogAsk]);
+ at($askedDate['ai_state']==='sent'&&str_contains($askedDate['ai_reply'],'despesa #'.$dialogId)&&
+  str_contains($askedDate['ai_reply'],'data do pagamento'),
+  'Pronoun after successful creation preserves expense ID and requests only payment date');
+ at(DB::one('SELECT payment_status FROM expenses WHERE id=?',[$dialogId])['payment_status']==='pending',
+  'Clarification cannot change financial status');
+ $dialogRepeatId=DB::insert('ai_whatsapp_inbox',array_merge($dialogBase,[
+  'provider_message_id'=>'paid-dialog-repeat-id','body'=>(string)$dialogId,'ai_state'=>'queued']));
+ AiWhatsAppWorker::tick(1,$dialogNoModel,$verifier,null,$sender,true);
+ at(str_contains(DB::one('SELECT ai_reply FROM ai_whatsapp_inbox WHERE id=?',[$dialogRepeatId])['ai_reply'],'data do pagamento'),
+  'Repeating expense ID must ask date, not what action to perform');
+ $dialogDate=DB::insert('ai_whatsapp_inbox',array_merge($dialogBase,[
+  'provider_message_id'=>'paid-dialog-day','body'=>'hoje','ai_state'=>'queued']));
+ AiWhatsAppWorker::tick(1,$dialogNoModel,$verifier,null,$sender,true);
+ $prepared=DB::one('SELECT ai_state,ai_reply FROM ai_whatsapp_inbox WHERE id=?',[$dialogDate]);
+ at($prepared['ai_state']==='sent'&&str_contains($prepared['ai_reply'],'AINDA NÃO EXECUTADA')
+  &&str_contains($prepared['ai_reply'],'despesa #'.$dialogId),
+  'Date follow-up prepares separate confirmation with correct expense ID');
+ at(DB::one('SELECT payment_status FROM expenses WHERE id=?',[$dialogId])['payment_status']==='pending',
+  'Proposed paid expense stays pending until the one-time code is confirmed');
+ at(preg_match('/CONFIRMAR ([A-F0-9]{12})/',$prepared['ai_reply'],$confirmationMatch)===1,
+  'One-time confirmation code is supplied to ADM');
+ $dialogConfirm=DB::insert('ai_whatsapp_inbox',array_merge($dialogBase,[
+  'provider_message_id'=>'paid-dialog-confirm','body'=>'CONFIRMAR '.$confirmationMatch[1],'ai_state'=>'queued']));
+ AiWhatsAppWorker::tick(1,$dialogNoModel,$verifier,null,$sender,true);
+ $paid=DB::one('SELECT payment_status,paid_on FROM expenses WHERE id=?',[$dialogId]);
+ at($paid['payment_status']==='paid'&&$paid['paid_on']===$expectedToday,
+  'Separate consent marks only the intended expense paid on the specified date');
+ at(DB::one('SELECT ai_state FROM ai_whatsapp_inbox WHERE id=?',[$dialogConfirm])['ai_state']==='sent',
+  'Payment confirmation returns exactly one successful WhatsApp reply');
+ at(count($sent)===$dialogSentBefore+4&&$dialogNoModelCalls===0,
+  'Multi-turn finance dialogue sends four replies and consumes zero model calls');
+ at(AiWhatsAppWorker::tick(1,$dialogNoModel,$verifier,null,$sender,true)['processed']===0,
+  'Confirmed payment is not re-executed after worker restart');
+ // Reject new pronoun reference after an unrelated intervening message.
+ $breakMsg=DB::insert('ai_whatsapp_inbox',array_merge($dialogBase,[
+  'provider_message_id'=>'paid-dialog-break','body'=>'outro assunto','ai_reply'=>'Ok.','ai_state'=>'sent']));
+ $afterBreak=DB::insert('ai_whatsapp_inbox',array_merge($dialogBase,[
+  'provider_message_id'=>'paid-dialog-after-break','body'=>'pode colocar ela como pago','ai_state'=>'queued']));
+ $afterRow=DB::one('SELECT * FROM ai_whatsapp_inbox WHERE id=?',[$afterBreak]);
+ $after=AiWhatsAppExpensePaidDialogue::plan('pode colocar ela como pago',$afterRow,$admin,$paidDialogCatalog);
+ at(isset($after['text'])&&str_contains($after['text'],'Qual é o ID'),
+  'Intervening message invalidates entity pronoun and never invents expense ID');
  echo "AI WhatsApp tools: schema, create once, edit once, protected fields, self assignment, category default, client denial, private reply, group guard OK\n";
 }finally{@unlink(ROOT.'/config/config.php');@unlink(ROOT.'/storage/installed.lock');}

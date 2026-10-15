@@ -30,6 +30,41 @@ final class AiWhatsAppCrossModuleReport
   ]]];
  }
 
+ /**
+  * Conservative no-LLM planner for complete, explicit requests for a combined
+  * summary. Unsupported grammar or extra verbs always falls back to the model.
+  */
+ public static function fastPlan(string $message,bool $private): ?array {
+  if(!$private||mb_strlen($message,'UTF-8')>210||(Auth::$user['role']??'')!=='admin')return null;
+  $t=AiWhatsAppFinancialConversation::normalize($message);
+  if(!preg_match('/\A(?:(?:me\s+)?(?:faz|faca|mostre|mostra|mande|manda|gere|gera|quero|da)\s+)?(?:um\s+)?(?:resumo|panorama)\s+(?:de|das|dos)\s+(.+)\z/u',$t,$m))return null;
+  $subject=str_replace([',','/'], ' ',$m[1]);
+  $tokens=preg_split('/\s+/u',trim($subject));
+  $vocabulary=['de','das','dos','do','da','as','os','meus','minhas','minha','meu','e','com','a','o',
+   'tarefas','tasks','projetos','agenda','compromissos','eventos','financeiro','financeiras','financas',
+   'despesas','custos','contas','receber','recebimentos','faturamento','cobrancas','hoje','amanha',
+   'neste','este','esse','mes','desta','nessa','semana','pendentes'];
+  if(!$tokens||array_diff($tokens,$vocabulary))return null;
+  $args=[
+   'tasks'=>(bool)preg_match('/\b(?:tarefas|tasks)\b/u',$t),
+   'projects'=>(bool)preg_match('/\bprojetos\b/u',$t),
+   'agenda'=>(bool)preg_match('/\b(?:agenda|compromissos|eventos)\b/u',$t),
+   'finance'=>self::explicitlyFinancial($message),
+   'period'=>'week'
+  ];
+  if(preg_match('/\bamanha\b/u',$t))$args['period']='tomorrow';
+  elseif(preg_match('/\bhoje\b/u',$t))$args['period']='today';
+  elseif(preg_match('/\bmes\b/u',$t))$args['period']='month';
+  if($args['finance']){
+   if(preg_match('/\b(?:despesas|custos)\b/u',$t)&&preg_match('/\bpendentes\b/u',$t))
+    $args['finance_view']='pending_expenses';
+   elseif(preg_match('/\b(?:contas\s+a\s+receber|cobrancas)\b/u',$t))
+    $args['finance_view']='receivables';
+  }
+  if(array_sum(array_map(static fn($v)=>(int)$v,[$args['tasks'],$args['projects'],$args['agenda'],$args['finance']]))<2)return null;
+  return ['tool'=>'cross_module_report','arguments'=>$args];
+ }
+
  public static function normalize(array $args): array {
   foreach(array_keys($args) as $key)
    if(!in_array($key,[...self::SECTIONS,'period','task_query','finance_view'],true))fail('Filtro do resumo combinado não permitido.',422);

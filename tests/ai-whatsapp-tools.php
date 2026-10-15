@@ -1020,5 +1020,58 @@ try{
  at(str_contains($naturalFormat,'Mostrando 1 de 2')&&str_contains($naturalFormat,'15/10/2026'),
   'Formatted reply provides accurate total, partial marker and deadline');
 
+ // Answer cache: store only a rendered read reply; verify CURRENT tool result on every request.
+ Auth::$user=DB::one('SELECT * FROM users WHERE id=?',[$admin]);Auth::$actor=Auth::$user;
+ $ansTools=array_merge(AiWhatsAppTools::catalog(true),AiWhatsAppAdminActions::catalog(true),
+  AiWhatsAppAgendaTools::catalog(true));
+ $ansRow=['session_name'=>'taskesc','chat_id'=>$chat,'sender_id'=>$chat,'chat_type'=>'private'];
+ $ansQuestion='Task, encontre as tarefas do Saulo';
+ $ansPlan=['tool'=>'list_tasks','arguments'=>['query'=>'Saulo','limit'=>5]];
+ $ansLive=['kind'=>'task_list','total'=>1,'tasks'=>[['id'=>32,'title'=>'Aula Saulo',
+  'stage'=>'Em produção','due_at'=>'2026-10-15 10:00:00']]];
+ $ansReply='Encontrei 1 tarefa: #32 Aula Saulo.';
+ at(AiWhatsAppAnswerCache::recall($ansQuestion,$ansRow,$admin,$ansTools,$ansPlan,$ansLive)===null,
+  'Cold answer cache must miss');
+ AiWhatsAppAnswerCache::remember($ansQuestion,$ansRow,$admin,$ansTools,$ansPlan,$ansLive,$ansReply);
+ at(AiWhatsAppAnswerCache::recall($ansQuestion,$ansRow,$admin,$ansTools,$ansPlan,$ansLive)===$ansReply,
+  'Same question + current result + current ACL reuses exact answer');
+ $ansChanged=$ansLive;$ansChanged['tasks'][0]['stage']='Concluídas';
+ at(AiWhatsAppAnswerCache::recall($ansQuestion,$ansRow,$admin,$ansTools,$ansPlan,$ansChanged)===null,
+  'Fresh changed task state invalidates answer immediately');
+ $ansChanged=$ansLive;$ansChanged['total']=2;
+ at(AiWhatsAppAnswerCache::recall($ansQuestion,$ansRow,$admin,$ansTools,$ansPlan,$ansChanged)===null,
+  'Fresh changed pagination total invalidates old answer immediately');
+ $ansOther=$ansRow;$ansOther['chat_id']='5585000000000@c.us';
+ at(AiWhatsAppAnswerCache::recall($ansQuestion,$ansOther,$admin,$ansTools,$ansPlan,$ansLive)===null,
+  'Answer cannot be reused in a different chat');
+ at(AiWhatsAppAnswerCache::recall($ansQuestion,$ansRow,$admin+88,$ansTools,$ansPlan,$ansLive)===null,
+  'Answer cannot be reused by another user');
+ $ansOther=$ansRow;$ansOther['chat_type']='group';
+ at(AiWhatsAppAnswerCache::recall($ansQuestion,$ansOther,$admin,$ansTools,$ansPlan,$ansLive)===null,
+  'No private answer replayed in a group');
+ at(AiWhatsAppAnswerCache::recall($ansQuestion,$ansRow,$admin,[],$ansPlan,$ansLive)===null,
+  'Permissions removed invalidate answer cache');
+ $unsafePlan=['tool'=>'create_task','arguments'=>['title'=>'Write disallowed']];
+ AiWhatsAppAnswerCache::remember($ansQuestion,$ansRow,$admin,$ansTools,$unsafePlan,$ansLive,'Created!');
+ at(AiWhatsAppAnswerCache::recall($ansQuestion,$ansRow,$admin,$ansTools,$unsafePlan,$ansLive)===null,
+  'Never cache business writes');
+ $financeQuestion='Task, total das despesas pendentes deste mês';
+ $financePlan=['tool'=>'finance_expenses','arguments'=>['from'=>$financialFrom,'to'=>$financialTo,'payment_status'=>'pending']];
+ $financeLive=['kind'=>'finance_expenses','total_cents'=>33850,'count'=>4];
+ AiWhatsAppAnswerCache::remember($financeQuestion,$ansRow,$admin,$ansTools,$financePlan,$financeLive,'R$ 338,50');
+ at(AiWhatsAppAnswerCache::recall($financeQuestion,$ansRow,$admin,$ansTools,$financePlan,$financeLive)==='R$ 338,50',
+  'Financial answer cache saves repeated result');
+ $financeLive['total_cents']=45000;
+ at(AiWhatsAppAnswerCache::recall($financeQuestion,$ansRow,$admin,$ansTools,$financePlan,$financeLive)===null,
+  'Financial totals MUST be fetched again and stale answer MUST be rejected');
+ $cacheDB=DB::one('SELECT result_json FROM idempotency WHERE user_id=? AND operation_key LIKE ? ORDER BY created_at DESC LIMIT 1',
+  [$admin,'ai-answer-v1:%']);
+ at($cacheDB!==null&&str_contains((string)$cacheDB['result_json'],'digest'),
+  'Answer cache stores only HMAC digest and final text, not the raw tool result');
+ $previousAnswer=AiWhatsAppAnswerCache::recall($ansQuestion,$ansRow,$admin,$ansTools,$ansPlan,$ansLive);
+ $ansSamePlanDifferentArgs=['tool'=>'list_tasks','arguments'=>['query'=>'outro','limit'=>5]];
+ at(AiWhatsAppAnswerCache::recall($ansQuestion,$ansRow,$admin,$ansTools,$ansSamePlanDifferentArgs,$ansLive)===null,
+  'Same question but different inferred intent cannot replay a mismatched response');
+ at($previousAnswer===$ansReply,'Unchanged authorized result survives independent cache entries');
  echo "AI WhatsApp tools: schema, create once, edit once, protected fields, self assignment, category default, client denial, private reply, group guard OK\n";
 }finally{@unlink(ROOT.'/config/config.php');@unlink(ROOT.'/storage/installed.lock');}

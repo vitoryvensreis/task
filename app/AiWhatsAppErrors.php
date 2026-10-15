@@ -8,7 +8,7 @@ final class AiWhatsAppErrors
   $s=(string)$e->getMessage();
   $known=[
    'ai_provider_rate_limit','ai_provider_bad_credentials','ai_provider_model_unavailable',
-   'ai_provider_unavailable','ai_connection_failed','ai_provider_bad_request','ai_not_configured','ai_gemini_not_configured',
+   'ai_provider_unavailable','ai_connection_failed','ai_provider_bad_request','ai_usage_daily_limit','ai_not_configured','ai_gemini_not_configured',
    'ai_invalid_response','ai_invalid_tool','ai_invalid_args','ai_multiple_tools',
    'ai_no_reply','ai_unauthorized_tool','ai_tool_not_allowed','ai_arguments_invalid',
    'ai_plan_invalid','ai_model_invalid','ai_tool_catalog_invalid','ai_unknown_result'

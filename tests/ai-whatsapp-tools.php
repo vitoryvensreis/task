@@ -988,6 +988,8 @@ try{
  at(AiWhatsAppConversationContext::plan('e amanhã e pague tudo',$ctxNext,$admin,$ctxTools2)===null,
   'A followup containing any write verb cannot be routed as a read-only report');
  // Stage 3: natural local clarifications and help are replies, never tools/LLM writes.
+ // Finish unrelated queued CI fixtures so the worker selects the message under test.
+ DB::run("UPDATE ai_whatsapp_inbox SET ai_state='ignored' WHERE ai_state IN ('queued','retry')");
  Auth::$user=DB::one('SELECT * FROM users WHERE id=?',[$admin]);Auth::$actor=Auth::$user;
  $naturalAskBase=['session_name'=>'taskesc','chat_id'=>$chat,'sender_id'=>$chat,
   'chat_type'=>'private','message_type'=>'chat','status'=>'received',

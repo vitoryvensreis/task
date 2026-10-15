@@ -74,19 +74,53 @@ final class TaskEscFinanceReadApi
 
     public static function expenses(array $args=[]): array {
         self::authorize();
-        foreach(array_keys($args) as $key)if(!in_array($key,['from','to','limit'],true))fail('Filtro financeiro não permitido.',422);
+        foreach(array_keys($args) as $key)
+            if(!in_array($key,['from','to','limit','payment_status'],true))fail('Filtro financeiro não permitido.',422);
         [$from,$to]=self::period($args);
         $limit=integer($args['limit']??10,1,10);
-        $sql="SELECT entry_date,description,category,amount_cents,payment_status FROM (
+        $filter=enumv($args['payment_status']??'all',['all','pending','paid'],'situação de pagamento');
+        // Exactly the same scope for both FULL totals and limited visible rows.
+        // Totals must never be computed from the first 10 displayed items.
+        $base="FROM (
             SELECT e.spent_on entry_date,e.description,e.category,e.amount_cents,e.payment_status
               FROM expenses e WHERE e.deleted_at IS NULL AND e.spent_on BETWEEN ? AND ?
             UNION ALL
             SELECT c.spent_on entry_date,c.description,'Custos de task' category,c.amount_cents,c.payment_status
               FROM costs c WHERE c.spent_on BETWEEN ? AND ?
-          ) x ORDER BY entry_date DESC LIMIT $limit";
-        $rows=DB::all($sql,[$from,$to,$from,$to]);
-        foreach($rows as &$r)$r=['date'=>(string)$r['entry_date'],'description'=>mb_substr((string)$r['description'],0,90),
-            'category'=>(string)$r['category'],'amount_cents'=>(int)$r['amount_cents'],'paid'=>(string)$r['payment_status']==='paid'];unset($r);
-        return ['kind'=>'finance_expenses','from'=>$from,'to'=>$to,'rows'=>$rows,'registered_only'=>true];
+          ) x";
+        $params=[$from,$to,$from,$to];
+        $stats=DB::one("SELECT
+            COUNT(*) count_all,
+            COALESCE(SUM(amount_cents),0) total_all_cents,
+            COALESCE(SUM(CASE WHEN payment_status='pending' THEN amount_cents ELSE 0 END),0) pending_total_cents,
+            COALESCE(SUM(CASE WHEN payment_status='paid' THEN amount_cents ELSE 0 END),0) paid_total_cents,
+            COALESCE(SUM(CASE WHEN payment_status='pending' THEN 1 ELSE 0 END),0) pending_count,
+            COALESCE(SUM(CASE WHEN payment_status='paid' THEN 1 ELSE 0 END),0) paid_count
+            $base",$params);
+        $where=$filter==='all'?'':' WHERE payment_status=?';
+        $rowParams=$filter==='all'?$params:[...$params,$filter];
+        $rows=DB::all("SELECT entry_date,description,category,amount_cents,payment_status $base $where
+            ORDER BY entry_date DESC,description LIMIT $limit",$rowParams);
+        foreach($rows as &$r)$r=[
+            'date'=>(string)$r['entry_date'],
+            'description'=>mb_substr((string)$r['description'],0,90),
+            'category'=>(string)$r['category'],
+            'amount_cents'=>(int)$r['amount_cents'],
+            'paid'=>(string)$r['payment_status']==='paid'
+        ];
+        unset($r);
+        $count=$filter==='pending'?(int)$stats['pending_count']
+            :($filter==='paid'?(int)$stats['paid_count']:(int)$stats['count_all']);
+        $total=$filter==='pending'?(int)$stats['pending_total_cents']
+            :($filter==='paid'?(int)$stats['paid_total_cents']:(int)$stats['total_all_cents']);
+        return [
+            'kind'=>'finance_expenses','from'=>$from,'to'=>$to,
+            'payment_status'=>$filter,'count'=>$count,'total_cents'=>$total,
+            'pending_count'=>(int)$stats['pending_count'],
+            'paid_count'=>(int)$stats['paid_count'],
+            'pending_total_cents'=>(int)$stats['pending_total_cents'],
+            'paid_total_cents'=>(int)$stats['paid_total_cents'],
+            'rows'=>$rows,'registered_only'=>true,
+        ];
     }
 }

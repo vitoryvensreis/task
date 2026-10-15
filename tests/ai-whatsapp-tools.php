@@ -299,7 +299,7 @@ try{
  $availableAdmin=array_column(array_column(AiWhatsAppAdminActions::catalog(true),'function'),'name');
  at((AiWhatsAppFastPath::plan('liste os clientes',true)['tool']??null)==='list_clients','Admin exact list clients avoids model');
  at(AiWhatsAppFastPath::plan('liste os clientes',false)===null,'No list clients shortcut in groups');
- at(count($availableAdmin)===10&&in_array('record_payment',$availableAdmin,true),'Admin private catalog exposes guarded tools');
+ at(count($availableAdmin)===11&&in_array('record_payment',$availableAdmin,true),'Admin private catalog exposes guarded tools');
  at(AiWhatsAppAdminActions::catalog(false)===[],'Admin cannot reveal admin tools in a group');
  $beforeApprovalInvoices=(int)DB::one('SELECT COUNT(*) n FROM invoices')['n'];
  $request=DB::insert('ai_whatsapp_inbox',['session_name'=>'taskesc','provider_message_id'=>'approval-propose-1',

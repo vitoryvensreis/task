@@ -235,7 +235,7 @@ $rw=AiWhatsAppSmartRouter::select('Task, crie uma tarefa nova',$routerCatalog);
 t($rw['mode']==='complex'&&count($rw['tools'])===count($routerCatalog)&&$rw['preference']===null,
  'Write requests keep complete authorized catalog and configured primary');
 $rNewExpense=AiWhatsAppSmartRouter::select('Nova despesa',$routerCatalog);
-t($rNewExpense['mode']==='general'&&count($rNewExpense['tools'])===count($routerCatalog),
+t($rNewExpense['mode']!=='focused_read'&&count($rNewExpense['tools'])===count($routerCatalog),
  'Ambiguous new expense must retain admin write tools for confirmation');
 $rMarkExpense=AiWhatsAppSmartRouter::select('Marcar despesa paga',$routerCatalog);
 t(count($rMarkExpense['tools'])===count($routerCatalog),

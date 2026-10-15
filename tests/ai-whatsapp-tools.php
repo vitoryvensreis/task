@@ -658,5 +658,61 @@ try{
   'WhatsApp shows analytical report rather than 30-task raw list');
  at((int)DB::one('SELECT COUNT(*) n FROM demands')['n']===$demandsBefore,'No business mutation from WhatsApp analysis');
 
+
+ // AI usage step 3: caps stay OFF until ADM explicitly enables; schema remains 29.
+ Auth::$user=DB::one('SELECT * FROM users WHERE id=?',[$admin]);Auth::$actor=Auth::$user;
+ Auth::$origin='web';Auth::$previewClientId=null;
+ at(AiWhatsAppUsagePolicy::current()['enabled']===false,'Usage enforcement must default OFF');
+ at(AiWhatsAppUsagePolicy::current()['retention_days']===30,'Minimum retention defaults to 30d');
+ AiWhatsAppUsagePolicy::reserve('gemini','2001-01-19'); // disabled, no counter
+ at(AiWhatsAppUsagePolicy::reservedToday('2001-01-19')['gemini']===0,'Disabled caps cannot count or block requests');
+ try{AiWhatsAppUsagePolicy::save(['retention_days'=>2]);throw new RuntimeException('Unsafe retention accepted');}
+ catch(AppError $e){at($e->status===422,'Retention below 30 days rejected');}
+ try{AiWhatsAppUsagePolicy::save(['alert_percent'=>10]);throw new RuntimeException('Unsafe alert accepted');}
+ catch(AppError $e){at($e->status===422,'Alert percentage validated');}
+ $saved=AiWhatsAppUsagePolicy::save(['enabled'=>true,'gemini_daily_calls'=>2,'groq_daily_calls'=>1,
+  'alert_percent'=>50,'retention_days'=>30]);
+ at($saved['policy']['enabled']===true,'ADMIN explicitly enables limits');
+ AiWhatsAppUsagePolicy::reserve('gemini','2001-01-19');
+ $warn=AiWhatsAppUsagePolicy::notifyAdmins('2001-01-19');
+ at(($warn['alerts']['gemini']['level']??null)==='warning','50 percent generates one warning');
+ at(($warn['notifications_created']??0)>=1,'ADM receives in-app warning');
+ at(AiWhatsAppUsagePolicy::notifyAdmins('2001-01-19')['notifications_created']===0,
+  'Repeated cron run does not duplicate alerts');
+ AiWhatsAppUsagePolicy::reserve('gemini','2001-01-19');
+ AiWhatsAppUsagePolicy::reserve('groq','2001-01-19');
+ try{AiWhatsAppUsagePolicy::reserve('gemini','2001-01-19');throw new RuntimeException('Gemini quota exceeded');}
+ catch(RuntimeException $e){at($e->getMessage()==='ai_usage_daily_limit','Gemini hard cap enforced atomically');}
+ try{AiWhatsAppUsagePolicy::reserve('groq','2001-01-19');throw new RuntimeException('Groq quota exceeded');}
+ catch(RuntimeException $e){at($e->getMessage()==='ai_usage_daily_limit','Groq hard cap enforced separately');}
+ at(AiWhatsAppUsagePolicy::reservedToday('2001-01-19')===['gemini'=>2,'groq'=>1],
+  'Denied requests do not increment counters');
+ $limitAlert=AiWhatsAppUsagePolicy::notifyAdmins('2001-01-19');
+ at(($limitAlert['alerts']['gemini']['level']??null)==='limit','Limit threshold detected');
+ at(($limitAlert['notifications_created']??0)>=1,'ADM notified when limit reached');
+ at(AiWhatsAppUsagePolicy::notifyAdmins('2001-01-19')['notifications_created']===0,'No alert spam');
+ at(AiWhatsAppProvider::fallbackEligible('ai_usage_daily_limit'),'Other configured provider can be tried');
+ at(!AiWhatsAppErrors::retryable(new RuntimeException('ai_usage_daily_limit')),
+  'Quota failure cannot repeatedly consume AI budget');
+ $oldPath=AiWhatsAppUsageMetrics::fileForDay('2001-01-05');
+ $keepPath=ROOT.'/storage/logs/ai-usage-2001-04-25.jsonl';
+ @mkdir(ROOT.'/storage/logs',0700,true);
+ file_put_contents($oldPath,"{}\n");file_put_contents($keepPath,"{}\n");
+ $clean=AiWhatsAppUsagePolicy::cleanup(new DateTimeImmutable('2001-05-01',new DateTimeZone('UTC')));
+ at(!is_file($oldPath)&&is_file($keepPath),'Expired telemetry deleted, recent records retained');
+ at($clean['files_deleted']>=1&&$clean['counters_deleted']>=2,'Only expired counters and files deleted');
+ @unlink($keepPath);
+ $priorActor=Auth::$user;
+ Auth::$user=['id'=>9999,'role'=>'staff','active'=>1];Auth::$actor=Auth::$user;
+ try{AiWhatsAppUsagePolicy::read();throw new RuntimeException('Staff accessed settings');}
+ catch(AppError $e){at($e->status===403,'Staff forbidden from governance');}
+ Auth::$user=$priorActor;Auth::$actor=$priorActor;
+ Auth::$previewClientId=999;
+ try{AiWhatsAppUsagePolicy::read();throw new RuntimeException('Preview accessed settings');}
+ catch(AppError $e){at($e->status===403,'Client preview forbidden');}
+ Auth::$previewClientId=null;
+ AiWhatsAppUsagePolicy::save(['enabled'=>false,'gemini_daily_calls'=>0,'groq_daily_calls'=>0,
+  'alert_percent'=>80,'retention_days'=>30]);
+ at(setting('schema_version')==='29','Monitoring does not migrate or recreate schema');
  echo "AI WhatsApp tools: schema, create once, edit once, protected fields, self assignment, category default, client denial, private reply, group guard OK\n";
 }finally{@unlink(ROOT.'/config/config.php');@unlink(ROOT.'/storage/installed.lock');}

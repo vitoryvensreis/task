@@ -556,5 +556,17 @@ try{
  at(AiWhatsAppWorker::tick(1,$unexpectedPlanner,$verifier,null,$sender,true)['processed']===0,
   'Terminal failure and cached read cannot replay');
 
+ // Model-free stage-filtered query remains scoped to the authorized TaskEsc API.
+ $classroomRequest='Task, encontre as tarefas relacionadas à edição de aulas e me diga quais ainda estão em produção';
+ $classroomPlan=AiWhatsAppFastPath::plan($classroomRequest);
+ at(is_array($classroomPlan)&&($classroomPlan['tool']??'')==='list_tasks','Classroom query uses local read plan');
+ $classroomResult=AiWhatsAppTools::run('list_tasks',$classroomPlan['arguments']);
+ at(($classroomResult['kind']??'')==='list','Classroom query returns live API records');
+ foreach($classroomResult['tasks'] as $d){
+  at(($d['stage']??'')==='Em produção','Only tasks in requested Kanban stage');
+  at(str_contains(mb_strtolower((string)$d['title']),'aula'),'Only class-related task titles');
+ }
+ try{AiWhatsAppTools::run('list_tasks',['query'=>'aula','stage_name'=>'Etapa inexistente']);throw new RuntimeException('Invalid stage used');}
+ catch(AppError $e){at($e->getMessage()!=='','Stage names resolved only from active DB stages');}
  echo "AI WhatsApp tools: schema, create once, edit once, protected fields, self assignment, category default, client denial, private reply, group guard OK\n";
 }finally{@unlink(ROOT.'/config/config.php');@unlink(ROOT.'/storage/installed.lock');}

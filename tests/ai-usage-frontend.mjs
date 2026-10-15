@@ -27,5 +27,8 @@ assert.ok(src.includes("name=\"retention_days\""),'Retention field required');
 assert.ok(src.includes('const quotaRows='),'Two-provider quota controls required');
 assert.ok(api.includes("'ai.usage_policy_save'=>("),'POST-only route required');
 assert.ok(api.includes("fail('Método não permitido.',405)"),'GET must not update policy');
+assert.ok(src.includes('conversationHtml')&&src.includes('context_followup'),'Conversation panel tracks follow-up metrics');
+assert.ok(src.includes('local_clarification')&&src.includes('guided_help'),'Conversation panel shows help/clarifications');
+assert.ok(src.includes("const conversationStats=d.conversation||{}"),'Missing metric series must render safely');
 assert.ok(!src.includes('console.log(d)'), 'Do not log telemetry payload to browser console');
 console.log('AI usage frontend route/permissions/filters/chart: OK');

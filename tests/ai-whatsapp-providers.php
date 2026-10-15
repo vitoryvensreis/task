@@ -234,6 +234,12 @@ t($rf['mode']==='focused_read'&&array_column(array_column($rf['tools'],'function
 $rw=AiWhatsAppSmartRouter::select('Task, crie uma tarefa nova',$routerCatalog);
 t($rw['mode']==='complex'&&count($rw['tools'])===count($routerCatalog)&&$rw['preference']===null,
  'Write requests keep complete authorized catalog and configured primary');
+$rNewExpense=AiWhatsAppSmartRouter::select('Nova despesa',$routerCatalog);
+t($rNewExpense['mode']==='general'&&count($rNewExpense['tools'])===count($routerCatalog),
+ 'Ambiguous new expense must retain admin write tools for confirmation');
+$rMarkExpense=AiWhatsAppSmartRouter::select('Marcar despesa paga',$routerCatalog);
+t(count($rMarkExpense['tools'])===count($routerCatalog),
+ 'Paying or marking an expense must never be narrowed to finance reads');
 $ra=AiWhatsAppSmartRouter::select('Me fale sobre tarefas e agenda de amanhã',$routerCatalog);
 t($ra['mode']==='general'&&count($ra['tools'])===count($routerCatalog),
  'Cross-module requests must not be silently narrowed to one tool');

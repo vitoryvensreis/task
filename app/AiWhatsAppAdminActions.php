@@ -6,28 +6,47 @@ final class AiWhatsAppAdminActions {
  public static function enabled(): bool {
   $cfg=config('ai_whatsapp',[]);return is_array($cfg)&&!empty($cfg['admin_control_enabled']);
  }
+ /** Finance is deliberately independent from broader admin control:
+  * private ADM, finance.manage, and one-time confirmation are mandatory.
+  * Explicit config financial_write_enabled=false disables this feature. */
+ public static function financialWriteEnabled(): bool {
+  $cfg=config('ai_whatsapp',[]);
+  return is_array($cfg)&&($cfg['financial_write_enabled']??true)!==false;
+ }
+ private const FINANCIAL_ACTIONS=['create_invoice','record_payment','create_expense',
+  'mark_expense_paid','cancel_invoice','register_receipt'];
+ private static function allowedWrite(string $name): bool {
+  return in_array($name,self::FINANCIAL_ACTIONS,true)
+   ?self::financialWriteEnabled()&&Auth::can('finance.manage')
+   :self::enabled();
+ }
  private static function tool(string $name,string $description,array $properties,array $required=[]): array {
   return ['type'=>'function','function'=>['name'=>$name,'description'=>$description,'parameters'=>['type'=>'object','properties'=>$properties,'required'=>$required,'additionalProperties'=>false]]];
  }
  public static function sensitive(string $name): bool {
-  return in_array($name,['create_invoice','record_payment','create_expense','mark_expense_paid','cancel_invoice','create_project','agenda_create','agenda_update','agenda_cancel'],true);
+  return in_array($name,['create_invoice','record_payment','create_expense','mark_expense_paid','cancel_invoice','register_receipt','create_project','agenda_create','agenda_update','agenda_cancel'],true);
  }
  public static function catalog(bool $private): array {
-  if(!self::enabled()||!$private||(Auth::$user['role']??'')!=='admin')return [];
+  if(!$private||(Auth::$user['role']??'')!=='admin')return [];
+  $full=self::enabled();
+  $finance=self::financialWriteEnabled()&&Auth::can('finance.manage');
+  if(!$full&&!$finance)return [];
   $id=['type'=>'integer'];$date=['type'=>'string','description'=>'YYYY-MM-DD'];
   $money=['type'=>'integer','description'=>'Valor em centavos: R$ 150,00 = 15000.'];
-  return [
+  $all=[
    self::tool('list_clients','Listar clientes ativos do TaskEsc',['query'=>['type'=>'string']]),
    self::tool('list_projects','Listar projetos por cliente',['client_id'=>$id]),
    self::tool('list_team','Listar usuários, função e atividade; sem segredos',[]),
    self::tool('list_events','Listar próximos eventos da agenda, sem atualizar Google',[]),
    self::tool('create_invoice','Preparar cobrança avulsa. Só será executada após confirmação separada do administrador.',['client_id'=>$id,'description'=>['type'=>'string'],'amount_cents'=>$money,'due_on'=>$date],['client_id','description','amount_cents','due_on']),
    self::tool('record_payment','Preparar registro CONTÁBIL de recebimento já ocorrido; não faz transferência. Confirmação separada.',['invoice_id'=>$id,'amount_cents'=>$money,'paid_on'=>$date,'method'=>['type'=>'string']],['invoice_id','amount_cents','paid_on','method']),
-   self::tool('create_expense','Preparar despesa pendente, com confirmação em outra mensagem.',['description'=>['type'=>'string'],'category'=>['type'=>'string'],'vendor'=>['type'=>'string'],'amount_cents'=>$money,'spent_on'=>$date],['description','category','amount_cents','spent_on']),
+   self::tool('create_expense','Registrar DESPESA/custo novo no financeiro; preparação e confirmação em mensagens diferentes. Na ausência de categoria, usar Outros; se não houver data, usar hoje. Despesa nasce PENDENTE, sem presumir pagamento.',['description'=>['type'=>'string'],'category'=>['type'=>'string','description'=>'Categoria existente, opcional: Outros quando não informada'],'vendor'=>['type'=>'string'],'amount_cents'=>$money,'spent_on'=>$date],['description','amount_cents']),
+   self::tool('register_receipt','Registrar uma ENTRADA/RECEITA JÁ RECEBIDA, vinculada a CLIENTE existente: cria cobrança e baixa contábil no mesmo ato, mediante confirmação separada. Exige cliente, descrição, valor, data e meio de pagamento; não faz transferência.',['client_id'=>$id,'description'=>['type'=>'string'],'amount_cents'=>$money,'paid_on'=>$date,'method'=>['type'=>'string']],['client_id','description','amount_cents','paid_on','method']),
    self::tool('mark_expense_paid','Preparar marcação contábil de despesa como PAGA, sem transferir dinheiro, com confirmação separada.',['expense_id'=>$id,'paid_on'=>$date],['expense_id','paid_on']),
    self::tool('cancel_invoice','Preparar cancelamento de cobrança sem pagamentos, com confirmação.',['invoice_id'=>$id],['invoice_id']),
    self::tool('create_project','Preparar criação de projeto no cliente, mediante confirmação.',['client_id'=>$id,'name'=>['type'=>'string'],'description'=>['type'=>'string']],['client_id','name']),
   ];
+  return $full?$all:array_values(array_filter($all,static fn($t)=>in_array($t['function']['name']??'',self::FINANCIAL_ACTIONS,true)));
  }
  private static function keys(array $data,array $allowed): void {
   foreach(array_keys($data) as $key)if(!in_array($key,$allowed,true))fail('Campo administrativo não permitido.',422);
@@ -36,7 +55,7 @@ final class AiWhatsAppAdminActions {
  public static function prepare(string $name,array $p): array {
   Auth::admin();
   if(AiWhatsAppAgendaTools::sensitive($name))return AiWhatsAppAgendaTools::prepare($name,$p);
-  if(!self::enabled())fail('Controle administrativo da IA desativado.',403);
+  if(!self::allowedWrite($name))fail('Controle de escrita financeira ou administrativa não autorizado.',403);
   if(!self::sensitive($name))fail('Ação administrativa não autorizada.',403);
   switch($name){
    case 'create_invoice':
@@ -58,12 +77,27 @@ final class AiWhatsAppAdminActions {
      'Registrar recebimento já ocorrido: '.self::brl($amount).' na fatura #'.$id.', data '.$paid.', meio '.$method.'. Saldo anterior '.self::brl($remaining)];
    case 'create_expense':
     self::keys($p,['description','category','vendor','amount_cents','spent_on']);
-    $desc=required($p,'description',190);$cat=required($p,'category',80);
+    $desc=required($p,'description',190);$cat=trim((string)($p['category']??'Outros'));
+    if($cat==='')$cat='Outros';
+    if(mb_strlen($cat)>80)fail('Categoria de despesa muito extensa.',422);
     if(!DB::one('SELECT id FROM expense_categories WHERE name=? AND active=1',[$cat]))fail('Categoria de despesa inválida.',422);
-    $amount=integer($p['amount_cents']??null,1,100000000);$date=datev($p['spent_on']??null,false);
+    $amount=integer($p['amount_cents']??null,1,100000000);$date=datev($p['spent_on']??(new DateTimeImmutable('today',new DateTimeZone((string)config('timezone','America/Fortaleza'))))->format('Y-m-d'),false);
     $vendor=mb_substr(trim((string)($p['vendor']??'')),0,190);
     return [['description'=>$desc,'category'=>$cat,'vendor'=>$vendor,'amount_cents'=>$amount,'spent_on'=>$date,'payment_status'=>'pending'],
      'Criar despesa PENDENTE: '.$desc.', '.self::brl($amount).', '.$cat.', '.$date];
+   case 'register_receipt':
+    self::keys($p,['client_id','description','amount_cents','paid_on','method']);
+    $clientId=integer($p['client_id']??null,1);$client=Auth::client($clientId);
+    if(!(int)$client['active'])fail('Cliente inativo.',422);
+    $desc=required($p,'description',190);
+    $amount=integer($p['amount_cents']??null,1,100000000);
+    $paid=datev($p['paid_on']??null,false);
+    $method=required($p,'method',50);
+    return [['client_id'=>$clientId,'description'=>$desc,'amount_cents'=>$amount,
+      'paid_on'=>$paid,'method'=>$method],
+     'Registrar ENTRADA JÁ RECEBIDA de '.$client['name'].': '.self::brl($amount).
+     ', data '.$paid.', meio '.$method.', descrição '.$desc.
+     '. Será criada cobrança quitada para manter a conciliação do TaskEsc.'];
    case 'mark_expense_paid':
     self::keys($p,['expense_id','paid_on']);$id=integer($p['expense_id']??null,1);
     $expense=DB::one('SELECT id,description,amount_cents,payment_status,deleted_at FROM expenses WHERE id=?',[$id]);
@@ -91,7 +125,7 @@ final class AiWhatsAppAdminActions {
  public static function run(string $name,array $p): array {
   Auth::admin();
   if(AiWhatsAppAgendaTools::sensitive($name))return AiWhatsAppAgendaTools::runConfirmed($name,$p);
-  if(!self::enabled())fail('Controle administrativo da IA desativado.',403);
+  if(self::sensitive($name)&&!self::allowedWrite($name))fail('Controle de escrita financeira ou administrativa não autorizado.',403);
   switch($name){
    case 'list_clients':
     self::keys($p,['query']);$q=mb_substr(trim((string)($p['query']??'')),0,70);
@@ -116,6 +150,17 @@ final class AiWhatsAppAdminActions {
     if((int)$i['amount_cents']-$settled!==(int)$p['expected_balance_cents'])fail('Saldo alterado. Solicite novamente.',409);
     unset($p['expected_balance_cents']);return ['kind'=>'admin_done','action'=>'Recebimento registrado','id'=>(int)Finance::payment($p)['id']];
    case 'create_expense':return ['kind'=>'admin_done','action'=>'Despesa criada (pendente)','id'=>(int)Finance::expenseSave($p)['id']];
+   case 'register_receipt':
+    // This is called inside the SAME DB transaction as approval consumption.
+    // The pair either commits together or is fully rolled back.
+    $invoice=Finance::invoiceCreate([
+     'client_id'=>$p['client_id'],'description'=>$p['description'],
+     'amount_cents'=>$p['amount_cents'],'due_on'=>$p['paid_on']]);
+    $payment=Finance::payment([
+     'invoice_id'=>$invoice['id'],'amount_cents'=>$p['amount_cents'],
+     'paid_on'=>$p['paid_on'],'method'=>$p['method']]);
+    return ['kind'=>'admin_done','action'=>'Entrada recebida registrada',
+     'id'=>(int)$payment['id']];
    case 'mark_expense_paid':
     $id=integer($p['expense_id'],1);
     $e=DB::one('SELECT amount_cents,payment_status,deleted_at FROM expenses WHERE id=? FOR UPDATE',[$id]);

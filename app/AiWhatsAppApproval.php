@@ -19,7 +19,7 @@ final class AiWhatsAppApproval {
  }
  private static function privateAdmin(array $row): void {
   Auth::admin();
-  if(!AiWhatsAppAdminActions::enabled()&&!AiWhatsAppAgendaTools::writeEnabled())fail('Controle administrativo da IA desativado.',403);
+  if(!AiWhatsAppAdminActions::enabled()&&!AiWhatsAppAdminActions::financialWriteEnabled()&&!AiWhatsAppAgendaTools::writeEnabled())fail('Controle administrativo da IA desativado.',403);
   if(($row['chat_type']??'')!=='private')fail('Confirmações disponíveis somente em conversa privada.',403);
   if(!Auth::can('finance.manage'))fail('Acesso administrativo necessário.',403);
  }

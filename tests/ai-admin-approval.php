@@ -9,8 +9,8 @@ function aa(bool $ok,string $message): void {if(!$ok)throw new RuntimeException(
 Auth::$user=['id'=>1,'name'=>'Admin Teste','role'=>'admin','active'=>1];Auth::$actor=Auth::$user;Auth::$origin='whatsapp';
 $public=AiWhatsAppAdminActions::catalog(true);
 $names=array_column(array_column($public,'function'),'name');
-aa(count($names)===10,'Admin must see 10 allowlisted tools');
-foreach(['create_invoice','record_payment','create_expense','mark_expense_paid','cancel_invoice','create_project'] as $tool){
+aa(count($names)===11,'Admin must see 11 allowlisted tools');
+foreach(['create_invoice','record_payment','create_expense','register_receipt','mark_expense_paid','cancel_invoice','create_project'] as $tool){
  aa(in_array($tool,$names,true),'Admin action missing: '.$tool);
  aa(AiWhatsAppAdminActions::sensitive($tool),'Financial or operational write must be sensitive');
 }

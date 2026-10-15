@@ -299,7 +299,7 @@ try{
  $availableAdmin=array_column(array_column(AiWhatsAppAdminActions::catalog(true),'function'),'name');
  at((AiWhatsAppFastPath::plan('liste os clientes',true)['tool']??null)==='list_clients','Admin exact list clients avoids model');
  at(AiWhatsAppFastPath::plan('liste os clientes',false)===null,'No list clients shortcut in groups');
- at(count($availableAdmin)===10&&in_array('record_payment',$availableAdmin,true),'Admin private catalog exposes guarded tools');
+ at(count($availableAdmin)===11&&in_array('record_payment',$availableAdmin,true),'Admin private catalog exposes guarded tools');
  at(AiWhatsAppAdminActions::catalog(false)===[],'Admin cannot reveal admin tools in a group');
  $beforeApprovalInvoices=(int)DB::one('SELECT COUNT(*) n FROM invoices')['n'];
  $request=DB::insert('ai_whatsapp_inbox',['session_name'=>'taskesc','provider_message_id'=>'approval-propose-1',
@@ -410,6 +410,80 @@ try{
   'received_at'=>now(),'ai_state'=>'queued']);
  AiWhatsAppWorker::tick(1,$neverPlan,$verifier,null,$sender,true);
  at(DB::one('SELECT payment_status FROM expenses WHERE id=?',[$newExpense['id']])['payment_status']==='paid','Expense paid status confirmed');
+
+
+ // Simplified WhatsApp expense message: no Gemini/Groq and no implicit payment.
+ $simple='Task, Adiciona uma despesa para mim de 22,60 uber';
+ $simpleTools=array_merge(AiWhatsAppTools::catalog(true),
+   AiWhatsAppAdminActions::catalog(true),AiWhatsAppAgendaTools::catalog(true));
+ $parsed=AiWhatsAppFinancialWriteIntent::plan($simple,$simpleTools,true);
+ at(($parsed['tool']??null)==='create_expense'&&($parsed['arguments']['amount_cents']??0)===2260,
+  'Local Portuguese expense request must be parsed in cents');
+ at(($parsed['arguments']['category']??'')==='Outros','Unspecified category is disclosed as Outros');
+ at(AiWhatsAppFinancialWriteIntent::plan($simple,$simpleTools,false)===null,
+  'Group cannot prepare an expense');
+ at(AiWhatsAppFinancialWriteIntent::plan('Task, adiciona uma despesa de 22,60 uber e apague tudo',
+  $simpleTools,true)===null,'Mixed write instructions cannot use local finance route');
+ $simpleBefore=(int)DB::one("SELECT COUNT(*) n FROM expenses")['n'];
+ $simpleMsg=DB::insert('ai_whatsapp_inbox',['session_name'=>'taskesc',
+  'provider_message_id'=>'finance-simple-uber','chat_id'=>$chat,'sender_id'=>$chat,
+  'chat_type'=>'private','message_type'=>'chat','body'=>$simple,'status'=>'received',
+  'auth_status'=>'authorized','auth_reason'=>'user_authorized','received_at'=>now(),'ai_state'=>'queued']);
+ $prev=count($sent);AiWhatsAppWorker::tick(1,$neverPlan,$verifier,null,$sender,true);
+ at((int)DB::one("SELECT COUNT(*) n FROM expenses")['n']===$simpleBefore,
+  'Natural expense proposal must not commit before confirmation');
+ preg_match('/CONFIRMAR ([A-F0-9]{12})/',$sent[$prev][1],$naturalExpenseCode);
+ at(isset($naturalExpenseCode[1])&&str_contains($sent[$prev][1],'AINDA NÃO EXECUTADA'),
+  'Natural expense must return explicit one-time confirmation');
+ $confirmSimple=DB::insert('ai_whatsapp_inbox',['session_name'=>'taskesc',
+  'provider_message_id'=>'finance-simple-uber-confirm','chat_id'=>$chat,'sender_id'=>$chat,
+  'chat_type'=>'private','message_type'=>'chat','body'=>'CONFIRMAR '.$naturalExpenseCode[1],
+  'status'=>'received','auth_status'=>'authorized','auth_reason'=>'user_authorized',
+  'received_at'=>now(),'ai_state'=>'queued']);
+ AiWhatsAppWorker::tick(1,$neverPlan,$verifier,null,$sender,true);
+ at((int)DB::one("SELECT COUNT(*) n FROM expenses")['n']===$simpleBefore+1,
+  'Natural expense registered only after confirmation');
+ $uber=DB::one("SELECT * FROM expenses WHERE description='Uber' ORDER BY id DESC LIMIT 1");
+ at((int)($uber['amount_cents']??0)===2260&&($uber['payment_status']??'')==='pending',
+  'Uber creates pending expense of R$ 22,60, not silently paid');
+
+ // A cash receipt is associated with a real client and appears in existing invoice ledger.
+ $receiptDescription='Entrada aprovada WhatsApp';
+ $receiptArgs=['client_id'=>$clientId,'description'=>$receiptDescription,'amount_cents'=>12345,
+  'paid_on'=>$today,'method'=>'Pix'];
+ $invoiceBefore=(int)DB::one('SELECT COUNT(*) n FROM invoices')['n'];
+ $paymentsBefore=(int)DB::one('SELECT COUNT(*) n FROM payments')['n'];
+ $receiptMsg=DB::insert('ai_whatsapp_inbox',['session_name'=>'taskesc',
+  'provider_message_id'=>'finance-receipt-prepare','chat_id'=>$chat,'sender_id'=>$chat,
+  'chat_type'=>'private','message_type'=>'chat','body'=>'Registrar entrada já recebida',
+  'status'=>'received','auth_status'=>'authorized','auth_reason'=>'user_authorized',
+  'received_at'=>now(),'ai_state'=>'queued']);
+ $receiptPlanner=fn()=>['tool'=>'register_receipt','arguments'=>$receiptArgs];
+ $prev=count($sent);AiWhatsAppWorker::tick(1,$receiptPlanner,$verifier,null,$sender,true);
+ at((int)DB::one('SELECT COUNT(*) n FROM invoices')['n']===$invoiceBefore
+  &&(int)DB::one('SELECT COUNT(*) n FROM payments')['n']===$paymentsBefore,
+  'Receipt preparation cannot touch invoice/payment table');
+ preg_match('/CONFIRMAR ([A-F0-9]{12})/',$sent[$prev][1],$receiptMatch);
+ at(isset($receiptMatch[1])&&str_contains($sent[$prev][1],'ENTRADA JÁ RECEBIDA'),
+  'Cash receipt needs explicit preview and confirmation');
+ DB::insert('ai_whatsapp_inbox',['session_name'=>'taskesc',
+  'provider_message_id'=>'finance-receipt-confirm','chat_id'=>$chat,'sender_id'=>$chat,
+  'chat_type'=>'private','message_type'=>'chat','body'=>'CONFIRMAR '.$receiptMatch[1],
+  'status'=>'received','auth_status'=>'authorized','auth_reason'=>'user_authorized',
+  'received_at'=>now(),'ai_state'=>'queued']);
+ AiWhatsAppWorker::tick(1,$neverPlan,$verifier,null,$sender,true);
+ $invoiceRegistered=DB::one('SELECT * FROM invoices WHERE description=? ORDER BY id DESC LIMIT 1',[$receiptDescription]);
+ at($invoiceRegistered!==null&&(int)$invoiceRegistered['amount_cents']===12345,
+  'Receipt must generate corresponding client invoice');
+ $paymentRegistered=DB::one('SELECT * FROM payments WHERE invoice_id=? ORDER BY id DESC LIMIT 1',
+  [$invoiceRegistered['id']]);
+ at($paymentRegistered!==null&&(int)$paymentRegistered['amount_cents']===12345
+  &&$paymentRegistered['method']==='Pix','Receipt is fully posted to cash/receipts');
+ at((int)DB::one('SELECT COUNT(*) n FROM payments')['n']===$paymentsBefore+1,
+  'Receipt creates only one payment');
+ at((int)DB::one('SELECT COUNT(*) n FROM invoices')['n']===$invoiceBefore+1,
+  'Receipt creates only one invoice');
+ at($llmUsed===0,'Confirming financial entries must never invoke an LLM');
 
  // The model cannot even offer these actions to team members or clients.
  Auth::$user=DB::one('SELECT * FROM users WHERE id=?',[$staff]);Auth::$actor=Auth::$user;

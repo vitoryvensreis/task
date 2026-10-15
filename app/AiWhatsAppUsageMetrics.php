@@ -9,7 +9,7 @@ declare(strict_types=1);
 final class AiWhatsAppUsageMetrics
 {
  private const ROUTES=['fast_path','cache_hit','model_route'];
- private const CONVERSATION=['guided_help','local_clarification','context_followup'];
+ private const CONVERSATION=['guided_help','local_clarification','context_followup','answer_cache_hit'];
  private const PROVIDERS=['gemini','groq'];
 
  public static function fileForDay(string $date): ?string {

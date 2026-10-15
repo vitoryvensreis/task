@@ -37,32 +37,47 @@ if(!preg_match('/\A[a-z0-9][a-z0-9._-]{2,90}\z/D',$gm)){
 }
 $groq=(string)($cfg['groq_model']??'openai/gpt-oss-120b');
 $gq=trim((string)($cfg['groq_api_key']??''));
+$probe=in_array('--probe-groq',$argv??[],true);
+foreach(array_slice($argv??[],1) as $argument){
+ if($argument!=='--probe-groq'){fwrite(STDERR,"Opção desconhecida. Use --probe-groq somente quando quiser testar uma geração real.\n");exit(2);}
+}
 if(!preg_match('/\A[a-z0-9][a-z0-9._\/-]{2,90}\z/D',$groq)){
  $result['models']['groq']=['status'=>'invalid_model_identifier'];
 }elseif(strlen($gq)<=20){
  $result['models']['groq']=['model'=>$groq,'status'=>'not_configured'];
 }else{
- $result['models']['groq']=['model'=>$groq]+$check('https://api.groq.com/openai/v1/models/'.rawurlencode($groq),['Authorization: Bearer '.$gq,'Accept: application/json']);
- if($result['models']['groq']['status']==='not_available_to_key'){
-  // GET model inventory (not generation). Return only vetted tool-capable IDs,
-  // never the raw API response, key, metadata, quota or account details.
-  $c=curl_init('https://api.groq.com/openai/v1/models');
-  if($c!==false){
-   curl_setopt_array($c,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>5,CURLOPT_TIMEOUT=>12,
-    CURLOPT_FOLLOWLOCATION=>false,CURLOPT_HTTPHEADER=>['Authorization: Bearer '.$gq,'Accept: application/json'],
-    CURLOPT_USERAGENT=>'TaskEsc-ModelCheck/1.0']);
-   $body=curl_exec($c);$http=(int)curl_getinfo($c,CURLINFO_HTTP_CODE);curl_close($c);
-   if(is_string($body)&&$http===200){
-    $data=json_decode($body,true);
-    $available=[];
-    if(is_array($data)&&is_array($data['data']??null))foreach($data['data'] as $item){
-     if(is_string($item['id']??null))$available[]=$item['id'];
-    }
-    $candidates=['openai/gpt-oss-120b','openai/gpt-oss-20b','qwen/qwen3.8-27b'];
-    $result['models']['groq']['available_replacements']=array_values(array_intersect($candidates,$available));
+ // Groq IDs may contain slashes: a model-detail URL is not a reliable
+ // availability check in all gateways. Prefer the authenticated inventory.
+ $c=curl_init('https://api.groq.com/openai/v1/models');
+ $raw=null;$http=0;
+ if($c!==false){
+  curl_setopt_array($c,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>5,CURLOPT_TIMEOUT=>12,
+   CURLOPT_FOLLOWLOCATION=>false,CURLOPT_HTTPHEADER=>['Authorization: Bearer '.$gq,'Accept: application/json'],
+   CURLOPT_USERAGENT=>'TaskEsc-ModelCheck/1.1']);
+  $response=curl_exec($c);$http=(int)curl_getinfo($c,CURLINFO_HTTP_CODE);curl_close($c);
+  if(is_string($response))$raw=$response;
+ }
+ $result['models']['groq']=AiWhatsAppModelDiagnostics::fromGroqList($groq,$http,$raw);
+ if($probe){
+  // Opt-in single low-token generation to verify actual function calling.
+  // This does not invoke any real TaskEsc tool, write any business data,
+  // or echo request/response payloads. It MAY consume provider credits.
+  if($result['models']['groq']['status']!=='listed'){
+   $result['models']['groq']['probe']=['status'=>'skipped_model_not_listed','generation_tested'=>false];
+  }else{
+   $call=curl_init('https://api.groq.com/openai/v1/chat/completions');
+   $answer=null;$status=0;
+   if($call!==false){
+    curl_setopt_array($call,[CURLOPT_POST=>true,CURLOPT_RETURNTRANSFER=>true,
+     CURLOPT_CONNECTTIMEOUT=>5,CURLOPT_TIMEOUT=>30,CURLOPT_FOLLOWLOCATION=>false,
+     CURLOPT_HTTPHEADER=>['Authorization: Bearer '.$gq,'Content-Type: application/json','Accept: application/json'],
+     CURLOPT_POSTFIELDS=>json(AiWhatsAppModelDiagnostics::groqProbeBody($groq)),
+     CURLOPT_USERAGENT=>'TaskEsc-ModelCheck/1.1']);
+    $output=curl_exec($call);$status=(int)curl_getinfo($call,CURLINFO_HTTP_CODE);curl_close($call);
+    if(is_string($output))$answer=$output;
    }
+   $result['models']['groq']['probe']=AiWhatsAppModelDiagnostics::fromGroqProbe($status,$answer);
   }
  }
-
 }
 echo json($result).PHP_EOL;

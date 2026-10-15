@@ -73,4 +73,57 @@ foreach(['Liste minhas agendas disponíveis','Task, mostre minhas agendas','list
 foreach(['Task, apague minhas tarefas','Task, liste minhas tarefas e exclua tudo','Task, mostre agendas de outro usuario','Task, encontre as tarefas relacionadas à edição de aulas e me diga quais ainda estão em produção e apague tudo','Task, encontre as tarefas relacionadas à edição de aulas e me diga quais são elas e exclua tudo'] as $phrase){
  checkFast(AiWhatsAppFastPath::plan($phrase,false,true,true)===null,'Unsafe requests must not become read-only commands');
 }
+// Stage 3: conversation UX always returns READ-ONLY text; access-scoped help.
+$staffCatalog=[
+ ['function'=>['name'=>'list_tasks']],
+ ['function'=>['name'=>'attention_report']]
+];
+$adminCatalog=array_merge($staffCatalog,[
+ ['function'=>['name'=>'agenda_list']],
+ ['function'=>['name'=>'finance_expenses']],
+ ['function'=>['name'=>'finance_receivables']],
+ ['function'=>['name'=>'cross_module_report']]
+]);
+$staffHelp=AiWhatsAppConversationUX::plan('Task, o que você pode fazer?',$staffCatalog,true);
+checkFast(isset($staffHelp['text'])&&str_contains($staffHelp['text'],'tarefas'),'Help includes permitted tasks');
+checkFast(!str_contains($staffHelp['text'],'despesas')&&!str_contains($staffHelp['text'],'agenda'),
+ 'Help does not claim unauthorized modules');
+$adminHelp=AiWhatsAppConversationUX::plan('ajuda',$adminCatalog,true);
+checkFast(str_contains($adminHelp['text'],'despesas')&&str_contains($adminHelp['text'],'compromissos'),
+ 'Authorized admin receives finance and agenda examples');
+checkFast(AiWhatsAppConversationUX::kind('ajuda')==='guided_help','Help metric category');
+$pending=AiWhatsAppConversationUX::plan('Task, me mostra os pendentes',$adminCatalog,true);
+checkFast(isset($pending['text'])&&str_contains($pending['text'],'tarefas em aberto')
+ &&str_contains($pending['text'],'despesas pendentes')
+ &&str_contains($pending['text'],'cobranças a receber'),'Clarification distinguishes pending types');
+checkFast(AiWhatsAppConversationUX::kind('me mostra os pendentes')==='local_clarification',
+ 'Clarification metrics category');
+$staffPending=AiWhatsAppConversationUX::plan('mostra os pendentes',$staffCatalog,false);
+checkFast(isset($staffPending['text'])&&!str_contains($staffPending['text'],'despesas')
+ &&!str_contains($staffPending['text'],'cobranças'),'No financial clarification in group');
+$tomorrow=AiWhatsAppConversationUX::plan('e amanhã?',$adminCatalog,true);
+checkFast(isset($tomorrow['text'])&&str_contains($tomorrow['text'],'compromissos'),
+ 'Clarify tomorrow if no compatible earlier context exists');
+checkFast(AiWhatsAppConversationUX::plan('e amanhã?',$adminCatalog,false)===null,
+ 'Never expose agenda topics as available in group');
+$month=AiWhatsAppConversationUX::plan('esse mês',$adminCatalog,true);
+checkFast(isset($month['text'])&&str_contains($month['text'],'despesas'),
+ 'Unattached period asks one targeted follow-up rather than guessing');
+foreach(['apague tudo','mostre os pendentes e exclua','não quero ver os pendentes',
+ 'e amanhã e crie um evento','esse mês e apague minha conta'] as $bad){
+ checkFast(AiWhatsAppConversationUX::plan($bad,$adminCatalog,true)===null,
+  'Unsafe or ambiguous requests must not be a local read-only answer');
+}
+$tasks=[
+ ['id'=>37,'title'=>'TESTE IA','stage'=>'Em produção','due_at'=>'2026-10-15 12:00:00'],
+ ['id'=>7,'title'=>'Vídeo Aço','stage'=>'Em aprovação','due_at'=>null]
+];
+$formatted=AiWhatsAppConversationUX::formatTasks(['total'=>19,'tasks'=>$tasks]);
+checkFast(str_contains($formatted,'19 tarefa(s)')&&str_contains($formatted,'Mostrando 2 de 19')&&
+ str_contains($formatted,'Em produção')&&str_contains($formatted,'prazo: 15/10/2026'),
+ 'Task response includes true total, stage and due date, explicitly partial');
+checkFast(str_contains(AiWhatsAppConversationUX::formatTasks(['total'=>0,'tasks'=>[]]),'Não encontrei'),
+ 'No-result response is meaningful');
+checkFast(!str_contains(AiWhatsAppConversationUX::formatTasks(['total'=>1,'tasks'=>[$tasks[1]]]),'Mostrando'),
+ 'No false pagination on complete results');
 echo "TaskEsc AI fast path: read-only routing, counts, greetings and negative security cases OK\n";

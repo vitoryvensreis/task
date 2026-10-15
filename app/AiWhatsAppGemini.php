@@ -29,10 +29,12 @@ final class AiWhatsAppGemini
             ],
             CURLOPT_POSTFIELDS=>json($payload),
         ]);
+        $requestStart=microtime(true);
         $raw=curl_exec($curl);
         $http=(int)curl_getinfo($curl,CURLINFO_HTTP_CODE);
         $curlError=(int)curl_errno($curl);
         curl_close($curl);
+        AiWhatsAppUsageMetrics::provider('gemini',$model,$http,$curlError,$requestStart,is_string($raw)?$raw:null);
         // Only numeric upstream codes; never log request body, response body, keys or user data.
         if($curlError!==0||$http<200||$http>=300)
             error_log('TaskEsc AI upstream provider=gemini http='.$http.' curl_errno='.$curlError);

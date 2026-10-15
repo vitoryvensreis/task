@@ -30,8 +30,10 @@ final class AiWhatsAppGroq
     CURLOPT_HTTPHEADER=>['Authorization: Bearer '.$key,'Content-Type: application/json','Accept: application/json'],
     CURLOPT_POSTFIELDS=>json($request),
   ]);
+  $requestStart=microtime(true);
   $raw=curl_exec($curl);$http=(int)curl_getinfo($curl,CURLINFO_HTTP_CODE);
   $curlError=(int)curl_errno($curl);curl_close($curl);
+  AiWhatsAppUsageMetrics::provider('groq',$model,$http,$curlError,$requestStart,is_string($raw)?$raw:null);
   if($http<200||$http>=300||$curlError!==0)
    error_log('TaskEsc AI upstream provider=groq http='.$http.' curl_errno='.$curlError);
   if(!is_string($raw))throw new RuntimeException('ai_connection_failed');

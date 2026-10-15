@@ -481,5 +481,80 @@ try{
  try{AiWhatsAppAgendaTools::run('agenda_list',[],true);throw new RuntimeException('Staff bypassed');}
  catch(AppError $e){at($e->status===403,'Staff denied from admin calendar');}
  Auth::$user=DB::one('SELECT * FROM users WHERE id=?',[$admin]);Auth::$actor=Auth::$user;
+ // Persistent per-user intent cache: store/read interpretation, never stale business results.
+ $memoryQuestion='Pode encontrar a tarefa chamada Aula Augusto?';
+ $memoryPlan=['tool'=>'list_tasks','arguments'=>['query'=>'Aula']];
+ $memTools=AiWhatsAppTools::catalog(false);
+ $memoryBase=['session_name'=>'taskesc','chat_id'=>$chat,'sender_id'=>$chat,'chat_type'=>'private',
+  'message_type'=>'chat','body'=>$memoryQuestion,'status'=>'received','auth_status'=>'authorized',
+  'auth_user_id'=>$admin,'auth_reason'=>'user_authorized','received_at'=>now(),'ai_state'=>'queued'];
+ $memoryMsg=DB::insert('ai_whatsapp_inbox',array_merge($memoryBase,['provider_message_id'=>'memory-first-1']));
+ $cacheCalls=0;$cachePlanner=static function() use (&$cacheCalls,$memoryPlan):array {$cacheCalls++;return $memoryPlan;};
+ $memBefore=count($sent);
+ AiWhatsAppWorker::tick(1,$cachePlanner,$verifier,null,$sender,true);
+ at($cacheCalls===1,'First unknown question consults LLM exactly once');
+ at(DB::one('SELECT ai_state FROM ai_whatsapp_inbox WHERE id=?',[$memoryMsg])['ai_state']==='sent','First memory question answered');
+ $stored=AiWhatsAppMemory::recall($memoryQuestion,$memoryBase,$admin,$memTools);
+ at($stored===$memoryPlan,'Safe read-only interpretation persisted in idempotency store');
+ at(count($sent)===$memBefore+1,'Model answer sent');
+ $updatedTitle=DB::one('SELECT title FROM demands WHERE id=1')['title'];
+ DB::run('UPDATE demands SET title=? WHERE id=1',['Aula Augusto ALTERADA']);
+ DB::insert('ai_whatsapp_inbox',array_merge($memoryBase,['provider_message_id'=>'memory-second-1']));
+ $cachedCalls=0;$unexpectedPlanner=static function() use (&$cachedCalls):array {$cachedCalls++;throw new RuntimeException('ai_model_should_not_be_called');};
+ $memBefore=count($sent);
+ AiWhatsAppWorker::tick(1,$unexpectedPlanner,$verifier,null,$sender,true);
+ at($cachedCalls===0,'Second same question must NOT invoke model');
+ at(count($sent)===$memBefore+1&&str_contains($sent[$memBefore][1],'Aula Augusto ALTERADA'),
+  'Cache is interpretation only and reads fresh task data');
+ DB::run('UPDATE demands SET title=? WHERE id=1',[$updatedTitle]);
+
+ // Cache cannot cross different account, chat, group or revised tool permission set.
+ at(AiWhatsAppMemory::recall($memoryQuestion,$memoryBase,$staff,$memTools)===null,'Other user cache isolated');
+ $otherScope=$memoryBase;$otherScope['chat_id']='some-other-chat@c.us';
+ at(AiWhatsAppMemory::recall($memoryQuestion,$otherScope,$admin,$memTools)===null,'Other chat isolated');
+ at(AiWhatsAppMemory::recall($memoryQuestion,$memoryBase,$admin,[['function'=>['name'=>'list_tasks','description'=>'changed','parameters'=>[]]]])===null,
+  'Catalog policy changes invalidate prior cached plan');
+ foreach([
+  'CONFIRMAR ABCDEF123456','Task, senha da API','O que tenho para amanhã?',
+  'Quanto eu recebo este mês?'
+ ] as $secretOrRelative)at(AiWhatsAppMemory::recall($secretOrRelative,$memoryBase,$admin,$memTools)===null,'Sensitive/relative cache disabled');
+ AiWhatsAppMemory::remember('Crie uma nova task',$memoryBase,$admin,$memTools,['tool'=>'create_task','arguments'=>['title'=>'x']]);
+ at(AiWhatsAppMemory::recall('Crie uma nova task',$memoryBase,$admin,$memTools)===null,'Never persist write action plans');
+
+ // Human-friendly, one-time error reply after permanent failure.
+ $badMsg=DB::insert('ai_whatsapp_inbox',array_merge($memoryBase,['provider_message_id'=>'memory-error-unparsed',
+   'body'=>'Explica um pedido que a IA não entendeu']));
+ $before=count($sent);
+ AiWhatsAppWorker::tick(1,static fn()=>throw new RuntimeException('ai_invalid_response'),$verifier,null,$sender,true);
+ at(DB::one('SELECT ai_state FROM ai_whatsapp_inbox WHERE id=?',[$badMsg])['ai_state']==='sent','Invalid response reported instead of silent failure');
+ at(count($sent)===$before+1&&str_contains($sent[$before][1],'Não entendi'),'User gets actionable parse feedback');
+ at((int)DB::one('SELECT ai_attempts FROM ai_whatsapp_inbox WHERE id=?',[$badMsg])['ai_attempts']===1,'Permanent model error does not burn retry quota');
+
+ $quotaMsg=DB::insert('ai_whatsapp_inbox',array_merge($memoryBase,['provider_message_id'=>'memory-error-quota',
+   'body'=>'Preciso de um relatório explicado pela IA']));
+ $before=count($sent);
+ AiWhatsAppWorker::tick(1,static fn()=>throw new RuntimeException('ai_provider_rate_limit'),$verifier,null,$sender,true);
+ at(DB::one('SELECT ai_state FROM ai_whatsapp_inbox WHERE id=?',[$quotaMsg])['ai_state']==='sent','Rate limit reported');
+ at(count($sent)===$before+1&&str_contains($sent[$before][1],'limite de requisições'),'Rate-limit reason shown');
+
+ // Transient transport failure retries twice, then delivers only one honest explanation.
+ $transport=DB::insert('ai_whatsapp_inbox',array_merge($memoryBase,['provider_message_id'=>'memory-error-network',
+   'body'=>'Dá detalhes completos de projeto específico']));
+ $before=count($sent);
+ for($n=1;$n<=3;$n++){
+  AiWhatsAppWorker::tick(1,static fn()=>throw new RuntimeException('ai_connection_failed'),$verifier,null,$sender,true);
+  $state=DB::one('SELECT ai_state,ai_attempts FROM ai_whatsapp_inbox WHERE id=?',[$transport]);
+  at((int)$state['ai_attempts']===$n,'Correct retry count');
+  if($n<3){
+   at($state['ai_state']==='retry'&&count($sent)===$before,'No premature delivery during retry');
+   DB::run('UPDATE ai_whatsapp_inbox SET ai_available_at=UTC_TIMESTAMP(6) WHERE id=?',[$transport]);
+  }else{
+   at($state['ai_state']==='sent'&&count($sent)===$before+1,'Terminal failure sends once');
+   at(str_contains($sent[$before][1],'conexão falhou'),'Retry failure explained in Portuguese');
+  }
+ }
+ at(AiWhatsAppWorker::tick(1,$unexpectedPlanner,$verifier,null,$sender,true)['processed']===0,
+  'Terminal failure and cached read cannot replay');
+
  echo "AI WhatsApp tools: schema, create once, edit once, protected fields, self assignment, category default, client denial, private reply, group guard OK\n";
 }finally{@unlink(ROOT.'/config/config.php');@unlink(ROOT.'/storage/installed.lock');}

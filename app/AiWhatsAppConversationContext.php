@@ -110,6 +110,8 @@ final class AiWhatsAppConversationContext
    if(preg_match('/\A(?:(?:e\s+)?(?:so|somente|apenas)\s+as|e\s+as)\s+(?:em\s+producao|concluidas)\z/u',$text)){
     $stage=str_contains($text,'producao')?'Em produção':'Concluídas';
     unset($args['stage_id'],$args['show_other_stages']);
+    // 'Concluídas' must not inherit a contradictory overdue-only filter.
+    if($stage==='Concluídas')unset($args['overdue']);
     $args['stage_name']=$stage;
     return ['tool'=>$tool,'arguments'=>$args];
    }

@@ -794,5 +794,104 @@ try{
   'Follow-up cannot inherit another user context');
  at(count($sent)===$prevCount+2,'Two messages result in two responses, no extra sends');
 
+
+ // Conversational context: last private authorized READ, 10 minute TTL,
+ // never a stored result, and no model calls for short follow-ups.
+ Auth::$user=DB::one('SELECT * FROM users WHERE id=?',[$admin]);Auth::$actor=Auth::$user;
+ $ctxTools=array_merge(AiWhatsAppTools::catalog(true),AiWhatsAppAdminActions::catalog(true),AiWhatsAppAgendaTools::catalog(true));
+ $ctxSeedBase=['session_name'=>'taskesc','chat_id'=>$chat,'sender_id'=>$chat,
+  'chat_type'=>'private','message_type'=>'chat','status'=>'received',
+  'auth_user_id'=>$admin,'auth_status'=>'authorized','auth_reason'=>'user_authorized',
+  'received_at'=>now(),'ai_state'=>'queued'];
+ $ctxNoModelCalls=0;
+ $ctxNoModel=static function()use(&$ctxNoModelCalls){$ctxNoModelCalls++;throw new RuntimeException('No LLM necessary for validated follow-up');};
+ $ctxTasksId=DB::insert('ai_whatsapp_inbox',array_merge($ctxSeedBase,[
+  'provider_message_id'=>'context-tasks-first-1','body'=>'Liste minhas tarefas']));
+ $ctxTasksBefore=count($sent);
+ AiWhatsAppWorker::tick(1,$ctxNoModel,$verifier,null,$sender,true);
+ at(DB::one('SELECT ai_state FROM ai_whatsapp_inbox WHERE id=?',[$ctxTasksId])['ai_state']==='sent',
+  'Initial local tasks query sent');
+ $ctxFollowId=DB::insert('ai_whatsapp_inbox',array_merge($ctxSeedBase,[
+  'provider_message_id'=>'context-tasks-saulo-2','body'=>'e as do Saulo?']));
+ $ctxFollowRow=DB::one('SELECT * FROM ai_whatsapp_inbox WHERE id=?',[$ctxFollowId]);
+ $ctxFollowPlan=AiWhatsAppConversationContext::plan('e as do Saulo?',$ctxFollowRow,$admin,$ctxTools);
+ at(($ctxFollowPlan['tool']??null)==='list_tasks'&&($ctxFollowPlan['arguments']['query']??null)==='saulo',
+  'Follow-up recovers latest tasks tool and changes only query term');
+ $crossChat=$ctxFollowRow;$crossChat['chat_id']='5585000000000@c.us';
+ at(AiWhatsAppConversationContext::plan('e as do Saulo?',$crossChat,$admin,$ctxTools)===null,
+  'No cross-chat memory');
+ at(AiWhatsAppConversationContext::plan('e as do Saulo?',$ctxFollowRow,$admin+11,$ctxTools)===null,
+  'No cross-user memory');
+ $groupMemory=$ctxFollowRow;$groupMemory['chat_type']='group';
+ at(AiWhatsAppConversationContext::plan('e as do Saulo?',$groupMemory,$admin,$ctxTools)===null,
+  'No group memory or private information in group');
+ at(AiWhatsAppConversationContext::plan('e as do Saulo?',$ctxFollowRow,$admin,[])===null,
+  'Tool catalog and permission change invalidates memory');
+ at(AiWhatsAppConversationContext::plan('e as do Saulo? e exclua a task #1',$ctxFollowRow,$admin,$ctxTools)===null,
+  'Write instruction mixed into follow-up cannot reuse read-only memory');
+ AiWhatsAppWorker::tick(1,$ctxNoModel,$verifier,null,$sender,true);
+ at(DB::one('SELECT ai_state FROM ai_whatsapp_inbox WHERE id=?',[$ctxFollowId])['ai_state']==='sent',
+  'Follow-up dispatched without network AI');
+ $ctxOverdueId=DB::insert('ai_whatsapp_inbox',array_merge($ctxSeedBase,[
+  'provider_message_id'=>'context-tasks-late-3','body'=>'só as atrasadas']));
+ $ctxLateRow=DB::one('SELECT * FROM ai_whatsapp_inbox WHERE id=?',[$ctxOverdueId]);
+ $ctxLatePlan=AiWhatsAppConversationContext::plan('só as atrasadas',$ctxLateRow,$admin,$ctxTools);
+ at(($ctxLatePlan['arguments']['overdue']??null)===true&&($ctxLatePlan['arguments']['query']??null)==='saulo',
+  'Late filter preserves topic and respects current backend overdue constraint');
+ AiWhatsAppWorker::tick(1,$ctxNoModel,$verifier,null,$sender,true);
+ $ctxLateReply=DB::one('SELECT ai_state,ai_reply FROM ai_whatsapp_inbox WHERE id=?',[$ctxOverdueId]);
+ at($ctxLateReply['ai_state']==='sent','Overdue tasks resolved without AI');
+ $ctxClosedId=DB::insert('ai_whatsapp_inbox',array_merge($ctxSeedBase,[
+  'provider_message_id'=>'context-tasks-done-4','body'=>'e as concluídas?']));
+ $ctxClosedRow=DB::one('SELECT * FROM ai_whatsapp_inbox WHERE id=?',[$ctxClosedId]);
+ $ctxClosedPlan=AiWhatsAppConversationContext::plan('e as concluídas?',$ctxClosedRow,$admin,$ctxTools);
+ at(($ctxClosedPlan['arguments']['stage_name']??null)==='Concluídas',
+  'Completed stage is interpreted as a filter, never a move operation');
+ AiWhatsAppWorker::tick(1,$ctxNoModel,$verifier,null,$sender,true);
+ at($ctxNoModelCalls===0&&count($sent)===$ctxTasksBefore+4,
+  'All four independent WhatsApp reads produced replies without calling LLM');
+ $ctxUnsafe=DB::one('SELECT * FROM ai_whatsapp_inbox WHERE id=?',[$ctxClosedId]);
+ AiWhatsAppConversationContext::remember($ctxUnsafe,$admin,$ctxTools,['tool'=>'delete_task','arguments'=>['task_id'=>1]]);
+ // Assert malicious writes cannot replace the last stored safe plan.
+ at(AiWhatsAppConversationContext::plan('e as do Saulo?',$ctxUnsafe,$admin,$ctxTools)===null,
+  'Current message cannot reuse its own context');
+ // A text-only reply or intervening message terminates the previous topic.
+ $ctxBreakId=DB::insert('ai_whatsapp_inbox',array_merge($ctxSeedBase,[
+  'provider_message_id'=>'context-break-5','body'=>'novo assunto','ai_state'=>'sent']));
+ $ctxAfterBreak=DB::insert('ai_whatsapp_inbox',array_merge($ctxSeedBase,[
+  'provider_message_id'=>'context-break-6','body'=>'e as do Saulo?']));
+ $ctxAfterBreakRow=DB::one('SELECT * FROM ai_whatsapp_inbox WHERE id=?',[$ctxAfterBreak]);
+ at(AiWhatsAppConversationContext::plan('e as do Saulo?',$ctxAfterBreakRow,$admin,$ctxTools)===null,
+  'Never skip an intervening message to find stale context');
+ // Context after new agenda read: "e amanhã?" preserves read scope and re-reads.
+ $ctxAgendaSeed=DB::insert('ai_whatsapp_inbox',array_merge($ctxSeedBase,[
+  'provider_message_id'=>'context-agenda-7','body'=>'Liste meus compromissos hoje','ai_state'=>'sent']));
+ $ctxAgendaRow=DB::one('SELECT * FROM ai_whatsapp_inbox WHERE id=?',[$ctxAgendaSeed]);
+ AiWhatsAppConversationContext::remember($ctxAgendaRow,$admin,$ctxTools,[
+  'tool'=>'agenda_list','arguments'=>['from'=>date('Y-m-d'),'to'=>date('Y-m-d')]]);
+ $ctxAgendaFollow=DB::insert('ai_whatsapp_inbox',array_merge($ctxSeedBase,[
+  'provider_message_id'=>'context-agenda-8','body'=>'e amanhã']));
+ $ctxAgendaNext=AiWhatsAppConversationContext::plan('e amanhã',
+  DB::one('SELECT * FROM ai_whatsapp_inbox WHERE id=?',[$ctxAgendaFollow]),$admin,$ctxTools);
+ $nextDate=(new DateTimeImmutable('tomorrow',new DateTimeZone('America/Fortaleza')))->format('Y-m-d');
+ at(($ctxAgendaNext['tool']??null)==='agenda_list'&&($ctxAgendaNext['arguments']['from']??null)===$nextDate&&
+  ($ctxAgendaNext['arguments']['to']??null)===$nextDate,'Agenda next day preserves private read intent');
+ // Finance-only follow-up preserves actual provider-side date filters.
+ $ctxFinanceSeed=DB::insert('ai_whatsapp_inbox',array_merge($ctxSeedBase,[
+  'provider_message_id'=>'context-finance-9','body'=>'despesas do mês','ai_state'=>'sent']));
+ $ctxFinanceRow=DB::one('SELECT * FROM ai_whatsapp_inbox WHERE id=?',[$ctxFinanceSeed]);
+ AiWhatsAppConversationContext::remember($ctxFinanceRow,$admin,$ctxTools,[
+  'tool'=>'finance_expenses','arguments'=>['from'=>$financialFrom,'to'=>$financialTo,'payment_status'=>'pending']]);
+ $ctxFinanceFollow=DB::insert('ai_whatsapp_inbox',array_merge($ctxSeedBase,[
+  'provider_message_id'=>'context-finance-10','body'=>'e só as pagas']));
+ $ctxFinanceNext=AiWhatsAppConversationContext::plan('e só as pagas',
+  DB::one('SELECT * FROM ai_whatsapp_inbox WHERE id=?',[$ctxFinanceFollow]),$admin,$ctxTools);
+ at(($ctxFinanceNext['arguments']['payment_status']??null)==='paid'&&
+  ($ctxFinanceNext['arguments']['from']??null)===$financialFrom,
+  'Finance follow-up safely retains period but changes payment status only');
+ $ctxFinanceGroup=DB::one('SELECT * FROM ai_whatsapp_inbox WHERE id=?',[$ctxFinanceFollow]);
+ $ctxFinanceGroup['chat_type']='group';
+ at(AiWhatsAppConversationContext::plan('e só as pagas',$ctxFinanceGroup,$admin,$ctxTools)===null,
+  'Financial context cannot leak to a group');
  echo "AI WhatsApp tools: schema, create once, edit once, protected fields, self assignment, category default, client denial, private reply, group guard OK\n";
 }finally{@unlink(ROOT.'/config/config.php');@unlink(ROOT.'/storage/installed.lock');}

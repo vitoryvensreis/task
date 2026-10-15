@@ -29,6 +29,13 @@ foreach([
  try{AiWhatsAppGemini::parseResponse($bad,$tools);throw new RuntimeException('Unsafe Gemini response accepted');}
  catch(RuntimeException $e){t($e->getMessage()!=='Unsafe Gemini response accepted','Unsafe response rejected');}
 }
+// Model HTTP 404 must allow configured Groq as a separate provider.
+foreach(['ai_provider_unavailable','ai_connection_failed','ai_provider_rate_limit','ai_provider_model_unavailable'] as $reason){
+ t(AiWhatsAppProvider::fallbackEligible($reason),'Fallback for recoverable unavailability: '.$reason);
+}
+foreach(['ai_provider_bad_credentials','ai_unauthorized_tool','ai_invalid_response','ai_multiple_tools','ai_invalid_args','ai_tool_not_allowed'] as $reason){
+ t(!AiWhatsAppProvider::fallbackEligible($reason),'Never retry unsafe or unauthorized responses: '.$reason);
+}
 t(!AiWhatsAppProvider::enabled(),'No private key must mean disabled');
 t(AiWhatsAppProvider::status()['gemini_configured']===false,'No configured key');
 echo "TaskEsc AI providers: Gemini schema, planning, allowlist and disabled-by-default OK\n";

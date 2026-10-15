@@ -36,6 +36,12 @@ final class AiWhatsAppProvider
             'groq_configured'=>self::groqConfigured()];
     }
 
+    /** Fallback only for transport, quota, or unavailable model, never for unsafe responses/auth failures. */
+    public static function fallbackEligible(string $code): bool
+    {
+        return in_array($code,['ai_provider_unavailable','ai_connection_failed','ai_provider_rate_limit','ai_provider_model_unavailable'],true);
+    }
+
     public static function plan(string $message,array $context,array $tools): array
     {
         if(!self::enabled())throw new RuntimeException('ai_not_configured');
@@ -54,7 +60,7 @@ final class AiWhatsAppProvider
             }catch(RuntimeException $e){
                 // Fallback only on transport/provider outage. A malformed or unsafe tool
                 // response fails closed instead of being retried against another model.
-                if(!in_array($e->getMessage(),['ai_provider_unavailable','ai_connection_failed','ai_provider_rate_limit'],true))throw $e;
+                if(!self::fallbackEligible($e->getMessage()))throw $e;
                 $first??=$e;
             }
         }

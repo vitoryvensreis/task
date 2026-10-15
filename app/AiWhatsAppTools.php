@@ -6,7 +6,7 @@ final class AiWhatsAppTools
 {
  public static function catalog(bool $privateChat=false): array {
   $tools=[
-   ['type'=>'function','function'=>['name'=>'list_tasks','description'=>'Listar tarefas visíveis ao usuário no TaskEsc.','parameters'=>['type'=>'object','properties'=>['query'=>['type'=>'string','description'=>'Busca por título ou cliente (opcional)'],'client_id'=>['type'=>'integer','description'=>'ID do cliente, se fornecido'],'limit'=>['type'=>'integer','description'=>'Mostrar até 10 tasks (opcional)']], 'additionalProperties'=>false]]]
+   ['type'=>'function','function'=>['name'=>'list_tasks','description'=>'Listar tarefas visíveis ao usuário no TaskEsc.','parameters'=>['type'=>'object','properties'=>['query'=>['type'=>'string','description'=>'Busca por título ou cliente (opcional)'],'client_id'=>['type'=>'integer','description'=>'ID do cliente, se fornecido'],'stage_id'=>['type'=>'integer','description'=>'ID da etapa do Kanban, se fornecido'],'stage_name'=>['type'=>'string','description'=>'Nome exato da etapa do Kanban, se fornecido; não combine com stage_id'],'limit'=>['type'=>'integer','description'=>'Mostrar até 10 tasks (opcional)']], 'additionalProperties'=>false]]]
   ];
   if(Auth::can('tasks.create'))$tools[]=['type'=>'function','function'=>['name'=>'create_task','description'=>'Criar uma task nova somente em cliente acessível; exige título, briefing, cliente e categoria. Prazo usa padrão mínimo do sistema se omitido.','parameters'=>['type'=>'object','properties'=>[
    'title'=>['type'=>'string'],'brief'=>['type'=>'string'],'client_id'=>['type'=>'integer'],
@@ -63,6 +63,14 @@ final class AiWhatsAppTools
     $limit=integer($args['limit']??10,1,10);
     $params=['paginate'=>1,'per_page'=>10,'q'=>$query];
     if(array_key_exists('client_id',$args))$params['client_id']=integer($args['client_id'],1);
+    if(isset($args['stage_id'])&&isset($args['stage_name']))fail('Selecione etapa por ID ou por nome.',422);
+    if(array_key_exists('stage_id',$args))$params['stage_id']=integer($args['stage_id'],1);
+    if(array_key_exists('stage_name',$args)){
+     $stageName=required($args,'stage_name',100);
+     $stage=DB::one('SELECT id FROM stages WHERE name=? AND active=1 ORDER BY id LIMIT 1',[$stageName]);
+     if(!$stage)fail('Não encontrei essa etapa do Kanban. Informe o nome exato.',422);
+     $params['stage_id']=(int)$stage['id'];
+    }
     $data=TaskEscTaskApi::list($params);
     return ['kind'=>'list','total'=>(int)$data['pagination']['total'],'tasks'=>array_map(static fn($d)=>[
       'id'=>(int)$d['id'],'title'=>$d['title'],'client'=>$d['client_name'],'stage'=>$d['stage_name'],'due_at'=>$d['due_at']

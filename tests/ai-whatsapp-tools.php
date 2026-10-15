@@ -8,6 +8,11 @@ file_put_contents(ROOT.'/config/config.php',"<?php\nreturn ".var_export($c,true)
 @mkdir(ROOT.'/storage/sessions',0700,true);touch(ROOT.'/storage/installed.lock');
 require ROOT.'/app/bootstrap.php';
 function at(bool $ok,string $why): void {if(!$ok)throw new RuntimeException($why);}
+// CI reports synthetic assertion failures rather than swallowing them in app HTTP handlers.
+set_exception_handler(static function(Throwable $e): void {
+ fwrite(STDERR,'AI test failed: '.get_class($e).' '.$e->getMessage().' at '.basename($e->getFile()).':'.$e->getLine().PHP_EOL);
+ exit(255);
+});
 try{
  $db=DB::conn();$db->exec('SET FOREIGN_KEY_CHECKS=0');
  foreach(DB::all('SHOW TABLES') as $r){$name=(string)array_values($r)[0];if(!preg_match('/\A[A-Za-z0-9_]+\z/D',$name))throw new RuntimeException('unexpected table');$db->exec('DROP TABLE `'.$name.'`');}

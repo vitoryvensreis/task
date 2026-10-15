@@ -94,7 +94,7 @@
   }
     const ROUTES={dashboard:'dashboard',kanban:'kanban',demands:'tasks',agenda:'agenda',clients:'clientes',services:'servicos',finance:'financeiro',reports:'relatorios',automations:'automacoes',logs:'saude-logs',settings:'configuracoes'};
   const ROUTE_PAGES=Object.fromEntries(Object.entries(ROUTES).map(([k,v])=>[v,k]));
-  function readRoute(){let path=location.pathname;if(BASE&&path.startsWith(BASE))path=path.slice(BASE.length);path=path.replace(/^\/+|\/+$/g,'');const parts=path.split('/').filter(Boolean);let page=ROUTE_PAGES[parts[0]]||'';let taskId=0;if(parts[0]==='kanban'&&parts[1]==='task'&&/^\d+$/.test(parts[2]||'')){page='kanban';taskId=Number(parts[2])}if(!page&&location.hash){const legacy=location.hash.replace(/^#/,'').split('/');page=['dashboard','kanban','demands','agenda','clients','services','finance','reports','automations','logs','settings'].includes(legacy[0])?legacy[0]:'';if(legacy[0]==='demands'&&/^\d+$/.test(legacy[1]||'')){page='kanban';taskId=Number(legacy[1])}}return {page:page||'dashboard',taskId}}
+  function readRoute(){let path=location.pathname;if(BASE&&path.startsWith(BASE))path=path.slice(BASE.length);path=path.replace(/^\/+|\/+$/g,'');const parts=path.split('/').filter(Boolean);let page=ROUTE_PAGES[parts[0]]||'';let taskId=0;if(parts[0]==='kanban'&&parts[1]==='task'&&/^\d+$/.test(parts[2]||'')){page='kanban';taskId=Number(parts[2])}if(!page&&location.hash){const legacy=location.hash.replace(/^#/,'').split('/');page=['dashboard','kanban','demands','agenda','clients','services','finance','reports','automations','logs','ai-monitor','settings'].includes(legacy[0])?legacy[0]:'';if(legacy[0]==='demands'&&/^\d+$/.test(legacy[1]||'')){page='kanban';taskId=Number(legacy[1])}}return {page:page||'dashboard',taskId}}
   const initialRoute=readRoute();
   const S={user:null,meta:null,csrf:'',page:initialRoute.page,pendingTaskId:initialRoute.taskId,demands:[],dashboard:null,timer:null,chatPeerId:0,chatContacts:[],chatUnread:0,chatOpen:false};
   const realtimeOwnedChannels=new Set(),realtimeSeen=new Map(),realtimePending=new Map();
@@ -828,7 +828,8 @@
         ['finance','wallet','Financeiro','R$'],
         ['reports','chart-bar','Relatórios','▤'],
         ['automations','workflow','Automações','◇'],
-        ['logs','activity','Saúde & Logs','◉']
+        ['logs','activity','Saúde & Logs','◉'],
+        ['ai-monitor','bot','Monitoramento IA','IA']
       ]:[]),
       ...(staff&&!admin?[['reports','chart-bar','Relatórios','▤']]:[]),
       ['settings','settings','Configurações','⚙']
@@ -846,7 +847,7 @@
   document.addEventListener('click',e=>{if(!e.target.closest('.notification-shell'))closeNotifications()});
   document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeNotifications();closeAdminChat()}});
   $('#logout').onclick=async()=>{try{await api('auth.logout',{},'POST',false)}finally{showLogin()}};$('#preview-exit').onclick=async()=>{try{showPageLoader();await api('preview.stop',{},'POST');location.href=routeUrl('dashboard')}catch(x){hidePageLoader();toast(x.message,true)}};$('#menu').onclick=()=>{const open=!$('.sidebar').classList.contains('open');$('.sidebar').classList.toggle('open',open);document.body.classList.toggle('nav-open',open)};$('#nav-backdrop')?.addEventListener('click',closeMobileNav);$('#new-demand').onclick=()=>openDemand();
-  async function go(page,push=false,visualLoad=false,preserveView=null){const previousPage=S.page;if(previousPage==='automations'&&page!=='automations'&&automationEditorState?.dirty&&!confirm('Você tem alterações não salvas nesta automação. Deseja descartá-las?'))return;const keepView=preserveView===null?(page===previousPage&&!push):!!preserveView,viewState=keepView?captureViewState():null;if(page==='agenda'&&previousPage!=='agenda'){window.taskescAgendaView=window.matchMedia&&window.matchMedia('(max-width:760px)').matches?'day':'week';window.taskescAgendaDate=null}if(visualLoad)showPageLoader();if(push&&page!==S.page)history.pushState({},'',routeUrl(page));S.page=page;syncRealtimeChannels();closeNotifications();document.body.classList.toggle('kanban-page',page==='kanban');document.querySelectorAll('.nav-btn').forEach(b=>{const active=b.dataset.page===page;b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});const names={dashboard:['VISÃO GERAL','Dashboard'],kanban:['PRODUÇÃO','Kanban'],demands:['PRODUÇÃO','Tasks'],agenda:['PLANEJAMENTO','Agenda'],clients:['RELACIONAMENTO','Clientes'],services:['PRODUÇÃO','Serviços'],finance:['COMERCIAL','Financeiro'],reports:['INDICADORES','Relatórios'],automations:['AUTOMAÇÃO','Automações'],logs:['SISTEMA','Saúde & Logs'],settings:['SISTEMA','Configurações']};if(page==='settings'&&S.user.role!=='admin')names.settings=['CONTA','Minha conta'];$('#page-kicker').textContent=names[page]?.[0]||'';$('#page-title').textContent=names[page]?.[1]||page;closeMobileNav();try{await (({dashboard:renderDashboard,kanban:renderKanban,demands:renderDemandList,agenda:renderAgenda,clients:renderClients,services:renderServices,finance:renderFinance,reports:renderReports,automations:renderAutomations,logs:renderSystemLogs,settings:renderSettings}[page]||renderDashboard)());if(page==='kanban'&&S.pendingTaskId){const id=S.pendingTaskId;S.pendingTaskId=0;await openDemand(id)}}catch(e){toast(e.message,true);$('#content').innerHTML=`<div class="empty">${esc(e.message)}</div>`}finally{if(viewState)restoreViewState(viewState);else if(page!==previousPage)requestAnimationFrame(()=>window.scrollTo({left:0,top:0,behavior:'auto'}));if(page==='kanban'&&page!==previousPage)requestAnimationFrame(()=>requestAnimationFrame(()=>{const board=$('.kanban');if(board)board.scrollLeft=0}));if(visualLoad)hidePageLoader()}}
+  async function go(page,push=false,visualLoad=false,preserveView=null){const previousPage=S.page;if(previousPage==='automations'&&page!=='automations'&&automationEditorState?.dirty&&!confirm('Você tem alterações não salvas nesta automação. Deseja descartá-las?'))return;const keepView=preserveView===null?(page===previousPage&&!push):!!preserveView,viewState=keepView?captureViewState():null;if(page==='agenda'&&previousPage!=='agenda'){window.taskescAgendaView=window.matchMedia&&window.matchMedia('(max-width:760px)').matches?'day':'week';window.taskescAgendaDate=null}if(visualLoad)showPageLoader();if(push&&page!==S.page)history.pushState({},'',routeUrl(page));S.page=page;syncRealtimeChannels();closeNotifications();document.body.classList.toggle('kanban-page',page==='kanban');document.querySelectorAll('.nav-btn').forEach(b=>{const active=b.dataset.page===page;b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});const names={dashboard:['VISÃO GERAL','Dashboard'],kanban:['PRODUÇÃO','Kanban'],demands:['PRODUÇÃO','Tasks'],agenda:['PLANEJAMENTO','Agenda'],clients:['RELACIONAMENTO','Clientes'],services:['PRODUÇÃO','Serviços'],finance:['COMERCIAL','Financeiro'],reports:['INDICADORES','Relatórios'],automations:['AUTOMAÇÃO','Automações'],logs:['SISTEMA','Saúde & Logs'],'ai-monitor':['INTELIGÊNCIA','Monitoramento IA'],settings:['SISTEMA','Configurações']};if(page==='settings'&&S.user.role!=='admin')names.settings=['CONTA','Minha conta'];$('#page-kicker').textContent=names[page]?.[0]||'';$('#page-title').textContent=names[page]?.[1]||page;closeMobileNav();try{await (({dashboard:renderDashboard,kanban:renderKanban,demands:renderDemandList,agenda:renderAgenda,clients:renderClients,services:renderServices,finance:renderFinance,reports:renderReports,automations:renderAutomations,logs:renderSystemLogs,'ai-monitor':renderAiMonitor,settings:renderSettings}[page]||renderDashboard)());if(page==='kanban'&&S.pendingTaskId){const id=S.pendingTaskId;S.pendingTaskId=0;await openDemand(id)}}catch(e){toast(e.message,true);$('#content').innerHTML=`<div class="empty">${esc(e.message)}</div>`}finally{if(viewState)restoreViewState(viewState);else if(page!==previousPage)requestAnimationFrame(()=>window.scrollTo({left:0,top:0,behavior:'auto'}));if(page==='kanban'&&page!==previousPage)requestAnimationFrame(()=>requestAnimationFrame(()=>{const board=$('.kanban');if(board)board.scrollLeft=0}));if(visualLoad)hidePageLoader()}}
   function refresh(){return go(S.page,false,false,true)};
   window.addEventListener('popstate',()=>{const r=readRoute();S.pendingTaskId=r.taskId;go(r.page,false,true)});
   function dashboardDelta(current,previous){current=Number(current||0);previous=Number(previous||0);if(previous===0)return current===0?{text:'0%',cls:'neutral'}:{text:'+100%',cls:'positive'};const pct=Math.round(((current-previous)/previous)*100);return {text:(pct>0?'+':'')+pct+'%',cls:pct>0?'positive':pct<0?'negative':'neutral'}}
@@ -1511,6 +1512,53 @@
   function auditActionLabel(v){
     return ({created:'Criado',updated:'Atualizado',save:'Atualizado',deleted:'Excluído',stage:'Etapa alterada',reordered:'Reordenado',payment:'Pagamento registrado',refund:'Estorno registrado',cancelled:'Cancelado','2fa.enabled':'2FA ativado','2fa.disabled':'2FA desativado','client_access.created':'Acesso de cliente criado','client_access.revoked':'Acesso revogado','logo.upload':'Logo atualizada','integration.save':'Integração atualizada'}[v]||String(v||'—')).replace(/^bulk\./,'Ação em lote: ');
   }
+  async function renderAiMonitor(){
+    if(S.user?.role!=='admin'||S.user?.is_preview)throw new Error('Acesso restrito ao administrador.');
+    const f=window.aiMonitorFilters||{days:7,provider:'all'};
+    window.aiMonitorFilters=f;
+    const d=await api('ai.usage_dashboard',{days:f.days,provider:f.provider});
+    const fmt=n=>new Intl.NumberFormat('pt-BR').format(Number(n)||0);
+    const duration=n=>n===null||n===undefined?'Sem amostras':(Number(n)/1000).toLocaleString('pt-BR',{maximumFractionDigits:2})+' s';
+    const totalRoutes=Object.values(d.routes||{}).reduce((a,b)=>a+Number(b||0),0);
+    const percent=(num,den)=>den?Math.round(100*Number(num)/den)+'%':'—';
+    const cards=[
+      ['Chamadas aos modelos',fmt(d.requests),'Tentativas HTTP Gemini + Groq'],
+      ['Tokens informados',fmt(d.total_tokens),fmt(d.token_samples)+' chamadas com total conhecido'],
+      ['Falhas',fmt((d.http_errors||0)+(d.transport_errors||0)),fmt(d.http_errors)+' HTTP · '+fmt(d.transport_errors)+' conexão'],
+      ['Latência média',duration(d.avg_latency_ms),fmt(d.latency_samples)+' amostras']
+    ];
+    const days=Array.isArray(d.daily)?d.daily:[];
+    const maxReq=Math.max(1,...days.map(x=>Number(x.requests||0)));
+    const providers=Object.entries(d.providers||{});
+    const models=Object.entries(d.models||{});
+    const routeVisible=f.provider==='all';
+    const selectDays=[1,7,14,30].map(n=>'<option value="'+n+'" '+(n===Number(f.days)?'selected':'')+'>'+(n===1?'Hoje (UTC)':'Últimos '+n+' dias')+'</option>').join('');
+    const selectProviders=[['all','Todos'],['gemini','Gemini'],['groq','Groq']].map(([k,v])=>'<option value="'+k+'" '+(k===f.provider?'selected':'')+'>'+v+'</option>').join('');
+    const statCards=cards.map(([title,value,sub])=>'<article class="panel ai-monitor-stat"><span class="eyebrow">'+esc(title)+'</span><strong>'+esc(value)+'</strong><small>'+esc(sub)+'</small></article>').join('');
+    const bars=days.map(x=>'<div class="ai-monitor-day" title="'+esc(x.date)+': '+fmt(x.requests)+' chamadas"><div class="ai-monitor-bar-rail"><div class="ai-monitor-bars"><span class="ai-monitor-bar ok" style="height:'+Math.min(100,100*Number(x.http_ok||0)/maxReq)+'%"></span><span class="ai-monitor-bar error" style="height:'+Math.min(100,100*Number(x.errors||0)/maxReq)+'%"></span></div></div><small>'+esc(x.date.slice(5).replace('-','/'))+'</small></div>').join('');
+    const routeRows=[['fast_path','PHP direto'],['cache_hit','Cache reutilizado'],['model_route','Modelo de IA']].map(([k,v])=>'<div class="ai-monitor-route"><div><b>'+esc(v)+'</b><span>'+fmt(d.routes?.[k]||0)+' · '+percent(d.routes?.[k]||0,totalRoutes)+'</span></div><div class="ai-monitor-track"><i style="width:'+(totalRoutes?Math.round(100*(d.routes?.[k]||0)/totalRoutes):0)+'%"></i></div></div>').join('');
+    const providerRows=providers.map(([k,v])=>'<tr><td>'+esc(k.toUpperCase())+'</td><td>'+fmt(v.requests)+'</td><td>'+fmt(v.http_ok)+'</td><td>'+fmt(v.errors)+'</td><td>'+fmt(v.tokens)+'</td></tr>').join('');
+    const modelRows=models.map(([k,v])=>'<tr><td>'+esc(k)+'</td><td>'+esc(v.provider)+'</td><td>'+fmt(v.requests)+'</td><td>'+fmt(v.http_ok)+'</td><td>'+fmt(v.errors)+'</td><td>'+fmt(v.tokens)+'</td></tr>').join('');
+    $('#content').innerHTML=
+      '<div class="section-title"><div><h3>Monitoramento da IA</h3><div class="panel-sub">Consumo e desempenho de Gemini e Groq. Coleta iniciada no deploy do monitoramento.</div></div><button class="secondary" id="ai-monitor-refresh">'+icon('refresh-cw','↻')+' Atualizar</button></div>'+
+      '<div class="ai-monitor-toolbar"><label>Período <select id="ai-monitor-days" class="select">'+selectDays+'</select></label><label>Provedor <select id="ai-monitor-provider" class="select">'+selectProviders+'</select></label></div>'+
+      '<div class="ai-monitor-stats">'+statCards+'</div>'+
+      '<div class="ai-monitor-two"><section class="panel ai-monitor-panel"><div class="panel-head"><div><h3>Solicitações por dia</h3><div class="panel-sub">HTTP 2xx e falhas não representam necessariamente sucesso na operação de negócio.</div></div></div>'+
+      '<div class="ai-monitor-chart" role="img" aria-label="Gráfico de chamadas por dia">'+bars+'</div><div class="panel-sub">Barras claras: HTTP 2xx · Barras rosadas: falhas. '+fmt(d.files_read)+' dia(s) com arquivo de métricas.</div></section>'+
+      '<section class="panel ai-monitor-panel"><div class="panel-head"><div><h3>Origem da interpretação</h3><div class="panel-sub">PHP direto e cache podem evitar chamadas ao planejamento por IA.</div></div></div>'+
+      (routeVisible?'<div class="ai-monitor-routes">'+routeRows+'</div><div class="panel-sub">'+fmt(d.avoided_planning_calls)+' interpretações sem nova chamada de planejamento. Não representa economia em dinheiro.</div>':
+       '<p class="panel-sub">A origem PHP/cache não informa qual provedor seria chamado. Selecione Todos para visualizar.</p>')+'</section></div>'+
+      '<section class="panel ai-monitor-panel"><div class="panel-head"><div><h3>Uso por provedor</h3></div></div><div class="table-wrap"><table class="table"><thead><tr><th>Provedor</th><th>Chamadas</th><th>HTTP 2xx</th><th>Falhas</th><th>Tokens informados</th></tr></thead><tbody>'+
+      (providerRows||'<tr><td colspan="5">Nenhuma chamada registrada no período.</td></tr>')+'</tbody></table></div></section>'+
+      '<section class="panel ai-monitor-panel"><div class="panel-head"><div><h3>Modelos utilizados</h3></div></div><div class="table-wrap"><table class="table"><thead><tr><th>Modelo</th><th>Provedor</th><th>Chamadas</th><th>HTTP 2xx</th><th>Falhas</th><th>Tokens</th></tr></thead><tbody>'+
+      (modelRows||'<tr><td colspan="6">Sem modelos registrados no período.</td></tr>')+'</tbody></table></div></section>'+
+      '<p class="panel-sub ai-monitor-footnote">'+esc(d.coverage||'')+(d.truncated_files?' Atenção: leitura limitada em arquivo de métricas muito grande.':'')+' Fuso dos gráficos: UTC. Tokens não reportados não são estimados. Alertas e retenção na etapa 3/3.</p>';
+    $('#ai-monitor-refresh').onclick=()=>go('ai-monitor',false,false,true);
+    $('#ai-monitor-days').onchange=e=>{f.days=Number(e.target.value);go('ai-monitor',false,false,true)};
+    $('#ai-monitor-provider').onchange=e=>{f.provider=e.target.value;go('ai-monitor',false,false,true)};
+    paintIcons();
+  }
+
   async function renderSystemLogs(){
     const [health,logs]=await Promise.all([api('system.health'),api('system.logs',{limit:160})]);
     const items=health.items||[],audit=logs.audit||[],errors=logs.errors||[],mail=logs.mail||[],push=logs.push||[];

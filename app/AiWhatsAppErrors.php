@@ -20,6 +20,7 @@ final class AiWhatsAppErrors
  }
  public static function message(Throwable $e): string {
   return match(self::code($e)){
+   'ai_usage_daily_limit'=>'Não consegui usar os modelos de IA porque o limite diário configurado pelo administrador foi atingido. Consultas diretas e cache continuam disponíveis. Veja Monitoramento IA.',
    'ai_provider_rate_limit'=>'Não consegui responder porque o limite de requisições da IA foi atingido. Tente novamente quando a cota for renovada ou configure outro provedor.',
    'ai_provider_bad_credentials','ai_gemini_not_configured','ai_not_configured'=>'Não consegui responder porque o serviço de IA não está configurado corretamente. Peça ao administrador para verificar as chaves de API na VPS.',
    'ai_provider_model_unavailable','ai_model_invalid'=>'Não consegui responder porque o modelo de IA configurado não está disponível. Peça ao administrador para verificar o modelo.',

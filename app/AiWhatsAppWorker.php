@@ -207,7 +207,18 @@ final class AiWhatsAppWorker
   if(($r['kind']??'')==='edited')return 'Task #'.$r['id'].' atualizada com sucesso.';
   if(($r['kind']??'')==='moved')return 'Task #'.$r['id'].' movida para '.mb_substr((string)$r['stage'],0,60).'.';
   if(($r['kind']??'')==='list'){
-   if(!$r['tasks'])return 'Nenhuma task encontrada.';
+   if(!$r['tasks']){
+    if(isset($r['searched_stage'])){
+     $stage=mb_substr((string)$r['searched_stage'],0,60);
+     if(!empty($r['alternatives'])){
+      $lines=array_map(static fn($d)=>'#'.$d['id'].' '.mb_substr((string)$d['title'],0,60).' — '.mb_substr((string)$d['stage'],0,35),$r['alternatives']);
+      return 'Nenhuma task correspondente na etapa "'.$stage.'". Mas encontrei '
+        .(int)$r['alternative_total'].' em outras etapas:'."\n".implode("\n",$lines);
+     }
+     return 'Não encontrei tarefas correspondentes à busca, nem na etapa "'.$stage.'" nem nas outras etapas visíveis para seu usuário.';
+    }
+    return 'Nenhuma task encontrada para os filtros informados.';
+   }
    $lines=array_map(static fn($d)=>'#'.$d['id'].' '.mb_substr((string)$d['title'],0,60).' — '.mb_substr((string)$d['stage'],0,35),$r['tasks']);
    return 'Tasks ('.$r['total'].' encontradas):'."\n".implode("\n",$lines);
   }

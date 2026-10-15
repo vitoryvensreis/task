@@ -8,7 +8,7 @@ final class AiWhatsAppErrors
   $s=(string)$e->getMessage();
   $known=[
    'ai_provider_rate_limit','ai_provider_bad_credentials','ai_provider_model_unavailable',
-   'ai_provider_unavailable','ai_connection_failed','ai_not_configured','ai_gemini_not_configured',
+   'ai_provider_unavailable','ai_connection_failed','ai_provider_bad_request','ai_not_configured','ai_gemini_not_configured',
    'ai_invalid_response','ai_invalid_tool','ai_invalid_args','ai_multiple_tools',
    'ai_no_reply','ai_unauthorized_tool','ai_tool_not_allowed','ai_arguments_invalid',
    'ai_plan_invalid','ai_model_invalid','ai_tool_catalog_invalid','ai_unknown_result'
@@ -23,6 +23,7 @@ final class AiWhatsAppErrors
    'ai_provider_rate_limit'=>'Não consegui responder porque o limite de requisições da IA foi atingido. Tente novamente quando a cota for renovada ou configure outro provedor.',
    'ai_provider_bad_credentials','ai_gemini_not_configured','ai_not_configured'=>'Não consegui responder porque o serviço de IA não está configurado corretamente. Peça ao administrador para verificar as chaves de API na VPS.',
    'ai_provider_model_unavailable','ai_model_invalid'=>'Não consegui responder porque o modelo de IA configurado não está disponível. Peça ao administrador para verificar o modelo.',
+   'ai_provider_bad_request'=>'Não consegui interpretar seu pedido porque o provedor rejeitou o formato da solicitação. Nenhuma alteração foi realizada. O administrador deve verificar a integração da IA.',
    'ai_provider_unavailable','ai_connection_failed'=>'Não consegui responder porque o serviço de IA está indisponível ou a conexão falhou. Tente novamente em alguns minutos.',
    'ai_unauthorized_tool','ai_tool_not_allowed'=>'Não posso executar essa operação neste chat porque ela não está autorizada para seu usuário ou para este grupo. Consulte as permissões no TaskEsc ou tente no privado, se aplicável.',
    'ai_invalid_response','ai_invalid_tool','ai_invalid_args','ai_multiple_tools','ai_no_reply','ai_arguments_invalid','ai_plan_invalid'=>'Não entendi a solicitação com segurança. Reformule o pedido informando a ação, a tarefa ou o compromisso e os dados necessários.',

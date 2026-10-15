@@ -17,8 +17,14 @@ final class AiWhatsAppSmartRouter
   $t=self::normalize($message);
   // Mixed, dangerous or complex requests keep the full authorized catalog.
   // We NEVER decide to perform an action based on keywords here.
-  if(mb_strlen($t)>260||preg_match(self::WRITE,$t))
+  if(mb_strlen($t)>260||preg_match(self::WRITE,$t)
+   ||preg_match('/\b(?:novo|nova|novos|novas|inclua|incluir|lance|lancar|lancamento|marcar|baixa|liquidar|receba|receber|pago|paga|registra|registo)\b/u',$t))
    return ['mode'=>'complex','preference'=>null,'tools'=>$all];
+  // Never narrow a tool catalog based only on a noun like "nova despesa".
+  // A positive READ cue is required; uncertain requests keep full permissions
+  // and explicit administrative confirmation handling.
+  if(!preg_match('/\A(?:(?:me\s+)?(?:diga|fale|fala|mostre|mostra|liste|lista|listar|consulte|consultar|procure|encontre|ver|veja|busque|buscar|resuma|resumo|relatorio|quanto|quantos|quantas|qual|quais|quero\s+ver|me\s+manda|manda|mandar|pode\s+mostrar|mostra\s+pra\s+mim)\b)/u',$t))
+   return ['mode'=>'general','preference'=>null,'tools'=>$all];
   $subjects=[
    'tasks'=>(bool)preg_match('/\b(?:tarefa|tarefas|task|tasks|kanban|atrasad[ao]s?|prazo|demandas?)\b/u',$t),
    'agenda'=>(bool)preg_match('/\b(?:agenda|compromissos?|calendarios?|reunioes?|eventos?|horarios?)\b/u',$t),

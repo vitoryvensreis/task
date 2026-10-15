@@ -566,7 +566,24 @@ try{
   at(($d['stage']??'')==='Em produção','Only tasks in requested Kanban stage');
   at(str_contains(mb_strtolower((string)$d['title']),'aula'),'Only class-related task titles');
  }
- try{AiWhatsAppTools::run('list_tasks',['query'=>'aula','stage_name'=>'Etapa inexistente']);throw new RuntimeException('Invalid stage used');}
+ // If the requested Kanban column is empty, show only authorized matches from other columns.
+ $previousRecord=DB::one('SELECT title,stage_id FROM demands WHERE id=1');
+ $otherStage=DB::one("SELECT id FROM stages WHERE active=1 AND name<>'Em produção' AND id<>? ORDER BY id LIMIT 1",[$previousRecord['stage_id']]);
+ at((bool)$otherStage,'CI has a non-production stage');
+ DB::run('UPDATE demands SET title=?,stage_id=? WHERE id=1',['Aula TESTE ALTERNATIVA SEM MATCH', $otherStage['id']]);
+ $alternative=AiWhatsAppTools::run('list_tasks',[
+  'query'=>'Aula TESTE ALTERNATIVA SEM MATCH','stage_name'=>'Em produção','show_other_stages'=>true,'limit'=>10]);
+ at(($alternative['kind']??'')==='list'&&$alternative['total']===0,'Production match is really empty');
+ at(($alternative['alternative_total']??0)>=1,'Alternative stage match visible');
+ at(count(array_filter($alternative['alternatives']??[],static fn($t)=>(int)$t['id']===1))===1,
+  'Alternative matching task is returned with real Kanban status');
+ DB::run('UPDATE demands SET title=?,stage_id=? WHERE id=1',[$previousRecord['title'],$previousRecord['stage_id']]);
+ try{AiWhatsAppTools::run('list_tasks',['query'=>'aula','show_other_stages'=>true]);throw new RuntimeException('Missing stage accepted');}
+ catch(AppError $e){at($e->status===422,'Alternatives require explicit stage');}
+ try{AiWhatsAppTools::run('list_tasks',['query'=>'aula','stage_name'=>'Em produção','show_other_stages'=>'yes']);throw new RuntimeException('Wrong type accepted');}
+ catch(AppError $e){at($e->status===422,'Alternatives flag requires boolean');}
+
+  try{AiWhatsAppTools::run('list_tasks',['query'=>'aula','stage_name'=>'Etapa inexistente']);throw new RuntimeException('Invalid stage used');}
  catch(AppError $e){at($e->getMessage()!=='','Stage names resolved only from active DB stages');}
  echo "AI WhatsApp tools: schema, create once, edit once, protected fields, self assignment, category default, client denial, private reply, group guard OK\n";
 }finally{@unlink(ROOT.'/config/config.php');@unlink(ROOT.'/storage/installed.lock');}

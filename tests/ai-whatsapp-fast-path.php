@@ -15,7 +15,8 @@ $phrases=[
  'listar tarefas 2'=>['tool'=>'list_tasks','arguments'=>['limit'=>2]],
  'Task, liste minhas tarefas'=>['tool'=>'list_tasks','arguments'=>['limit'=>10]],
  'TaskEsc: liste minhas tarefas'=>['tool'=>'list_tasks','arguments'=>['limit'=>10]],
- 'Task, encontre as tarefas relacionadas à edição de aulas e me diga quais ainda estão em produção'=>['tool'=>'list_tasks','arguments'=>['query'=>'aula','stage_name'=>'Em produção','limit'=>10]],
+ 'Task, encontre as tarefas relacionadas à edição de aulas e me diga quais ainda estão em produção'=>['tool'=>'list_tasks','arguments'=>['query'=>'aula','stage_name'=>'Em produção','show_other_stages'=>true,'limit'=>10]],
+ 'Task, encontre as tarefas relacionadas à edição de aulas e me diga quais são elas'=>['tool'=>'list_tasks','arguments'=>['query'=>'aula','limit'=>10]],
 ];
 foreach($phrases as $text=>$expected){
  $result=AiWhatsAppFastPath::plan($text);
@@ -59,7 +60,7 @@ foreach(['Liste minhas agendas disponíveis','Task, mostre minhas agendas','list
  checkFast(AiWhatsAppFastPath::plan($phrase,false,true,false)===null,'Never reveal calendars in groups');
  checkFast(AiWhatsAppFastPath::plan($phrase,false,false,false)===null,'Never reveal calendars to non-admin');
 }
-foreach(['Task, apague minhas tarefas','Task, liste minhas tarefas e exclua tudo','Task, mostre agendas de outro usuario','Task, encontre as tarefas relacionadas à edição de aulas e me diga quais ainda estão em produção e apague tudo'] as $phrase){
+foreach(['Task, apague minhas tarefas','Task, liste minhas tarefas e exclua tudo','Task, mostre agendas de outro usuario','Task, encontre as tarefas relacionadas à edição de aulas e me diga quais ainda estão em produção e apague tudo','Task, encontre as tarefas relacionadas à edição de aulas e me diga quais são elas e exclua tudo'] as $phrase){
  checkFast(AiWhatsAppFastPath::plan($phrase,false,true,true)===null,'Unsafe requests must not become read-only commands');
 }
 echo "TaskEsc AI fast path: read-only routing, counts, greetings and negative security cases OK\n";

@@ -982,5 +982,36 @@ try{
   'Cross-domain followup never exposes private context in groups');
  at(AiWhatsAppConversationContext::plan('e amanhã e pague tudo',$ctxNext,$admin,$ctxTools2)===null,
   'A followup containing any write verb cannot be routed as a read-only report');
+ // Stage 3: natural local clarifications and help are replies, never tools/LLM writes.
+ Auth::$user=DB::one('SELECT * FROM users WHERE id=?',[$admin]);Auth::$actor=Auth::$user;
+ $naturalAskBase=['session_name'=>'taskesc','chat_id'=>$chat,'sender_id'=>$chat,
+  'chat_type'=>'private','message_type'=>'chat','status'=>'received',
+  'auth_user_id'=>$admin,'auth_status'=>'authorized','auth_reason'=>'user_authorized',
+  'received_at'=>now(),'ai_state'=>'queued'];
+ $naturalNoModel=0;
+ $naturalBlockModel=static function()use(&$naturalNoModel){$naturalNoModel++;throw new RuntimeException('Natural reply should avoid LLM');};
+ $naturalExisting=(int)DB::one('SELECT COUNT(*) n FROM demands')['n'];
+ foreach([
+  ['id'=>'natural-help-1','body'=>'Task, o que você pode fazer?','expected'=>'tarefas'],
+  ['id'=>'natural-clarify-2','body'=>'Task, me mostra os pendentes','expected'=>'despesas pendentes']
+ ] as $case){
+  $id=DB::insert('ai_whatsapp_inbox',array_merge($naturalAskBase,[
+   'provider_message_id'=>$case['id'],'body'=>$case['body']]));
+  at(AiWhatsAppWorker::tick(1,$naturalBlockModel,$verifier,null,$sender,true)['processed']===1,
+   'Natural request processed');
+  $state=DB::one('SELECT ai_state,ai_reply FROM ai_whatsapp_inbox WHERE id=?',[$id]);
+  at($state['ai_state']==='sent'&&str_contains((string)$state['ai_reply'],$case['expected']),
+   'User-friendly response answers with a useful clarification');
+ }
+ at($naturalNoModel===0,'No LLM planning calls spent on common clarification and help');
+ at((int)DB::one('SELECT COUNT(*) n FROM demands')['n']===$naturalExisting,
+  'Asking for clarity never mutates a task');
+ // Results are not reused; formatting receives the latest TaskEsc business response.
+ $naturalFormat=AiWhatsAppConversationUX::formatTasks(['total'=>2,'tasks'=>[
+   ['id'=>37,'title'=>'Teste integração','stage'=>'Em produção','due_at'=>'2026-10-15 12:00:00']
+ ]]);
+ at(str_contains($naturalFormat,'Mostrando 1 de 2')&&str_contains($naturalFormat,'15/10/2026'),
+  'Formatted reply provides accurate total, partial marker and deadline');
+
  echo "AI WhatsApp tools: schema, create once, edit once, protected fields, self assignment, category default, client denial, private reply, group guard OK\n";
 }finally{@unlink(ROOT.'/config/config.php');@unlink(ROOT.'/storage/installed.lock');}

@@ -116,6 +116,30 @@ t(str_contains($written,'#101')&&str_contains($written,'vencido')&&!str_contains
 t(str_contains($written,'Nenhuma tarefa foi alterada.')&&mb_strlen($written)<3201,
  'WhatsApp report must be bounded and explicitly read-only');
 
+// Step 1 metrics: provider counters without persisting prompt, response or IDs.
+$start=1000.0;
+$geminiUsage='{"usageMetadata":{"promptTokenCount":110,"candidatesTokenCount":17,"totalTokenCount":127},"candidates":[{"content":{"parts":[{"text":"PRIVATE DATA NEVER RECORDED"}]}}]}';
+$metric=AiWhatsAppUsageMetrics::providerRow('gemini','gemini-3.8-flash',200,0,$start,$geminiUsage,1000.245);
+t($metric['duration_ms']===245&&$metric['input_tokens']===110&&$metric['output_tokens']===17&&$metric['total_tokens']===127,
+ 'Gemini reported token counts and latency captured');
+t($metric['status']==='http_ok'&&$metric['http']===200&&$metric['curl_errno']===0,
+ 'Gemini status is numeric');
+t(!str_contains(json_encode($metric),'PRIVATE DATA'),'Metrics must never contain model response');
+$groqUsage='{"usage":{"prompt_tokens":88,"completion_tokens":12,"total_tokens":100},"choices":[{"message":{"content":"secret response"}}]}';
+$groqMetric=AiWhatsAppUsageMetrics::providerRow('groq','openai/gpt-oss-120b',200,0,10.0,$groqUsage,10.95);
+t($groqMetric['input_tokens']===88&&$groqMetric['output_tokens']===12&&$groqMetric['total_tokens']===100,
+ 'Groq token counts from API usage');
+t(!str_contains(json_encode($groqMetric),'secret response'),'No model text stored in metrics');
+$rejectMetric=AiWhatsAppUsageMetrics::providerRow('gemini','gemini-3.8-flash',429,0,20.0,'{"error":{"message":"PRIVATE API CREDENTIAL"}}',20.1);
+t($rejectMetric['status']==='http_error'&&$rejectMetric['total_tokens']===null,
+ '429 has no invented token counts');
+t(!str_contains(json_encode($rejectMetric),'PRIVATE'),'Never store error bodies');
+$timeoutMetric=AiWhatsAppUsageMetrics::providerRow('groq','openai/gpt-oss-120b',0,28,25.0,null,50.0);
+t($timeoutMetric['status']==='transport_error'&&$timeoutMetric['curl_errno']===28&&$timeoutMetric['duration_ms']===25000,
+ 'Timeout recorded without PII');
+$invalidMetric=AiWhatsAppUsageMetrics::providerRow('unexpected','key value',500,0,10.0,null,10.1);
+t($invalidMetric['provider']==='unknown'&&$invalidMetric['model']==='unknown','Provider labels are sanitized');
+
 t(!AiWhatsAppProvider::enabled(),'No private key must mean disabled');
 t(AiWhatsAppProvider::status()['gemini_configured']===false,'No configured key');
 echo "TaskEsc AI providers: Gemini schema, planning, allowlist and disabled-by-default OK\n";

@@ -9,7 +9,7 @@ declare(strict_types=1);
 final class AiWhatsAppUsageMetrics
 {
  private const ROUTES=['fast_path','cache_hit','model_route'];
- private const CONVERSATION=['guided_help','local_clarification','context_followup'];
+ private const CONVERSATION=['guided_help','local_clarification','context_followup','answer_cache_hit'];
  private const PROVIDERS=['gemini','groq'];
 
  public static function fileForDay(string $date): ?string {
@@ -108,7 +108,7 @@ final class AiWhatsAppUsageMetrics
    'provider_errors'=>0,'duration_ms_sum'=>0,'duration_samples'=>0,
    'input_tokens'=>0,'output_tokens'=>0,'total_tokens'=>0,'token_known_attempts'=>0,
    'routes'=>['fast_path'=>0,'cache_hit'=>0,'model_route'=>0],
-   'conversation'=>['guided_help'=>0,'local_clarification'=>0,'context_followup'=>0],'providers'=>[],
+   'conversation'=>['guided_help'=>0,'local_clarification'=>0,'context_followup'=>0,'answer_cache_hit'=>0],'providers'=>[],
    'coverage'=>'Only events collected since metrics deployment. HTTP 200 does not guarantee TaskEsc tool execution.'];
   for($day=0;$day<$days;$day++){
    $date=$now->modify('-'.$day.' days')->format('Y-m-d');

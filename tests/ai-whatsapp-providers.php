@@ -216,6 +216,46 @@ try{
  }finally{Auth::$user=$priorUser;Auth::$actor=$priorActor;Auth::$previewClientId=$priorPreview;}
 }finally{@unlink($fixturePath);}
 
+// Smart routing never broadens privileges; simple one-domain READ has a small catalog.
+$routerCatalog=[
+ ['type'=>'function','function'=>['name'=>'list_tasks','description'=>'','parameters'=>['type'=>'object']]],
+ ['type'=>'function','function'=>['name'=>'finance_expenses','description'=>'','parameters'=>['type'=>'object']]],
+ ['type'=>'function','function'=>['name'=>'agenda_list','description'=>'','parameters'=>['type'=>'object']]],
+ ['type'=>'function','function'=>['name'=>'create_task','description'=>'','parameters'=>['type'=>'object']]],
+ ['type'=>'function','function'=>['name'=>'cross_module_report','description'=>'','parameters'=>['type'=>'object']]],
+];
+$rt=AiWhatsAppSmartRouter::select('Task, me diga quais tarefas estão atrasadas.',$routerCatalog);
+t($rt['mode']==='focused_read'&&$rt['preference']==='groq'
+  &&array_column(array_column($rt['tools'],'function'),'name')===['list_tasks'],
+  'Simple task read uses only authorized task tools and may prefer Groq');
+$rf=AiWhatsAppSmartRouter::select('Me manda o total das despesas pendentes',$routerCatalog);
+t($rf['mode']==='focused_read'&&array_column(array_column($rf['tools'],'function'),'name')===['finance_expenses'],
+ 'Financial read cannot expose task-write or agenda tools');
+$rw=AiWhatsAppSmartRouter::select('Task, crie uma tarefa nova',$routerCatalog);
+t($rw['mode']==='complex'&&count($rw['tools'])===count($routerCatalog)&&$rw['preference']===null,
+ 'Write requests keep complete authorized catalog and configured primary');
+$rNewExpense=AiWhatsAppSmartRouter::select('Nova despesa',$routerCatalog);
+t($rNewExpense['mode']!=='focused_read'&&count($rNewExpense['tools'])===count($routerCatalog),
+ 'Ambiguous new expense must retain admin write tools for confirmation');
+$rMarkExpense=AiWhatsAppSmartRouter::select('Marcar despesa paga',$routerCatalog);
+t(count($rMarkExpense['tools'])===count($routerCatalog),
+ 'Paying or marking an expense must never be narrowed to finance reads');
+$ra=AiWhatsAppSmartRouter::select('Me fale sobre tarefas e agenda de amanhã',$routerCatalog);
+t($ra['mode']==='general'&&count($ra['tools'])===count($routerCatalog),
+ 'Cross-module requests must not be silently narrowed to one tool');
+$plannerCalls=0;
+$mock=function($prompt,$ctx,$tools)use(&$plannerCalls){$plannerCalls++;
+ t(count($tools)===1&&$tools[0]['function']['name']==='list_tasks',
+ 'Provider gets only filtered read tool');
+ return ['tool'=>'list_tasks','arguments'=>['query'=>'saulo']];
+};
+$plan=AiWhatsAppSmartRouter::plan('Mostre as tarefas do Saulo',[],$routerCatalog,$mock);
+t($plannerCalls===1&&$plan['tool']==='list_tasks','Focused router respects model/tool contract');
+$badMock=static fn()=>['tool'=>'create_task','arguments'=>['title'=>'unauthorized']];
+try{AiWhatsAppSmartRouter::plan('Liste tarefas atrasadas',[],$routerCatalog,$badMock);
+ throw new RuntimeException('Router failed to reject tool not exposed to focused model');}
+catch(RuntimeException $e){t($e->getMessage()==='ai_unauthorized_tool','Filtered router rejects unoffered tools');}
+
 t(!AiWhatsAppProvider::enabled(),'No private key must mean disabled');
 t(AiWhatsAppProvider::status()['gemini_configured']===false,'No configured key');
 echo "TaskEsc AI providers: Gemini schema, planning, allowlist and disabled-by-default OK\n";

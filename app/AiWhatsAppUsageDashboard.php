@@ -29,7 +29,7 @@ final class AiWhatsAppUsageDashboard
    'input_tokens'=>0,'output_tokens'=>0,'total_tokens'=>0,'token_samples'=>0,
    'latency_samples'=>0,'avg_latency_ms'=>null,
    'routes'=>['fast_path'=>0,'cache_hit'=>0,'model_route'=>0],
-   'conversation'=>['guided_help'=>0,'local_clarification'=>0,'context_followup'=>0],
+   'conversation'=>['guided_help'=>0,'local_clarification'=>0,'context_followup'=>0,'answer_cache_hit'=>0],
    'providers'=>[],'models'=>[],'daily'=>[],
    'files_read'=>0,'truncated_files'=>0,
    'coverage'=>'Dados coletados desde a instalação do monitoramento. HTTP 2xx não comprova sucesso da operação no TaskEsc.'

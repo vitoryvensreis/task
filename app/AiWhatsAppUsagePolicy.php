@@ -114,7 +114,14 @@ final class AiWhatsAppUsagePolicy {
    if(!preg_match('/\Aai_usage_calls_(\d{4}-\d{2}-\d{2})_(?:gemini|groq)\z/D',$key,$m)||$m[1]>=$cutoff)continue;
    $counters+=DB::run('DELETE FROM settings WHERE `key`=?',[$key])->rowCount();
   }
-  return ['retention_days'=>$days,'files_deleted'=>$removed,'counters_deleted'=>$counters];
+  // Prune only expired AI answer-cache keys, in bounded batches; preserve
+  // business idempotency keys and unrelated integrations.
+  $answersPurged=DB::run("DELETE FROM idempotency
+    WHERE operation_key LIKE 'ai-answer-v1:%'
+      AND created_at<DATE_SUB(UTC_TIMESTAMP(),INTERVAL 7 DAY)
+    LIMIT 500")->rowCount();
+  return ['retention_days'=>$days,'files_deleted'=>$removed,'counters_deleted'=>$counters,
+   'answers_purged'=>$answersPurged];
  }
  public static function dailyMaintenance(): array {
   return self::notifyAdmins()+['cleanup'=>self::cleanup()];

@@ -14,6 +14,31 @@ t($req['tools'][0]['functionDeclarations'][0]['parameters']['type']==='OBJECT','
 t($req['tools'][0]['functionDeclarations'][0]['parameters']['properties']['query']['type']==='STRING','Gemini schema nested string');
 t(!isset($req['tools'][0]['functionDeclarations'][0]['parameters']['additionalProperties']),'Gemini schema portability');
 t($req['contents'][0]['parts'][0]['text']==='Liste tasks','Gemini prompt');
+// Zero-argument functions must never put PHP [] where JSON Schema expects an object.
+$zero=['type'=>'function','function'=>['name'=>'agenda_calendars','description'=>'List available calendars','parameters'=>[
+ 'type'=>'object','properties'=>[],'additionalProperties'=>false]]];
+$geminiZero=AiWhatsAppGemini::requestBody('Listar agendas',[] ,[$zero]);
+$declaration=$geminiZero['tools'][0]['functionDeclarations'][0];
+t($declaration['name']==='agenda_calendars'&&!array_key_exists('parameters',$declaration),
+ 'Gemini no-arg function must OMIT optional parameters schema');
+$groqZero=AiWhatsAppToolSchemas::forGroq([$zero]);
+$groqJson=json_encode($groqZero,JSON_THROW_ON_ERROR);
+t(str_contains($groqJson,'"properties":{}')&&!str_contains($groqJson,'"properties":[]'),
+ 'Groq no-arg function requires empty JSON object, not PHP empty list');
+t($zero['function']['parameters']['properties']===[],
+ 'Normalization must not mutate the permission catalog');
+$nested=['type'=>'function','function'=>['name'=>'nested','description'=>'nested','parameters'=>[
+ 'type'=>'object','properties'=>['root'=>['type'=>'object','properties'=>[]]],'additionalProperties'=>false]]];
+$nestedJson=json_encode(AiWhatsAppToolSchemas::forGroq([$nested]),JSON_THROW_ON_ERROR);
+t(str_contains($nestedJson,'"root":{"type":"object","properties":{}}'),
+ 'Nested no-argument object schemas must remain JSON objects');
+t(AiWhatsAppErrors::code(new RuntimeException('ai_provider_bad_request'))==='ai_provider_bad_request',
+ 'Bad request distinguished from transport failures');
+t(!AiWhatsAppErrors::retryable(new RuntimeException('ai_provider_bad_request')),
+ 'Repeated malformed HTTP 400 must not burn three worker retries');
+t(AiWhatsAppProvider::fallbackEligible('ai_provider_bad_request'),
+ 'One alternative provider may still handle a supported request');
+
 $reply=AiWhatsAppGemini::parseResponse(answer([['functionCall'=>['name'=>'list_tasks','args'=>[]]]]),$tools);
 t($reply===['tool'=>'list_tasks','arguments'=>[]],'Empty arguments allowed');
 $edit=AiWhatsAppGemini::parseResponse(answer([['functionCall'=>['name'=>'edit_task','args'=>['task_id'=>12]]]]),$tools);

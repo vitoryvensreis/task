@@ -168,8 +168,8 @@ try{
  AiWhatsAppWorker::tick(1,$rejectPlanner,$verifier,null,$sender,true);
  at($calls===0,'Read-only fast path must never invoke LLM');
  at(DB::one('SELECT ai_state FROM ai_whatsapp_inbox WHERE id=?',[$fastMsg])['ai_state']==='sent','Read-only fast path replied once');
- at(count($sent)===$sentBefore+1&&str_starts_with($sent[$sentBefore][1],'Tasks ('),'Fast path uses authorized TaskEsc task API');
- at(substr_count($sent[$sentBefore][1],"\n")<=5,'Requested result limit applies');
+ at(count($sent)===$sentBefore+1&&str_starts_with($sent[$sentBefore][1],'Encontrei '),'Fast path uses authorized TaskEsc task API');
+ at(substr_count($sent[$sentBefore][1],'• #')<=5,'Requested result limit applies');
  at((int)(DB::one('SELECT COUNT(*) n FROM demands')['n']??0)===$tasksBefore,'Read-only fast path cannot mutate demands');
 
  // Private vocatives/calendar inventories are read-only and never invoke the provider.
@@ -180,7 +180,7 @@ try{
  AiWhatsAppWorker::tick(1,$rejectPlanner,$verifier,null,$sender,true);
  at($calls===0&&DB::one('SELECT ai_state FROM ai_whatsapp_inbox WHERE id=?',[$prefixed])['ai_state']==='sent',
   'Private Task prefix uses local list route');
- at(count($sent)===$before+1&&str_starts_with($sent[$before][1],'Tasks ('),'Private task reply sent');
+ at(count($sent)===$before+1&&str_starts_with($sent[$before][1],'Encontrei '),'Private task reply sent');
 
  $calendarMsg=DB::insert('ai_whatsapp_inbox',['session_name'=>'taskesc','provider_message_id'=>'fast-calendar-1',
   'chat_id'=>$chat,'sender_id'=>$chat,'chat_type'=>'private','message_type'=>'chat','body'=>'Liste minhas agendas disponíveis',

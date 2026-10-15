@@ -31,7 +31,11 @@ final class AiWhatsAppGroq
     CURLOPT_POSTFIELDS=>json($request),
   ]);
   $raw=curl_exec($curl);$http=(int)curl_getinfo($curl,CURLINFO_HTTP_CODE);curl_close($curl);
-  if(!is_string($raw)||$http<200||$http>=300)throw new RuntimeException('ai_provider_unavailable');
+  if(!is_string($raw))throw new RuntimeException('ai_connection_failed');
+  if($http===429)throw new RuntimeException('ai_provider_rate_limit');
+  if(in_array($http,[401,403],true))throw new RuntimeException('ai_provider_bad_credentials');
+  if($http===404)throw new RuntimeException('ai_provider_model_unavailable');
+  if($http<200||$http>=300)throw new RuntimeException('ai_provider_unavailable');
   $answer=json_decode($raw,true,64,JSON_THROW_ON_ERROR);
   $msg=$answer['choices'][0]['message']??null;
   if(!is_array($msg))throw new RuntimeException('ai_invalid_response');

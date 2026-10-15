@@ -160,6 +160,10 @@ $eventRows=[
   'status'=>'transport_error','http'=>0,'curl_errno'=>28,'duration_ms'=>25000,
   'input_tokens'=>null,'output_tokens'=>null,'total_tokens'=>null],
  ['at'=>'2001-01-19T00:07:00Z','type'=>'routing','route'=>'wrong_route'],
+ ['at'=>'2001-01-19T00:07:10Z','type'=>'conversation','kind'=>'guided_help'],
+ ['at'=>'2001-01-19T00:07:20Z','type'=>'conversation','kind'=>'local_clarification'],
+ ['at'=>'2001-01-19T00:07:30Z','type'=>'conversation','kind'=>'context_followup'],
+ ['at'=>'2001-01-19T00:07:40Z','type'=>'conversation','kind'=>'wrong_or_sensitive'],
  ['at'=>'2001-01-19T00:08:00Z','type'=>'provider','provider'=>'not-authorized','model'=>'inject',
   'status'=>'http_ok','total_tokens'=>999999],
 ];
@@ -176,12 +180,18 @@ try{
   'Dashboard calculates average latency from real samples');
  t($aggregate['avoided_planning_calls']===2&&$aggregate['routes']['model_route']===1,
   'PHP+cache route count avoids false currency savings');
+ t($aggregate['conversation']['guided_help']===1
+   &&$aggregate['conversation']['local_clarification']===1
+   &&$aggregate['conversation']['context_followup']===1,
+  'Conversation counters are aggregate-only and ignore unexpected event names');
  t(count($aggregate['daily'])===1&&$aggregate['daily'][0]['date']===$fixtureDate,
   'UTC daily graph uses one date');
  $groqOnly=AiWhatsAppUsageDashboard::aggregate(1,'groq',$now);
  t($groqOnly['requests']===2&&$groqOnly['total_tokens']===0&&$groqOnly['avoided_planning_calls']===null,
   'Provider filter excludes unrelated metrics and does not attribute cache to Groq');
  t($groqOnly['routes']['fast_path']===0,'Provider filter hides unattributable route events');
+ t($groqOnly['conversation']['guided_help']===0&&$groqOnly['conversation']['context_followup']===0,
+  'Provider filter must not attribute local dialogue to Groq');
  $noMetrics=AiWhatsAppUsageDashboard::aggregate(7,'all',new DateTimeImmutable('2001-02-20',new DateTimeZone('UTC')));
  t($noMetrics['requests']===0&&count($noMetrics['daily'])===7,
   'Empty monitoring period renders zero-safe charts');

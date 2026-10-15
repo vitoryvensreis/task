@@ -22,6 +22,8 @@ final class AiWhatsAppConversationUX
   if(self::supports($catalog,'attention_report'))$examples[]='• "Quais projetos precisam da minha atenção?"';
   if(self::supports($catalog,'agenda_list'))$examples[]='• "Mostre meus compromissos de hoje"';
   if(self::supports($catalog,'finance_expenses'))$examples[]='• "Total das despesas pendentes deste mês"';
+  if(self::supports($catalog,'create_expense'))$examples[]='• "Adiciona uma despesa de R$ 22,60 Uber" (pede confirmação)';
+  if(self::supports($catalog,'register_receipt'))$examples[]='• "Registre entrada recebida do cliente X por Pix" (pede dados e confirmação)';
   if(self::supports($catalog,'cross_module_report'))$examples[]='• "Resumo das tarefas e da agenda desta semana"';
   if(self::supports($catalog,'create_task'))$examples[]='• "Crie uma tarefa para o cliente..."';
   if(!$examples)return 'Não encontrei ferramentas de consulta disponíveis para seu acesso atual. Consulte suas permissões no TaskEsc.';

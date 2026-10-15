@@ -714,5 +714,85 @@ try{
  AiWhatsAppUsagePolicy::save(['enabled'=>false,'gemini_daily_calls'=>0,'groq_daily_calls'=>0,
   'alert_percent'=>80,'retention_days'=>30]);
  at(setting('schema_version')==='29','Monitoring does not migrate or recreate schema');
+ // Financial conversation: short follow-up uses only this ADM/private history, not another chat or user.
+ Auth::$user=DB::one('SELECT * FROM users WHERE id=?',[$admin]);Auth::$actor=Auth::$user;
+ Auth::$origin='whatsapp';Auth::$previewClientId=null;
+ at(AiWhatsAppFinancialConversation::pendingRequest('Task me manda o total das Despesas/custos pendentes')==='needs_period',
+  'Initial totals question must request the missing period');
+ at(AiWhatsAppFinancialConversation::pendingRequest('Task me manda o total das Despesas/custos pendentes esse mês')==='month',
+  'Explicit monthly request must be recognized without Gemini');
+ at(AiWhatsAppFinancialConversation::pendingRequest('Task me manda o total das Despesas/custos pendentes e apaga tudo')===null,
+  'Financial read-only fast path rejects additional writes');
+ at(AiWhatsAppFinancialConversation::plan('esse mês',[],(int)$admin,false)===null,
+  'Finance follow-up cannot run outside verified ADM private access');
+ $financialFrom=(new DateTimeImmutable('now',new DateTimeZone('America/Fortaleza')))->format('Y-m-01');
+ $financialTo=(new DateTimeImmutable('now',new DateTimeZone('America/Fortaleza')))->format('Y-m-t');
+ $financeDay=$financialFrom;
+ $baselineFinance=TaskEscFinanceReadApi::expenses(['from'=>$financialFrom,'to'=>$financialTo,'payment_status'=>'pending']);
+ $expectedFinanceTotal=(int)$baselineFinance['total_cents']+33850;
+ $expectedFinanceCount=(int)$baselineFinance['count']+4;
+ $expectedBrl='R$ '.number_format($expectedFinanceTotal/100,2,',','.');
+ $sampleFinance=[
+  ['description'=>'Custo pendente 1','amount_cents'=>1990,'payment_status'=>'pending'],
+  ['description'=>'Custo pendente 2','amount_cents'=>10470,'payment_status'=>'pending'],
+  ['description'=>'Custo pendente 3','amount_cents'=>11400,'payment_status'=>'pending'],
+  ['description'=>'Custo pendente 4','amount_cents'=>9990,'payment_status'=>'pending'],
+  ['description'=>'Custo pago excluído','amount_cents'=>7500,'payment_status'=>'paid']
+ ];
+ foreach($sampleFinance as $entry)
+  DB::insert('expenses',[
+   'description'=>$entry['description'],'vendor'=>'Fornecedor teste',
+   'category'=>'Software','amount_cents'=>$entry['amount_cents'],
+   'spent_on'=>$financeDay,'payment_status'=>$entry['payment_status'],
+   'created_by'=>$admin,'created_at'=>now(),'updated_at'=>now()
+  ]);
+ $finArgs=['from'=>$financialFrom,'to'=>$financialTo,'payment_status'=>'pending','limit'=>2];
+ $fin=TaskEscFinanceReadApi::expenses($finArgs);
+ at($fin['pending_total_cents']===$expectedFinanceTotal&&$fin['total_cents']===$expectedFinanceTotal&&$fin['count']===$expectedFinanceCount,
+  'Pending financial amount must sum all 4 records, independent of display limit 2');
+ at(count($fin['rows'])===2&&count(array_filter($fin['rows'],static fn($x)=>$x['paid']))===0,
+  'Pending-only list excludes paid expenses and respects limit');
+ $finReply=(new ReflectionMethod(AiWhatsAppWorker::class,'formatResult'))->invoke(null,$fin);
+ at(str_contains($finReply,$expectedBrl)&&str_contains($finReply,'Exibindo 2 de '.$expectedFinanceCount),
+  'WhatsApp must show full pending total before truncated details');
+ $prevCount=count($sent);
+ $financeQ=DB::insert('ai_whatsapp_inbox',[
+  'session_name'=>'taskesc','provider_message_id'=>'financial-question-missing-period',
+  'chat_id'=>$chat,'sender_id'=>$chat,'auth_user_id'=>$admin,
+  'chat_type'=>'private','message_type'=>'chat',
+  'body'=>'Task me manda o total das Despesas/custos pendentes',
+  'status'=>'received','auth_status'=>'authorized','auth_reason'=>'user_authorized',
+  'received_at'=>(new DateTimeImmutable('now',new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u'),
+  'ai_state'=>'queued'
+ ]);
+ $financeAiCalls=0;
+ $denyAi=static function()use(&$financeAiCalls){$financeAiCalls++;throw new RuntimeException('No AI needed for financial follow-up');};
+ AiWhatsAppWorker::tick(1,$denyAi,$verifier,null,$sender,true);
+ $storedQ=DB::one('SELECT ai_state,ai_reply FROM ai_whatsapp_inbox WHERE id=?',[$financeQ]);
+ at($storedQ['ai_state']==='sent'&&str_contains($storedQ['ai_reply'],'período'),
+  'Missing period must prompt just once for period');
+ $financeFollowup=DB::insert('ai_whatsapp_inbox',[
+  'session_name'=>'taskesc','provider_message_id'=>'financial-follow-up-month',
+  'chat_id'=>$chat,'sender_id'=>$chat,'auth_user_id'=>$admin,
+  'chat_type'=>'private','message_type'=>'chat','body'=>'esse mês',
+  'status'=>'received','auth_status'=>'authorized','auth_reason'=>'user_authorized',
+  'received_at'=>(new DateTimeImmutable('now',new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u'),
+  'ai_state'=>'queued'
+ ]);
+ AiWhatsAppWorker::tick(1,$denyAi,$verifier,null,$sender,true);
+ $storedFinance=DB::one('SELECT ai_state,ai_reply FROM ai_whatsapp_inbox WHERE id=?',[$financeFollowup]);
+ at($financeAiCalls===0&&$storedFinance['ai_state']==='sent',
+  'Contextual monthly answer must run without calling model');
+ at(str_contains($storedFinance['ai_reply'],$expectedBrl)&&str_contains($storedFinance['ai_reply'],'Despesas/custos pendentes'),
+  'Contextual monthly reply must use live pending-only financial totals');
+ $wrongRow=DB::one('SELECT * FROM ai_whatsapp_inbox WHERE id=?',[$financeFollowup]);
+ $wrongRow['chat_id']='5585000000000@c.us';
+ at(AiWhatsAppFinancialConversation::plan('esse mês',$wrongRow,$admin,true)===null,
+  'Follow-up cannot inherit another chat context');
+ $wrongRow['chat_id']=$chat;
+ at(AiWhatsAppFinancialConversation::plan('esse mês',$wrongRow,$admin+100,true)===null,
+  'Follow-up cannot inherit another user context');
+ at(count($sent)===$prevCount+2,'Two messages result in two responses, no extra sends');
+
  echo "AI WhatsApp tools: schema, create once, edit once, protected fields, self assignment, category default, client denial, private reply, group guard OK\n";
 }finally{@unlink(ROOT.'/config/config.php');@unlink(ROOT.'/storage/installed.lock');}

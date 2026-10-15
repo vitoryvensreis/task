@@ -71,7 +71,9 @@ final class AiWhatsAppWorker
   // Read-only commands and exact greetings never contact a paid/quota-limited model.
   // For everything else, preserve the original Gemini -> Groq route.
   $localConfirmation=$financialPrivate?AiWhatsAppApproval::command($body):null;
-  $planned=$localConfirmation??AiWhatsAppFastPath::plan($body,$financialPrivate,(Auth::$user['role']??'')==='admin',
+  $planned=$localConfirmation
+    ??AiWhatsAppFinancialConversation::plan($body,$row,(int)$first['user_id'],$financialPrivate)
+    ??AiWhatsAppFastPath::plan($body,$financialPrivate,(Auth::$user['role']??'')==='admin',
     $row['chat_type']==='private' && (Auth::$user['role']??'')==='admin');
   // A fast route or cached interpretation avoids planning requests, NOT live DB reads.
   $route=$planned!==null?'fast_path':null;
@@ -204,9 +206,23 @@ final class AiWhatsAppWorker
    return implode("\n",$lines);
   }
   if(($r['kind']??'')==='finance_expenses'){
-   $lines=['Despesas/custos registrados ('.date('d/m/Y',strtotime($r['from'])).' a '.date('d/m/Y',strtotime($r['to'])).'):'];
-   if(!$r['rows'])$lines[]='Nenhum custo registrado neste período.';
-   foreach($r['rows'] as $v)$lines[]=date('d/m/Y',strtotime($v['date'])).' '.$v['description'].' — '.self::brl((int)$v['amount_cents']).($v['paid']?' (pago)':' (pendente)');
+   $status=(string)($r['payment_status']??'all');
+   $heading=match($status){
+    'pending'=>'Despesas/custos pendentes',
+    'paid'=>'Despesas/custos pagos',
+    default=>'Despesas/custos registrados'
+   };
+   $lines=[$heading.' ('.date('d/m/Y',strtotime($r['from'])).' a '.date('d/m/Y',strtotime($r['to'])).'):',
+    'Total: '.self::brl((int)$r['total_cents']).' | '.(int)$r['count'].' lançamento(s)'];
+   if($status==='all'){
+    $lines[]='Pendentes: '.self::brl((int)$r['pending_total_cents']).' ('.(int)$r['pending_count'].')';
+    $lines[]='Pagos: '.self::brl((int)$r['paid_total_cents']).' ('.(int)$r['paid_count'].')';
+   }
+   if(!$r['rows'])$lines[]='Nenhuma despesa correspondente encontrada.';
+   foreach($r['rows'] as $v)
+    $lines[]=date('d/m/Y',strtotime($v['date'])).' '.$v['description'].' — '.self::brl((int)$v['amount_cents']).($v['paid']?' (pago)':' (pendente)');
+   if((int)$r['count']>count($r['rows']))$lines[]='Exibindo '.count($r['rows']).' de '.$r['count'].' registros.';
+   $lines[]='Valores dos lançamentos já registrados. Data do registro não significa vencimento.';
    $lines[]='Consulta somente leitura.';
    return implode("\n",$lines);
   }

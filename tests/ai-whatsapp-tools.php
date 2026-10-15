@@ -556,6 +556,21 @@ try{
  at(AiWhatsAppWorker::tick(1,$unexpectedPlanner,$verifier,null,$sender,true)['processed']===0,
   'Terminal failure and cached read cannot replay');
 
+ // Reproduce the user's real read-only WhatsApp question; no Gemini/Groq call.
+ $sauloQuestion='Task, procure as tarefas relacionadas ao Saulo e me diga em quais etapas do Kanban elas estão. Não altere nenhuma tarefa.';
+ $sauloPlan=AiWhatsAppFastPath::plan($sauloQuestion);
+ at($sauloPlan===['tool'=>'list_tasks','arguments'=>['query'=>'saulo','limit'=>10]],'Generic Saulo request routes locally');
+ $previousSaulo=DB::one('SELECT title FROM demands WHERE id=1');
+ DB::run('UPDATE demands SET title=? WHERE id=1',['Material Saulo TESTE DE CONSULTA']);
+ $sauloBeforeCount=(int)DB::one('SELECT COUNT(*) n FROM demands')['n'];
+ $sauloResult=AiWhatsAppTools::run($sauloPlan['tool'],$sauloPlan['arguments']);
+ at(($sauloResult['kind']??'')==='list'&&count(array_filter($sauloResult['tasks'],
+  static fn($t)=>(int)$t['id']===1&&str_contains((string)$t['title'],'Saulo'))===1,
+  'Saulo question returns authorized tasks and their Kanban stages');
+ at((int)DB::one('SELECT COUNT(*) n FROM demands')['n']===$sauloBeforeCount,
+  'Read-only question cannot create or delete tasks');
+ DB::run('UPDATE demands SET title=? WHERE id=1',[$previousSaulo['title']]);
+
  // Model-free stage-filtered query remains scoped to the authorized TaskEsc API.
  $classroomRequest='Task, encontre as tarefas relacionadas à edição de aulas e me diga quais ainda estão em produção';
  $classroomPlan=AiWhatsAppFastPath::plan($classroomRequest);

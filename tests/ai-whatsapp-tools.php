@@ -893,5 +893,94 @@ try{
  $ctxFinanceGroup['chat_type']='group';
  at(AiWhatsAppConversationContext::plan('e só as pagas',$ctxFinanceGroup,$admin,$ctxTools)===null,
   'Financial context cannot leak to a group');
+
+ // AI contextual step 2: multi-domain report uses current gateways and explicit scopes.
+ Auth::$user=DB::one('SELECT * FROM users WHERE id=?',[$admin]);Auth::$actor=Auth::$user;
+ Auth::$origin='whatsapp';Auth::$previewClientId=null;
+ $combinedCatalog=AiWhatsAppTools::catalog(true);
+ at(in_array('cross_module_report',array_column(array_column($combinedCatalog,'function'),'name'),true),
+  'ADM private tools include composite report');
+ $calendarText='Task, faz um resumo de tarefas, projetos e agenda de hoje';
+ $combinedPlan=AiWhatsAppCrossModuleReport::fastPlan($calendarText,true);
+ at(($combinedPlan['tool']??null)==='cross_module_report'&&
+  ($combinedPlan['arguments']['agenda']??false)===true&&
+  ($combinedPlan['arguments']['finance']??true)===false,
+  'Conservative PHP route combines tasks, projects and agenda without LLM or finance');
+ $combined=AiWhatsAppCrossModuleReport::run($combinedPlan['arguments'],true,$calendarText);
+ at(($combined['kind']??null)==='cross_module_report'&&
+  isset($combined['sections']['tasks'],$combined['sections']['projects'],$combined['sections']['agenda'])&&
+  !isset($combined['sections']['finance']),
+  'Combined read contains only explicitly requested permitted sections');
+ at(($combined['read_only']??null)===true,'Composite report makes no write operations');
+ $combinedReply=AiWhatsAppCrossModuleReport::format($combined);
+ at(str_contains($combinedReply,'TAREFAS:')&&str_contains($combinedReply,'PROJETOS:')&&
+  str_contains($combinedReply,'AGENDA:')&&!str_contains($combinedReply,'FINANCEIRO DA EMPRESA'),
+  'One WhatsApp response presents each section and excludes unrequested finance');
+ $financeText='Task, faz um resumo de tarefas, agenda e financeiro deste mês';
+ $financePlan=AiWhatsAppCrossModuleReport::fastPlan($financeText,true);
+ at(($financePlan['arguments']['period']??null)==='month'&&
+  ($financePlan['arguments']['finance']??false)===true,'Explicit month finance intent recognized');
+ $financeReport=AiWhatsAppCrossModuleReport::run($financePlan['arguments'],true,$financeText);
+ $currentFin=TaskEscFinanceReadApi::summary(['from'=>$financeReport['from'],'to'=>$financeReport['to']]);
+ at($financeReport['sections']['finance']['data']['expense_cents']===$currentFin['expense_cents'],
+  'Report financial amounts use same current ledger gateway as standalone query');
+ try{AiWhatsAppCrossModuleReport::run([
+   'tasks'=>true,'finance'=>true,'period'=>'week'],true,
+   'Task, faça resumo de tarefas e agenda');throw new RuntimeException('Finance silently included');}
+ catch(AppError $e){at($e->status===422,'No implicit financial exposure from AI proposal');}
+ at(AiWhatsAppCrossModuleReport::fastPlan('Task, faz um resumo de tarefas e financeiro sem finanças',true)===null,
+  'Contradictory or negative financial intent cannot run PHP shortcut');
+ try{AiWhatsAppCrossModuleReport::run([
+   'tasks'=>true,'agenda'=>true],false,'resumo de tarefas e agenda');throw new RuntimeException('Group composite accepted');}
+ catch(AppError $e){at($e->status===403,'Group cannot request composite admin snapshots');}
+ try{AiWhatsAppCrossModuleReport::run([
+   'tasks'=>true,'finance'=>true,'finance_view'=>'invalid'],true,$financeText);throw new RuntimeException('Invalid finance view');}
+ catch(AppError $e){at($e->status===422,'Unsupported finance view denied');}
+ try{AiWhatsAppCrossModuleReport::run([
+   'tasks'=>true,'finance'=>true,'delete'=>true],true,$financeText);throw new RuntimeException('Unexpected write key');}
+ catch(AppError $e){at($e->status===422,'Unexpected/unsafe tool args denied');}
+ try{AiWhatsAppCrossModuleReport::run([
+   'tasks'=>true,'finance'=>true],true,'Não quero financeiro, só tarefas');throw new RuntimeException('Negation ignored');}
+ catch(AppError $e){at($e->status===422,'Explicit financial negation prevents leaking a financial report');}
+ $dateProbe=new DateTimeImmutable('2026-10-15 13:00:00',new DateTimeZone('America/Fortaleza'));
+ at(AiWhatsAppCrossModuleReport::dates('tomorrow',$dateProbe)===['2026-10-16','2026-10-16'],
+  'Tomorrow applies local timezone date');
+ at(AiWhatsAppCrossModuleReport::dates('month',$dateProbe)===['2026-10-01','2026-10-31'],
+  'Month selects complete local financial and agenda period');
+ $ctxChat='5585888880002@c.us';$ctxRowBase=[
+  'session_name'=>'taskesc','chat_id'=>$ctxChat,'sender_id'=>$ctxChat,
+  'chat_type'=>'private','message_type'=>'chat','status'=>'received','auth_user_id'=>$admin,
+  'auth_status'=>'authorized','auth_reason'=>'user_authorized','received_at'=>now(),
+  'ai_state'=>'sent'
+ ];
+ $ctxScope=DB::insert('ai_whatsapp_inbox',array_merge($ctxRowBase,[
+  'provider_message_id'=>'cross-module-context-base-1','body'=>$financeText]));
+ $ctxTools2=array_merge(AiWhatsAppTools::catalog(true),AiWhatsAppAdminActions::catalog(true),AiWhatsAppAgendaTools::catalog(true));
+ $ctxPrev=DB::one('SELECT * FROM ai_whatsapp_inbox WHERE id=?',[$ctxScope]);
+ AiWhatsAppConversationContext::remember($ctxPrev,$admin,$ctxTools2,$financePlan);
+ $ctxFollow=DB::insert('ai_whatsapp_inbox',array_merge($ctxRowBase,[
+  'provider_message_id'=>'cross-module-followup-tomorrow-2','body'=>'e amanhã','ai_state'=>'queued']));
+ $ctxNext=DB::one('SELECT * FROM ai_whatsapp_inbox WHERE id=?',[$ctxFollow]);
+ $planTomorrow=AiWhatsAppConversationContext::plan('e amanhã',$ctxNext,$admin,$ctxTools2);
+ at(($planTomorrow['tool']??null)==='cross_module_report'&&
+  ($planTomorrow['arguments']['period']??null)==='tomorrow'&&
+  ($planTomorrow['arguments']['finance']??false)===true,
+  'Followup changes period while preserving explicitly authorized financial module');
+ $continued=AiWhatsAppCrossModuleReport::run($planTomorrow['arguments'],true,'e amanhã',true);
+ at(isset($continued['sections']['finance'],$continued['sections']['agenda']),
+  'Trusted contextual followup re-reads live agenda and financial data');
+ try{AiWhatsAppCrossModuleReport::run($planTomorrow['arguments'],true,'e amanhã',false);
+  throw new RuntimeException('Untrusted planning inherited financial content');}
+ catch(AppError $e){at($e->status===422,'Only server-trusted context can inherit previous finance scope');}
+ $ctxWrong=$ctxNext;$ctxWrong['chat_id']='5585000000000@c.us';
+ at(AiWhatsAppConversationContext::plan('e amanhã',$ctxWrong,$admin,$ctxTools2)===null,
+  'Cross-domain followup never leaks across chats');
+ at(AiWhatsAppConversationContext::plan('e amanhã',$ctxNext,$admin+99,$ctxTools2)===null,
+  'Cross-domain followup never leaks across user accounts');
+ $ctxWrong=$ctxNext;$ctxWrong['chat_type']='group';
+ at(AiWhatsAppConversationContext::plan('e amanhã',$ctxWrong,$admin,$ctxTools2)===null,
+  'Cross-domain followup never exposes private context in groups');
+ at(AiWhatsAppConversationContext::plan('e amanhã e pague tudo',$ctxNext,$admin,$ctxTools2)===null,
+  'A followup containing any write verb cannot be routed as a read-only report');
  echo "AI WhatsApp tools: schema, create once, edit once, protected fields, self assignment, category default, client denial, private reply, group guard OK\n";
 }finally{@unlink(ROOT.'/config/config.php');@unlink(ROOT.'/storage/installed.lock');}

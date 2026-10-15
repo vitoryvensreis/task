@@ -62,6 +62,11 @@ final class AiWhatsAppFastPath
             ];
             if(isset($adminCommands[$text]))return ['tool'=>$adminCommands[$text],'arguments'=>[]];
         }
+        // Analysis intent requires actual prioritization, not a raw list_tasks
+        // response. Only strict read-only phrases are routed without LLM.
+        if(preg_match('/\Aanalise\s+minhas\s+demandas\s+e\s+me\s+diga\s+quais\s+projetos\s+(?:ainda\s+)?precisam\s+da\s+minha\s+atencao(?:,\s*considerando\s+(?:os\s+)?prazos,\s*prioridades\s+e\s+andamento(?:\s+das\s+tarefas)?)?(?:[.]\s*considere\s+os\s+prazos,\s*prioridades\s+e\s+andamento\s+das\s+tarefas)?(?:[.]\s*nao\s+altere\s+(?:nada|nenhuma\s+informacao))?\z/u',$text)){
+            return ['tool'=>'attention_report','arguments'=>[]];
+        }
         // Generic read-only query by a named topic, without hardcoding people
         // or consuming credits. Tight grammar rejects any additional commands.
         // Results use TaskEscTaskApi::list, which reapplies the current ACL.

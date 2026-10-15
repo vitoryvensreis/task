@@ -44,7 +44,7 @@ final class AiWhatsAppTools
      'limit'=>['type'=>'integer','description'=>'Exibir até 10 detalhes; o total considera TODOS os registros']
     ],'additionalProperties'=>false]]];
   }
-  return $tools;
+  return array_merge($tools,AiWhatsAppCrossModuleReport::catalog($privateChat));
  }
 
  /** Only metadata that this user may see; never prompt with finance or unrelated tenants. */

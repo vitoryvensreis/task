@@ -728,6 +728,10 @@ try{
  $financialFrom=(new DateTimeImmutable('now',new DateTimeZone('America/Fortaleza')))->format('Y-m-01');
  $financialTo=(new DateTimeImmutable('now',new DateTimeZone('America/Fortaleza')))->format('Y-m-t');
  $financeDay=$financialFrom;
+ $baselineFinance=TaskEscFinanceReadApi::expenses(['from'=>$financialFrom,'to'=>$financialTo,'payment_status'=>'pending']);
+ $expectedFinanceTotal=(int)$baselineFinance['total_cents']+33850;
+ $expectedFinanceCount=(int)$baselineFinance['count']+4;
+ $expectedBrl='R$ '.number_format($expectedFinanceTotal/100,2,',','.');
  $sampleFinance=[
   ['description'=>'Custo pendente 1','amount_cents'=>1990,'payment_status'=>'pending'],
   ['description'=>'Custo pendente 2','amount_cents'=>10470,'payment_status'=>'pending'],
@@ -744,12 +748,12 @@ try{
   ]);
  $finArgs=['from'=>$financialFrom,'to'=>$financialTo,'payment_status'=>'pending','limit'=>2];
  $fin=TaskEscFinanceReadApi::expenses($finArgs);
- at($fin['pending_total_cents']===33850&&$fin['total_cents']===33850&&$fin['count']===4,
+ at($fin['pending_total_cents']===$expectedFinanceTotal&&$fin['total_cents']===$expectedFinanceTotal&&$fin['count']===$expectedFinanceCount,
   'Pending financial amount must sum all 4 records, independent of display limit 2');
  at(count($fin['rows'])===2&&count(array_filter($fin['rows'],static fn($x)=>$x['paid']))===0,
   'Pending-only list excludes paid expenses and respects limit');
  $finReply=(new ReflectionMethod(AiWhatsAppWorker::class,'formatResult'))->invoke(null,$fin);
- at(str_contains($finReply,'R$ 338,50')&&str_contains($finReply,'Exibindo 2 de 4'),
+ at(str_contains($finReply,$expectedBrl)&&str_contains($finReply,'Exibindo 2 de '.$expectedFinanceCount),
   'WhatsApp must show full pending total before truncated details');
  $prevCount=count($sent);
  $financeQ=DB::insert('ai_whatsapp_inbox',[
@@ -779,7 +783,7 @@ try{
  $storedFinance=DB::one('SELECT ai_state,ai_reply FROM ai_whatsapp_inbox WHERE id=?',[$financeFollowup]);
  at($financeAiCalls===0&&$storedFinance['ai_state']==='sent',
   'Contextual monthly answer must run without calling model');
- at(str_contains($storedFinance['ai_reply'],'R$ 338,50')&&str_contains($storedFinance['ai_reply'],'Despesas/custos pendentes'),
+ at(str_contains($storedFinance['ai_reply'],$expectedBrl)&&str_contains($storedFinance['ai_reply'],'Despesas/custos pendentes'),
   'Contextual monthly reply must use live pending-only financial totals');
  $wrongRow=DB::one('SELECT * FROM ai_whatsapp_inbox WHERE id=?',[$financeFollowup]);
  $wrongRow['chat_id']='5585000000000@c.us';

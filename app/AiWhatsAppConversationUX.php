@@ -29,6 +29,11 @@ final class AiWhatsAppConversationUX
    implode("\n",array_slice($examples,0,6)).
    "\nVocê pode fazer perguntas de acompanhamento no privado, como “e as do Saulo?” após uma consulta de tarefas.";
  }
+ public static function kind(string $message): string {
+  $t=self::normalize($message);
+  return preg_match('/\A(?:ajuda|menu|o que voce faz|o que voce pode fazer|como voce pode me ajudar|quais sao suas funcoes)\z/u',$t)
+   ?'guided_help':'local_clarification';
+ }
  /** Read-only, exact-match clarification; all other messages keep normal routing. */
  public static function plan(string $message,array $catalog,bool $private): ?array {
   if(mb_strlen($message,'UTF-8')>140)return null;

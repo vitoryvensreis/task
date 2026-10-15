@@ -41,6 +41,8 @@ try {
   'automation.toggle'=>Automation::toggle($p),
   'automation.runs'=>Automation::runs($p),
   'ai.usage_dashboard'=>AiWhatsAppUsageDashboard::read($p),
+  'ai.usage_policy'=>AiWhatsAppUsagePolicy::read(),
+  'ai.usage_policy_save'=>AiWhatsAppUsagePolicy::save($p),
   'system.health'=>SystemHealth::health(),
   'system.logs'=>SystemHealth::logs($p),
   'system.error_resolve'=>SystemHealth::resolve($p),

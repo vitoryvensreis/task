@@ -93,6 +93,29 @@ t(AiWhatsAppModelDiagnostics::fromGroqProbe(404,'{}')['status']==='model_unavail
  'Only actual generation endpoint 404 marks model unavailable for generation');
 t(AiWhatsAppModelDiagnostics::fromGroqProbe(429,'{}')['status']==='quota_limit',
  'Probe reports quota limits');
+// Deterministic project triage: only current, non-completed visible tasks count.
+$at=new DateTimeImmutable('2026-10-15 12:00:00',new DateTimeZone('America/Fortaleza'));
+$sample=[
+ ['id'=>101,'title'=>'Revisar anúncio vencido','project_id'=>7,'client_id'=>2,'client_name'=>'Cliente A','stage_kind'=>'in_progress','stage_name'=>'Em produção','priority'=>'urgent','due_at'=>'2026-10-14 10:00:00'],
+ ['id'=>102,'title'=>'Aula em andamento','project_id'=>8,'client_id'=>3,'client_name'=>'Cliente B','stage_kind'=>'todo','stage_name'=>'A fazer','priority'=>'high','due_at'=>'2026-10-18 15:00:00'],
+ ['id'=>103,'title'=>'Aula já finalizada','project_id'=>7,'client_id'=>2,'client_name'=>'Cliente A','stage_kind'=>'completed','stage_name'=>'Concluídas','priority'=>'urgent','due_at'=>'2026-10-02 10:00:00'],
+ ['id'=>104,'title'=>'Tarefa normal sem projeto','project_id'=>null,'client_id'=>4,'client_name'=>'Cliente C','stage_kind'=>'in_progress','stage_name'=>'Em produção','priority'=>'normal','due_at'=>'2026-11-10 09:00:00']
+];
+$report=AiWhatsAppAttentionReport::summarize($sample,[7=>'Projeto Vídeos',8=>'Projeto Aulas'],$at,4);
+t($report['kind']==='attention_report'&&$report['active']===3&&$report['completed']===1,
+ 'Report excludes completed tasks from active/urgency totals');
+t($report['overdue']===1&&$report['upcoming']===1&&$report['high']===2,
+ 'Deadline and priority classification respects local time');
+t($report['groups'][0]['label']==='Projeto: Projeto Vídeos',
+ 'Risk prioritization puts overdue project first');
+t(str_contains($report['groups'][2]['label'],'sem projeto vinculado'),
+ 'Tasks without projects must be labelled by client, not invented project');
+$written=AiWhatsAppAttentionReport::format($report);
+t(str_contains($written,'#101')&&str_contains($written,'vencido')&&!str_contains($written,'#103'),
+ 'Report includes actual overdue IDs, not completed tasks');
+t(str_contains($written,'Nenhuma tarefa foi alterada.')&&mb_strlen($written)<3201,
+ 'WhatsApp report must be bounded and explicitly read-only');
+
 t(!AiWhatsAppProvider::enabled(),'No private key must mean disabled');
 t(AiWhatsAppProvider::status()['gemini_configured']===false,'No configured key');
 echo "TaskEsc AI providers: Gemini schema, planning, allowlist and disabled-by-default OK\n";

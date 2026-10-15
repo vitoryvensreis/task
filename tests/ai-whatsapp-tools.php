@@ -629,5 +629,34 @@ try{
  }
  at(count($normalized)===count($fullCatalog),'Schema normalization must preserve authorized tool catalog');
 
+ // User-requested business attention analysis: live TaskEsc reads, no extra AI calls.
+ Auth::$user=DB::one('SELECT * FROM users WHERE id=?',[$admin]);Auth::$actor=Auth::$user;
+ $attentionCatalog=AiWhatsAppTools::catalog(true);
+ at(in_array('attention_report',array_column(array_column($attentionCatalog,'function'),'name'),true),
+  'Read-only attention report is offered to authorized user');
+ $demandsBefore=(int)DB::one('SELECT COUNT(*) n FROM demands')['n'];
+ $attentionRaw=AiWhatsAppTools::run('attention_report',[]);
+ at(($attentionRaw['kind']??'')==='attention_report','Attention report fetches the live TaskEsc API');
+ $attentionOutput=AiWhatsAppAttentionReport::format($attentionRaw);
+ at(str_contains($attentionOutput,'Análise de demandas')&&str_contains($attentionOutput,'Nenhuma tarefa foi alterada.'),
+  'Attention report is analytical and explicitly read-only');
+ at((int)DB::one('SELECT COUNT(*) n FROM demands')['n']===$demandsBefore,
+  'Attention analysis has no task-creation or task-deletion side effect');
+ $attentionBody='Task, analise minhas demandas e me diga quais projetos precisam da minha atenção, considerando prazos, prioridades e andamento. Não altere nada.';
+ $attentionMsg=DB::insert('ai_whatsapp_inbox',[
+  'session_name'=>'taskesc','provider_message_id'=>'attention-report-test-1',
+  'chat_id'=>$chat,'sender_id'=>$chat,'chat_type'=>'private','message_type'=>'chat',
+  'body'=>$attentionBody,'status'=>'received','auth_status'=>'authorized',
+  'auth_reason'=>'user_authorized','received_at'=>now(),'ai_state'=>'queued']);
+ $attentionBefore=count($sent);$attentionModelCalls=0;
+ $notNeededModel=static function()use(&$attentionModelCalls){$attentionModelCalls++;throw new RuntimeException('Model should not be called');};
+ AiWhatsAppWorker::tick(1,$notNeededModel,$verifier,null,$sender,true);
+ at($attentionModelCalls===0,'User intent analysis must not consume Gemini/Groq credits');
+ at(DB::one('SELECT ai_state FROM ai_whatsapp_inbox WHERE id=?',[$attentionMsg])['ai_state']==='sent',
+  'WhatsApp analysis dispatched exactly once');
+ at(count($sent)===$attentionBefore+1&&str_contains($sent[$attentionBefore][1],'Análise de demandas'),
+  'WhatsApp shows analytical report rather than 30-task raw list');
+ at((int)DB::one('SELECT COUNT(*) n FROM demands')['n']===$demandsBefore,'No business mutation from WhatsApp analysis');
+
  echo "AI WhatsApp tools: schema, create once, edit once, protected fields, self assignment, category default, client denial, private reply, group guard OK\n";
 }finally{@unlink(ROOT.'/config/config.php');@unlink(ROOT.'/storage/installed.lock');}

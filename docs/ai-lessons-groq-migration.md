@@ -42,3 +42,21 @@ A primeira lista até 10 correspondências de "aula" nas etapas visíveis. A seg
 A consulta por `q=aula` utiliza a pesquisa já existente de tarefas (título, cliente, categoria, responsável ou ID). Não há busca semântica por briefing completo neste passo.
 
 Testes: `php tests/ai-whatsapp-fast-path.php`, `php tests/ai-whatsapp-tools.php` no MySQL 8 e MariaDB 10.11.
+
+## Correção de diagnóstico (após teste real de 14/10)
+
+A chave Groq retornou um caso inconsistente: `GET /models/openai%2Fgpt-oss-120b` devolveu HTTP 404, enquanto `GET /models` devolveu HTTP 200 e incluiu o identificador exato `openai/gpt-oss-120b`. Logo, **não use o GET de detalhe com ID contendo barra para concluir se o modelo está disponível à conta**.
+
+O comando de diagnóstico agora consulta o inventário oficial `GET /openai/v1/models` uma única vez:
+- `status: "listed"`: ID ativo presente na listagem autenticada. `generation_tested: false` significa que o funcionamento real ainda **não foi validado**.
+- `status: "not_listed"`: ID ausente ou inativo; alternativas só são sugeridas se presentes no mesmo inventário.
+- `auth_or_access_rejected`, `quota_limit` ou `connection_failed`: falha na própria consulta. Não se deve inferir indisponibilidade do modelo.
+- A listagem não demonstra que a API de geração e o tool calling estão operacionais.
+
+Para testar o fallback real sem mexer no TaskEsc:
+```bash
+php bin/ai-model-check.php --probe-groq
+```
+O parâmetro opcional emite **uma única chamada pequena ao modelo** com uma função fictícia `taskesc_diagnostic` (nenhuma operação de negócio é executada). Isso **pode consumir tokens/créditos do Groq**. A saída exibe somente status e código HTTP; nunca a API key, o corpo da conversa, o prompt nem a resposta bruta.
+
+Quando `probe.status` for `operational`, o Groq aceitou a geração e retornou a chamada de ferramenta esperada. Se a listagem estiver OK e o probe falhar, examine apenas o status sintético e o código HTTP exibidos.

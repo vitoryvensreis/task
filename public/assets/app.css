@@ -2239,3 +2239,14 @@ button.compact-row{cursor:pointer}.compact-row:hover{border-color:#3a4854}.compa
 .ai-monitor-footnote{margin:16px 0 6px;max-width:900px}
 @media(max-width:1080px){.ai-monitor-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.ai-monitor-two{grid-template-columns:1fr}}
 @media(max-width:620px){.ai-monitor-stats{grid-template-columns:1fr 1fr}.ai-monitor-stat{padding:13px}.ai-monitor-stat strong{font-size:22px}.ai-monitor-panel{padding:12px}.ai-monitor-chart{gap:3px}}
+
+/* AI monitoring quotas and retention preferences */
+.ai-monitor-policy-toggle{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:700;margin:8px 0 18px}
+.ai-monitor-policy-toggle input{accent-color:#c1d2e1;width:17px;height:17px}
+.ai-monitor-policy-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:14px 0 18px}
+.ai-monitor-policy-grid label,.ai-monitor-quota-row{display:flex;flex-direction:column;gap:7px;font-size:12px;min-width:0}
+.ai-monitor-policy-grid .input{max-width:330px}
+.ai-monitor-quota-row .ai-monitor-track{max-width:330px}
+.ai-monitor-policy-actions{display:flex;justify-content:flex-end;margin:16px 0 2px}
+.ai-monitor-policy .status-warn{color:var(--warning);font-weight:600}
+@media(max-width:620px){.ai-monitor-policy-grid{grid-template-columns:1fr}.ai-monitor-policy-actions .primary{width:100%}}

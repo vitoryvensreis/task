@@ -73,16 +73,23 @@ final class AiWhatsAppWorker
   $localConfirmation=$financialPrivate?AiWhatsAppApproval::command($body):null;
   $planned=$localConfirmation??AiWhatsAppFastPath::plan($body,$financialPrivate,(Auth::$user['role']??'')==='admin',
     $row['chat_type']==='private' && (Auth::$user['role']??'')==='admin');
+  // A fast route or cached interpretation avoids planning requests, NOT live DB reads.
+  $route=$planned!==null?'fast_path':null;
   $fromModel=false;
   if($planned===null){
    // Reuse only a prior authorized READ-ONLY tool interpretation, never the old answer.
    $planned=AiWhatsAppMemory::recall($body,$row,(int)$first['user_id'],$tools);
    if($planned===null){
+    $route='model_route';
     $context=AiWhatsAppTools::context()+AiWhatsAppAgendaTools::context($row['chat_type']==='private');
     $planned=$planner?$planner($body,$context,$tools):AiWhatsAppProvider::plan($body,$context,$tools);
     $fromModel=true;
+   }else{
+    $route='cache_hit';
    }
   }
+  // Capture the route decision only (no input text/user/chat identifiers).
+  if($planner===null&&$route!==null)AiWhatsAppUsageMetrics::routing($route);
   if(!is_array($planned))throw new RuntimeException('ai_plan_invalid');
   $message='';
   if(isset($planned['tool'])){

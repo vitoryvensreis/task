@@ -140,6 +140,72 @@ t($timeoutMetric['status']==='transport_error'&&$timeoutMetric['curl_errno']===2
 $invalidMetric=AiWhatsAppUsageMetrics::providerRow('unexpected','key value',500,0,10.0,null,10.1);
 t($invalidMetric['provider']==='unknown'&&$invalidMetric['model']==='unknown','Provider labels are sanitized');
 
+// Dashboard aggregate: historical fixture dates protect current production metrics.
+$fixtureDate='2001-01-19';
+$fixturePath=AiWhatsAppUsageMetrics::fileForDay($fixtureDate);
+t(is_string($fixturePath),'Metrics day filename is valid');
+@mkdir(dirname($fixturePath),0700,true);
+t(!is_file($fixturePath),'Historical fixture does not overwrite existing telemetry');
+$eventRows=[
+ ['at'=>'2001-01-19T00:01:00Z','type'=>'routing','route'=>'fast_path'],
+ ['at'=>'2001-01-19T00:02:00Z','type'=>'routing','route'=>'cache_hit'],
+ ['at'=>'2001-01-19T00:03:00Z','type'=>'routing','route'=>'model_route'],
+ ['at'=>'2001-01-19T00:04:00Z','type'=>'provider','provider'=>'gemini','model'=>'gemini-3.8-flash',
+  'status'=>'http_ok','http'=>200,'curl_errno'=>0,'duration_ms'=>450,
+  'input_tokens'=>100,'output_tokens'=>20,'total_tokens'=>120],
+ ['at'=>'2001-01-19T00:05:00Z','type'=>'provider','provider'=>'groq','model'=>'openai/gpt-oss-120b',
+  'status'=>'http_error','http'=>429,'curl_errno'=>0,'duration_ms'=>200,
+  'input_tokens'=>null,'output_tokens'=>null,'total_tokens'=>null],
+ ['at'=>'2001-01-19T00:06:00Z','type'=>'provider','provider'=>'groq','model'=>'openai/gpt-oss-120b',
+  'status'=>'transport_error','http'=>0,'curl_errno'=>28,'duration_ms'=>25000,
+  'input_tokens'=>null,'output_tokens'=>null,'total_tokens'=>null],
+ ['at'=>'2001-01-19T00:07:00Z','type'=>'routing','route'=>'wrong_route'],
+ ['at'=>'2001-01-19T00:08:00Z','type'=>'provider','provider'=>'not-authorized','model'=>'inject',
+  'status'=>'http_ok','total_tokens'=>999999],
+];
+try{
+ $lines=array_map(static fn($v)=>json_encode($v,JSON_THROW_ON_ERROR|JSON_UNESCAPED_SLASHES),$eventRows);
+ file_put_contents($fixturePath,implode("\n",$lines)."\n",LOCK_EX);
+ $now=new DateTimeImmutable('2001-01-19 12:00:00',new DateTimeZone('UTC'));
+ $aggregate=AiWhatsAppUsageDashboard::aggregate(1,'all',$now);
+ t($aggregate['requests']===3&&$aggregate['http_ok']===1&&$aggregate['http_errors']===1&&$aggregate['transport_errors']===1,
+  'Dashboard aggregates Gemini and Groq errors correctly');
+ t($aggregate['input_tokens']===100&&$aggregate['output_tokens']===20&&$aggregate['total_tokens']===120&&$aggregate['token_samples']===1,
+  'Dashboard never invents missing tokens');
+ t($aggregate['avg_latency_ms']===8550&&$aggregate['latency_samples']===3,
+  'Dashboard calculates average latency from real samples');
+ t($aggregate['avoided_planning_calls']===2&&$aggregate['routes']['model_route']===1,
+  'PHP+cache route count avoids false currency savings');
+ t(count($aggregate['daily'])===1&&$aggregate['daily'][0]['date']===$fixtureDate,
+  'UTC daily graph uses one date');
+ $groqOnly=AiWhatsAppUsageDashboard::aggregate(1,'groq',$now);
+ t($groqOnly['requests']===2&&$groqOnly['total_tokens']===0&&$groqOnly['avoided_planning_calls']===null,
+  'Provider filter excludes unrelated metrics and does not attribute cache to Groq');
+ t($groqOnly['routes']['fast_path']===0,'Provider filter hides unattributable route events');
+ $noMetrics=AiWhatsAppUsageDashboard::aggregate(7,'all',new DateTimeImmutable('2001-02-20',new DateTimeZone('UTC')));
+ t($noMetrics['requests']===0&&count($noMetrics['daily'])===7,
+  'Empty monitoring period renders zero-safe charts');
+ try{AiWhatsAppUsageDashboard::aggregate(90,'all',$now);throw new RuntimeException('Invalid days accepted');}
+ catch(InvalidArgumentException){}
+ // Unit auth tests: API endpoint is exclusively for ADM, not regular users or client preview.
+ $priorUser=Auth::$user;$priorActor=Auth::$actor;$priorPreview=Auth::$previewClientId;
+ try{
+  Auth::$user=['id'=>1,'role'=>'staff','active'=>1];Auth::$actor=Auth::$user;Auth::$previewClientId=null;
+  try{AiWhatsAppUsageDashboard::read(['days'=>1]);throw new RuntimeException('Staff access accepted');}
+  catch(AppError $e){t($e->status===403,'Staff must receive 403');}
+  Auth::$user=['id'=>2,'role'=>'admin','active'=>1];Auth::$actor=Auth::$user;
+  t(AiWhatsAppUsageDashboard::read(['days'=>1,'provider'=>'all'])['days']===1,
+   'Verified ADM can retrieve aggregate-only monitoring data');
+  try{AiWhatsAppUsageDashboard::read(['days'=>40]);throw new RuntimeException('Invalid days accepted');}
+  catch(AppError $e){t($e->status===422,'Days strictly validated');}
+  try{AiWhatsAppUsageDashboard::read(['provider'=>'<script>']);throw new RuntimeException('Invalid provider accepted');}
+  catch(AppError $e){t($e->status===422,'Provider parameter strictly validated');}
+  Auth::$previewClientId=3;
+  try{AiWhatsAppUsageDashboard::read([]);throw new RuntimeException('Preview accepted');}
+  catch(AppError $e){t($e->status===403,'Client preview must not access AI monitoring');}
+ }finally{Auth::$user=$priorUser;Auth::$actor=$priorActor;Auth::$previewClientId=$priorPreview;}
+}finally{@unlink($fixturePath);}
+
 t(!AiWhatsAppProvider::enabled(),'No private key must mean disabled');
 t(AiWhatsAppProvider::status()['gemini_configured']===false,'No configured key');
 echo "TaskEsc AI providers: Gemini schema, planning, allowlist and disabled-by-default OK\n";

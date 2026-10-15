@@ -76,6 +76,7 @@ final class AiWhatsAppWorker
   $uxPlan=($localConfirmation===null&&$conversationPlan===null)
     ?AiWhatsAppConversationUX::plan($body,$tools,$row['chat_type']==='private'):null;
   $planned=$localConfirmation
+    ??AiWhatsAppExpensePaidDialogue::plan($body,$row,(int)$first['user_id'],$tools)
     ??AiWhatsAppFinancialWriteIntent::plan($body,$tools,$financialPrivate)
     ??AiWhatsAppFinancialConversation::plan($body,$row,(int)$first['user_id'],$financialPrivate)
     ??$conversationPlan

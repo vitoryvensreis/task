@@ -92,7 +92,7 @@ final class AiWhatsAppWorker
    if($planned===null){
     $route='model_route';
     $context=AiWhatsAppTools::context()+AiWhatsAppAgendaTools::context($row['chat_type']==='private');
-    $planned=$planner?$planner($body,$context,$tools):AiWhatsAppProvider::plan($body,$context,$tools);
+    $planned=AiWhatsAppSmartRouter::plan($body,$context,$tools,$planner);
     $fromModel=true;
    }else{
     $route='cache_hit';
@@ -123,7 +123,18 @@ final class AiWhatsAppWorker
     elseif($name==='cross_module_report')$result=AiWhatsAppCrossModuleReport::run($args,$row['chat_type']==='private',$body,$trustedFollowup);
     elseif(AiWhatsAppAgendaTools::supported($name))$result=AiWhatsAppAgendaTools::run($name,$args,$row['chat_type']==='private');
     else $result=AiWhatsAppTools::run($name,$args);
-    $reply=self::formatResult($result);
+    // Always execute the tool and verify current ACL BEFORE consulting response cache.
+    // Therefore no live task, financial balance, or calendar event can become stale.
+    $reply=null;
+    try{$reply=AiWhatsAppAnswerCache::recall($body,$row,(int)$first['user_id'],$tools,$planned,$result);}
+    catch(Throwable){error_log('TaskEsc AI answer cache read unavailable');}
+    if($reply===null){
+     $reply=self::formatResult($result);
+     try{AiWhatsAppAnswerCache::remember($body,$row,(int)$first['user_id'],$tools,$planned,$result,$reply);}
+     catch(Throwable){error_log('TaskEsc AI answer cache write unavailable');}
+    }elseif($planner===null){
+     AiWhatsAppUsageMetrics::conversation('answer_cache_hit');
+    }
     // Keep only the preceding authorized READ intent, not data or chat text.
     // This is a private and short-lived reference; live tool ACL runs again on follow-up.
     try{AiWhatsAppConversationContext::remember($row,(int)$first['user_id'],$tools,$planned);}

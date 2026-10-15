@@ -484,7 +484,7 @@ try{
  // Persistent per-user intent cache: store/read interpretation, never stale business results.
  $memoryQuestion='Pode encontrar a tarefa chamada Aula Augusto?';
  $memoryPlan=['tool'=>'list_tasks','arguments'=>['query'=>'Aula']];
- $memTools=AiWhatsAppTools::catalog(false);
+ $memTools=array_merge(AiWhatsAppTools::catalog(true),AiWhatsAppAdminActions::catalog(true),AiWhatsAppAgendaTools::catalog(true));
  $memoryBase=['session_name'=>'taskesc','chat_id'=>$chat,'sender_id'=>$chat,'chat_type'=>'private',
   'message_type'=>'chat','body'=>$memoryQuestion,'status'=>'received','auth_status'=>'authorized',
   'auth_user_id'=>$admin,'auth_reason'=>'user_authorized','received_at'=>now(),'ai_state'=>'queued'];

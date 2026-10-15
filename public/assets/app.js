@@ -92,7 +92,7 @@
     document.querySelectorAll('[data-push-test]').forEach(b=>b.onclick=()=>testPush(b));
     await updatePushControls();
   }
-    const ROUTES={dashboard:'dashboard',kanban:'kanban',demands:'tasks',agenda:'agenda',clients:'clientes',services:'servicos',finance:'financeiro',reports:'relatorios',automations:'automacoes',logs:'saude-logs',settings:'configuracoes'};
+    const ROUTES={dashboard:'dashboard',kanban:'kanban',demands:'tasks',agenda:'agenda',clients:'clientes',services:'servicos',finance:'financeiro',reports:'relatorios',automations:'automacoes',logs:'saude-logs','ai-monitor':'monitoramento-ia',settings:'configuracoes'};
   const ROUTE_PAGES=Object.fromEntries(Object.entries(ROUTES).map(([k,v])=>[v,k]));
   function readRoute(){let path=location.pathname;if(BASE&&path.startsWith(BASE))path=path.slice(BASE.length);path=path.replace(/^\/+|\/+$/g,'');const parts=path.split('/').filter(Boolean);let page=ROUTE_PAGES[parts[0]]||'';let taskId=0;if(parts[0]==='kanban'&&parts[1]==='task'&&/^\d+$/.test(parts[2]||'')){page='kanban';taskId=Number(parts[2])}if(!page&&location.hash){const legacy=location.hash.replace(/^#/,'').split('/');page=['dashboard','kanban','demands','agenda','clients','services','finance','reports','automations','logs','ai-monitor','settings'].includes(legacy[0])?legacy[0]:'';if(legacy[0]==='demands'&&/^\d+$/.test(legacy[1]||'')){page='kanban';taskId=Number(legacy[1])}}return {page:page||'dashboard',taskId}}
   const initialRoute=readRoute();

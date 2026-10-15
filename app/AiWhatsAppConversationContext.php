@@ -107,7 +107,7 @@ final class AiWhatsAppConversationContext
    if(preg_match('/\A(?:e\s+)?(?:so|somente|apenas)\s+as\s+atrasadas\z/u',$text)){
     $args['overdue']=true;return ['tool'=>$tool,'arguments'=>$args];
    }
-   if(preg_match('/\A(?:e\s+)?(?:so|somente|apenas)\s+as\s+(?:em\s+producao|concluidas)\z/u',$text)){
+   if(preg_match('/\A(?:(?:e\s+)?(?:so|somente|apenas)\s+as|e\s+as)\s+(?:em\s+producao|concluidas)\z/u',$text)){
     $stage=str_contains($text,'producao')?'Em produção':'Concluídas';
     unset($args['stage_id'],$args['show_other_stages']);
     $args['stage_name']=$stage;

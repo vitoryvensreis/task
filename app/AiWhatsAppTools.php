@@ -8,6 +8,11 @@ final class AiWhatsAppTools
   $tools=[
    ['type'=>'function','function'=>['name'=>'list_tasks','description'=>'Listar tarefas visíveis ao usuário no TaskEsc.','parameters'=>['type'=>'object','properties'=>['query'=>['type'=>'string','description'=>'Busca por título ou cliente (opcional)'],'client_id'=>['type'=>'integer','description'=>'ID do cliente, se fornecido'],'stage_id'=>['type'=>'integer','description'=>'ID da etapa do Kanban, se fornecido'],'stage_name'=>['type'=>'string','description'=>'Nome exato da etapa do Kanban, se fornecido; não combine com stage_id'],'show_other_stages'=>['type'=>'boolean','description'=>'Ao consultar uma etapa, se não houver resultados, mostrar tarefas correspondentes de outras etapas sem inventar status'],'limit'=>['type'=>'integer','description'=>'Mostrar até 10 tasks (opcional)']], 'additionalProperties'=>false]]]
   ];
+  if(Auth::can('tasks.read'))$tools[]=['type'=>'function','function'=>[
+   'name'=>'attention_report',
+   'description'=>'Analisar quais demandas, projetos e clientes exigem atenção: prazos vencidos, próximos sete dias, prioridades alta/urgente e andamento real. Resumo somente leitura com dados atuais; usar quando o usuário pedir análise, não lista simples.',
+   'parameters'=>['type'=>'object','properties'=>[],'additionalProperties'=>false]
+  ]];
   if(Auth::can('tasks.create'))$tools[]=['type'=>'function','function'=>['name'=>'create_task','description'=>'Criar uma task nova somente em cliente acessível; exige título, briefing, cliente e categoria. Prazo usa padrão mínimo do sistema se omitido.','parameters'=>['type'=>'object','properties'=>[
    'title'=>['type'=>'string'],'brief'=>['type'=>'string'],'client_id'=>['type'=>'integer'],
    'category_id'=>['type'=>'integer'],'assigned_to'=>['type'=>'integer','description'=>'ID de um responsável válido; não invente.'],'assign_to_me'=>['type'=>'boolean','description'=>'Use true quando o autor pedir "eu mesmo", "para mim" ou seu próprio nome e for da equipe. Não combine com assigned_to.'], 
@@ -53,6 +58,7 @@ final class AiWhatsAppTools
 
  public static function run(string $name,array $args): array {
   switch($name){
+   case 'attention_report':return AiWhatsAppAttentionReport::run($args);
    case 'finance_summary': return TaskEscFinanceReadApi::summary($args);
    case 'finance_receivables': return TaskEscFinanceReadApi::receivables($args);
    case 'finance_expenses': return TaskEscFinanceReadApi::expenses($args);

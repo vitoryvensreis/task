@@ -52,7 +52,7 @@ jobs:
           php tests/ai-whatsapp-providers.php
           php tests/wppconnect-contract.php
           php tests/automation-contract.php
-          python3 -m py_compile ops/realtime-step1.py ops/realtime-step3.py ops/realtime-step4.py ops/automation-worker.py ops/ai-whatsapp-worker.py
+          python3 -m py_compile ops/realtime-step1.py ops/realtime-step3.py ops/realtime-step4.py ops/automation-worker.py ops/ai-whatsapp-worker.py ops/wppconnect-webhook-probe.py
           python3 tests/realtime-ops.py
           rm -rf ops/__pycache__
 
@@ -558,6 +558,21 @@ jobs:
             set -euo pipefail
             cd "$DEPLOY_PATH"
             php bin/ai-whatsapp-incident.php || true
+          REMOTE
+
+      - name: Verificar URL de webhook do WPPConnect (sem imprimir secrets)
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
+            set -euo pipefail
+            cd "$DEPLOY_PATH"
+            python3 ops/wppconnect-webhook-probe.py || true
           REMOTE
 
       - name: Testar publicação diagnóstica no Centrifugo

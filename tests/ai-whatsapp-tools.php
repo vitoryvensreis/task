@@ -1006,7 +1006,7 @@ try{
    'Natural request processed');
   $state=DB::one('SELECT ai_state,ai_reply FROM ai_whatsapp_inbox WHERE id=?',[$id]);
   at($state['ai_state']==='sent'&&str_contains((string)$state['ai_reply'],$case['expected']),
-   'User-friendly response answers with a useful clarification');
+   'User-friendly response answers with a useful clarification: '.$case['id'].' state='.$state['ai_state'].' reply='.mb_substr((string)$state['ai_reply'],0,150));
  }
  at($naturalNoModel===0,'No LLM planning calls spent on common clarification and help');
  at((int)DB::one('SELECT COUNT(*) n FROM demands')['n']===$naturalExisting,

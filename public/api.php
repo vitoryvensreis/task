@@ -42,7 +42,7 @@ try {
   'automation.runs'=>Automation::runs($p),
   'ai.usage_dashboard'=>AiWhatsAppUsageDashboard::read($p),
   'ai.usage_policy'=>AiWhatsAppUsagePolicy::read(),
-  'ai.usage_policy_save'=>AiWhatsAppUsagePolicy::save($p),
+  'ai.usage_policy_save'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?AiWhatsAppUsagePolicy::save($p):fail('Método não permitido.',405),
   'system.health'=>SystemHealth::health(),
   'system.logs'=>SystemHealth::logs($p),
   'system.error_resolve'=>SystemHealth::resolve($p),

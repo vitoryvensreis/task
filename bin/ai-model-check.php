@@ -35,7 +35,7 @@ if(!preg_match('/\A[a-z0-9][a-z0-9._-]{2,90}\z/D',$gm)){
 }else{
  $result['models']['gemini']=['model'=>$gm]+$check('https://generativelanguage.googleapis.com/v1beta/models/'.$gm,['x-goog-api-key: '.$gk,'Accept: application/json']);
 }
-$groq=(string)($cfg['groq_model']??'llama-3.3-70b-versatile');
+$groq=(string)($cfg['groq_model']??'openai/gpt-oss-120b');
 $gq=trim((string)($cfg['groq_api_key']??''));
 if(!preg_match('/\A[a-z0-9][a-z0-9._\/-]{2,90}\z/D',$groq)){
  $result['models']['groq']=['status'=>'invalid_model_identifier'];
@@ -43,5 +43,26 @@ if(!preg_match('/\A[a-z0-9][a-z0-9._\/-]{2,90}\z/D',$groq)){
  $result['models']['groq']=['model'=>$groq,'status'=>'not_configured'];
 }else{
  $result['models']['groq']=['model'=>$groq]+$check('https://api.groq.com/openai/v1/models/'.rawurlencode($groq),['Authorization: Bearer '.$gq,'Accept: application/json']);
+ if($result['models']['groq']['status']==='not_available_to_key'){
+  // GET model inventory (not generation). Return only vetted tool-capable IDs,
+  // never the raw API response, key, metadata, quota or account details.
+  $c=curl_init('https://api.groq.com/openai/v1/models');
+  if($c!==false){
+   curl_setopt_array($c,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>5,CURLOPT_TIMEOUT=>12,
+    CURLOPT_FOLLOWLOCATION=>false,CURLOPT_HTTPHEADER=>['Authorization: Bearer '.$gq,'Accept: application/json'],
+    CURLOPT_USERAGENT=>'TaskEsc-ModelCheck/1.0']);
+   $body=curl_exec($c);$http=(int)curl_getinfo($c,CURLINFO_HTTP_CODE);curl_close($c);
+   if(is_string($body)&&$http===200){
+    $data=json_decode($body,true);
+    $available=[];
+    if(is_array($data)&&is_array($data['data']??null))foreach($data['data'] as $item){
+     if(is_string($item['id']??null))$available[]=$item['id'];
+    }
+    $candidates=['openai/gpt-oss-120b','openai/gpt-oss-20b','qwen/qwen3.8-27b'];
+    $result['models']['groq']['available_replacements']=array_values(array_intersect($candidates,$available));
+   }
+  }
+ }
+
 }
 echo json($result).PHP_EOL;

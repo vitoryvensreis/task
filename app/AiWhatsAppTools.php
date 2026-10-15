@@ -6,7 +6,7 @@ final class AiWhatsAppTools
 {
  public static function catalog(bool $privateChat=false): array {
   $tools=[
-   ['type'=>'function','function'=>['name'=>'list_tasks','description'=>'Listar tarefas visíveis ao usuário no TaskEsc.','parameters'=>['type'=>'object','properties'=>['query'=>['type'=>'string','description'=>'Busca por título ou cliente (opcional)'],'client_id'=>['type'=>'integer','description'=>'ID do cliente, se fornecido'],'stage_id'=>['type'=>'integer','description'=>'ID da etapa do Kanban, se fornecido'],'stage_name'=>['type'=>'string','description'=>'Nome exato da etapa do Kanban, se fornecido; não combine com stage_id'],'limit'=>['type'=>'integer','description'=>'Mostrar até 10 tasks (opcional)']], 'additionalProperties'=>false]]]
+   ['type'=>'function','function'=>['name'=>'list_tasks','description'=>'Listar tarefas visíveis ao usuário no TaskEsc.','parameters'=>['type'=>'object','properties'=>['query'=>['type'=>'string','description'=>'Busca por título ou cliente (opcional)'],'client_id'=>['type'=>'integer','description'=>'ID do cliente, se fornecido'],'stage_id'=>['type'=>'integer','description'=>'ID da etapa do Kanban, se fornecido'],'stage_name'=>['type'=>'string','description'=>'Nome exato da etapa do Kanban, se fornecido; não combine com stage_id'],'show_other_stages'=>['type'=>'boolean','description'=>'Ao consultar uma etapa, se não houver resultados, mostrar tarefas correspondentes de outras etapas sem inventar status'],'limit'=>['type'=>'integer','description'=>'Mostrar até 10 tasks (opcional)']], 'additionalProperties'=>false]]]
   ];
   if(Auth::can('tasks.create'))$tools[]=['type'=>'function','function'=>['name'=>'create_task','description'=>'Criar uma task nova somente em cliente acessível; exige título, briefing, cliente e categoria. Prazo usa padrão mínimo do sistema se omitido.','parameters'=>['type'=>'object','properties'=>[
    'title'=>['type'=>'string'],'brief'=>['type'=>'string'],'client_id'=>['type'=>'integer'],
@@ -71,10 +71,26 @@ final class AiWhatsAppTools
      if(!$stage)fail('Não encontrei essa etapa do Kanban. Informe o nome exato.',422);
      $params['stage_id']=(int)$stage['id'];
     }
+    $otherStages=$args['show_other_stages']??false;
+    if(!is_bool($otherStages))fail('Filtro de outras etapas inválido.',422);
+    if($otherStages&&!isset($params['stage_id']))fail('Informe uma etapa para consultar alternativas.',422);
     $data=TaskEscTaskApi::list($params);
-    return ['kind'=>'list','total'=>(int)$data['pagination']['total'],'tasks'=>array_map(static fn($d)=>[
+    $tasks=array_map(static fn($d)=>[
       'id'=>(int)$d['id'],'title'=>$d['title'],'client'=>$d['client_name'],'stage'=>$d['stage_name'],'due_at'=>$d['due_at']
-    ],array_slice($data['rows'],0,$limit))];
+    ],array_slice($data['rows'],0,$limit));
+    $result=['kind'=>'list','total'=>(int)$data['pagination']['total'],'tasks'=>$tasks];
+    if($otherStages&&$result['total']===0){
+     // Do not misrepresent a stage-filtered empty result as no tasks in the system.
+     // Reuse the same authorized TaskEscTaskApi gateway, now without the stage filter.
+     $otherParams=$params;unset($otherParams['stage_id']);
+     $alternatives=TaskEscTaskApi::list($otherParams);
+     $result['searched_stage']=$stageName??(string)(DB::one('SELECT name FROM stages WHERE id=?',[$params['stage_id']])['name']??'etapa solicitada');
+     $result['alternative_total']=(int)$alternatives['pagination']['total'];
+     $result['alternatives']=array_map(static fn($d)=>[
+       'id'=>(int)$d['id'],'title'=>$d['title'],'stage'=>$d['stage_name']
+     ],array_slice($alternatives['rows'],0,$limit));
+    }
+    return $result;
    case 'create_task':
     Auth::requireAbility('tasks.create');
     foreach(['title','brief','client_id','category_id'] as $key)if(!array_key_exists($key,$args))fail('Dados insuficientes para criar task.',422);

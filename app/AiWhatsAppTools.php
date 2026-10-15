@@ -6,7 +6,7 @@ final class AiWhatsAppTools
 {
  public static function catalog(bool $privateChat=false): array {
   $tools=[
-   ['type'=>'function','function'=>['name'=>'list_tasks','description'=>'Listar tarefas visíveis ao usuário no TaskEsc.','parameters'=>['type'=>'object','properties'=>['query'=>['type'=>'string','description'=>'Busca por título ou cliente (opcional)'],'client_id'=>['type'=>'integer','description'=>'ID do cliente, se fornecido'],'stage_id'=>['type'=>'integer','description'=>'ID da etapa do Kanban, se fornecido'],'stage_name'=>['type'=>'string','description'=>'Nome exato da etapa do Kanban, se fornecido; não combine com stage_id'],'show_other_stages'=>['type'=>'boolean','description'=>'Ao consultar uma etapa, se não houver resultados, mostrar tarefas correspondentes de outras etapas sem inventar status'],'limit'=>['type'=>'integer','description'=>'Mostrar até 10 tasks (opcional)']], 'additionalProperties'=>false]]]
+   ['type'=>'function','function'=>['name'=>'list_tasks','description'=>'Listar tarefas visíveis ao usuário no TaskEsc.','parameters'=>['type'=>'object','properties'=>['query'=>['type'=>'string','description'=>'Busca por título ou cliente (opcional)'],'client_id'=>['type'=>'integer','description'=>'ID do cliente, se fornecido'],'stage_id'=>['type'=>'integer','description'=>'ID da etapa do Kanban, se fornecido'],'stage_name'=>['type'=>'string','description'=>'Nome exato da etapa do Kanban, se fornecido; não combine com stage_id'],'show_other_stages'=>['type'=>'boolean','description'=>'Ao consultar uma etapa, se não houver resultados, mostrar tarefas correspondentes de outras etapas sem inventar status'],'overdue'=>['type'=>'boolean','description'=>'Filtrar apenas tarefas atrasadas e ainda abertas'],'limit'=>['type'=>'integer','description'=>'Mostrar até 10 tasks (opcional)']], 'additionalProperties'=>false]]]
   ];
   if(Auth::can('tasks.read'))$tools[]=['type'=>'function','function'=>[
    'name'=>'attention_report',
@@ -71,6 +71,10 @@ final class AiWhatsAppTools
     if(!is_string($query)||mb_strlen($query)>90)fail('Busca inválida.',422);
     $limit=integer($args['limit']??10,1,10);
     $params=['paginate'=>1,'per_page'=>10,'q'=>$query];
+    if(array_key_exists('overdue',$args)){
+     if(!is_bool($args['overdue']))fail('Filtro de atraso inválido.',422);
+     if($args['overdue'])$params['overdue']=1;
+    }
     if(array_key_exists('client_id',$args))$params['client_id']=integer($args['client_id'],1);
     if(isset($args['stage_id'])&&isset($args['stage_name']))fail('Selecione etapa por ID ou por nome.',422);
     if(array_key_exists('stage_id',$args))$params['stage_id']=integer($args['stage_id'],1);

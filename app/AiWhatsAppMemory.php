@@ -14,7 +14,7 @@ final class AiWhatsAppMemory
  private const PREFIX='ai-read-plan-v1:';
  private const TTL_DAYS=7;
  private const SAFE_TOOLS=[
-  'list_tasks','agenda_calendars','agenda_list','agenda_detail',
+  'list_tasks','attention_report','agenda_calendars','agenda_list','agenda_detail',
   'list_clients','list_projects','list_team','list_events',
   'finance_summary','finance_receivables','finance_expenses'
  ];

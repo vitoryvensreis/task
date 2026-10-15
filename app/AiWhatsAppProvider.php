@@ -52,6 +52,7 @@ final class AiWhatsAppProvider
         foreach(array_unique([$primary,$fallback]) as $provider){
             if(!self::available($provider))continue;
             try{
+                AiWhatsAppUsagePolicy::reserve($provider);
                 return match($provider){
                     'gemini'=>AiWhatsAppGemini::plan($message,$context,$tools),
                     'groq'=>AiWhatsAppGroq::plan($message,$context,$tools),

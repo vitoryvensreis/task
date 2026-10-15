@@ -73,11 +73,13 @@ final class AiWhatsAppWorker
   $localConfirmation=$financialPrivate?AiWhatsAppApproval::command($body):null;
   $conversationPlan=$localConfirmation===null
     ?AiWhatsAppConversationContext::plan($body,$row,(int)$first['user_id'],$tools):null;
+  $uxPlan=($localConfirmation===null&&$conversationPlan===null)
+    ?AiWhatsAppConversationUX::plan($body,$tools,$row['chat_type']==='private'):null;
   $planned=$localConfirmation
     ??AiWhatsAppFinancialConversation::plan($body,$row,(int)$first['user_id'],$financialPrivate)
     ??$conversationPlan
     ??AiWhatsAppCrossModuleReport::fastPlan($body,$financialPrivate)
-    ??AiWhatsAppConversationUX::plan($body,$tools,$row['chat_type']==='private')
+    ??$uxPlan
     ??AiWhatsAppFastPath::plan($body,$financialPrivate,(Auth::$user['role']??'')==='admin',
     $row['chat_type']==='private' && (Auth::$user['role']??'')==='admin');
   $trustedFollowup=$conversationPlan!==null && $planned===$conversationPlan;
@@ -148,8 +150,8 @@ final class AiWhatsAppWorker
    if(!self::sameUser($first,$again)){self::ignore($id,'access_revoked');return;}
    $message=mb_substr($message,0,550);
    DB::run("UPDATE ai_whatsapp_inbox SET ai_state='reply_pending',ai_reply=?,ai_processed_at=?,ai_updated_at=? WHERE id=? AND ai_state='processing'",[$message,self::now(),self::now(),$id]);
-   if($planner===null&&$route==='fast_path')
-    AiWhatsAppUsageMetrics::conversation('local_clarification');
+   if($planner===null&&$uxPlan!==null&&$planned===$uxPlan)
+    AiWhatsAppUsageMetrics::conversation(AiWhatsAppConversationUX::kind($body));
   }
   if($planner===null&&$trustedFollowup&&isset($planned['tool']))
    AiWhatsAppUsageMetrics::conversation('context_followup');

@@ -537,6 +537,15 @@ try{
  at(DB::one('SELECT ai_state FROM ai_whatsapp_inbox WHERE id=?',[$quotaMsg])['ai_state']==='sent','Rate limit reported');
  at(count($sent)===$before+1&&str_contains($sent[$before][1],'limite de requisições'),'Rate-limit reason shown');
 
+ // HTTP 400 is a malformed provider request, not a network outage: no repeated billing.
+ $formatMsg=DB::insert('ai_whatsapp_inbox',array_merge($memoryBase,[
+  'provider_message_id'=>'memory-error-provider-format','body'=>'Faça análise de projeto sem mudar nada']));
+ $prior=count($sent);
+ AiWhatsAppWorker::tick(1,static fn()=>throw new RuntimeException('ai_provider_bad_request'),$verifier,null,$sender,true);
+ $formatState=DB::one('SELECT ai_state,ai_attempts FROM ai_whatsapp_inbox WHERE id=?',[$formatMsg]);
+ at($formatState['ai_state']==='sent'&&(int)$formatState['ai_attempts']===1,'Provider HTTP 400 must not be retried');
+ at(count($sent)===$prior+1&&str_contains($sent[$prior][1],'formato'),'WhatsApp explains provider format error');
+
  // Transient transport failure retries twice, then delivers only one honest explanation.
  $transport=DB::insert('ai_whatsapp_inbox',array_merge($memoryBase,['provider_message_id'=>'memory-error-network',
    'body'=>'Dá detalhes completos de projeto específico']));
@@ -600,5 +609,25 @@ try{
 
   try{AiWhatsAppTools::run('list_tasks',['query'=>'aula','stage_name'=>'Etapa inexistente']);throw new RuntimeException('Invalid stage used');}
  catch(AppError $e){at($e->getMessage()!=='','Stage names resolved only from active DB stages');}
+ // Production-style catalog: ADM private tools include no-argument calendar/team functions.
+ Auth::$user=DB::one('SELECT * FROM users WHERE id=?',[$admin]);Auth::$actor=Auth::$user;
+ $fullCatalog=array_merge(AiWhatsAppTools::catalog(true),AiWhatsAppAdminActions::catalog(true),AiWhatsAppAgendaTools::catalog(true));
+ $toolNames=array_column(array_column($fullCatalog,'function'),'name');
+ foreach(['agenda_calendars','list_team','list_events'] as $expectedTool)
+  at(in_array($expectedTool,$toolNames,true),'Expected zero-argument production tool '.$expectedTool);
+ $fullRequest=AiWhatsAppGemini::requestBody('Analise demandas',[], $fullCatalog);
+ $gemFunctions=$fullRequest['tools'][0]['functionDeclarations'];
+ foreach($gemFunctions as $declaration)if(in_array($declaration['name'],['agenda_calendars','list_team','list_events'],true))
+  at(!isset($declaration['parameters']),'No-argument Gemini function must omit optional parameters');
+ $normalized=AiWhatsAppToolSchemas::forGroq($fullCatalog);
+ $normalizedJson=json($normalized);
+ at(!str_contains($normalizedJson,'"properties":[]'),'Full Groq catalog has no invalid empty list for object properties');
+ foreach($normalized as $tool){
+  $parameters=$tool['function']['parameters'];
+  if(($parameters['type']??null)==='object'&&($fullCatalog[array_search($tool['function']['name'],$toolNames,true)]['function']['parameters']['properties']??null)===[])
+   at($parameters['properties'] instanceof stdClass,'Groq no-argument tool schema must be JSON object');
+ }
+ at(count($normalized)===count($fullCatalog),'Schema normalization must preserve authorized tool catalog');
+
  echo "AI WhatsApp tools: schema, create once, edit once, protected fields, self assignment, category default, client denial, private reply, group guard OK\n";
 }finally{@unlink(ROOT.'/config/config.php');@unlink(ROOT.'/storage/installed.lock');}

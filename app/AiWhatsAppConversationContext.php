@@ -11,7 +11,7 @@ final class AiWhatsAppConversationContext
 {
  private const PREFIX='ai-conversation-v1:';
  private const TTL_MINUTES=10;
- private const READ_TOOLS=['list_tasks','agenda_list','finance_expenses'];
+ private const READ_TOOLS=['list_tasks','agenda_list','finance_expenses','cross_module_report'];
  private static function currentNames(array $catalog): array {
   return array_values(array_filter(array_column(array_column($catalog,'function'),'name'),'is_string'));
  }
@@ -35,6 +35,7 @@ final class AiWhatsAppConversationContext
    'list_tasks'=>['query','limit','stage_id','stage_name','show_other_stages','client_id','overdue'],
    'agenda_list'=>['from','to','limit'],
    'finance_expenses'=>['from','to','limit','payment_status'],
+   'cross_module_report'=>['tasks','projects','agenda','finance','period','task_query','finance_view'],
    default=>[]
   };
   foreach($args as $name=>$value){
@@ -96,6 +97,43 @@ final class AiWhatsAppConversationContext
   $text=self::norm($message);
   $tool=$previous['tool'];$args=$previous['arguments'];
   // Exact, harmless read-only follow-up grammar. Never execute writes from context.
+  // Follow-ups for combined READ-ONLY snapshots. Scope is inherited only from
+  // the immediately preceding authorized response. Finance is never added by a
+  // generic period follow-up unless it already existed in the prior plan.
+  if($tool==='cross_module_report'){
+   if(preg_match('/\A(?:e\s+)?(?:amanha|para\s+amanha|os\s+de\s+amanha)\z/u',$text)){
+    $args['period']='tomorrow';return ['tool'=>$tool,'arguments'=>$args];
+   }
+   if(preg_match('/\A(?:e\s+)?(?:hoje|para\s+hoje)\z/u',$text)){
+    $args['period']='today';return ['tool'=>$tool,'arguments'=>$args];
+   }
+   if(preg_match('/\A(?:e\s+)?(?:esse|este)\s+mes\z/u',$text)){
+    $args['period']='month';return ['tool'=>$tool,'arguments'=>$args];
+   }
+   if(preg_match('/\A(?:e\s+)?(?:a\s+)?agenda\z/u',$text)){
+    $args['agenda']=true;return ['tool'=>$tool,'arguments'=>$args];
+   }
+   if(preg_match('/\A(?:e\s+)?(?:os\s+)?projetos\z/u',$text)){
+    $args['projects']=true;return ['tool'=>$tool,'arguments'=>$args];
+   }
+   if(preg_match('/\A(?:e\s+)?(?:as\s+)?tarefas\z/u',$text)){
+    $args['tasks']=true;return ['tool'=>$tool,'arguments'=>$args];
+   }
+   if(preg_match('/\A(?:e\s+)?(?:o\s+)?financeiro\z/u',$text)){
+    $args['finance']=true;$args['finance_view']='summary';
+    return ['tool'=>$tool,'arguments'=>$args];
+   }
+   if(preg_match('/\A(?:e\s+)?(?:as\s+)?despesas\s+pendentes\z/u',$text)){
+    $args['finance']=true;$args['finance_view']='pending_expenses';
+    return ['tool'=>$tool,'arguments'=>$args];
+   }
+   if(preg_match('/\A(?:e\s+)?(?:as\s+)?do\s+([a-z0-9][a-z0-9 -]{1,39})\z/u',$text,$m)
+    &&($args['tasks']??false)){
+    $args['task_query']=trim($m[1]);
+    return ['tool'=>$tool,'arguments'=>$args];
+   }
+   return null;
+  }
   if($tool==='list_tasks'){
    if(preg_match('/\A(?:e\s+)?(?:as\s+)?(?:do|da|de)\s+([a-z0-9][a-z0-9 -]{1,39})\z/u',$text,$m)){
     $name=trim($m[1]);

@@ -194,6 +194,24 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -p "$VPS_PORT" -H "$VPS_HOST" >> ~/.ssh/known_hosts
 
+      - name: Diagnosticar WhatsApp antes de reiniciar o worker (somente leitura)
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
+            set -euo pipefail
+            echo "TaskEsc AI WhatsApp: snapshot PRE-DEPLOY UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            systemctl is-active taskesc-ai-whatsapp-worker.service || true
+            systemctl show taskesc-ai-whatsapp-worker.service -p ActiveState -p SubState -p NRestarts -p ExecMainStatus --no-pager || true
+            cd "$DEPLOY_PATH"
+            php bin/ai-whatsapp-diagnose.php || true
+          REMOTE
+
       - name: Backup obrigatório pré-deploy
         id: backup
         env:
@@ -525,6 +543,21 @@ jobs:
             else
               sudo -n python3 "$DEPLOY_PATH/ops/ai-whatsapp-worker.py" check --deploy-path "$DEPLOY_PATH"
             fi
+          REMOTE
+
+      - name: Diagnosticar WhatsApp e conexao WPPConnect (somente leitura)
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
+            set -euo pipefail
+            cd "$DEPLOY_PATH"
+            php bin/ai-whatsapp-incident.php || true
           REMOTE
 
       - name: Testar publicação diagnóstica no Centrifugo

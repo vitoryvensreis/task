@@ -1558,6 +1558,13 @@
 
     const bars=days.map(x=>'<div class="ai-monitor-day" title="'+esc(x.date)+': '+fmt(x.requests)+' chamadas"><div class="ai-monitor-bar-rail"><div class="ai-monitor-bars"><span class="ai-monitor-bar ok" style="height:'+Math.min(100,100*Number(x.http_ok||0)/maxReq)+'%"></span><span class="ai-monitor-bar error" style="height:'+Math.min(100,100*Number(x.errors||0)/maxReq)+'%"></span></div></div><small>'+esc(x.date.slice(5).replace('-','/'))+'</small></div>').join('');
     const routeRows=[['fast_path','PHP direto'],['cache_hit','Cache reutilizado'],['model_route','Modelo de IA']].map(([k,v])=>'<div class="ai-monitor-route"><div><b>'+esc(v)+'</b><span>'+fmt(d.routes?.[k]||0)+' · '+percent(d.routes?.[k]||0,totalRoutes)+'</span></div><div class="ai-monitor-track"><i style="width:'+(totalRoutes?Math.round(100*(d.routes?.[k]||0)/totalRoutes):0)+'%"></i></div></div>').join('');
+    const conversationStats=d.conversation||{};
+    const conversationHtml=routeVisible?'<section class="panel ai-monitor-panel"><div class="panel-head"><div><h3>Clareza nas conversas</h3><div class="panel-sub">Somente contadores anônimos. Não são gravados textos ou números de WhatsApp.</div></div></div>'+
+      '<div class="ai-monitor-stats">'+[
+        ['Ajuda contextual',conversationStats.guided_help||0],
+        ['Esclarecimentos locais',conversationStats.local_clarification||0],
+        ['Continuações sem novo planejamento',conversationStats.context_followup||0]
+      ].map(([title,num])=>'<article class="ai-monitor-stat"><span class="eyebrow">'+esc(title)+'</span><strong>'+fmt(num)+'</strong></article>').join('')+'</div></section>':'';
     const providerRows=providers.map(([k,v])=>'<tr><td>'+esc(k.toUpperCase())+'</td><td>'+fmt(v.requests)+'</td><td>'+fmt(v.http_ok)+'</td><td>'+fmt(v.errors)+'</td><td>'+fmt(v.tokens)+'</td></tr>').join('');
     const modelRows=models.map(([k,v])=>'<tr><td>'+esc(k)+'</td><td>'+esc(v.provider)+'</td><td>'+fmt(v.requests)+'</td><td>'+fmt(v.http_ok)+'</td><td>'+fmt(v.errors)+'</td><td>'+fmt(v.tokens)+'</td></tr>').join('');
     $('#content').innerHTML=
@@ -1573,7 +1580,7 @@
       (providerRows||'<tr><td colspan="5">Nenhuma chamada registrada no período.</td></tr>')+'</tbody></table></div></section>'+
       '<section class="panel ai-monitor-panel"><div class="panel-head"><div><h3>Modelos utilizados</h3></div></div><div class="table-wrap"><table class="table"><thead><tr><th>Modelo</th><th>Provedor</th><th>Chamadas</th><th>HTTP 2xx</th><th>Falhas</th><th>Tokens</th></tr></thead><tbody>'+
       (modelRows||'<tr><td colspan="6">Sem modelos registrados no período.</td></tr>')+'</tbody></table></div></section>'+
-      quotaHtml+
+      conversationHtml+quotaHtml+
       '<p class="panel-sub ai-monitor-footnote">'+esc(d.coverage||'')+(d.truncated_files?' Atenção: leitura limitada em arquivo de métricas muito grande.':'')+' Fuso dos gráficos: UTC. Tokens não reportados não são estimados. Alertas e retenção na etapa 3/3.</p>';
     $('#ai-policy-form').onsubmit=async e=>{
       e.preventDefault();

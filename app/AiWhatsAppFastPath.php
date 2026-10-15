@@ -65,7 +65,10 @@ final class AiWhatsAppFastPath
         // A frequent classroom-editing query is a safe, read-only filtered lookup.
         // No model needed; every execution re-reads TaskEsc with current authorization.
         if(preg_match('/\\A(?:encontre|mostre|liste|listar)\\s+(?:as\\s+)?tarefas\\s+relacionadas\\s+a\\s+edicao\\s+de\\s+aulas\\s+e\\s+me\\s+diga\\s+quais\\s+(?:ainda\\s+)?estao\\s+em\\s+producao\\z/u',$text)){
-            return ['tool'=>'list_tasks','arguments'=>['query'=>'aula','stage_name'=>'Em produção','limit'=>10]];
+            return ['tool'=>'list_tasks','arguments'=>['query'=>'aula','stage_name'=>'Em produção','show_other_stages'=>true,'limit'=>10]];
+        }
+        if(preg_match('/\\A(?:encontre|mostre|liste|listar)\\s+(?:as\\s+)?tarefas\\s+relacionadas\\s+a\\s+edicao\\s+de\\s+aulas\\s+e\\s+me\\s+diga\\s+quais\\s+sao\\s+elas\\z/u',$text)){
+            return ['tool'=>'list_tasks','arguments'=>['query'=>'aula','limit'=>10]];
         }
         // Explicit and complete phrases only. Never accept negations, additions
         // like "e exclua", or unspecified client/project filters in this path.

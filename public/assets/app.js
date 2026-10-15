@@ -1516,7 +1516,8 @@
     if(S.user?.role!=='admin'||S.user?.is_preview)throw new Error('Acesso restrito ao administrador.');
     const f=window.aiMonitorFilters||{days:7,provider:'all'};
     window.aiMonitorFilters=f;
-    const d=await api('ai.usage_dashboard',{days:f.days,provider:f.provider});
+    const [d,usagePolicy]=await Promise.all([api('ai.usage_dashboard',{days:f.days,provider:f.provider}),api('ai.usage_policy')]);
+    const cfg=usagePolicy.policy||{};const quotaUsed=usagePolicy.usage_today||{};const alertEntries=Object.entries(usagePolicy.alerts||{});
     const fmt=n=>new Intl.NumberFormat('pt-BR').format(Number(n)||0);
     const duration=n=>n===null||n===undefined?'Sem amostras':(Number(n)/1000).toLocaleString('pt-BR',{maximumFractionDigits:2})+' s';
     const totalRoutes=Object.values(d.routes||{}).reduce((a,b)=>a+Number(b||0),0);
@@ -1535,6 +1536,26 @@
     const selectDays=[1,7,14,30].map(n=>'<option value="'+n+'" '+(n===Number(f.days)?'selected':'')+'>'+(n===1?'Hoje (UTC)':'Últimos '+n+' dias')+'</option>').join('');
     const selectProviders=[['all','Todos'],['gemini','Gemini'],['groq','Groq']].map(([k,v])=>'<option value="'+k+'" '+(k===f.provider?'selected':'')+'>'+v+'</option>').join('');
     const statCards=cards.map(([title,value,sub])=>'<article class="panel ai-monitor-stat"><span class="eyebrow">'+esc(title)+'</span><strong>'+esc(value)+'</strong><small>'+esc(sub)+'</small></article>').join('');
+    const quotaRows=[['gemini','Gemini'],['groq','Groq']].map(([key,name])=>{
+      const cap=Math.max(0,Number(cfg[key+'_daily_calls']||0));
+      const used=Math.max(0,Number(quotaUsed[key]||0));
+      const percent=cap?Math.min(100,Math.round(used*100/cap)):0;
+      return '<div class="ai-monitor-quota-row"><label for="ai-policy-'+key+'">'+name+' — limite diário de chamadas (0 = ilimitado)</label>'+
+       '<input class="input" id="ai-policy-'+key+'" name="'+key+'_daily_calls" type="number" min="0" max="100000" step="1" value="'+cap+'" required>'+
+       '<span class="panel-sub">'+fmt(used)+' chamadas reservadas hoje (UTC)'+(cap?' / '+fmt(cap)+' permitidas':' — sem teto')+'</span>'+
+       '<div class="ai-monitor-track"><i style="width:'+percent+'%"></i></div></div>';
+    }).join('');
+    const alertsHtml=alertEntries.length?'<p class="status-warn">Alertas de cota: '+alertEntries.map(([name,v])=>esc(name)+' '+fmt(v.used)+'/'+fmt(v.max)+' ('+esc(v.level)+')').join(' · ')+'</p>':
+      '<p class="panel-sub">Nenhum limite configurado foi atingido ou aproximado.</p>';
+    const quotaHtml='<section class="panel ai-monitor-panel ai-monitor-policy"><div class="panel-head"><div><h3>Limites, alertas e retenção</h3>'+
+      '<p class="panel-sub">Limites são por provedor e por dia UTC. Consultas PHP/cache seguem funcionando mesmo se os modelos atingirem o teto.</p></div></div>'+
+      '<form id="ai-policy-form"><label class="ai-monitor-policy-toggle"><input id="ai-policy-enabled" name="enabled" type="checkbox" '+(cfg.enabled?'checked':'')+'> Ativar bloqueio por cota diária</label>'+
+      '<div class="ai-monitor-policy-grid">'+quotaRows+'</div><div class="ai-monitor-policy-grid">'+
+      '<label>Alertar a partir de (%) <input class="input" name="alert_percent" type="number" min="50" max="99" value="'+Number(cfg.alert_percent||80)+'" required></label>'+
+      '<label>Reter métricas (dias) <input class="input" name="retention_days" type="number" min="30" max="365" value="'+Number(cfg.retention_days||30)+'" required></label></div>'+
+      '<p class="panel-sub">Padrão: cota desativada e 30 dias de retenção. Alertas internos são enviados aos ADMs pelo cron. Cotas contam tentativas reservadas, inclusive timeouts; tokens não medidos não entram em previsões.</p>'+
+      alertsHtml+'<div class="ai-monitor-policy-actions"><button class="primary" type="submit">Salvar configurações</button></div></form></section>';
+
     const bars=days.map(x=>'<div class="ai-monitor-day" title="'+esc(x.date)+': '+fmt(x.requests)+' chamadas"><div class="ai-monitor-bar-rail"><div class="ai-monitor-bars"><span class="ai-monitor-bar ok" style="height:'+Math.min(100,100*Number(x.http_ok||0)/maxReq)+'%"></span><span class="ai-monitor-bar error" style="height:'+Math.min(100,100*Number(x.errors||0)/maxReq)+'%"></span></div></div><small>'+esc(x.date.slice(5).replace('-','/'))+'</small></div>').join('');
     const routeRows=[['fast_path','PHP direto'],['cache_hit','Cache reutilizado'],['model_route','Modelo de IA']].map(([k,v])=>'<div class="ai-monitor-route"><div><b>'+esc(v)+'</b><span>'+fmt(d.routes?.[k]||0)+' · '+percent(d.routes?.[k]||0,totalRoutes)+'</span></div><div class="ai-monitor-track"><i style="width:'+(totalRoutes?Math.round(100*(d.routes?.[k]||0)/totalRoutes):0)+'%"></i></div></div>').join('');
     const providerRows=providers.map(([k,v])=>'<tr><td>'+esc(k.toUpperCase())+'</td><td>'+fmt(v.requests)+'</td><td>'+fmt(v.http_ok)+'</td><td>'+fmt(v.errors)+'</td><td>'+fmt(v.tokens)+'</td></tr>').join('');
@@ -1552,7 +1573,21 @@
       (providerRows||'<tr><td colspan="5">Nenhuma chamada registrada no período.</td></tr>')+'</tbody></table></div></section>'+
       '<section class="panel ai-monitor-panel"><div class="panel-head"><div><h3>Modelos utilizados</h3></div></div><div class="table-wrap"><table class="table"><thead><tr><th>Modelo</th><th>Provedor</th><th>Chamadas</th><th>HTTP 2xx</th><th>Falhas</th><th>Tokens</th></tr></thead><tbody>'+
       (modelRows||'<tr><td colspan="6">Sem modelos registrados no período.</td></tr>')+'</tbody></table></div></section>'+
+      quotaHtml+
       '<p class="panel-sub ai-monitor-footnote">'+esc(d.coverage||'')+(d.truncated_files?' Atenção: leitura limitada em arquivo de métricas muito grande.':'')+' Fuso dos gráficos: UTC. Tokens não reportados não são estimados. Alertas e retenção na etapa 3/3.</p>';
+    $('#ai-policy-form').onsubmit=async e=>{
+      e.preventDefault();
+      const form=e.currentTarget,button=form.querySelector('button[type=submit]');
+      const data=Object.fromEntries(new FormData(form));
+      data.enabled=!!form.querySelector('#ai-policy-enabled').checked;
+      for(const k of ['gemini_daily_calls','groq_daily_calls','alert_percent','retention_days'])data[k]=Number(data[k]);
+      button.disabled=true;
+      try{
+        await api('ai.usage_policy_save',data,'POST');
+        toast('Limites e retenção salvos. Alterações válidas para novas chamadas de IA.');
+        await go('ai-monitor',false,false,true);
+      }catch(err){toast(err.message||'Falha ao salvar os limites.',true);button.disabled=false;}
+    };
     $('#ai-monitor-refresh').onclick=()=>go('ai-monitor',false,false,true);
     $('#ai-monitor-days').onchange=e=>{f.days=Number(e.target.value);go('ai-monitor',false,false,true)};
     $('#ai-monitor-provider').onchange=e=>{f.provider=e.target.value;go('ai-monitor',false,false,true)};

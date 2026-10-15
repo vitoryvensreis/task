@@ -71,11 +71,15 @@ final class AiWhatsAppWorker
   // Read-only commands and exact greetings never contact a paid/quota-limited model.
   // For everything else, preserve the original Gemini -> Groq route.
   $localConfirmation=$financialPrivate?AiWhatsAppApproval::command($body):null;
+  $conversationPlan=$localConfirmation===null
+    ?AiWhatsAppConversationContext::plan($body,$row,(int)$first['user_id'],$tools):null;
   $planned=$localConfirmation
     ??AiWhatsAppFinancialConversation::plan($body,$row,(int)$first['user_id'],$financialPrivate)
-    ??AiWhatsAppConversationContext::plan($body,$row,(int)$first['user_id'],$tools)
+    ??$conversationPlan
+    ??AiWhatsAppCrossModuleReport::fastPlan($body,$financialPrivate)
     ??AiWhatsAppFastPath::plan($body,$financialPrivate,(Auth::$user['role']??'')==='admin',
     $row['chat_type']==='private' && (Auth::$user['role']??'')==='admin');
+  $trustedFollowup=$conversationPlan!==null && $planned===$conversationPlan;
   // A fast route or cached interpretation avoids planning requests, NOT live DB reads.
   $route=$planned!==null?'fast_path':null;
   $fromModel=false;
@@ -99,7 +103,7 @@ final class AiWhatsAppWorker
    $name=(string)$planned['tool'];$args=$planned['arguments']??null;
    if(!is_array($args))throw new RuntimeException('ai_arguments_invalid');
    // Lock inbox row and revalidate identity+group membership before EACH write/read tool.
-   try{$message=DB::tx(function() use($id,$row,$first,$name,$args,$tools,$verify,$localConfirmation,$fromModel,$body,$planned): string {
+   try{$message=DB::tx(function() use($id,$row,$first,$name,$args,$tools,$verify,$localConfirmation,$fromModel,$body,$planned,$trustedFollowup): string {
     $locked=DB::one('SELECT ai_state FROM ai_whatsapp_inbox WHERE id=? FOR UPDATE',[$id]);
     if(($locked['ai_state']??'')!=='processing')throw new RuntimeException('ai_operation_already_handled');
     $again=self::decision($row,$verify);
@@ -113,6 +117,7 @@ final class AiWhatsAppWorker
     if($isLocalApproval)$result=AiWhatsAppApproval::decide($name,$args,$row);
     elseif(AiWhatsAppAdminActions::sensitive($name))$result=AiWhatsAppApproval::propose($name,$args,$row);
     elseif(in_array($name,['list_clients','list_projects','list_team','list_events'],true))$result=AiWhatsAppAdminActions::run($name,$args);
+    elseif($name==='cross_module_report')$result=AiWhatsAppCrossModuleReport::run($args,$row['chat_type']==='private',$body,$trustedFollowup);
     elseif(AiWhatsAppAgendaTools::supported($name))$result=AiWhatsAppAgendaTools::run($name,$args,$row['chat_type']==='private');
     else $result=AiWhatsAppTools::run($name,$args);
     $reply=self::formatResult($result);
@@ -234,6 +239,7 @@ final class AiWhatsAppWorker
   if(($r['kind']??'')==='created')return 'Task #'.$r['id'].' criada com sucesso.';
   if(($r['kind']??'')==='edited')return 'Task #'.$r['id'].' atualizada com sucesso.';
   if(($r['kind']??'')==='moved')return 'Task #'.$r['id'].' movida para '.mb_substr((string)$r['stage'],0,60).'.';
+  if(($r['kind']??'')==='cross_module_report')return AiWhatsAppCrossModuleReport::format($r);
   if(($r['kind']??'')==='attention_report')return AiWhatsAppAttentionReport::format($r);
   if(($r['kind']??'')==='list'){
    if(!$r['tasks']){

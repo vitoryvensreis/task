@@ -1563,7 +1563,8 @@
       '<div class="ai-monitor-stats">'+[
         ['Ajuda contextual',conversationStats.guided_help||0],
         ['Esclarecimentos locais',conversationStats.local_clarification||0],
-        ['Continuações sem novo planejamento',conversationStats.context_followup||0]
+        ['Continuações sem novo planejamento',conversationStats.context_followup||0],
+        ['Respostas reutilizadas com dados conferidos',conversationStats.answer_cache_hit||0]
       ].map(([title,num])=>'<article class="ai-monitor-stat"><span class="eyebrow">'+esc(title)+'</span><strong>'+fmt(num)+'</strong></article>').join('')+'</div></section>':'';
     const providerRows=providers.map(([k,v])=>'<tr><td>'+esc(k.toUpperCase())+'</td><td>'+fmt(v.requests)+'</td><td>'+fmt(v.http_ok)+'</td><td>'+fmt(v.errors)+'</td><td>'+fmt(v.tokens)+'</td></tr>').join('');
     const modelRows=models.map(([k,v])=>'<tr><td>'+esc(k)+'</td><td>'+esc(v.provider)+'</td><td>'+fmt(v.requests)+'</td><td>'+fmt(v.http_ok)+'</td><td>'+fmt(v.errors)+'</td><td>'+fmt(v.tokens)+'</td></tr>').join('');

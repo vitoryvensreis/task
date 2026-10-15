@@ -73,10 +73,13 @@ final class AiWhatsAppWorker
   $localConfirmation=$financialPrivate?AiWhatsAppApproval::command($body):null;
   $conversationPlan=$localConfirmation===null
     ?AiWhatsAppConversationContext::plan($body,$row,(int)$first['user_id'],$tools):null;
+  $uxPlan=($localConfirmation===null&&$conversationPlan===null)
+    ?AiWhatsAppConversationUX::plan($body,$tools,$row['chat_type']==='private'):null;
   $planned=$localConfirmation
     ??AiWhatsAppFinancialConversation::plan($body,$row,(int)$first['user_id'],$financialPrivate)
     ??$conversationPlan
     ??AiWhatsAppCrossModuleReport::fastPlan($body,$financialPrivate)
+    ??$uxPlan
     ??AiWhatsAppFastPath::plan($body,$financialPrivate,(Auth::$user['role']??'')==='admin',
     $row['chat_type']==='private' && (Auth::$user['role']??'')==='admin');
   $trustedFollowup=$conversationPlan!==null && $planned===$conversationPlan;
@@ -147,7 +150,11 @@ final class AiWhatsAppWorker
    if(!self::sameUser($first,$again)){self::ignore($id,'access_revoked');return;}
    $message=mb_substr($message,0,550);
    DB::run("UPDATE ai_whatsapp_inbox SET ai_state='reply_pending',ai_reply=?,ai_processed_at=?,ai_updated_at=? WHERE id=? AND ai_state='processing'",[$message,self::now(),self::now(),$id]);
+   if($planner===null&&$uxPlan!==null&&$planned===$uxPlan)
+    AiWhatsAppUsageMetrics::conversation(AiWhatsAppConversationUX::kind($body));
   }
+  if($planner===null&&$trustedFollowup&&isset($planned['tool']))
+   AiWhatsAppUsageMetrics::conversation('context_followup');
   // No additional business operation after this point, only outbound delivery.
   self::deliver($row,$first,$verify,$mentioned,$send,$message);
  }
@@ -241,22 +248,7 @@ final class AiWhatsAppWorker
   if(($r['kind']??'')==='moved')return 'Task #'.$r['id'].' movida para '.mb_substr((string)$r['stage'],0,60).'.';
   if(($r['kind']??'')==='cross_module_report')return AiWhatsAppCrossModuleReport::format($r);
   if(($r['kind']??'')==='attention_report')return AiWhatsAppAttentionReport::format($r);
-  if(($r['kind']??'')==='list'){
-   if(!$r['tasks']){
-    if(isset($r['searched_stage'])){
-     $stage=mb_substr((string)$r['searched_stage'],0,60);
-     if(!empty($r['alternatives'])){
-      $lines=array_map(static fn($d)=>'#'.$d['id'].' '.mb_substr((string)$d['title'],0,60).' — '.mb_substr((string)$d['stage'],0,35),$r['alternatives']);
-      return 'Nenhuma task correspondente na etapa "'.$stage.'". Mas encontrei '
-        .(int)$r['alternative_total'].' em outras etapas:'."\n".implode("\n",$lines);
-     }
-     return 'Não encontrei tarefas correspondentes à busca, nem na etapa "'.$stage.'" nem nas outras etapas visíveis para seu usuário.';
-    }
-    return 'Nenhuma task encontrada para os filtros informados.';
-   }
-   $lines=array_map(static fn($d)=>'#'.$d['id'].' '.mb_substr((string)$d['title'],0,60).' — '.mb_substr((string)$d['stage'],0,35),$r['tasks']);
-   return 'Tasks ('.$r['total'].' encontradas):'."\n".implode("\n",$lines);
-  }
+  if(($r['kind']??'')==='list')return AiWhatsAppConversationUX::formatTasks($r);
   throw new RuntimeException('ai_unknown_result');
  }
  private static function ignore(int $id,string $reason): void {

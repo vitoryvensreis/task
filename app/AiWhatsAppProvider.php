@@ -58,8 +58,9 @@ final class AiWhatsAppProvider
                     default=>throw new RuntimeException('ai_provider_invalid'),
                 };
             }catch(RuntimeException $e){
-                // Fallback only on transport/provider outage. A malformed or unsafe tool
-                // response fails closed instead of being retried against another model.
+                // Categorical failures only: no prompt, response, API key or chat identifier.
+                error_log('TaskEsc AI route provider='.$provider.' failure='.$e->getMessage());
+                // Never retry unsafe tool/model responses against another provider.
                 if(!self::fallbackEligible($e->getMessage()))throw $e;
                 $first??=$e;
             }

@@ -31,7 +31,11 @@ final class AiWhatsAppGemini
         ]);
         $raw=curl_exec($curl);
         $http=(int)curl_getinfo($curl,CURLINFO_HTTP_CODE);
+        $curlError=(int)curl_errno($curl);
         curl_close($curl);
+        // Only numeric upstream codes; never log request body, response body, keys or user data.
+        if($curlError!==0||$http<200||$http>=300)
+            error_log('TaskEsc AI upstream provider=gemini http='.$http.' curl_errno='.$curlError);
         // Don't log provider bodies: they may contain prompts or account metadata.
         if(!is_string($raw))throw new RuntimeException('ai_connection_failed');
         if($http===429)throw new RuntimeException('ai_provider_rate_limit');

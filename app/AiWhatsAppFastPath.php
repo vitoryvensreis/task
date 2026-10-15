@@ -62,6 +62,15 @@ final class AiWhatsAppFastPath
             ];
             if(isset($adminCommands[$text]))return ['tool'=>$adminCommands[$text],'arguments'=>[]];
         }
+        // Generic read-only query by a named topic, without hardcoding people
+        // or consuming credits. Tight grammar rejects any additional commands.
+        // Results use TaskEscTaskApi::list, which reapplies the current ACL.
+        if(preg_match('/\A(?:procure|encontre|mostre|liste|listar)\s+(?:as\s+)?tarefas\s+relacionadas\s+(?:ao|a)\s+([a-z0-9][a-z0-9 -]{1,39}?)\s+e\s+me\s+diga\s+em\s+quais\s+etapas\s+do\s+kanban\s+elas\s+estao(?:[.]\s+nao\s+altere\s+nenhuma\s+tarefa)?\z/u',$text,$m)){
+            $term=trim($m[1]);
+            if(!preg_match('/\b(?:apague|exclua|delete|remova|edite|mova|pague|confirme|cancele)\b/u',$term)){
+                return ['tool'=>'list_tasks','arguments'=>['query'=>$term,'limit'=>10]];
+            }
+        }
         // A frequent classroom-editing query is a safe, read-only filtered lookup.
         // No model needed; every execution re-reads TaskEsc with current authorization.
         if(preg_match('/\\A(?:encontre|mostre|liste|listar)\\s+(?:as\\s+)?tarefas\\s+relacionadas\\s+a\\s+edicao\\s+de\\s+aulas\\s+e\\s+me\\s+diga\\s+quais\\s+(?:ainda\\s+)?estao\\s+em\\s+producao\\z/u',$text)){

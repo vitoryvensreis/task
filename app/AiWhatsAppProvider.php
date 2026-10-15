@@ -39,7 +39,7 @@ final class AiWhatsAppProvider
     /** Fallback only for transport, quota, or unavailable model, never for unsafe responses/auth failures. */
     public static function fallbackEligible(string $code): bool
     {
-        return in_array($code,['ai_provider_unavailable','ai_connection_failed','ai_provider_rate_limit','ai_provider_model_unavailable','ai_provider_bad_request'],true);
+        return in_array($code,['ai_provider_unavailable','ai_connection_failed','ai_provider_rate_limit','ai_provider_model_unavailable','ai_provider_bad_request','ai_usage_daily_limit'],true);
     }
 
     public static function plan(string $message,array $context,array $tools): array

@@ -17,7 +17,7 @@ final class AiWhatsAppUsagePolicy {
     'gemini_daily_calls','groq_daily_calls'=>$n>=0&&$n<=100000,
     'alert_percent'=>$n>=50&&$n<=99,
     'retention_days'=>$n>=30&&$n<=365,
-    default=>false})throw new InvalidArgumentException($key);
+    default=>false}))throw new InvalidArgumentException($key);
    $out[$key]=$n;
   }
   return $out;

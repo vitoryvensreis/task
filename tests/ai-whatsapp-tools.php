@@ -565,7 +565,7 @@ try{
  $sauloBeforeCount=(int)DB::one('SELECT COUNT(*) n FROM demands')['n'];
  $sauloResult=AiWhatsAppTools::run($sauloPlan['tool'],$sauloPlan['arguments']);
  at(($sauloResult['kind']??'')==='list'&&count(array_filter($sauloResult['tasks'],
-  static fn($t)=>(int)$t['id']===1&&str_contains((string)$t['title'],'Saulo'))===1,
+  static fn($t)=>(int)$t['id']===1&&str_contains((string)$t['title'],'Saulo')))===1,
   'Saulo question returns authorized tasks and their Kanban stages');
  at((int)DB::one('SELECT COUNT(*) n FROM demands')['n']===$sauloBeforeCount,
   'Read-only question cannot create or delete tasks');

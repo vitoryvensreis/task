@@ -73,6 +73,7 @@ final class AiWhatsAppWorker
   $localConfirmation=$financialPrivate?AiWhatsAppApproval::command($body):null;
   $planned=$localConfirmation
     ??AiWhatsAppFinancialConversation::plan($body,$row,(int)$first['user_id'],$financialPrivate)
+    ??AiWhatsAppConversationContext::plan($body,$row,(int)$first['user_id'],$tools)
     ??AiWhatsAppFastPath::plan($body,$financialPrivate,(Auth::$user['role']??'')==='admin',
     $row['chat_type']==='private' && (Auth::$user['role']??'')==='admin');
   // A fast route or cached interpretation avoids planning requests, NOT live DB reads.
@@ -115,6 +116,10 @@ final class AiWhatsAppWorker
     elseif(AiWhatsAppAgendaTools::supported($name))$result=AiWhatsAppAgendaTools::run($name,$args,$row['chat_type']==='private');
     else $result=AiWhatsAppTools::run($name,$args);
     $reply=self::formatResult($result);
+    // Keep only the preceding authorized READ intent, not data or chat text.
+    // This is a private and short-lived reference; live tool ACL runs again on follow-up.
+    try{AiWhatsAppConversationContext::remember($row,(int)$first['user_id'],$tools,$planned);}
+    catch(Throwable){error_log('TaskEsc AI conversation context unavailable');}
     // Cache an interpretation only AFTER an authorized successful read. Never cache writes.
     if($fromModel){
      try{AiWhatsAppMemory::remember($body,$row,(int)$first['user_id'],$tools,$planned);}

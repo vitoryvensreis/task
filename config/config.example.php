@@ -26,7 +26,7 @@ return [
    'gemini_api_key' => '',
    'gemini_model' => 'gemini-3.8-flash',
    'groq_api_key' => '',
-   'groq_model' => 'llama-3.3-70b-versatile',
+   'groq_model' => 'openai/gpt-oss-120b',
  ],
  'trusted_origins' => ['https://chatgpt.com','https://chat.openai.com'],
 ];

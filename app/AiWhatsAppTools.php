@@ -37,8 +37,11 @@ final class AiWhatsAppTools
      'client_id'=>['type'=>'integer','description'=>'Cliente específico, somente ID existente'],
      'limit'=>['type'=>'integer','description'=>'Até 10 cobranças detalhadas']
     ],'additionalProperties'=>false]]];
-   $tools[]=['type'=>'function','function'=>['name'=>'finance_expenses','description'=>'Consultar despesas e custos de tarefas registrados no período, sem alterar lançamentos. Apenas ADM em conversa privada.','parameters'=>['type'=>'object','properties'=>[
-     'from'=>$range['from'],'to'=>$range['to'],'limit'=>['type'=>'integer','description'=>'Até 10 custos']
+   $tools[]=['type'=>'function','function'=>['name'=>'finance_expenses','description'=>'Consultar despesas/custos pagos, pendentes ou todos no período, incluindo TOTAL EM REAIS calculado pelo TaskEsc, não apenas a lista. Para "total de despesas pendentes" use payment_status=pending; para somatório geral use all. Apenas ADM no privado; não altera lançamentos.','parameters'=>['type'=>'object','properties'=>[
+     'from'=>$range['from'],'to'=>$range['to'],
+     'payment_status'=>['type'=>'string','enum'=>['all','pending','paid'],
+       'description'=>'Filtrar por despesas pendentes, pagas ou todas; padrão all'],
+     'limit'=>['type'=>'integer','description'=>'Exibir até 10 detalhes; o total considera TODOS os registros']
     ],'additionalProperties'=>false]]];
   }
   return $tools;

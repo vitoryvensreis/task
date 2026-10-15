@@ -12,7 +12,7 @@ RewriteRule ^realtime\.auth$ realtime-auth.php [L,QSA]
 # Rotas amigáveis do painel. Arquivos e endpoints físicos continuam sendo servidos normalmente.
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^(?:dashboard|kanban|tasks|agenda|clientes|financeiro|relatorios|configuracoes)(?:/.*)?$ index.php [L,QSA]
+RewriteRule ^(?:dashboard|kanban|tasks|agenda|clientes|financeiro|relatorios|monitoramento-ia|configuracoes)(?:/.*)?$ index.php [L,QSA]
 <FilesMatch "^(config|schema|README|\.env)">
   Require all denied
 </FilesMatch>

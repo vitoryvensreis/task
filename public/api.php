@@ -40,6 +40,7 @@ try {
   'automation.save'=>Automation::save($p),
   'automation.toggle'=>Automation::toggle($p),
   'automation.runs'=>Automation::runs($p),
+  'ai.usage_dashboard'=>AiWhatsAppUsageDashboard::read($p),
   'system.health'=>SystemHealth::health(),
   'system.logs'=>SystemHealth::logs($p),
   'system.error_resolve'=>SystemHealth::resolve($p),

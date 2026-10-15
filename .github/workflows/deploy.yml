@@ -65,6 +65,7 @@ jobs:
           node tests/realtime-frontend.mjs
           node tests/automation-frontend.mjs
           node tests/automation-pan.mjs
+          node tests/ai-usage-frontend.mjs
           node --check public/assets/vendor/centrifuge-5.7.4.js
           node --check public/service-worker.js
           node - <<'NODE'

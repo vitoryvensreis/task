@@ -575,6 +575,21 @@ jobs:
             python3 ops/wppconnect-webhook-probe.py || true
           REMOTE
 
+      - name: Revalidar webhook da sessao WPPConnect uma unica vez
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        if: ${{ contains(github.event.head_commit.message, '[wpp-rebind-once]') }}
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
+            set -euo pipefail
+            cd "$DEPLOY_PATH"
+            php bin/wpp-session-rebind.php --once
+          REMOTE
+
       - name: Testar publicação diagnóstica no Centrifugo
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}

@@ -43,7 +43,7 @@ final class AiWhatsAppCrossModuleReport
   $vocabulary=['de','das','dos','do','da','as','os','meus','minhas','minha','meu','e','com','a','o',
    'tarefas','tasks','projetos','agenda','compromissos','eventos','financeiro','financeiras','financas',
    'despesas','custos','contas','receber','recebimentos','faturamento','cobrancas','hoje','amanha',
-   'neste','este','esse','mes','desta','nessa','semana','pendentes'];
+   'neste','este','esse','deste','desse','nesta','mes','desta','nessa','semana','pendentes'];
   if(!$tokens||array_diff($tokens,$vocabulary))return null;
   $args=[
    'tasks'=>(bool)preg_match('/\b(?:tarefas|tasks)\b/u',$t),

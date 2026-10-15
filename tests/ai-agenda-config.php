@@ -4,7 +4,7 @@ if(getenv('GITHUB_ACTIONS')!=='true')throw new RuntimeException('Run only in dis
 define('ROOT',dirname(__DIR__));
 $p=ROOT.'/config/config.php';if(is_file($p))throw new RuntimeException('Refusing to replace config.php');
 try{
- file_put_contents($p,"<?php\nreturn ".var_export(['ai_whatsapp'=>['enabled'=>true,'admin_control_enabled'=>false,'agenda_control_enabled'=>true]],true).";\n");
+ file_put_contents($p,"<?php\nreturn ".var_export(['ai_whatsapp'=>['enabled'=>true,'admin_control_enabled'=>false,'financial_write_enabled'=>false,'agenda_control_enabled'=>true]],true).";\n");
  require ROOT.'/app/bootstrap.php';
  Auth::$user=['role'=>'admin','id'=>1,'active'=>1];Auth::$actor=Auth::$user;
  if(!AiWhatsAppAgendaTools::writeEnabled())throw new RuntimeException('Independent agenda opt-in ignored');

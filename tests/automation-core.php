@@ -311,6 +311,19 @@ try{
  ];
  $finalEdges=[];
  for($i=0;$i<count($finalNodes)-1;$i++)$finalEdges[]=['from'=>$finalNodes[$i]['id'],'to'=>$finalNodes[$i+1]['id'],'branch'=>'next'];
+ // Save must reject workflows without a connected termination node.
+ $invalidDefinition=['version'=>1,'nodes'=>[['id'=>'trigger','type'=>'trigger','config'=>['event'=>'demand.final_delivered']],['id'=>'move','type'=>'action.task','config'=>['operation'=>'stage','value'=>'5']]],'edges'=>[['from'=>'trigger','to'=>'move','branch'=>'next']]];
+ $noEndRejected=false;
+ try{Automation::validateDefinition($invalidDefinition,'demand.final_delivered');}catch(AppError $e){$noEndRejected=$e->status===422;}
+ autoCheck($noEndRejected,'Automation without an ending must be rejected.');
+ $invalidDefinition['nodes'][]=['id'=>'end','type'=>'end','config'=>[]];
+ $unconnectedEndRejected=false;
+ try{Automation::validateDefinition($invalidDefinition,'demand.final_delivered');}catch(AppError $e){$unconnectedEndRejected=$e->status===422;}
+ autoCheck($unconnectedEndRejected,'Disconnected ending must not allow saving.');
+ $missingTrigger=$invalidDefinition;$missingTrigger['nodes']=array_values(array_filter($missingTrigger['nodes'],fn($n)=>$n['type']!=='trigger'));$missingTrigger['edges']=[];
+ $missingTriggerRejected=false;
+ try{Automation::validateDefinition($missingTrigger,'demand.final_delivered');}catch(AppError $e){$missingTriggerRejected=$e->status===422;}
+ autoCheck($missingTriggerRejected,'Removing trigger must block saving until recreated.');
  $finalAutomation=Automation::save(['name'=>'Teste entrega final','trigger_event'=>'demand.final_delivered','definition'=>['version'=>1,'nodes'=>$finalNodes,'edges'=>$finalEdges],'active'=>1]);
  $initialCopies=(int)DB::one("SELECT COUNT(*) n FROM demands WHERE title='Revisar Task automática'")['n'];
  Files::add(['demand_id'=>$demandId,'kind'=>'final','label'=>'Link final de teste','url'=>'https://example.com/entrega-final']);
@@ -358,10 +371,17 @@ try{
   'client_id'=>$clientId,'category_id'=>1,'assigned_to'=>$staffId,
   'title'=>'Destino WhatsApp manual','brief'=>'Teste de encaminhamento',
   'due_at'=>$due,'priority'=>'normal','whatsapp_recipient_mode'=>'custom',
-  'whatsapp_custom_phone'=>'+55 (85) 99999-3444','billing_mode'=>'one_off','amount_cents'=>0
+  'whatsapp_custom_phone'=>'+55 (85) 99999-3444','whatsapp_contact_name'=>'Contato Teste Augusto','billing_mode'=>'one_off','amount_cents'=>0
  ]);
  $phoneDemand=DB::one('SELECT * FROM demands WHERE id=?',[$phoneTask['id']]);
  autoCheck($phoneDemand['whatsapp_custom_phone']==='5585999993444','Task must store normalized custom WhatsApp destination.');
+ $contacts=WhatsappContacts::list(['q'=>'Augusto']);
+ autoCheck(count($contacts)===1&&$contacts[0]['name']==='Contato Teste Augusto'&&$contacts[0]['phone']==='5585999993444','Named contact must be searchable and stored with normalized phone.');
+ $contactsByNumber=WhatsappContacts::list(['q'=>'99993444']);
+ autoCheck(count($contactsByNumber)===1,'Agenda must search by phone.');
+ DB::tx(fn()=>WhatsappContacts::remember('Contato Atualizado Augusto','5585999993444'));
+ autoCheck(count(WhatsappContacts::list(['q'=>'Augusto']))===1,'Saving an existing number must update without duplicating.');
+
  $recipientReflection=new ReflectionMethod(AutomationWorker::class,'recipient');
  $recipientResult=$recipientReflection->invoke(null,['config'=>['recipient'=>'task']],$phoneDemand+['entity_type'=>'demand']);
  autoCheck($recipientResult['type']==='custom'&&$recipientResult['phone']==='5585999993444','Worker must use the task-selected custom WhatsApp number.');

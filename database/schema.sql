@@ -1,4 +1,4 @@
--- TaskEsc schema 29 (TaskEsc AI permissions; schema 20 retirado) | MySQL 8+ / MariaDB 10.6+ | UTF-8
+-- TaskEsc schema 30 (agenda WhatsApp; schema 20 retirado) | MySQL 8+ / MariaDB 10.6+ | UTF-8
 SET NAMES utf8mb4;
 SET time_zone = '+00:00';
 CREATE TABLE IF NOT EXISTS settings (`key` VARCHAR(100) PRIMARY KEY, value LONGTEXT NOT NULL) ENGINE=InnoDB;
@@ -73,6 +73,18 @@ CREATE TABLE expense_categories (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, nam
 INSERT INTO expense_categories (name,active,created_at,updated_at) VALUES ('Água',1,NOW(),NOW()),('Energia / Luz',1,NOW(),NOW()),('Internet / Telefonia',1,NOW(),NOW()),('Aluguel',1,NOW(),NOW()),('Software',1,NOW(),NOW()),('Armazenamento / Cloud',1,NOW(),NOW()),('Assinaturas',1,NOW(),NOW()),('Marketing',1,NOW(),NOW()),('Transporte',1,NOW(),NOW()),('Equipamentos',1,NOW(),NOW()),('Impostos',1,NOW(),NOW()),('Serviços',1,NOW(),NOW()),('Alimentação',1,NOW(),NOW()),('Custo Pessoal',1,NOW(),NOW()),('Outros',1,NOW(),NOW());
 CREATE TABLE expense_rules (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, name VARCHAR(190) NOT NULL, vendor VARCHAR(190) NOT NULL DEFAULT '', category VARCHAR(80) NOT NULL DEFAULT 'Outros', amount_cents BIGINT NOT NULL, recurrence VARCHAR(20) NOT NULL DEFAULT 'monthly', starts_on DATE NOT NULL, ends_on DATE NULL, active TINYINT NOT NULL DEFAULT 1, notes TEXT NULL, created_by INT NOT NULL, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL, KEY idx_expense_rules_active (active,recurrence,starts_on), FOREIGN KEY(created_by) REFERENCES users(id)) ENGINE=InnoDB;
 CREATE TABLE expenses (id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, rule_id INT NULL, description VARCHAR(190) NOT NULL, vendor VARCHAR(190) NOT NULL DEFAULT '', category VARCHAR(80) NOT NULL DEFAULT 'Outros', amount_cents BIGINT NOT NULL, spent_on DATE NOT NULL, payment_status VARCHAR(20) NOT NULL DEFAULT 'pending', paid_on DATE NULL, notes TEXT NULL, source_key VARCHAR(160) NULL, created_by INT NOT NULL, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL, deleted_at DATETIME NULL, UNIQUE KEY uq_expenses_source (source_key), KEY idx_expenses_period (deleted_at,spent_on,category), KEY idx_expenses_payment (payment_status,paid_on,spent_on), KEY idx_expenses_rule (rule_id,spent_on), FOREIGN KEY(rule_id) REFERENCES expense_rules(id), FOREIGN KEY(created_by) REFERENCES users(id)) ENGINE=InnoDB;
+CREATE TABLE whatsapp_contacts (
+ id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+ name VARCHAR(190) NOT NULL,
+ phone VARCHAR(20) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ created_by INT NULL,
+ created_at DATETIME NOT NULL,
+ updated_at DATETIME NOT NULL,
+ PRIMARY KEY (id),
+ UNIQUE KEY uq_whatsapp_contacts_phone (phone),
+ KEY idx_whatsapp_contacts_name (name),
+ CONSTRAINT fk_whatsapp_contacts_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 CREATE TABLE reset_tokens (token_hash VARCHAR(64) PRIMARY KEY, user_id INT NOT NULL, expires_at DATETIME NOT NULL, FOREIGN KEY(user_id) REFERENCES users(id)) ENGINE=InnoDB;
 CREATE TABLE rate_limits (bucket VARCHAR(100) PRIMARY KEY, attempts INT NOT NULL, expires_at DATETIME NOT NULL) ENGINE=InnoDB;
 CREATE TABLE api_tokens (id INT AUTO_INCREMENT PRIMARY KEY, user_id INT NOT NULL, name VARCHAR(190) NOT NULL, token_hash VARCHAR(64) NOT NULL UNIQUE, scopes VARCHAR(255) NOT NULL, client_id VARCHAR(100) NULL, refresh_hash VARCHAR(64) NULL UNIQUE, expires_at DATETIME NOT NULL, refresh_expires_at DATETIME NULL, revoked TINYINT NOT NULL DEFAULT 0, created_at DATETIME NOT NULL, FOREIGN KEY(user_id) REFERENCES users(id)) ENGINE=InnoDB;
@@ -83,5 +95,5 @@ CREATE TABLE templates (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(190) NOT
 INSERT INTO stages (id,name,kind,color,position) VALUES (1,'Recebidas','inbox','#666666',1),(2,'Em análise','analysis','#777777',2),(3,'Aguardando material','waiting','#8a8a8a',3),(4,'Planejadas','planned','#9a9a9a',4),(5,'Em produção','production','#b8b8b8',5),(6,'Em aprovação','approval','#d1d1d1',6),(7,'Ajustes','production','#a7a7a7',7),(8,'Concluídas','completed','#f0f0f0',8),(9,'Canceladas','cancelled','#5a5a5a',9),(10,'Arquivadas','archived','#444444',10);
 INSERT INTO categories (id,name,fields_json) VALUES (1,'Design gráfico','[]'),(2,'Edição de vídeo','[]'),(3,'Filmagem','[]'),(4,'Fotografia','[]'),(5,'Motion design','[]');
 INSERT INTO calendars(name) VALUES ('Produção');
-INSERT INTO settings (`key`,value) VALUES ('schema_version','29'),('brand_name','TaskEsc'),('brand_color','#ffffff'),('logo_url',''),('timezone','America/Fortaleza'),('upload_mb','0'),('retention_days','365'),('drive_account_id',''),('drive_root_folder_id',''),('min_delivery_business_hours','24'),('last_cron_at',''),('last_cron_error',''),('monitor_email',''),('browser_notifications','1'),('dashboard_default_period','month');
+INSERT INTO settings (`key`,value) VALUES ('schema_version','30'),('brand_name','TaskEsc'),('brand_color','#ffffff'),('logo_url',''),('timezone','America/Fortaleza'),('upload_mb','0'),('retention_days','365'),('drive_account_id',''),('drive_root_folder_id',''),('min_delivery_business_hours','24'),('last_cron_at',''),('last_cron_error',''),('monitor_email',''),('browser_notifications','1'),('dashboard_default_period','month');
 

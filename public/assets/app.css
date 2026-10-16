@@ -2257,3 +2257,17 @@ button.compact-row{cursor:pointer}.compact-row:hover{border-color:#3a4854}.compa
 .ai-monitor-policy-actions{display:flex;justify-content:flex-end;margin:16px 0 2px}
 .ai-monitor-policy .status-warn{color:var(--warning);font-weight:600}
 @media(max-width:620px){.ai-monitor-policy-grid{grid-template-columns:1fr}.ai-monitor-policy-actions .primary{width:100%}}
+
+
+/* Reusable WhatsApp contacts inside demand editor. */
+.task-contact-results{display:grid;gap:3px;max-height:200px;overflow-y:auto;padding:5px;margin:6px 0 11px;border:1px solid #333;border-radius:10px;background:#101317}
+.task-contact-results.hidden{display:none}
+.task-contact-choice{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 11px;min-height:43px;text-align:left;background:transparent;border:0;border-radius:7px;color:#eaeaea;cursor:pointer}
+.task-contact-choice>span{display:flex;align-items:center;gap:9px;min-width:0}
+.task-contact-choice b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.task-contact-choice small{color:#a8b5c3;white-space:nowrap}
+.task-contact-choice:hover,.task-contact-choice:focus-visible{background:#20282f}
+.task-contact-choice:focus-visible{outline:2px solid #92bbd3;outline-offset:-2px}
+.task-contact-fields{margin-top:10px}
+.automation-canvas-legend button{min-height:34px;white-space:nowrap}
+@media(max-width:700px){.task-contact-fields{grid-template-columns:1fr}.task-contact-choice{align-items:flex-start;flex-direction:column;gap:3px}.automation-canvas-legend{flex-wrap:wrap}}

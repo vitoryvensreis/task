@@ -978,7 +978,7 @@
         whatsappResults.classList.toggle('hidden',!whatsappSearch.value.trim()&&!whatsappSearch.matches(':focus'));
         whatsappResults.querySelectorAll('[data-contact-id]').forEach(button=>button.onclick=()=>{
           const contact=contacts.find(c=>Number(c.id)===Number(button.dataset.contactId));if(!contact)return;
-          whatsappPhone.value=contact.phone;whatsappName.value=contact.name;whatsappSearch.value=contact.name;
+          whatsappPhone.value=contact.phone;whatsappName.value=contact.name;whatsappName.dataset.autoContact='1';whatsappSearch.value=contact.name;
           whatsappResults.classList.add('hidden');
         });
         paintIcons();

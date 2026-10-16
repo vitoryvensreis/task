@@ -51,4 +51,9 @@ check(css.includes('.automation-flow-stage')&&css.includes('.automation-flow-nod
 check(app.includes('function automationPanCanvas()')&&app.includes('automationPanCanvas();'),'Free canvas must support hold-and-drag background panning.');
 check(app.includes('previousCanvas.scrollLeft')&&app.includes('automationEditorState.viewport'),'Canvas viewport should survive editor rerenders.');
 check(css.includes('.automation-canvas-scroll.is-panning')&&css.includes('margin:240px 320px'),'Canvas must show grab feedback and allow dragging from initial edges.');
+check(app.includes('data-flow-delete')&&app.includes('automationRemoveNode(button.dataset.flowDelete)'),'Canvas cards must have a working delete control.');
+check(css.includes('.automation-flow-delete')&&css.includes('.automation-flow-delete:focus-visible'),'Delete control must be visible and keyboard accessible.');
+check(app.includes('batch_id:options.batchId')&&app.includes('batch_total:options.batchTotal')&&app.includes('batch_index:options.batchIndex'),'Final uploads must send explicit batch metadata.');
+check(app.includes('batchId:uploadBatch,batchTotal:files.length,batchIndex:i'),'Final upload modal must supply a stable batch and complete file count.');
+check(!app.includes('Cada envio tem um evento próprio.'),'Final-delivery UI must no longer promise one automation per file.');
 console.log('Automation frontend: grouped triggers, deadlines, flexible WhatsApp recipients, visual tree and run history OK');

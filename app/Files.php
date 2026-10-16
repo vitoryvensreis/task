@@ -27,6 +27,25 @@ final class Files {
   return strtolower(pathinfo($name,PATHINFO_EXTENSION));
  }
 
+ /**
+  * Only the transaction that persists the last missing final file may emit the
+  * final-delivered event. The idempotent upload keys are already unique in files.
+  * A locking read sees the latest committed files even under REPEATABLE READ.
+  */
+ private static function finalDeliveryBatchReady(array $state,array $d): bool {
+  $batchId=(string)($state['batch_id']??'');
+  if($batchId==='')return true; // Legacy single-file/API uploads.
+  $total=(int)($state['batch_total']??0);
+  if($total<1||$total>500)throw new LogicException('Invalid final delivery batch metadata.');
+  $keys=[];$userId=(int)Auth::$user['id'];$demandId=(int)$d['id'];
+  for($index=0;$index<$total;$index++)$keys[]=hash('sha256',$userId.'|'.$demandId.'|'.$batchId.'-'.$index);
+  $placeholders=implode(',',array_fill(0,count($keys),'?'));
+  $files=DB::all('SELECT upload_key,kind FROM files WHERE demand_id=? AND upload_key IN ('.$placeholders.') FOR UPDATE',[$demandId,...$keys]);
+  if(count($files)!==$total)return false;
+  foreach($files as $file)if(($file['kind']??'')!=='final')fail('O lote contém um arquivo que não é entrega final.',409);
+  return true;
+ }
+
  private static function finalizeDriveUpload(string $token,array $state,array $drive): array {
   $d=Auth::demand((int)$state['demand_id'],true);$uploadKey=$state['upload_key']??null;
   if($uploadKey){
@@ -39,6 +58,8 @@ final class Files {
   if(empty($drive['id']))fail('O Google Drive não confirmou o arquivo enviado.',502);
   $result=DB::tx(function() use($d,$state,$drive,$uploadKey): array {
    Auth::demand((int)$d['id'],true);
+   // Serializes simultaneous finalizations for the same task, including uploads from other tabs.
+   DB::one('SELECT id FROM demands WHERE id=? FOR UPDATE',[(int)$d['id']]);
    if($uploadKey){
     $existing=DB::one('SELECT id,version_no,storage_provider,drive_file_id FROM files WHERE demand_id=? AND upload_key=? LIMIT 1 FOR UPDATE',[$d['id'],$uploadKey]);
     if($existing)return ['existing'=>$existing];
@@ -52,7 +73,7 @@ final class Files {
    }
    audit('demand',$d['id'],'file.added',null,['file_id'=>$id,'version'=>$row['version_no']??null,'storage'=>'drive']);Notify::demand($d,$state['kind']==='review'?'Versão para aprovação':'Novo arquivo',$row['label'],!$row['shared']);
    DemandRealtime::emit('demand.file_added',$d,['change'=>'file.added','file_id'=>$id,'version_no'=>$row['version_no']??null,'shared'=>(int)$row['shared']],(int)Auth::$user['id'],[],!$row['shared']?'staff':'all');
-   if($state['kind']==='final')DemandRealtime::emit('demand.final_delivered',$d,['change'=>'final.delivered','file_id'=>$id,'version_no'=>$row['version_no']??null,'shared'=>(int)$row['shared']],(int)Auth::$user['id']);
+   if($state['kind']==='final'&&self::finalDeliveryBatchReady($state,$d))DemandRealtime::emit('demand.final_delivered',$d,['change'=>'final.delivered','file_id'=>$id,'version_no'=>$row['version_no']??null,'shared'=>(int)$row['shared']],(int)Auth::$user['id']);
    return ['id'=>$id,'version_no'=>$row['version_no']??null,'storage'=>'drive'];
   });
   if(isset($result['existing'])){
@@ -84,6 +105,12 @@ final class Files {
   $rawSize=$p['size']??0;if(filter_var($rawSize,FILTER_VALIDATE_INT)===false||(int)$rawSize<1)fail('Tamanho de arquivo inválido.');$size=(int)$rawSize;$limitMb=(int)setting('upload_mb','0');$max=$limitMb>0?$limitMb*1024*1024:0;if($max>0&&$size>$max)fail('Arquivo acima do limite configurado de '.$limitMb.' MB.');
   $mime=trim((string)($p['mime']??'application/octet-stream'));if($mime===''||strlen($mime)>120||preg_match('/[\r\n]/',$mime))$mime='application/octet-stream';
   $uploadId=trim((string)($p['upload_id']??''));if($uploadId!==''&&!preg_match('/^[A-Za-z0-9_-]{12,96}$/',$uploadId))fail('Identificador de upload inválido.',400);
+  $batchId=trim((string)($p['batch_id']??''));$batchTotal=0;
+  if($batchId!==''){
+   if($kind!=='final'||!preg_match('/^[A-Za-z0-9_-]{16,80}$/',$batchId))fail('Lote de entrega final inválido.',400);
+   $batchTotal=integer($p['batch_total']??0,1,500);$batchIndex=integer($p['batch_index']??-1,0,$batchTotal-1);
+   if($uploadId!==$batchId.'-'.$batchIndex)fail('Arquivo não pertence ao lote indicado.',409);
+  }elseif(isset($p['batch_total'])||isset($p['batch_index']))fail('Lote incompleto.',400);
   $uploadKey=$uploadId!==''?hash('sha256',(string)Auth::$user['id'].'|'.$d['id'].'|'.$uploadId):null;
   foreach($_SESSION['drive_uploads']??[] as $key=>$state)if((int)($state['expires']??0)<time())unset($_SESSION['drive_uploads'][$key]);
   foreach($_SESSION['drive_uploads_done']??[] as $key=>$state)if((int)($state['expires']??0)<time())unset($_SESSION['drive_uploads_done'][$key]);
@@ -96,7 +123,7 @@ final class Files {
   }
   $folder=Google::ensureDemandFileFolder($d,$kind);$location=Google::startDriveUpload($folder['account_id'],$name,$mime,$size,$folder['folder_id']);
   $chunkSize=min($size,16*1024*1024);if($size>$chunkSize&&$chunkSize%262144!==0)$chunkSize=(int)(floor($chunkSize/262144)*262144);$chunkSize=max(262144,$chunkSize);
-  $token=bin2hex(random_bytes(24));$_SESSION['drive_uploads'][$token]=['user_id'=>(int)Auth::$user['id'],'demand_id'=>(int)$d['id'],'account_id'=>(int)$folder['account_id'],'location'=>$location,'label'=>$label,'name'=>$name,'mime'=>$mime,'size'=>$size,'offset'=>0,'chunk_size'=>$chunkSize,'upload_key'=>$uploadKey,'kind'=>$kind,'shared'=>$shared,'final_delivery_link'=>$kind==='final'?($folder['share_url']??null):null,'expires'=>time()+518400];
+  $token=bin2hex(random_bytes(24));$_SESSION['drive_uploads'][$token]=['user_id'=>(int)Auth::$user['id'],'demand_id'=>(int)$d['id'],'account_id'=>(int)$folder['account_id'],'location'=>$location,'label'=>$label,'name'=>$name,'mime'=>$mime,'size'=>$size,'offset'=>0,'chunk_size'=>$chunkSize,'upload_key'=>$uploadKey,'batch_id'=>$batchId,'batch_total'=>$batchTotal,'kind'=>$kind,'shared'=>$shared,'final_delivery_link'=>$kind==='final'?($folder['share_url']??null):null,'expires'=>time()+518400];
   return ['upload_token'=>$token,'direct_url'=>$location,'chunk_size'=>$chunkSize,'next_offset'=>0,'size'=>$size,'unlimited'=>$limitMb===0];
  }
 

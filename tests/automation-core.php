@@ -39,6 +39,14 @@ try{
  $db->exec(file_get_contents(ROOT.'/database/schema.sql'));
 
  autoCheck((int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0)===30,'Fresh schema must be 30.');
+ // Verify real 29 -> 30 data-safe contacts migration and idempotent retries.
+ $db->exec('DROP TABLE whatsapp_contacts');
+ DB::run("UPDATE settings SET value='29' WHERE `key`='schema_version'");
+ $contactMigration=Migrations::whatsappContacts();
+ autoCheck($contactMigration['previous']===29&&$contactMigration['current']===30&&$contactMigration['changed'],'Contacts migration 29->30 must work.');
+ autoCheck(Migrations::whatsappContactsIssues()===[],'Contacts migration must have required unique index and columns.');
+ autoCheck(Migrations::whatsappContacts()['changed']===false,'Contacts migration must be idempotent.');
+
  // Verify 24 -> 26 schema upgrade and preservation of WhatsApp data.
  $db->exec('ALTER TABLE demands DROP COLUMN whatsapp_custom_phone');
  $db->exec('ALTER TABLE whatsapp_messages MODIFY recipient_phone VARCHAR(20) CHARACTER SET ascii COLLATE ascii_bin NOT NULL');

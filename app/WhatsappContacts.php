@@ -14,8 +14,51 @@ final class WhatsappContacts {
    $args=['%'.$q.'%'];
    if($digits!==''){$where.=' OR phone LIKE ?';$args[]='%'.$digits.'%';}
   }
+  if(!empty($p['paginate'])){
+   $page=integer($p['page']??1,1,1000000);$perPage=integer($p['per_page']??20,1,100);
+   $total=(int)(DB::one('SELECT COUNT(*) AS n FROM whatsapp_contacts'.$where,$args)['n']??0);
+   $pages=max(1,(int)ceil($total/$perPage));$page=min($page,$pages);
+   $offset=($page-1)*$perPage;
+   $rows=DB::all('SELECT id,name,phone FROM whatsapp_contacts'.$where.' ORDER BY name,id LIMIT '.$perPage.' OFFSET '.$offset,$args);
+   return ['rows'=>$rows,'pagination'=>['page'=>$page,'pages'=>$pages,'per_page'=>$perPage,'total'=>$total]];
+  }
   return DB::all('SELECT id,name,phone FROM whatsapp_contacts'.$where.' ORDER BY name,id LIMIT 100',$args);
  }
+
+ /** Manual creation/editing of the directory, independent from task delivery settings. */
+ public static function save(array $p): array {
+  Auth::admin();
+  return DB::tx(static function() use($p): array {
+   $id=integer($p['id']??0,0);$name=required($p,'name',190);
+   $phone=WppConnect::normalizePhone((string)($p['phone']??''));
+   $old=$id?DB::one('SELECT id,name,phone FROM whatsapp_contacts WHERE id=? FOR UPDATE',[$id]):null;
+   if($id&&!$old)fail('Contato não encontrado.',404);
+   if(DB::one('SELECT id FROM whatsapp_contacts WHERE phone=? AND id<>? LIMIT 1',[$phone,$id]))fail('Este WhatsApp já está cadastrado na agenda.',409);
+   $now=now();
+   try {
+    if($id)DB::update('whatsapp_contacts',$id,['name'=>$name,'phone'=>$phone,'updated_at'=>$now]);
+    else $id=DB::insert('whatsapp_contacts',['name'=>$name,'phone'=>$phone,'created_by'=>(int)Auth::$user['id'],'created_at'=>$now,'updated_at'=>$now]);
+   } catch(PDOException $e) {
+    if((string)$e->getCode()==='23000')fail('Este WhatsApp já está cadastrado na agenda.',409);
+    throw $e;
+   }
+   audit('whatsapp_contact',$id,$old?'updated':'created',$old,['name'=>$name,'phone'=>$phone]);
+   return ['saved'=>true,'contact'=>['id'=>$id,'name'=>$name,'phone'=>$phone]];
+  });
+ }
+ /** Deleting a directory entry NEVER removes or changes stored numbers on demands. */
+ public static function delete(array $p): array {
+  Auth::admin();
+  return DB::tx(static function() use($p): array {
+   $id=integer($p['id']??0,1);
+   $old=DB::one('SELECT id,name,phone FROM whatsapp_contacts WHERE id=? FOR UPDATE',[$id]);
+   if(!$old)fail('Contato não encontrado.',404);
+   DB::run('DELETE FROM whatsapp_contacts WHERE id=?',[$id]);
+   audit('whatsapp_contact',$id,'deleted',$old,null);
+   return ['deleted'=>true,'id'=>$id];
+  });
+ }
+
  /** Called only inside the same transaction used to save a demand. */
  public static function remember(string $name,string $phone): array {
   Auth::admin();

@@ -17,9 +17,9 @@ try{
  $db=DB::conn();$db->exec('SET FOREIGN_KEY_CHECKS=0');
  foreach(DB::all('SHOW TABLES') as $r){$name=(string)array_values($r)[0];if(!preg_match('/\A[A-Za-z0-9_]+\z/D',$name))throw new RuntimeException('unexpected table');$db->exec('DROP TABLE `'.$name.'`');}
  $db->exec('SET FOREIGN_KEY_CHECKS=1');$db->exec(file_get_contents(ROOT.'/database/schema.sql'));
- at(setting('schema_version')==='29','Schema 29 required');
- at(Migrations::assistantToolsIssues()===[],'Schema 29 must validate');
- at(Migrations::assistantTools()['changed']===false,'Schema 29 must be idempotent');
+ at(setting('schema_version')==='30','Schema 30 required');
+ at(Migrations::assistantToolsIssues()===[],'Schema 30 must validate');
+ at(Migrations::assistantTools()['changed']===false,'Schema 30 must be idempotent');
  at(AiWhatsAppGroq::enabled()===false,'Groq must be disabled until configured');
  at(AiWhatsAppWorker::health()['status']==='ok','Worker must be healthy when disabled');
 
@@ -738,7 +738,7 @@ try{
  at((int)DB::one('SELECT COUNT(*) n FROM demands')['n']===$demandsBefore,'No business mutation from WhatsApp analysis');
 
 
- // AI usage step 3: caps stay OFF until ADM explicitly enables; schema remains 29.
+ // AI usage step 3: caps stay OFF until ADM explicitly enables; schema remains 30.
  Auth::$user=DB::one('SELECT * FROM users WHERE id=?',[$admin]);Auth::$actor=Auth::$user;
  Auth::$origin='web';Auth::$previewClientId=null;
  at(AiWhatsAppUsagePolicy::current()['enabled']===false,'Usage enforcement must default OFF');
@@ -792,7 +792,7 @@ try{
  Auth::$previewClientId=null;
  AiWhatsAppUsagePolicy::save(['enabled'=>false,'gemini_daily_calls'=>0,'groq_daily_calls'=>0,
   'alert_percent'=>80,'retention_days'=>30]);
- at(setting('schema_version')==='29','Monitoring does not migrate or recreate schema');
+ at(setting('schema_version')==='30','Monitoring does not migrate or recreate schema');
  // Financial conversation: short follow-up uses only this ADM/private history, not another chat or user.
  Auth::$user=DB::one('SELECT * FROM users WHERE id=?',[$admin]);Auth::$actor=Auth::$user;
  Auth::$origin='whatsapp';Auth::$previewClientId=null;

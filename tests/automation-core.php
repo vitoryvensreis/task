@@ -328,6 +328,29 @@ try{
  AutomationWorker::executeRun((int)$finalRun['id']);
  autoCheck((int)DB::one("SELECT COUNT(*) n FROM mail_queue WHERE recipient='delivery@ci.invalid' AND subject LIKE 'Entrega final:%'")['n']===1,'Completed automation step must never duplicate email.');
  autoCheck((int)DB::one('SELECT COUNT(*) n FROM automation_runs WHERE automation_id=?',[$finalAutomation['id']])['n']===1,'One final upload must yield one automation run.');
+ 
+ // Um lote de quatro entregas só fica pronto depois que o quarto registro
+ // é confirmado. Repetir a consulta não cria eventos e não há envio parcial.
+ autoAs($admin);
+ $batchId='0123456789abcdef0123456789abcdef';
+ $batchState=['batch_id'=>$batchId,'batch_total'=>4];
+ $batchReady=new ReflectionMethod(Files::class,'finalDeliveryBatchReady');
+ $batchDemand=['id'=>$demandId];
+ $batchUser=(int)Auth::$user['id'];
+ for($index=0;$index<4;$index++){
+  $key=hash('sha256',$batchUser.'|'.$demandId.'|'.$batchId.'-'.$index);
+  DB::insert('files',[
+   'demand_id'=>$demandId,'author_id'=>$batchUser,'label'=>'Teste de lote '.($index+1),
+   'original_name'=>'lote-'.($index+1).'.mp4','storage_provider'=>'url',
+   'url'=>'https://example.com/lote-'.($index+1).'.mp4','kind'=>'final',
+   'shared'=>1,'upload_key'=>$key,'created_at'=>now()
+  ]);
+  $ready=DB::tx(fn()=>$batchReady->invoke(null,$batchState,$batchDemand));
+  autoCheck($ready===($index===3),'Final delivery must wait for ALL uploaded files in batch.');
+ }
+ autoCheck(DB::tx(fn()=>$batchReady->invoke(null,$batchState,$batchDemand))===true,'Completed batch must be stable across retries.');
+ autoCheck(DB::tx(fn()=>$batchReady->invoke(null,['batch_id'=>'','batch_total'=>0],$batchDemand))===true,'Legacy single-file delivery remains compatible.');
+
 
  // O destinatário manual é propriedade da task e o worker precisa respeitá-lo.
  autoAs($admin);

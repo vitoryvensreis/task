@@ -91,8 +91,16 @@ final class Demands {
     $whatsappCustomPhone=$whatsappMode==='custom'
      ?WppConnect::normalizePhone((string)($p['whatsapp_custom_phone']??($old['whatsapp_custom_phone']??'')))
      :null;
+    if($whatsappMode==='custom'){
+     $contactName=trim((string)($p['whatsapp_contact_name']??''));
+     if($contactName==='') {
+      $savedContact=DB::one('SELECT name FROM whatsapp_contacts WHERE phone=?',[$whatsappCustomPhone]);
+      $contactName=(string)($savedContact['name']??'');
+     }
+     WhatsappContacts::remember($contactName,$whatsappCustomPhone);
+    }
    }else{
-    if(array_key_exists('whatsapp_recipient_mode',$p)||array_key_exists('whatsapp_custom_phone',$p))fail('Somente administradores podem configurar disparos de WhatsApp.',403);
+    if(array_key_exists('whatsapp_recipient_mode',$p)||array_key_exists('whatsapp_custom_phone',$p)||array_key_exists('whatsapp_contact_name',$p))fail('Somente administradores podem configurar disparos de WhatsApp.',403);
     $whatsappMode=(string)($old['whatsapp_recipient_mode']??'creator');
     $whatsappCustomPhone=$old['whatsapp_custom_phone']??null;
    }

@@ -56,4 +56,8 @@ check(css.includes('.automation-flow-delete')&&css.includes('.automation-flow-de
 check(app.includes('batch_id:options.batchId')&&app.includes('batch_total:options.batchTotal')&&app.includes('batch_index:options.batchIndex'),'Final uploads must send explicit batch metadata.');
 check(app.includes('batchId:uploadBatch,batchTotal:files.length,batchIndex:i'),'Final upload modal must supply a stable batch and complete file count.');
 check(!app.includes('Cada envio tem um evento próprio.'),'Final-delivery UI must no longer promise one automation per file.');
+check(app.includes("automationAddStructuralNode('trigger')")&&app.includes("automationAddStructuralNode('end')"),'Deleted trigger and final cards must be restorable.');
+check(app.includes("automationEditorState.definition.nodes.filter(n=>n.id!==nodeId)")&&app.includes("if(node.type==='trigger'||node.type==='end')"),'Structural card deletion must preserve other graph nodes.');
+check(app.includes("Conecte um bloco Encerrar fluxo ao gatilho antes de salvar."),'Frontend must reject flows without a connected ending.');
+check(app.includes("api('whatsapp_contacts.list')")&&app.includes('whatsapp_contact_name')&&app.includes('demand-whatsapp-contact-search'),'Task editor must offer named searchable WhatsApp contacts.');
 console.log('Automation frontend: grouped triggers, deadlines, flexible WhatsApp recipients, visual tree and run history OK');

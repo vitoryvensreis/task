@@ -58,6 +58,8 @@ try {
   'demands.get'=>Demands::get($p),
   'demands.save'=>Demands::save($p),
   'whatsapp_contacts.list'=>WhatsappContacts::list($p),
+  'whatsapp_contacts.save'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?WhatsappContacts::save($p):fail('Método não permitido.',405),
+  'whatsapp_contacts.delete'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?WhatsappContacts::delete($p):fail('Método não permitido.',405),
   'demands.stage'=>Demands::stage($p),
   'demands.reorder'=>Demands::reorder($p),
   'demands.bulk'=>Demands::bulk($p),

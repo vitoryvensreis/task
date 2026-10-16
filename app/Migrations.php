@@ -665,7 +665,7 @@ final class Migrations {
  public static function whatsappContacts(): array {
   $db=DB::conn();
   if($db->inTransaction())throw new LogicException('Migração da agenda fora de transações.');
-  $lock='taskesc-whatsapp-contacts-30:'.(string)(DB::one('SELECT SHA1(DATABASE()) AS h')['h']??'');
+  $lock='taskesc-contacts-30:'.(string)(DB::one('SELECT SHA1(DATABASE()) AS h')['h']??'');
   if((int)(DB::one('SELECT GET_LOCK(?,10) AS acquired',[$lock])['acquired']??0)!==1)throw new RuntimeException('Migração de contatos em execução.');
   try {
    $before=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);

@@ -166,7 +166,7 @@ final class Automation
     {
         $nodes=$definition['nodes']??null;$edges=$definition['edges']??null;
         if(!is_array($nodes)||!is_array($edges)||!$nodes||count($nodes)>100||count($edges)>200)fail('Fluxo da automação inválido.',422);
-        $cleanNodes=[];$ids=[];$triggerCount=0;
+        $cleanNodes=[];$ids=[];$triggerCount=0;$endCount=0;
         foreach($nodes as $node){
             if(!is_array($node))fail('Nó de automação inválido.',422);
             $id=(string)($node['id']??'');$type=(string)($node['type']??'');$config=$node['config']??[];
@@ -228,7 +228,7 @@ final class Automation
                     'priority'=>enumv((string)($config['priority']??'normal'),['low','normal','high','urgent'],'prioridade')
                 ];
                 if($mode==='specific')$config['client_id']=integer($node['config']['client_id']??0,1);
-            }else $config=[];
+            }elseif($type==='end'){$endCount++;$config=[];}else $config=[];
             $ids[$id]=true;
             $cleanNode=['id'=>$id,'type'=>$type,'config'=>$config];
             if(isset($node['position'])){
@@ -241,6 +241,7 @@ final class Automation
             $cleanNodes[]=$cleanNode;
         }
         if($triggerCount!==1)fail('O fluxo precisa ter exatamente um gatilho.',422);
+        if($endCount<1)fail('Adicione ao menos um bloco Encerrar fluxo antes de salvar.',422);
         $cleanEdges=[];$adj=[];$uniqueEdges=[];$branchCount=[];
         foreach($edges as $edge){
             if(!is_array($edge))fail('Conexão de automação inválida.',422);
@@ -266,6 +267,15 @@ final class Automation
         foreach(array_keys($ids) as $id)$visit($id);
         $triggerNode=array_values(array_filter($cleanNodes,fn($n)=>$n['type']==='trigger'))[0];
         if(!isset($adj[$triggerNode['id']]))fail('O gatilho precisa estar conectado a pelo menos um nó.',422);
+        $reachable=[];$queue=[$triggerNode['id']];
+        foreach($queue as $id){
+            if(isset($reachable[$id]))continue;
+            $reachable[$id]=true;
+            foreach($adj[$id]??[] as $next)$queue[]=$next;
+        }
+        $hasReachableEnd=false;
+        foreach($cleanNodes as $node)if($node['type']==='end'&&isset($reachable[$node['id']])){$hasReachableEnd=true;break;}
+        if(!$hasReachableEnd)fail('Conecte o gatilho a um bloco Encerrar fluxo antes de salvar.',422);
         return ['version'=>1,'nodes'=>$cleanNodes,'edges'=>$cleanEdges];
     }
 

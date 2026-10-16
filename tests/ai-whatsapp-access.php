@@ -18,7 +18,7 @@ try{
  $db=DB::conn();$db->exec('SET FOREIGN_KEY_CHECKS=0');
  foreach(DB::all('SHOW TABLES') as $row){$table=(string)array_values($row)[0];if(!preg_match('/\A[A-Za-z0-9_]+\z/D',$table))throw new RuntimeException('Unexpected DB table.');$db->exec('DROP TABLE `'.$table.'`');}
  $db->exec('SET FOREIGN_KEY_CHECKS=1');$db->exec(file_get_contents(ROOT.'/database/schema.sql'));
- ac((string)DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']==='29','Fresh schema is 29');
+ ac((string)DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']==='30','Fresh schema is 30');
  ac(Migrations::assistantAccessIssues()===[],'Fresh access columns/indexes valid');
  ac(Migrations::assistantAccess()['changed']===false,'Schema 28 migration idempotent');
 

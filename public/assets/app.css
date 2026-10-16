@@ -2113,6 +2113,13 @@ button.compact-row{cursor:pointer}.compact-row:hover{border-color:#3a4854}.compa
 .automation-flow-node{position:absolute;z-index:2;width:292px;touch-action:none}
 .automation-flow-node .automation-node-card{width:292px;min-height:86px;cursor:grab;touch-action:none;user-select:none}
 .automation-flow-node .automation-node-card:active{cursor:grabbing}
+/* Card deletion sits outside the draggable surface, so clicking it never starts a drag. */
+.automation-flow-delete{position:absolute;top:-10px;right:-10px;z-index:5;display:grid;place-items:center;width:29px;height:29px;border:1px solid #3b3135;border-radius:9px;background:#171315;color:#b9a8aa;cursor:pointer;opacity:.78;transition:background .16s,border-color .16s,color .16s,transform .16s,opacity .16s}
+.automation-flow-delete:hover,.automation-flow-delete:focus-visible{opacity:1;background:#3a191e;border-color:#985260;color:#fff;transform:scale(1.08)}
+.automation-flow-delete:focus-visible{outline:2px solid #d9a0a8;outline-offset:2px}
+.automation-flow-delete svg{width:15px;height:15px;pointer-events:none}
+@media (hover:none){.automation-flow-delete{opacity:1;width:34px;height:34px}}
+
 .automation-flow-node.automation-flow-target .automation-node-card{border-color:#506d85}
 .automation-flow-tools{display:grid;gap:5px;margin-top:5px;padding:5px 7px;border:1px solid #262c32;border-radius:9px;background:rgba(11,14,17,.96)}
 .automation-flow-tools-row{display:flex;align-items:center;gap:6px;min-height:29px}

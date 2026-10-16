@@ -57,6 +57,7 @@ try {
   'demands.list'=>Demands::list($p),
   'demands.get'=>Demands::get($p),
   'demands.save'=>Demands::save($p),
+  'whatsapp_contacts.list'=>WhatsappContacts::list($p),
   'demands.stage'=>Demands::stage($p),
   'demands.reorder'=>Demands::reorder($p),
   'demands.bulk'=>Demands::bulk($p),

@@ -9,8 +9,10 @@ final class WhatsappContacts {
   if(mb_strlen($q)>190)fail('Busca de contato muito longa.',422);
   $where='';$args=[];
   if($q!==''){
-   $where=' WHERE name LIKE ? OR phone LIKE ?';
-   $args=['%'.$q.'%','%'.preg_replace('/\D+/','',$q).'%'];
+   $digits=preg_replace('/\D+/','',$q);
+   $where=' WHERE name LIKE ?';
+   $args=['%'.$q.'%'];
+   if($digits!==''){$where.=' OR phone LIKE ?';$args[]='%'.$digits.'%';}
   }
   return DB::all('SELECT id,name,phone FROM whatsapp_contacts'.$where.' ORDER BY name,id LIMIT 100',$args);
  }

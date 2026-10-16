@@ -26,7 +26,7 @@ try{
  }
  $db->exec('SET FOREIGN_KEY_CHECKS=1');
  $db->exec(file_get_contents(ROOT.'/database/schema.sql'));
- aiCheck((string)DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']==='29','Fresh schema must be 29.');
+ aiCheck((string)DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']==='30','Fresh schema must be 30.');
  aiCheck(Migrations::assistantInboxIssues()===[],'Fresh inbox schema must be structurally valid.');
  aiCheck(Migrations::assistantInbox()['changed']===false,'Schema 27 migration must be idempotent.');
 

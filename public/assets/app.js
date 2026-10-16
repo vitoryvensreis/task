@@ -1994,7 +1994,7 @@
         '<button type="button" class="automation-flow-connect" data-flow-connect="'+esc(node.id)+'" data-flow-branch="'+branch+'" title="Conectar a um bloco existente">'+icon('link-2','↗')+'</button></div>'
       ).join('');
       return '<div class="automation-flow-node" data-flow-node="'+esc(node.id)+'" style="left:'+Math.round(pos.x)+'px;top:'+Math.round(pos.y)+'px">'+
-        automationNodeCard(node)+(!['trigger','end'].includes(node.type)?'<button type="button" class="automation-flow-delete" data-flow-delete="'+esc(node.id)+'" title="Excluir este card" aria-label="Excluir '+esc(automationNodeMeta(node).title)+'">'+icon('trash-2','×')+'</button>':'')+(tools?'<div class="automation-flow-tools">'+tools+'</div>':'')+'</div>';
+        automationNodeCard(node)+('<button type="button" class="automation-flow-delete" data-flow-delete="'+esc(node.id)+'" title="Excluir este card" aria-label="Excluir '+esc(automationNodeMeta(node).title)+'">'+icon('trash-2','×')+'</button>')+(tools?'<div class="automation-flow-tools">'+tools+'</div>':'')+'</div>';
     }).join('');
     const controls=def.edges.map((e,i)=>'<button type="button" class="automation-flow-edge-remove" data-flow-remove="'+i+'" title="Remover esta conexão" aria-label="Remover conexão">'+icon('x','×')+'</button>').join('');
     return '<div class="automation-flow-stage" style="width:'+bounds.width+'px;height:'+bounds.height+'px">'+
@@ -2258,16 +2258,32 @@
     const previousCanvas=$('.automation-canvas-scroll');
     if(previousCanvas)automationEditorState.viewport={left:previousCanvas.scrollLeft,top:previousCanvas.scrollTop};
     const root=automationRootId(),nodeCount=automationEditorState.definition.nodes.length,runCount=automationEditorState.runs?.length||0;
-    $('#content').innerHTML=`<div class="automation-editor-shell"><div class="automation-editor-top"><button type="button" class="ghost" id="automation-back">${icon('arrow-left','←')} Voltar</button><div class="automation-title-field"><span class="eyebrow">FLUXO</span><input id="automation-name" class="automation-name-input" maxlength="190" value="${esc(automationEditorState.name)}" aria-label="Nome da automação"></div><div class="automation-editor-actions"><label class="automation-active-switch"><input id="automation-active" type="checkbox" ${automationEditorState.active?'checked':''}><span></span><b>${automationEditorState.active?'Ativa':'Pausada'}</b></label><span id="automation-save-state" class="automation-save-state ${automationEditorState.dirty?'dirty':''}">${automationEditorState.dirty?'Alterações não salvas':'Tudo salvo'}</span><button type="button" class="primary" id="automation-save">${icon('save','✓')} Salvar automação</button></div></div><div class="automation-editor-meta"><span><b>${esc(automationTriggerLabel(automationEditorState.trigger_event))}</b><small>Gatilho</small></span><span><b>${nodeCount}</b><small>Blocos</small></span><span><b>${runCount}</b><small>Execuções recentes</small></span><span><b>Ações inteligentes</b><small>WhatsApp, e-mail, push e tasks</small></span></div><div class="automation-editor-layout"><section class="automation-canvas-panel"><div class="automation-canvas-head"><div><span class="eyebrow">EDITOR VISUAL</span><h3>Canvas livre da automação</h3><small>Arraste os cards para organizar; clique e arraste o fundo vazio para mover o canvas. Use + Nova saída ou Conectar para criar ramos.</small></div><div class="automation-canvas-legend"><span><i class="dot trigger"></i>Gatilho</span><span><i class="dot condition"></i>Condição</span><span><i class="dot whatsapp"></i>WhatsApp</span></div></div><div class="automation-canvas-scroll"><div class="automation-flow-root">${root?automationFlowMarkup():'<div class="empty">Gatilho ausente.</div>'}</div></div></section><aside class="automation-side-panel"><section class="panel automation-inspector-card"><div id="automation-inspector"></div></section><section class="panel automation-runs-card"><div class="panel-head"><div><h3>Últimas execuções</h3><div class="panel-sub">Resultado real das automações disparadas pelo Outbox e pelos gatilhos de prazo.</div></div></div>${automationRunsMarkup()}</section></aside></div></div>`;
+    $('#content').innerHTML=`<div class="automation-editor-shell"><div class="automation-editor-top"><button type="button" class="ghost" id="automation-back">${icon('arrow-left','←')} Voltar</button><div class="automation-title-field"><span class="eyebrow">FLUXO</span><input id="automation-name" class="automation-name-input" maxlength="190" value="${esc(automationEditorState.name)}" aria-label="Nome da automação"></div><div class="automation-editor-actions"><label class="automation-active-switch"><input id="automation-active" type="checkbox" ${automationEditorState.active?'checked':''}><span></span><b>${automationEditorState.active?'Ativa':'Pausada'}</b></label><span id="automation-save-state" class="automation-save-state ${automationEditorState.dirty?'dirty':''}">${automationEditorState.dirty?'Alterações não salvas':'Tudo salvo'}</span><button type="button" class="primary" id="automation-save">${icon('save','✓')} Salvar automação</button></div></div><div class="automation-editor-meta"><span><b>${esc(automationTriggerLabel(automationEditorState.trigger_event))}</b><small>Gatilho</small></span><span><b>${nodeCount}</b><small>Blocos</small></span><span><b>${runCount}</b><small>Execuções recentes</small></span><span><b>Ações inteligentes</b><small>WhatsApp, e-mail, push e tasks</small></span></div><div class="automation-editor-layout"><section class="automation-canvas-panel"><div class="automation-canvas-head"><div><span class="eyebrow">EDITOR VISUAL</span><h3>Canvas livre da automação</h3><small>Arraste os cards para organizar; clique e arraste o fundo vazio para mover o canvas. Use + Nova saída ou Conectar para criar ramos.</small></div><div class="automation-canvas-legend">${!root?'<button type="button" class="secondary" id="automation-add-trigger">+ Gatilho</button>':''}${!automationEditorState.definition.nodes.some(n=>n.type==='end')?'<button type="button" class="secondary" id="automation-add-end">+ Encerrar fluxo</button>':''}<span><i class="dot trigger"></i>Gatilho</span><span><i class="dot condition"></i>Condição</span><span><i class="dot whatsapp"></i>WhatsApp</span></div></div><div class="automation-canvas-scroll"><div class="automation-flow-root">${automationFlowMarkup()}</div></div></section><aside class="automation-side-panel"><section class="panel automation-inspector-card"><div id="automation-inspector"></div></section><section class="panel automation-runs-card"><div class="panel-head"><div><h3>Últimas execuções</h3><div class="panel-sub">Resultado real das automações disparadas pelo Outbox e pelos gatilhos de prazo.</div></div></div>${automationRunsMarkup()}</section></aside></div></div>`;
     paintIcons();
     $('#automation-back').onclick=closeAutomationEditor;
     const name=$('#automation-name');name.addEventListener('input',e=>{automationEditorState.name=e.target.value;automationMarkDirty()});
     $('#automation-active').addEventListener('change',e=>{automationEditorState.active=e.target.checked;automationMarkDirty();paintAutomationEditor()});
     $('#automation-save').onclick=saveAutomationEditor;
     automationFlowWire();
+    $('#automation-add-trigger')?.addEventListener('click',()=>automationAddStructuralNode('trigger'));
+    $('#automation-add-end')?.addEventListener('click',()=>automationAddStructuralNode('end'));
     document.querySelectorAll('[data-auto-add]').forEach(btn=>btn.onclick=()=>automationAddNode(btn.dataset.autoParent,btn.dataset.autoBranch,btn.dataset.autoAdd));
     document.querySelectorAll('[data-auto-add-select]').forEach(select=>select.onchange=()=>{if(select.value)automationAddNode(select.dataset.autoParent,select.dataset.autoBranch,select.value)});
     paintAutomationInspector()
+  }
+  function automationAddStructuralNode(type){
+    if(!automationEditorState||!['trigger','end'].includes(type)||automationEditorState.definition.nodes.some(n=>n.type===type))return;
+    const def=automationEditorState.definition,id=automationNextId(type),position=type==='trigger'?{x:90,y:320}:{x:Math.max(520,...def.nodes.map(n=>(n.position?.x||100)+390)),y:320};
+    const node={id,type,config:type==='trigger'?{event:automationEditorState.trigger_event}:{},position};
+    def.nodes.push(node);
+    if(type==='trigger'){
+      const target=def.nodes.find(n=>n.id!==id&&!def.edges.some(e=>e.to===n.id));
+      if(target)def.edges.push({from:id,to:target.id,branch:'next'});
+    }else{
+      const leaves=def.nodes.filter(n=>n.id!==id&&n.type!=='end'&&n.type!=='condition'&&!def.edges.some(e=>e.from===n.id));
+      for(const leaf of leaves)def.edges.push({from:leaf.id,to:id,branch:'next'});
+    }
+    automationEditorState.selectedNodeId=id;automationMarkDirty();paintAutomationEditor();
   }
   function automationDefaultDefinition(trigger){
     const config={event:trigger};if(trigger==='demand.due_soon')config.hours_before=24;if(trigger==='invoice.due_soon')config.days_before=3;
@@ -2324,9 +2340,15 @@
     automationEditorState.definition.edges=automationEditorState.definition.edges.filter(e=>!remove.has(e.from)&&!remove.has(e.to))
   }
   function automationRemoveNode(nodeId){
-    const node=automationNodeById(nodeId);if(!node||node.type==='trigger'||node.type==='end')return;
+    const node=automationNodeById(nodeId);if(!node)return;
     if(!confirm('Remover este bloco? As ligações serão reorganizadas e ramos sem origem poderão ser removidos.'))return;
     const edges=automationEditorState.definition.edges,parents=edges.filter(e=>e.to===nodeId);
+    if(node.type==='trigger'||node.type==='end'){
+      automationEditorState.definition.edges=edges.filter(e=>e.to!==nodeId&&e.from!==nodeId);
+      automationEditorState.definition.nodes=automationEditorState.definition.nodes.filter(n=>n.id!==nodeId);
+      automationEditorState.selectedNodeId=automationRootId()||automationEditorState.definition.nodes[0]?.id||'';
+      automationMarkDirty();paintAutomationEditor();return;
+    }
     const outputs=edges.filter(e=>e.from===nodeId);
     const continuation=outputs.find(e=>e.branch==='next'||e.branch==='yes')||outputs[0]||null;
     const replacement=continuation?.to||null;
@@ -2337,18 +2359,24 @@
       if(unique&&automationFlowCanConnect(edge.from,replacement))previous.push({from:edge.from,to:replacement,branch:edge.branch});
     }
     automationEditorState.definition.nodes=automationEditorState.definition.nodes.filter(n=>n.id!==nodeId);
-    const reached=new Set(),queue=[automationRootId()];
+    const rootId=automationRootId(),reached=new Set(),queue=rootId?[rootId]:[];
     for(let k=0;k<queue.length;k++){
       const id=queue[k];if(reached.has(id))continue;reached.add(id);
       automationEditorState.definition.edges.filter(e=>e.from===id).forEach(e=>queue.push(e.to));
     }
-    automationEditorState.definition.nodes=automationEditorState.definition.nodes.filter(n=>reached.has(n.id));
-    automationEditorState.definition.edges=automationEditorState.definition.edges.filter(e=>reached.has(e.to)&&reached.has(e.from));
+    if(rootId){automationEditorState.definition.nodes=automationEditorState.definition.nodes.filter(n=>reached.has(n.id));
+    automationEditorState.definition.edges=automationEditorState.definition.edges.filter(e=>reached.has(e.to)&&reached.has(e.from));}
     automationEditorState.selectedNodeId=parents[0]?.from||automationRootId();
     automationMarkDirty();paintAutomationEditor()
   }
   async function saveAutomationEditor(){
     if(!automationEditorState)return;
+    const nodes=automationEditorState.definition.nodes,edges=automationEditorState.definition.edges;
+    if(nodes.filter(n=>n.type==='trigger').length!==1){toast('Adicione um gatilho antes de salvar.',true);return}
+    const endIds=new Set(nodes.filter(n=>n.type==='end').map(n=>n.id));
+    const visited=new Set(),queue=[automationRootId()];
+    for(let i=0;i<queue.length;i++){const id=queue[i];if(visited.has(id))continue;visited.add(id);edges.filter(e=>e.from===id).forEach(e=>queue.push(e.to))}
+    if(![...endIds].some(id=>visited.has(id))){toast('Conecte um bloco Encerrar fluxo ao gatilho antes de salvar.',true);return}
     const button=$('#automation-save'),name=automationEditorState.name.trim();if(!name){toast('Informe o nome da automação.',true);$('#automation-name')?.focus();return}
     const old=button?.innerHTML;if(button){button.disabled=true;button.textContent='Salvando…'}
     try{

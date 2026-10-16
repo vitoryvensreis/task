@@ -11,7 +11,7 @@ final class AiWhatsAppWorker
  private static function now(): string {return (new DateTimeImmutable('now',new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u');}
  public static function health(): array {
   $schema=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);
-  return ['status'=>$schema===29?'ok':'error','schema'=>$schema,'enabled'=>AiWhatsAppProvider::enabled(),
+  return ['status'=>in_array($schema,[29,30],true)?'ok':'error','schema'=>$schema,'enabled'=>AiWhatsAppProvider::enabled(),
    'admin_control_enabled'=>AiWhatsAppAdminActions::enabled(),
    'agenda_control_enabled'=>AiWhatsAppAgendaTools::writeEnabled(),
    'queue'=>(int)(DB::one("SELECT COUNT(*) n FROM ai_whatsapp_inbox WHERE ai_state IN ('queued','retry')")['n']??0)];

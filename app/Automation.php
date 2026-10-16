@@ -268,7 +268,8 @@ final class Automation
         $triggerNode=array_values(array_filter($cleanNodes,fn($n)=>$n['type']==='trigger'))[0];
         if(!isset($adj[$triggerNode['id']]))fail('O gatilho precisa estar conectado a pelo menos um nó.',422);
         $reachable=[];$queue=[$triggerNode['id']];
-        foreach($queue as $id){
+        for($index=0;$index<count($queue);$index++){
+            $id=$queue[$index];
             if(isset($reachable[$id]))continue;
             $reachable[$id]=true;
             foreach($adj[$id]??[] as $next)$queue[]=$next;

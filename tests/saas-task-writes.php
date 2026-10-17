@@ -149,7 +149,7 @@ try{
    &&(int)$stored['amount_cents']===0,'Task created with forbidden attributes.');
  // Transactional idempotence: repeating the identical event must reuse the row.
  $sameId=DB::tx(fn()=>SaasEventOutbox::task($account,$id,1,'demand.created',$admin));
- taskCheck($sameId>0&&(int)DB::one('SELECT COUNT(*) n FROM saas_event_outbox WHERE tenant_account_id=?',[$account])['n']===1,
+ taskCheck($sameId>0&&(int)DB::one('SELECT COUNT(*) n FROM saas_event_outbox WHERE tenant_account_id=? AND event_type='demand.created'',[$account])['n']===1,
   'Idempotent retry of an identical event must not create a second row.');
  $outsideRejected=false;
  try{SaasEventOutbox::task($account,$id,1,'demand.created',$admin);}catch(LogicException){$outsideRejected=true;}

@@ -29,6 +29,10 @@ try {
   'saas.client.archive'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?SaasWriteApi::clientArchive($p):fail('Método não permitido.',405),
   'saas.project.save'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?SaasWriteApi::projectSave($p):fail('Método não permitido.',405),
   'saas.project.delete'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?SaasWriteApi::projectDelete($p):fail('Método não permitido.',405),
+  // B1.2c-2b staged tasks. No legacy automations, notifications or realtime.
+  'saas.task.save'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?SaasTaskWriteApi::save($p):fail('Método não permitido.',405),
+  'saas.task.move'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?SaasTaskWriteApi::move($p):fail('Método não permitido.',405),
+  'saas.task.archive'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?SaasTaskWriteApi::archive($p):fail('Método não permitido.',405),
   'account.get'=>Auth::profile(),
   'account.save'=>Auth::profileSave($p),
   'account.password'=>Auth::passwordChange($p),

@@ -42,6 +42,11 @@ try{
  taskCheck(SaasOutboxMigration::apply()['outbox_version']===4,'Missing isolated event outbox migration.');
  taskCheck(SaasOutboxMigration::issues()===[],'SaaS outbox migration must create correct schema.');
  taskCheck(SaasOutboxMigration::apply()['publishers_enabled']===false,'Migration must remain idempotent and inert.');
+ $db->exec('DROP TABLE saas_event_receipts');
+ taskCheck(SaasReceiptMigration::issues()===['missing_saas_event_receipts'],'Missing staged receipt table must be detected.');
+ taskCheck(SaasReceiptMigration::apply()['receipts_version']===5,'Staged receipt migration must complete before another account exists.');
+ taskCheck(SaasReceiptMigration::issues()===[],'Receipt schema must have tenant/unique keys and FKs.');
+ taskCheck(SaasReceiptMigration::apply()['delivery_enabled']===false,'Receipt migration must remain idempotent and inert.');
  $accountB=DB::insert('accounts',['slug'=>'ci-foreign','name'=>'Other company','account_type'=>'customer','status'=>'active','created_at'=>now(),'updated_at'=>now()]);
  DB::run('DELETE FROM account_members WHERE account_id=? AND user_id=?',[$account,$outsider]);
  DB::insert('account_members',['account_id'=>$accountB,'user_id'=>$outsider,'membership_role'=>'owner','status'=>'active','joined_at'=>now()]);
@@ -167,6 +172,51 @@ try{
  }
  taskCheck((int)DB::one('SELECT COUNT(*) n FROM event_outbox')['n']===0,
   'No staged SaaS event may leak into the legacy outbox.');
+
+ // Tenant-aware consumer does NOT publish messages. It ONLY creates held receipts.
+ $foreignPayload=[
+  'tenant_account_id'=>$accountB,'entity_id'=>$taskB,'version'=>1,
+  'client_id'=>$clientB,'project_id'=>$projectB,'stage_id'=>$stageB
+ ];
+ ksort($foreignPayload,SORT_STRING);
+ $foreignJson=json_encode($foreignPayload,JSON_THROW_ON_ERROR|JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+ $foreignType='demand.created';
+ $foreignKey=hash('sha256','taskesc:saas:v1:'.$accountB.':'.$foreignType.':'.$taskB.':1');
+ $foreignHash=hash('sha256',json_encode([$accountB,$foreignType,'demand',$taskB,$foreignJson,$outsider],JSON_THROW_ON_ERROR));
+ $foreignId=DB::insert('saas_event_outbox',[
+  'tenant_account_id'=>$accountB,'event_key'=>$foreignKey,'event_hash'=>$foreignHash,
+  'event_type'=>$foreignType,'entity_type'=>'demand','entity_id'=>$taskB,
+  'payload_json'=>$foreignJson,'created_by'=>$outsider,'created_at'=>now(),'available_at'=>now()
+ ]);
+ $firstBatch=SaasEventConsumer::prepareBatch($account,50);
+ taskCheck($firstBatch['selected']===6&&$firstBatch['prepared']===6&&$firstBatch['external_delivery_enabled']===false,
+  'Verified internal account should prepare six held receipts without external delivery.');
+ taskCheck((int)DB::one('SELECT COUNT(*) n FROM saas_event_receipts WHERE tenant_account_id=?',[$accountB])['n']===0,
+  'Preparing tenant A must NEVER read or acknowledge tenant B events.');
+ $repeat=SaasEventConsumer::prepareBatch($account,50);
+ taskCheck($repeat['selected']===0&&$repeat['prepared']===0,
+  'Replay must not duplicate any held receipts.');
+ $otherRejected=false;
+ try{SaasEventConsumer::prepareBatch($accountB,20);}catch(RuntimeException){$otherRejected=true;}
+ taskCheck($otherRejected,'External tenant worker must remain unavailable during B1.2.');
+ taskCheck((int)DB::one('SELECT COUNT(*) n FROM saas_event_outbox WHERE published_at IS NOT NULL')['n']===0,
+  'Preparing receipts must never acknowledge publication or consume held outbox.');
+ taskCheck(count(SaasEventConsumer::heldForOwner(50))===6,
+  'Verified owner should inspect six safe receipt projections.');
+
+ // Corrupt metadata is rejected and rolled back instead of silently consumed.
+ $bad=DB::insert('saas_event_outbox',[
+  'tenant_account_id'=>$account,'event_key'=>str_repeat('a',64),'event_hash'=>str_repeat('b',64),
+  'event_type'=>'demand.created','entity_type'=>'demand','entity_id'=>$id,
+  'payload_json'=>'{"tenant_account_id":999,"entity_id":999,"version":999}',
+  'created_by'=>$admin,'created_at'=>now(),'available_at'=>now()
+ ]);
+ $invalidRejected=false;
+ try{SaasEventConsumer::prepareBatch($account,10);}catch(RuntimeException|JsonException){$invalidRejected=true;}
+ taskCheck($invalidRejected,'Corrupt event must be rejected before receipt.');
+ taskCheck((int)DB::one('SELECT COUNT(*) n FROM saas_event_receipts WHERE tenant_account_id=?',[$account])['n']===6,
+  'Invalid event must not create any receipts.');
+ DB::run('DELETE FROM saas_event_outbox WHERE id=?',[$bad]);
  taskCheck((int)DB::one("SELECT COUNT(*) n FROM audit_log WHERE entity='demand' AND action LIKE 'saas.%'")['n']===6,
   'All successful task changes must appear in legacy audit (internal only).');
 

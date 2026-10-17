@@ -1,7 +1,8 @@
 # TaskEsc SaaS — Bloco 1: Fundação multiempresa
 
 **Registro de retomada — 2026-10-17.** Branch de desenvolvimento: `feat/saas-b1-foundation`.
-**Estado:** B1.1 implementado na branch e pendente de validação/homologação; B1 completo **não concluído**.
+**Estado:** B1.1 implementado e validado por CI; homologação/rollout ainda pendentes; B1 completo **não concluído**.
+**PR:** [#113](https://github.com/vitoryvensreis/task/pull/113), em rascunho. **CI:** [execução #39030497373](https://github.com/vitoryvensreis/task/actions/runs/39030497373), testes PHP/JavaScript/MySQL 8/MariaDB 10.11 aprovados, deploy omitido.
 **Produção:** nenhuma mudança nem criação de contas SaaS deve ser feita automaticamente. O deploy da branch está desabilitado pelo workflow (só `main` faz deploy). O schema operacional continua 30.
 **Aviso:** o schema **20** do SaaS antigo é historicamente removido, proibido e **não** será recriado.
 
@@ -56,7 +57,7 @@ O manifesto precisa ser o do backup pré-deploy, em `storage/backups/`, com refe
 
 ## Ponto exato de retomada
 
-1. Conferir o status do PR/CI da branch `feat/saas-b1-foundation`; não mesclar com `main` nem executar o CLI em produção sem homologação e decisão explícita de rollout.
+1. PR #113 e CI #39030497373 aprovados na fase B1.1; não mesclar com `main` nem executar o CLI em produção sem homologação e decisão explícita de rollout.
 2. Continuar **B1.2 pelo inventário de dependências SQL** e desenho da migração aditiva `account_id` para dados legados com conta interna, sem tocar no schema 20.
 3. Implementar isolamento no backend em lotes pequenos; fechar o teste A/B para cada módulo antes de avançar.
 4. Atualizar este README e este arquivo com commits, verificações concluídas, bloqueios e o próximo trabalho pendente.

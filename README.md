@@ -2,7 +2,7 @@
 
 ## SaaS — Bloco 1 (fundação multiempresa) — diário de desenvolvimento
 
-**Última atualização:** 17/10/2026 · **Branch:** `feat/saas-b1-foundation` · **PR:** [#113](https://github.com/vitoryvensreis/task/pull/113) (rascunho) · **Estado:** B1.1 e B1.2a validados; B1.2b implementado em homologação/CI; B1.2c/B1.3 pendentes. **Não liberado em produção.**
+**Última atualização:** 17/10/2026 · **Branch:** `feat/saas-b1-foundation` · **PR:** [#113](https://github.com/vitoryvensreis/task/pull/113) (rascunho) · **Estado:** B1.1 e B1.2a validados; B1.2b implementado e validado em CI; B1.2c/B1.3 pendentes. **Não liberado em produção.**
 
 **Documento de continuidade detalhado:** [docs/saas-b1.md](docs/saas-b1.md). Ao retomar o projeto, consulte este bloco e o documento ANTES de qualquer migração.
 
@@ -11,7 +11,7 @@
 | B1.1 — tabelas de contas e vínculo de usuários | ✅ Implementado e validado na branch | `accounts`, `account_members`, `account_settings`; conta interna para legado; migração idempotente com backup obrigatório, modo multiempresa bloqueado |
 | B1.1 — proteção inicial e verificações | ✅ Código e testes aprovados na CI | `AccountContext` valida o vínculo; testes no MySQL/MariaDB; NÃO conectado a todas as rotas ainda |
 | B1.2a — `tenant_account_id` em 15 tabelas principais | ✅ Implementado e CI aprovada, NÃO implantado | Migração aditiva e backfill testados em MySQL 8/MariaDB 10.11; rotas legadas ainda sem isolamento |
-| B1.2b — ownership em 16 tabelas filhas | 🟡 Implementado na branch, aguardando CI/homologação | Migração por FK em ordem de dependência, verificações multiparentais, testes adversariais e backup obrigatório; **sem ativar SaaS** |
+| B1.2b — ownership em 16 tabelas filhas | ✅ CI aprovada, NÃO implantado | Backfill por FK e checagens multiparentais aprovados no MySQL 8/MariaDB 10.11; ainda sem isolamento operacional |
 | B1.2c — isolamento backend, APIs e realtime | ⬜ Pendente | Filtrar e autorizar cada request/worker/arquivo/canal; testes cruzados entre empresas |
 | B1.2 — restrições de recursos do SaaS | ⬜ Pendente | Desabilitar IA e calendários Google integrados para assinantes no servidor; manter disparos de automação |
 | B1.3 — ativação, homologação e migração segura | ⬜ Pendente | 2 empresas em testes; deploy com backup/rollback; habilitar contas externas só após isolamento completo |
@@ -19,6 +19,8 @@
 | Blocos 4/5 — planos, licenças avulsas, Asaas | ⬜ Futuro | Não incluídos no Bloco 1 |
 
 **B1.2a validado:** [GitHub Actions #39031554658](https://github.com/vitoryvensreis/task/actions/runs/39031554658) — validação PHP/JS, MySQL 8 e MariaDB 10.11 aprovadas; **deploy skipped**. As correções de fixture (created_at de projetos e membership revogado no teste A/B) já estão incluídas. Nenhuma alteração foi aplicada à VPS.
+
+**B1.2b validado:** [GitHub Actions #39032439643](https://github.com/vitoryvensreis/task/actions/runs/39032439643) — PHP/JavaScript, MySQL 8 e MariaDB 10.11 aprovados; deploy na VPS `skipped`. A etapa **não** permite novas empresas nem elimina a necessidade das verificações nas rotas existentes.
 
 **Arquivos B1.2b:** `app/SaasChildMigration.php`, `bin/migrate-saas-children.php`, `tests/saas-children.php`, `app/AccountOwnership.php`, `database/schema.sql` e `.github/workflows/deploy.yml`. 16 tabelas filhas: `contract_items`, `cycles`, `cycle_items`, `demand_usage`, `transitions`, `comments`, `checklists`, `time_entries`, `files`, `reviews`, `change_requests`, `costs`, `payments`, `events`, `automation_runs` e `automation_run_steps`. Migração sob `settings.saas_children_version=3`, schema operacional permanece 30, execução manual com backup.
 
@@ -28,7 +30,7 @@
 
 **Testes:** [GitHub Actions #39030497373](https://github.com/vitoryvensreis/task/actions/runs/39030497373) — validação de código, MySQL 8 e MariaDB 10.11 aprovados; deploy na VPS **ignorado** no PR. PR permanece em rascunho para impedir aprovação precoce.
 
-**Ponto exato onde paramos:** validar CI/homologação **B1.2b** e seguir para **B1.2c (demais entidades com ownership ambíguo, controles reais, API, arquivos, workers e realtime)**. Ainda faltam controles de escrita, autorização e índices únicos/FKs por conta. **Não mesclar o PR nem implantar na VPS.** B1.1 NÃO significa que o sistema já possa atender duas empresas. O schema operacional continua **30**, sem recriar o schema **20** removido. O comando de migração só roda manualmente após backup validado e não foi adicionado ao deploy automático.
+**Ponto exato onde paramos:** começar **B1.2c (demais entidades com ownership ambíguo, controles reais, API, arquivos, workers e realtime)**. Ainda faltam controles de escrita, autorização e índices únicos/FKs por conta. **Não mesclar o PR nem implantar na VPS.** B1.1 NÃO significa que o sistema já possa atender duas empresas. O schema operacional continua **30**, sem recriar o schema **20** removido. O comando de migração só roda manualmente após backup validado e não foi adicionado ao deploy automático.
 
 ---
 

@@ -2271,3 +2271,57 @@ button.compact-row{cursor:pointer}.compact-row:hover{border-color:#3a4854}.compa
 .task-contact-fields{margin-top:10px}
 .automation-canvas-legend button{min-height:34px;white-space:nowrap}
 @media(max-width:700px){.task-contact-fields{grid-template-columns:1fr}.task-contact-choice{align-items:flex-start;flex-direction:column;gap:3px}.automation-canvas-legend{flex-wrap:wrap}}
+
+/* Contatos: agenda de WhatsApp reutilizável nas tasks. */
+.contacts-directory{display:grid;gap:15px;min-width:0}
+.contacts-directory-head{align-items:center;flex-wrap:wrap}
+.contacts-directory-head .eyebrow{display:block;margin-bottom:5px}
+.contacts-directory-head h3{font-size:23px;margin:0 0 6px}
+.contacts-directory-head .panel-sub{max-width:700px}
+.contacts-directory-head .primary{min-height:42px;display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap}
+.contacts-directory-panel{min-width:0;padding:17px}
+.contacts-directory-toolbar{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:14px}
+.contacts-directory-search{width:min(100%,470px);min-width:0}
+.contacts-directory-search .input{width:100%;max-width:none}
+.contacts-directory-toolbar small{color:var(--muted,#969696);font-size:12px;white-space:nowrap}
+.contacts-directory-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
+.contacts-directory-table{min-width:580px;width:100%}
+.contacts-directory-table td{padding:13px 12px}
+.contacts-directory-table th.contacts-actions-head{text-align:right}
+.contacts-directory-table td:last-child{text-align:right}
+.contacts-name-cell{display:inline-flex;align-items:center;gap:11px;min-width:0}
+.contacts-name-cell strong{overflow-wrap:anywhere;white-space:normal;font-weight:650}
+.contacts-avatar{width:34px;height:34px;display:grid;place-items:center;flex-shrink:0;background:#1a242b;border:1px solid #27363f;border-radius:11px;color:#c5d8e8}
+.contacts-avatar .icon-slot{display:grid;place-items:center}
+.contacts-phone{font-variant-numeric:tabular-nums;white-space:nowrap}
+.contacts-row-actions{display:flex;justify-content:flex-end;gap:8px;align-items:center}
+.contacts-row-actions .mini-btn{min-height:34px;display:inline-flex;gap:5px;align-items:center;justify-content:center}
+.contacts-row-actions .contacts-delete-btn{color:#e3a3a3}
+.contacts-row-actions .contacts-delete-btn:hover{color:#fff;background:#452124}
+.contacts-directory-pager{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:13px;color:#a8a8a8;font-size:12px}
+.contacts-directory-pager:empty{display:none}
+.contacts-directory-pager>div{display:flex;gap:8px}
+.contacts-directory-pager .ghost{display:inline-flex;gap:5px;align-items:center;min-height:35px}
+.contacts-directory-hint{display:flex;align-items:center;gap:7px;margin:0;color:#929292;font-size:12px;line-height:1.5}
+.contacts-edit-modal{max-width:480px}
+.contacts-editor-form{display:grid;gap:16px;padding:16px}
+.contacts-editor-form .field{min-width:0}
+.contacts-editor-form .form-actions{margin-top:3px}
+@media(max-width:760px){
+ .contacts-directory-head{align-items:stretch}
+ .contacts-directory-head .primary{width:100%}
+ .contacts-directory-panel{padding:12px}
+ .contacts-directory-toolbar{flex-direction:column;align-items:stretch;gap:7px}
+ .contacts-directory-search{width:100%}
+ .contacts-directory-toolbar small{white-space:normal}
+ .contacts-directory-table{min-width:0}
+ .contacts-directory-table thead{display:none}
+ .contacts-directory-table tbody{display:grid;gap:10px}
+ .contacts-directory-table tr{display:grid;grid-template-columns:1fr;gap:9px;padding:12px;border:1px solid #292929;border-radius:11px;background:#101010}
+ .contacts-directory-table td{display:block;padding:0!important;text-align:left!important;border:0!important;white-space:normal}
+ .contacts-directory-table td:last-child{padding-top:5px!important}
+ .contacts-row-actions{justify-content:flex-start;flex-wrap:wrap}
+ .contacts-row-actions .mini-btn{min-height:40px}
+ .contacts-directory-pager{flex-wrap:wrap}
+ .contacts-edit-modal{width:min(94vw,480px)}
+}

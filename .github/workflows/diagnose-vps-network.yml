@@ -1,0 +1,43 @@
+name: TaskEsc VPS network diagnostics
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  network:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Diagnosticar HTTPS publico sem expor segredos
+        shell: bash
+        run: |
+          set +e
+          echo "Verificando resolucao DNS publica..."
+          getent ahostsv4 task.escotilhaprodutora.com >/dev/null
+          echo "public_dns_ok=$?"
+          echo "Verificando porta HTTPS publica..."
+          curl -sS -o /tmp/taskesc-health-body -w "public_health_http=%{http_code} dns_time=%{time_namelookup} connect_time=%{time_connect}\n" --connect-timeout 6 --max-time 15 https://task.escotilhaprodutora.com/health.php
+          echo "public_health_exit=$?"
+          echo "Verificando pagina inicial..."
+          curl -sS -o /dev/null -w "public_home_http=%{http_code}\n" --connect-timeout 6 --max-time 15 https://task.escotilhaprodutora.com/
+          echo "public_home_exit=$?"
+      - name: Diagnosticar acesso SSH da VPS sem expor hostname
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+        run: |
+          set +e
+          if [ -z "$VPS_HOST" ] || [ -z "$VPS_PORT" ]; then echo "ssh_secrets_configured=false"; exit 0; fi
+          echo "ssh_secrets_configured=true"
+          getent ahostsv4 "$VPS_HOST" >/dev/null 2>&1
+          echo "ssh_host_dns_ok=$?"
+          timeout 12 ssh-keyscan -T 7 -p "$VPS_PORT" "$VPS_HOST" > /tmp/taskesc-ssh-hostkey 2>/dev/null
+          echo "ssh_keyscan_exit=$?"
+          if [ -s /tmp/taskesc-ssh-hostkey ]; then echo "ssh_port_reachable=true"; else echo "ssh_port_reachable=false"; fi

@@ -76,7 +76,17 @@ try{
  b1check($again['account_id']===$account&&(int)DB::one('SELECT COUNT(*) n FROM account_members')['n']===3,'Repeat migration must not duplicate account or members.');
 
  // Cross-account access must always be explicitly authorized.
+ // Re-running B1.1 must not grant new users access to the original account.
+ // New users must be provisioned explicitly in the same business transaction.
+ $lateUser=DB::insert('users',['name'=>'New tenant-era user','email'=>'late-user@ci.invalid',
+  'password_hash'=>'fixture','role'=>'staff','created_at'=>now()]);
+ $replayed=SaasFoundationMigration::apply();
+ b1check($replayed['initial_backfill_performed']===false,'Repeated foundation must never backfill users again.');
+ b1check(!DB::one('SELECT account_id FROM account_members WHERE account_id=? AND user_id=?',
+  [$account,$lateUser]),'Foundation replay granted unauthorized internal membership to a late user.');
  $other=DB::insert('accounts',['slug'=>'ci-other-account','name'=>'Outra empresa de teste','account_type'=>'customer','status'=>'active','created_at'=>now(),'updated_at'=>now()]);
+ b1reject(fn()=>SaasFoundationMigration::apply(),'Foundation replay must refuse any external tenant before touching membership.');
+ b1check(!DB::one('SELECT account_id FROM account_members WHERE account_id=? AND user_id=?',[$account,$lateUser]),'Rejected replay linked an external-era user.');
  b1reject(fn()=>AccountContext::forUser($admin,$other),'Original administrator cannot access a different account by guessing an id.');
  DB::insert('account_members',['account_id'=>$other,'user_id'=>$staff,'membership_role'=>'member','status'=>'active','joined_at'=>now()]);
  b1check(AccountContext::forUser($staff,$other)['account_id']===$other,'Explicit active memberships should resolve.');

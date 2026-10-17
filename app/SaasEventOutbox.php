@@ -74,6 +74,34 @@ final class SaasEventOutbox {
   return $id;
  }
 
+
+ /** Transactional, internal-only catalog event; no external delivery. */
+ public static function catalog(int $accountId,string $entity,int $entityId,string $type,int $actorId): int {
+  if(!DB::conn()->inTransaction())throw new LogicException('SaaS catalog event requires a transaction.');
+  self::ready();
+  $member=SaasRequestScope::owner();
+  if($accountId<1 || $accountId!==(int)$member['account_id'] ||
+     $actorId<1 || $actorId!==(int)(Auth::$actor['id']??0))
+   fail('Identidade de evento SaaS inválida.',403);
+  $events=['client'=>['client.saved','client.archived'],'project'=>['project.saved','project.deleted']];
+  $tables=['client'=>'clients','project'=>'projects'];
+  if(!isset($events[$entity])||!in_array($type,$events[$entity],true)||$entityId<1)
+   throw new InvalidArgumentException('Invalid SaaS catalog event.');
+  $row=DB::one('SELECT id FROM `'.$tables[$entity].'` WHERE id=? AND tenant_account_id=? LIMIT 1',
+   [$entityId,$accountId]);
+  // Deletion is validated by the scoped mutation itself before emitting.
+  if(!$row && $type!=='project.deleted')fail('Registro de evento fora da empresa.',404);
+  $payload=json_encode(['tenant_account_id'=>$accountId,'entity_id'=>$entityId],JSON_THROW_ON_ERROR);
+  $key=hash('sha256','taskesc:saas:catalog:'.bin2hex(random_bytes(16)));
+  $hash=hash('sha256',json_encode([$accountId,$type,$entity,$entityId,$payload,$actorId],JSON_THROW_ON_ERROR));
+  $now=(new DateTimeImmutable('now',new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u');
+  return DB::insert('saas_event_outbox',[
+   'tenant_account_id'=>$accountId,'event_key'=>$key,'event_hash'=>$hash,
+   'event_type'=>$type,'entity_type'=>$entity,'entity_id'=>$entityId,
+   'payload_json'=>$payload,'created_by'=>$actorId,'created_at'=>$now,'available_at'=>$now
+  ]);
+ }
+
  /** Read-only inspection, NOT a claim/publish/consume method. */
  public static function preview(int $limit=30): array {
   self::ready();

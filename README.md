@@ -2,7 +2,7 @@
 
 ## SaaS — Bloco 1 (fundação multiempresa) — diário de desenvolvimento
 
-**Última atualização:** 17/10/2026 · **Branch:** `feat/saas-b1-foundation` · **PR:** [#113](https://github.com/vitoryvensreis/task/pull/113) (rascunho) · **Estado:** B1.1 e B1.2a validados; B1.2b validado; B1.2c-1 validado; B1.2c-2a implementado sob CI; B1.2c-2b/B1.3 pendentes. **Não liberado em produção.**
+**Última atualização:** 17/10/2026 · **Branch:** `feat/saas-b1-foundation` · **PR:** [#113](https://github.com/vitoryvensreis/task/pull/113) (rascunho) · **Estado:** B1.1 e B1.2a validados; B1.2b validado; B1.2c-1 validado; B1.2c-2a implementado e validado; B1.2c-2b/B1.3 pendentes. **Não liberado em produção.**
 
 **Documento de continuidade detalhado:** [docs/saas-b1.md](docs/saas-b1.md). Ao retomar o projeto, consulte este bloco e o documento ANTES de qualquer migração.
 
@@ -13,7 +13,7 @@
 | B1.2a — `tenant_account_id` em 15 tabelas principais | ✅ Implementado e CI aprovada, NÃO implantado | Migração aditiva e backfill testados em MySQL 8/MariaDB 10.11; rotas legadas ainda sem isolamento |
 | B1.2b — ownership em 16 tabelas filhas | ✅ CI aprovada, NÃO implantado | Backfill por FK e checagens multiparentais aprovados no MySQL 8/MariaDB 10.11; ainda sem isolamento operacional |
 | B1.2c-1 — contexto de requisição + leituras isoladas | ✅ CI aprovada, NÃO implantado | Contexto validado por sessão; seleção CSRF; clientes/projetos/tasks filtrados; tokens antigos e empresas externas bloqueados |
-| B1.2c-2a — escritas seguras de clientes/projetos | 🟡 Código implementado, CI aguardada | Novas rotas experimentais POST, escopo por conta, transações, arquivamento sem dependências e exclusão de projeto vazio; não substitui CRUD legado |
+| B1.2c-2a — escritas seguras de clientes/projetos | ✅ CI aprovada, NÃO implantado | Rotas POST com escopo por conta, transações, arquivamento condicionado (inclusive templates recorrentes) e exclusão de projeto vazio; CRUD legado permanece |
 | B1.2c-2b — tasks e demais módulos | ⬜ Pendente | Autorização completa nas escritas legadas, contas de usuários, financeiro, arquivos, chat, filas/Outbox, workers, notificações, realtime, API/MCP e índices/FKs |
 | B1.2 — restrições de recursos do SaaS | ⬜ Pendente | Desabilitar IA e calendários Google integrados para assinantes no servidor; manter disparos de automação |
 | B1.3 — ativação, homologação e migração segura | ⬜ Pendente | 2 empresas em testes; deploy com backup/rollback; habilitar contas externas só após isolamento completo |
@@ -26,7 +26,9 @@
 
 **B1.2c-1 validado:** [GitHub Actions #39033292358](https://github.com/vitoryvensreis/task/actions/runs/39033292358): código PHP/JS, MySQL 8, MariaDB 10.11 aprovados; deploy na VPS ignorado. Os testes cobrem seleção forjada, membership revogado, tokens de API antigos e flags externas alteradas manualmente. **Ainda não altera nenhuma rota legada nem libera multiempresa.**
 
-**B1.2c-2a (em desenvolvimento):** `app/SaasWriteApi.php` adiciona `clientSave`, `clientArchive`, `projectSave`, `projectDelete` exclusivamente à conta interna verificada, com transação e cláusula de posse também em `UPDATE`/`DELETE`. Em `public/api.php`, rotas `saas.client.save`, `saas.client.archive`, `saas.project.save`, `saas.project.delete` exigem POST; a proteção CSRF já existente no middleware é aplicada a solicitações de sessão, enquanto bearer tokens sem tenant continuam rejeitados. Edições proíbem mudar projeto com tasks/cobranças e excluem apenas registros sem dependências; arquivamento de clientes não altera usuários/vínculos existentes. Mantém trilha `audit_log` do legado (**ainda não isolada por tenant**). Não dispara notificações nem automações até workers/filas estarem isolados. Testes em `tests/saas-writes.php` na matriz MySQL/MariaDB. **Não implantado, não pronto para contas externas.**
+**B1.2c-2a validado:** [GitHub Actions #39034250506](https://github.com/vitoryvensreis/task/actions/runs/39034250506) — sintaxe PHP/JS, MySQL 8 e MariaDB 10.11 aprovados, deploy na VPS `skipped`. Testa contas A/B, IDs forjados, dono sem permissão, token sem tenant, membership revogado, migração ausente, cliente com template recorrente, projetos com tasks e exclusões restritas. Nenhum dado de produção foi alterado.
+
+**B1.2c-2a (implementado e CI aprovada):** `app/SaasWriteApi.php` adiciona `clientSave`, `clientArchive`, `projectSave`, `projectDelete` exclusivamente à conta interna verificada, com transação e cláusula de posse também em `UPDATE`/`DELETE`. Em `public/api.php`, rotas `saas.client.save`, `saas.client.archive`, `saas.project.save`, `saas.project.delete` exigem POST; a proteção CSRF já existente no middleware é aplicada a solicitações de sessão, enquanto bearer tokens sem tenant continuam rejeitados. Edições proíbem mudar projeto com tasks/cobranças e excluem apenas registros sem dependências; arquivamento de clientes não altera usuários/vínculos existentes. Mantém trilha `audit_log` do legado (**ainda não isolada por tenant**). Não dispara notificações nem automações até workers/filas estarem isolados. Testes em `tests/saas-writes.php` na matriz MySQL/MariaDB. **Não implantado, não pronto para contas externas.**
 
 **Arquivos B1.2c-1:** `app/SaasRequestScope.php`, `app/SaasReadApi.php`, `public/api.php` e `tests/saas-children.php`. As novas rotas `saas.context`, `saas.account_select` (POST com CSRF), `saas.records` e `saas.record` são estritamente experimentais: exigem marcadores das migrações B1.1/B1.2a/B1.2b, sessões com vínculo ativo, proprietário ADM, e não aceitam bearer tokens sem contexto de empresa. Recursos permitidos: projeções seguras de `clients`, `projects`, `demands`, sempre filtradas por `tenant_account_id`. **Nenhuma rota legada foi alterada; não libera SaaS.**
 
@@ -38,7 +40,7 @@
 
 **Testes:** [GitHub Actions #39030497373](https://github.com/vitoryvensreis/task/actions/runs/39030497373) — validação de código, MySQL 8 e MariaDB 10.11 aprovados; deploy na VPS **ignorado** no PR. PR permanece em rascunho para impedir aprovação precoce.
 
-**Ponto exato onde paramos:** aguardar CI do B1.2c-2a, corrigir eventuais falhas e continuar **B1.2c-2b**: escrita de tasks, autenticação/tokens vinculados a tenant, escopo nas rotas legadas, tabelas sem pai confiável, APIs/MCP, arquivos, fila/Outbox, workers, notificações e realtime. Ainda faltam controles de escrita, autorização e índices únicos/FKs por conta. **Não mesclar o PR nem implantar na VPS.** B1.1 NÃO significa que o sistema já possa atender duas empresas. O schema operacional continua **30**, sem recriar o schema **20** removido. O comando de migração só roda manualmente após backup validado e não foi adicionado ao deploy automático.
+**Ponto exato onde paramos:** B1.2c-2a aprovado (#39034250506); continuar **B1.2c-2b**: escrita de tasks, autenticação/tokens vinculados a tenant, escopo nas rotas legadas, tabelas sem pai confiável, APIs/MCP, arquivos, fila/Outbox, workers, notificações e realtime. Ainda faltam controles de escrita, autorização e índices únicos/FKs por conta. **Não mesclar o PR nem implantar na VPS.** B1.1 NÃO significa que o sistema já possa atender duas empresas. O schema operacional continua **30**, sem recriar o schema **20** removido. O comando de migração só roda manualmente após backup validado e não foi adicionado ao deploy automático.
 
 ---
 

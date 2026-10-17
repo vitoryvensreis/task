@@ -23,9 +23,26 @@ Introduzir uma camada de contas assinantes ACIMA dos clientes comerciais atuais.
 
 **Não confundir:** o SQL `031` é uma numeração de arquivo NOVO; a migração não avança o schema operacional para 31 porque ainda não temos consultas multitenant protegidas em todos os módulos. Ela só estabelece a fundação em modo **inativo**, sob marcador separado.
 
+## B1.2a — extensão aditiva de ownership (em desenvolvimento; não liberado)
+
+**Objetivo deste subpasso:** preparar parte do domínio para ownership explícito, sem habilitar múltiplas empresas nem alterar as consultas legadas globalmente.
+
+- [x] `app/SaasDomainMigration.php`: migração B1.2a manual/idempotente sob advisory lock, requer B1.1 instalada, schema operacional 30, única conta interna, flags de signup/multiempresa em `0`; bloqueia migração em transação aberta e quando já existe outra conta; verifica estrutura e vínculos conhecidos. Marcador próprio `settings.saas_domain_version=2`.
+- [x] `database/schema.sql`: coluna `tenant_account_id BIGINT UNSIGNED NULL` e índice composto `(tenant_account_id,id)` em 15 tabelas de domínio. Importante: **`calendars.account_id` já é uma conta Google**; por isso usamos `tenant_account_id` para assinatura SaaS em todos os módulos, evitando semânticas conflitantes.
+- [x] 15 raízes cobertas: `clients`, `stages`, `categories`, `projects`, `contracts`, `demands`, `invoices`, `automations`, `whatsapp_contacts`, `expense_categories`, `expense_rules`, `expenses`, `templates`, `google_accounts`, `calendars`.
+- [x] `app/AccountOwnership.php`: escopo explícito de leitura/listagem por conta verificada e validação dos parentes (cliente/projeto/etapa/categoria) da task. **Ainda não acoplado aos endpoints existentes, de propósito.**
+- [x] `bin/migrate-saas-domain.php`: comando exclusivamente manual `--dry-run` ou `--apply`, exige manifesto de backup com SHA256 real e schema 30.
+- [x] `tests/saas-domain.php`: testes de migração de banco legado simulado, idempotência, preservação dos IDs, duas empresas fictícias, tentativas de leitura cruzada e vínculos cruzados. Conectado à matriz MySQL 8/MariaDB 10.11. **Status de CI a conferir no PR antes da próxima etapa.**
+
+**Limitações críticas desta etapa:** `tenant_account_id` é inicialmente **NULLABLE** porque os controllers legados não enviam ownership nos novos INSERTs. Nunca usar essa coluna como prova de isolamento completo. Os dados atuais são associados à conta interna somente quando o CLI for autorizado e o backup for validado. A rotina de backfill se recusa a atuar se existir outra conta. O próximo passo precisa propagar account id em TODAS as escritas, backfills restantes, validações por JOIN e FKs compostas; depois endurecer NOT NULL. Nenhum onboarding externo antes disso.
+
+**Ausente ainda:** `payments`, `contract_items`, `cycles`, `cycle_items`, `demand_usage`, `transitions`, `comments`, `checklists`, `time_entries`, `files`, `reviews`, `change_requests`, `costs`, `events`, `notifications`, `audit_log`, `event_outbox`, `automation_runs`, `automation_run_steps`, `whatsapp_messages`, `mail_queue`, `chat_threads`, `chat_messages`, `chat_message_tasks`, `push_subscriptions`, `push_delivery_log`, `ai_whatsapp_inbox` (interno), `system_errors`, tokens e demais tabelas. Fila, realtime, workers e rotas ainda NÃO estão isolados.
+
+**Próxima retomada correta:** B1.2b — mapear as tabelas filhas por FK, migrar ownership derivado do pai e recusar registros órfãos e pais de contas divergentes. Depois B1.2c — autorização por conta em todos os módulos, com testes agressivos contra vazamento.
+
 ## Pendente — B1.2: propagação e isolamento por conta
 
-- [ ] Projetar e migrar `account_id` nas tabelas operacionais; priorizar `clients`, `users`/vínculos, `demands`, `projects`, `stages`, `categories`, `contracts`, `invoices`, `payments`, `expenses`, `files`, `templates`, `automations`, `automation_runs`, `event_outbox`, `whatsapp_contacts`, mensagens/chat, agendas, Google, tokens e logs. O inventário precisa ser completado por relacionamento.
+- [ ] Completar `tenant_account_id` (B1.2a cobre 15 raízes, demais tabelas e consultas pendentes), priorizar `clients`, `users`/vínculos, `demands`, `projects`, `stages`, `categories`, `contracts`, `invoices`, `payments`, `expenses`, `files`, `templates`, `automations`, `automation_runs`, `event_outbox`, `whatsapp_contacts`, mensagens/chat, agendas, Google, tokens e logs. O inventário precisa ser completado por relacionamento.
 - [ ] Planejar índices únicos **por conta**, incluindo etapas/categorias/contatos, e FKs/joins contra relações de contas diferentes; detectar dados legados órfãos antes de tornar colunas NOT NULL.
 - [ ] Adicionar resolução de conta na autenticação e nas sessões/API tokens; seleção explícita para usuários que participem de várias empresas e verificação por requisição. Identificador enviado pelo browser **não prova autorização**.
 - [ ] Exigir `account_id` verificado para cada ação em `Auth`, `Catalog`, `Demands`, `Finance`, `Files`, `Reports`, `Agenda`, `Google`, `Chat`, `WhatsappContacts`, `Automation`, APIs e MCP.
@@ -58,8 +75,8 @@ O manifesto precisa ser o do backup pré-deploy, em `storage/backups/`, com refe
 ## Ponto exato de retomada
 
 1. PR #113 e CI #39030497373 aprovados na fase B1.1; não mesclar com `main` nem executar o CLI em produção sem homologação e decisão explícita de rollout.
-2. Continuar **B1.2 pelo inventário de dependências SQL** e desenho da migração aditiva `account_id` para dados legados com conta interna, sem tocar no schema 20.
-3. Implementar isolamento no backend em lotes pequenos; fechar o teste A/B para cada módulo antes de avançar.
+2. Continuar **B1.2b pelas tabelas filhas**, após verificar CI de B1.2a; confirmar migração de ownership derivado por relacionamentos, sem tocar no schema 20.
+3. Continuar B1.2c: integrar `AccountOwnership` e `AccountContext` às APIs de cada módulo e a todos os jobs em lotes pequenos; fechar o teste A/B para cada módulo.
 4. Atualizar este README e este arquivo com commits, verificações concluídas, bloqueios e o próximo trabalho pendente.
 
 ### Regras de segurança

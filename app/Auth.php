@@ -45,7 +45,7 @@ final class Auth {
  public static function requireAbility(string $ability): void {if(!self::can($ability))fail('Você não possui permissão para esta ação.',403);}
 
  private static function finalizeLogin(array $u): array {
-  session_regenerate_id(true);$_SESSION['user_id']=$u['id'];unset($_SESSION['preview_client_id'],$_SESSION['pending_2fa_user_id'],$_SESSION['pending_2fa_until']);$_SESSION['csrf']=bin2hex(random_bytes(24));
+  session_regenerate_id(true);$_SESSION['user_id']=$u['id'];unset($_SESSION['preview_client_id'],$_SESSION['pending_2fa_user_id'],$_SESSION['pending_2fa_until'],$_SESSION['taskesc_saas_account']);$_SESSION['csrf']=bin2hex(random_bytes(24));
   DB::update('users',(int)$u['id'],['last_login_at'=>now(),'last_login_ip'=>mb_substr((string)($_SERVER['REMOTE_ADDR']??''),0,45)]);
   unset($u['password_hash'],$u['twofa_secret'],$u['twofa_recovery_json']);self::$actor=$u;self::$user=$u;self::$user['is_preview']=0;audit('user',(int)$u['id'],'login',null,['ip'=>$_SERVER['REMOTE_ADDR']??'']);
   return ['user'=>self::$user,'csrf'=>csrf()];
@@ -53,7 +53,7 @@ final class Auth {
  public static function login(array $p): array {
   self::rate('login',15);$u=DB::one('SELECT * FROM users WHERE email=? AND active=1',[strtolower(trim($p['email']??''))]);if(!$u||!password_verify($p['password']??'',$u['password_hash']))fail('E-mail ou senha incorretos.',401);
   if($u['role']==='admin'&&!empty($u['twofa_enabled'])){
-   session_regenerate_id(true);$_SESSION['pending_2fa_user_id']=(int)$u['id'];$_SESSION['pending_2fa_until']=time()+300;unset($_SESSION['user_id'],$_SESSION['preview_client_id']);return ['twofa_required'=>true,'email'=>$u['email']];
+   session_regenerate_id(true);$_SESSION['pending_2fa_user_id']=(int)$u['id'];$_SESSION['pending_2fa_until']=time()+300;unset($_SESSION['user_id'],$_SESSION['preview_client_id'],$_SESSION['taskesc_saas_account']);return ['twofa_required'=>true,'email'=>$u['email']];
   }
   return self::finalizeLogin($u);
  }

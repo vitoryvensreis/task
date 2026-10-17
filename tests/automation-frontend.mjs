@@ -60,4 +60,9 @@ check(app.includes("automationAddStructuralNode('trigger')")&&app.includes("auto
 check(app.includes("automationEditorState.definition.nodes.filter(n=>n.id!==nodeId)")&&app.includes("if(node.type==='trigger'||node.type==='end')"),'Structural card deletion must preserve other graph nodes.');
 check(app.includes("Conecte um bloco Encerrar fluxo ao gatilho antes de salvar."),'Frontend must reject flows without a connected ending.');
 check(app.includes("api('whatsapp_contacts.list')")&&app.includes('whatsapp_contact_name')&&app.includes('demand-whatsapp-contact-search'),'Task editor must offer named searchable WhatsApp contacts.');
+check(app.includes("contacts:'contatos'")&&app.includes("['contacts','users','Contatos'")&&app.includes('contacts:renderContacts'),'Contacts must be a dedicated admin sidebar route.');
+check(app.includes("api('whatsapp_contacts.save'")&&app.includes("api('whatsapp_contacts.delete'")&&app.includes("api('whatsapp_contacts.list'"),'Contacts UI must implement list/save/delete endpoints.');
+check(app.includes("data-contact-edit")&&app.includes("data-contact-delete")&&app.includes("id=\"contacts-query\""),'Contacts must support search, edit and delete.');
+check(css.includes('.contacts-directory-table')&&css.includes('.contacts-row-actions')&&css.includes('@media(max-width:760px)'), 'Contacts directory must be responsive.');
+check(api.includes("'whatsapp_contacts.save'=>")&&api.includes("'whatsapp_contacts.delete'=>"),'Contacts writes must be routed through the backend.');
 console.log('Automation frontend: grouped triggers, deadlines, flexible WhatsApp recipients, visual tree and run history OK');

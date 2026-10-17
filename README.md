@@ -4,6 +4,8 @@
 
 **Última atualização:** 17/10/2026 · **Branch:** `feat/saas-b1-foundation` · **PR:** [#113](https://github.com/vitoryvensreis/task/pull/113) (rascunho) · **Estado:** B1.1 e B1.2a validados; B1.2b validado; B1.2c-1 validado; B1.2c-2a validado; B1.2c-2b.1 validado; B1.2c-2b.2a validado; B1.2c-2b.2b.1 validado; B1.2c-2b.2b.2a validado; B1.2c-2b.2b.2b.1 validado; B1.2c-2b.2b.2b.2a cofre de canais validado em CI; caixa interna B1.2c-2b.2b.2b.2b.1 validada em CI, workers/envios externos B1.2c-2b.2b.2b.2b.2/B1.3 pendentes. **Não liberado em produção.**
 
+**Implantação decidida:** mesma VPS, mesmo site `task.escotilhaprodutora.com` e mesmo banco de dados em uso; **sem subdomínio/banco novos**. Esta decisão exige rollout gradual e aditivo, *sem ativar outras empresas*. Nova auditoria **somente de leitura** em `app/SaasInPlacePreflight.php` / `bin/saas-inplace-preflight.php`, com bloqueios para schema diferente de 30, versão SaaS 20 antiga, marcadores divergentes, flags habilitadas e contas externas. `--release-check` só passa com backup SQL SHA256 verificado gerado nas últimas 2 horas. O preflight não executa migração, backup nem deploy. [Plano de rollout na instalação existente](docs/saas-deploy-inplace.md) substitui a proposta anterior de staging com outro banco. **Nenhuma atualização na VPS foi feita nesta rodada.**
+
 **Documento de continuidade detalhado:** [docs/saas-b1.md](docs/saas-b1.md). Ao retomar o projeto, consulte este bloco e o documento ANTES de qualquer migração.
 
 | Etapa | Situação | Resultado / próximo passo |
@@ -75,7 +77,7 @@
 
 **Testes:** [GitHub Actions #39030497373](https://github.com/vitoryvensreis/task/actions/runs/39030497373) — validação de código, MySQL 8 e MariaDB 10.11 aprovados; deploy na VPS **ignorado** no PR. PR permanece em rascunho para impedir aprovação precoce.
 
-**Ponto exato onde paramos:** B1.2c-2b.2b.2b.2b.1 passou nos testes da CI; NÃO foi publicada na VPS. Próximo passo é confirmar staging segregado via SSH (produção e base independentes), então implementar B1.2c-2b.2b.2b.2b.2 (automatização interna autorizada e workers externos com credenciais/rota por empresa), demais APIs/financeiro/arquivos/chat, e B1.3. Não disparar workflow de produção pela branch WIP. Registrar cada deploy com commit, backup e health.
+**Ponto exato onde paramos:** escolhido rollout **na VPS/domínio/DB atuais**, sem staging separado. Auditoria read-only implementada e em CI, sem execução na VPS. Antes de publicar código e aplicar DDL, conferir backup/snapshot recente e restaurável, pré-auditoria, capacidade/locks e todas as flags SaaS desligadas. Branch WIP não deve ser mesclada sem revisão de produção; os workers externos, controladores globais, chat, arquivos e financeiro continuam pendentes. Próxima implementação: B1.2c-2b.2b.2b.2b.2 com isolamento e testes A/B. Registrar commit, backup e health no deploy, quando houver acesso de execução.
 
 ---
 

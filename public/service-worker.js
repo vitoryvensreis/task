@@ -1,4 +1,4 @@
-const CACHE='taskesc-shell-v3.27.0-realtime6';
+const CACHE='taskesc-shell-v3.27.1-network-recovery';
 const scopeUrl=new URL('./',self.registration.scope);
 const assetUrl=path=>new URL(path,scopeUrl).toString();
 const SHELL=[
@@ -11,12 +11,23 @@ const SHELL=[
   assetUrl('assets/taskesc-logo.svg')
 ];
 
+// The offline page is the only mandatory precache entry. A missing optional
+// JS/CSS asset must not leave an old worker controlling the application.
 self.addEventListener('install',event=>{
-  event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting()));
+  event.waitUntil((async()=>{
+    const cache=await caches.open(CACHE);
+    await cache.add(assetUrl('offline.html'));
+    await Promise.allSettled(SHELL.slice(1).map(url=>cache.add(url)));
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener('activate',event=>{
-  event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));
+  event.waitUntil((async()=>{
+    const keys=await caches.keys();
+    await Promise.all(keys.filter(k=>k!==CACHE&&k.startsWith('taskesc-shell-')).map(k=>caches.delete(k)));
+    await self.clients.claim();
+  })());
 });
 
 self.addEventListener('fetch',event=>{

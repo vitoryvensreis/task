@@ -39,6 +39,9 @@ try{
  $initialClients=(int)DB::one('SELECT COUNT(*) n FROM clients')['n'];
 
  // Simulates the actual schema 30 deployment (no SaaS B1 tables installed yet).
+ // The newly added staged queue also has an account FK and did not exist in the
+ // pre-B1 database; drop it first to keep the fixture historically accurate.
+ $db->exec('DROP TABLE saas_event_outbox');
  $db->exec('DROP TABLE account_settings');
  $db->exec('DROP TABLE account_members');
  $db->exec('DROP TABLE accounts');

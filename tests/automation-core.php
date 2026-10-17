@@ -390,6 +390,25 @@ try{
  DB::tx(fn()=>WhatsappContacts::remember('Contato Atualizado Augusto','5585999993444'));
  autoCheck(count(WhatsappContacts::list(['q'=>'Augusto']))===1,'Saving an existing number must update without duplicating.');
 
+ // Contacts page: create, search pagination, edit, uniqueness, delete & task safety.
+ $manual=WhatsappContacts::save(['name'=>'Agenda João Teste','phone'=>'+55 85 99999-7777']);
+ autoCheck(($manual['saved']??false)===true&&($manual['contact']['phone']??'')==='5585999997777','Manual contact must normalize and persist WhatsApp.');
+ $manualId=(int)$manual['contact']['id'];
+ $searchPage=WhatsappContacts::list(['paginate'=>1,'q'=>'João','page'=>1,'per_page'=>1]);
+ autoCheck(($searchPage['pagination']['total']??0)===1&&count($searchPage['rows'])===1,'Contacts directory must paginate filtered records.');
+ $duplicateContact=false;
+ try{WhatsappContacts::save(['name'=>'Outro contato','phone'=>'5585999997777']);}catch(AppError $e){$duplicateContact=$e->status===409;}
+ autoCheck($duplicateContact,'Manual creation must reject duplicate WhatsApp numbers.');
+ $edited=WhatsappContacts::save(['id'=>$manualId,'name'=>'João Editado','phone'=>'+55 85 98888-6666']);
+ autoCheck(($edited['contact']['name']??'')==='João Editado'&&($edited['contact']['phone']??'')==='5585988886666','Contact editing must update name and phone.');
+ $alreadyUsed=false;
+ try{WhatsappContacts::save(['id'=>$manualId,'name'=>'Contato repetido','phone'=>'5585999993444']);}catch(AppError $e){$alreadyUsed=$e->status===409;}
+ autoCheck($alreadyUsed,'Editing must reject another contact phone.');
+ $deleted=WhatsappContacts::delete(['id'=>$manualId]);
+ autoCheck(($deleted['deleted']??false)===true&&count(WhatsappContacts::list(['q'=>'988886666']))===0,'Deleted contact must be removed from directory.');
+ autoCheck((string)DB::one('SELECT whatsapp_custom_phone FROM demands WHERE id=?',[$phoneDemand['id']])['whatsapp_custom_phone']==='5585999993444','Contact CRUD must not change stored task WhatsApp recipients.');
+
+
  $recipientReflection=new ReflectionMethod(AutomationWorker::class,'recipient');
  $recipientResult=$recipientReflection->invoke(null,['config'=>['recipient'=>'task']],$phoneDemand+['entity_type'=>'demand']);
  autoCheck($recipientResult['type']==='custom'&&$recipientResult['phone']==='5585999993444','Worker must use the task-selected custom WhatsApp number.');
@@ -409,6 +428,12 @@ try{
 
  // Somente administradores podem configurar destinatários pelo formulário da task.
  autoAs($staffId);
+ $staffContactsDenied=false;
+ try{WhatsappContacts::list();}catch(AppError $e){$staffContactsDenied=$e->status===403;}
+ autoCheck($staffContactsDenied,'Staff cannot list admin contacts.');
+ $staffWriteDenied=false;
+ try{WhatsappContacts::save(['name'=>'Invasão','phone'=>'5585999992222']);}catch(AppError $e){$staffWriteDenied=$e->status===403;}
+ autoCheck($staffWriteDenied,'Staff cannot manage admin contacts.');
  $noOverride=false;
  try{Demands::save([
   'id'=>$phoneDemand['id'],'version'=>DB::one('SELECT version FROM demands WHERE id=?',[$phoneDemand['id']])['version'],

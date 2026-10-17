@@ -55,9 +55,21 @@ final class SaasFoundationMigration {
     $db->exec($statement);
    }
    $issues=self::issues();if($issues)throw new RuntimeException('Fundação SaaS inválida: '.implode(',',$issues));
+   // Backfill is a ONE-TIME migration. Replaying B1.1 after customer
+   // onboarding must never grant the customer users access to legacy data.
+   $markerValue=(int)(DB::one('SELECT value FROM settings WHERE `key`=?',
+    [self::MARKER])['value']??0);
+   if(!in_array($markerValue,[0,self::VERSION],true))
+    throw new RuntimeException('Versão de fundação SaaS incompatível.');
    // All legacy records remain unchanged. One internal account owns the existing operation.
    $db->beginTransaction();
    try {
+    // A replay with a customer account must FAIL before granting membership.
+    $existing=DB::all('SELECT id,slug,account_type FROM accounts FOR UPDATE');
+    if(count($existing)>1||
+       ($existing&&($existing[0]['slug']!==AccountContext::LEGACY_SLUG||
+                    $existing[0]['account_type']!=='internal')))
+     throw new RuntimeException('Fundação só pode ser aplicada à operação interna única.');
     $old=DB::one('SELECT id,account_type FROM accounts WHERE slug=? FOR UPDATE',[AccountContext::LEGACY_SLUG]);
     if(!$old){
      $accountId=DB::insert('accounts',['slug'=>AccountContext::LEGACY_SLUG,'name'=>'TaskEsc - operação existente','account_type'=>'internal','status'=>'active','created_at'=>now(),'updated_at'=>now()]);
@@ -65,10 +77,12 @@ final class SaasFoundationMigration {
      if($old['account_type']!=='internal')throw new RuntimeException('Slug reservado da operação existente já pertence a outra conta.');
      $accountId=(int)$old['id'];
     }
-    DB::run("INSERT IGNORE INTO account_members (account_id,user_id,membership_role,status,joined_at)
-       SELECT ?,u.id,CASE WHEN u.role='admin' THEN 'owner' ELSE 'member' END,
-              CASE WHEN u.active=1 THEN 'active' ELSE 'inactive' END,?
-       FROM users u",[$accountId,now()]);
+    if($markerValue===0){
+     DB::run("INSERT IGNORE INTO account_members (account_id,user_id,membership_role,status,joined_at)
+        SELECT ?,u.id,CASE WHEN u.role='admin' THEN 'owner' ELSE 'member' END,
+               CASE WHEN u.active=1 THEN 'active' ELSE 'inactive' END,?
+        FROM users u",[$accountId,now()]);
+    }
     foreach(['saas.external_signup_enabled'=>'0','saas.multi_account_enabled'=>'0','saas.ai_assistant_enabled'=>'1','saas.google_calendar_enabled'=>'1'] as $key=>$value){
      DB::run('INSERT IGNORE INTO account_settings (account_id,`key`,value,updated_at) VALUES (?,?,?,?)',[$accountId,$key,$value,now()]);
     }
@@ -76,8 +90,8 @@ final class SaasFoundationMigration {
     $db->commit();
    }catch(Throwable $error){$db->rollBack();throw $error;}
    $unlinked=(int)(DB::one('SELECT COUNT(*) n FROM users u LEFT JOIN account_members m ON m.user_id=u.id AND m.account_id=? WHERE m.user_id IS NULL',[$accountId])['n']??0);
-   if($unlinked)throw new RuntimeException('Há usuários existentes sem vínculo à conta interna.');
-   return ['foundation_version'=>self::VERSION,'schema_version'=>$schema,'account_id'=>$accountId,'legacy_members'=>(int)(DB::one('SELECT COUNT(*) n FROM account_members WHERE account_id=?',[$accountId])['n']??0),'external_signup_enabled'=>false,'multi_account_enabled'=>false];
+   if($markerValue===0&&$unlinked)throw new RuntimeException('Há usuários existentes sem vínculo à conta interna.');
+   return ['foundation_version'=>self::VERSION,'schema_version'=>$schema,'account_id'=>$accountId,'legacy_members'=>(int)(DB::one('SELECT COUNT(*) n FROM account_members WHERE account_id=?',[$accountId])['n']??0),'external_signup_enabled'=>false,'multi_account_enabled'=>false,'initial_backfill_performed'=>$markerValue===0];
   }finally{DB::run('SELECT RELEASE_LOCK(?)',[$lock]);}
  }
 }

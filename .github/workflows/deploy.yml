@@ -168,6 +168,7 @@ jobs:
           php tests/saas-foundation.php
           php tests/saas-domain.php
           php tests/saas-children.php
+          php tests/saas-writes.php
 
   deploy:
     name: Deploy na VPS

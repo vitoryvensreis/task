@@ -166,7 +166,7 @@ php bin/migrate-saas-children.php --apply --backup-manifest=/CAMINHO/VALIDADO/ma
 
 **Regra principal:** não mesclar esta branch, habilitar outra empresa ou executar migração na VPS antes de terminar isolamento/CI e preparar rollback testado.
 
-## B1.2c-2b.2b.1 — Pré-consumidor isolado e recibos HELD (em validação)
+## B1.2c-2b.2b.1 — Pré-consumidor isolado e recibos HELD (CI aprovada)
 
 **Escopo:** preparar eventos por empresa com persistência e idempotência, **sem disparar nada**. A fila SaaS `saas_event_outbox` não é consumida pelos workers antigos.
 
@@ -175,13 +175,13 @@ php bin/migrate-saas-children.php --apply --backup-manifest=/CAMINHO/VALIDADO/ma
 - [x] `bin/migrate-saas-receipts.php`: exclusivamente manual, `--dry-run`/`--apply`, requer manifesto e backup SHA256 íntegro. Não conectado a deploy/cron.
 - [x] `app/SaasEventConsumer.php`: método `prepareBatch(accountId,limit)`, executado apenas por teste, sem rota HTTP nem agendador. Rejeita empresa externa, exige conta interna ativa e flags SaaS desabilitadas; busca somente eventos da empresa, disponíveis e ainda sem recibo, bloqueia linha com `FOR UPDATE` e cria recibo em transação. Valida chave de idempotência, integridade SHA256, tipo permitido, metadados de payload e relações tarefa/cliente/categoria/etapa/projeto. Recria JSON **canônico** para verificar o hash igual no MySQL 8 e MariaDB 10.11.
 - [x] `tests/saas-task-writes.php`: teste de migração independente, A/B (nenhum evento da empresa B consumido ao preparar A), repetição sem duplicação, bloqueio da conta externa, eventos malformados e nenhuma mudança em `published_at`. `tests/saas-foundation.php` reproduz o esquema antigo removendo primeiro as tabelas novas que possuem FKs.
-- [ ] A confirmar: CI MySQL 8/MariaDB 10.11 deste último commit de código. Anotar link e resultado aqui e no README.
+- [x] **CI aprovada:** [GitHub Actions #39053069659](https://github.com/vitoryvensreis/task/actions/runs/39053069659), PHP/JavaScript, MySQL 8 e MariaDB 10.11 aprovados, deploy na VPS `skipped`. Corrigida divergência de JSON entre MySQL/MariaDB pela normalização canônica antes de conferir o hash.
 
 **Atenção sobre retry:** o pré-consumidor não incrementa `attempts` nem agenda novos disparos, pois ainda **não existe entrega de mensagens**. Eventos inválidos são recusados/rollback da preparação, permanecendo na Outbox para diagnóstico e correção. Não usar os recibos `held` como prova de publicação, envio ou execução de automação. Não ligar os cronjobs legados à tabela `saas_event_receipts`.
 
 ### Ponto exato para retomar — B1.2c-2b.2b.2
 
-1. Confirmar CI deste subbloco e manutenção do deploy VPS `skipped`.
+1. CI de B1.2c-2b.2b.1 aprovada (#39053069659), VPS intacta; seguir com segurança para o consumidor de entregas.
 2. Projetar fila de ações/entregas por conta com verificação de membership, credenciais e destino (WhatsApp, notificações, push e realtime), idempotência, tentativas limitadas, retry/backoff e DLQ; nenhuma consulta global de destinatários.
 3. Criar workers totalmente novos de automações/entregas com autorização e deduplicação. Testar concorrência real, canais errados, IDs cruzados, eventos atrasados e tenants suspensos.
 4. Propagar ownership de logs, tokens, notificações e tabelas restantes; isolar APIs antigas, chat, arquivos e demais processos. Somente após auditoria end-to-end, liberar B1.3. IA e Google Calendar integrados continuam **exclusivos da operação interna**, enquanto os disparos por automações serão disponibilizados mediante isolamento seguro.

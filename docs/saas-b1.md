@@ -89,7 +89,8 @@ php bin/migrate-saas-children.php --apply --backup-manifest=/CAMINHO/VALIDADO/ma
 - `app/SaasReadApi.php` permite APENAS consultas de clientes, projetos e tarefas, com projeções de colunas limitadas e escopo SQL obrigatório `tenant_account_id=?`. Projetos exigem cliente proprietário; tasks exigem cliente, categoria, etapa e projeto (quando existir) pertencentes à mesma conta. Não inclui dados financeiros, chaves, tokens, briefs ou anexos brutos.
 - Acesso restrito ao ADM com vínculo `owner`, previamente autenticado. Tokens de API antigos, sem empresa associada, **são rejeitados** em todas as novas ações SaaS.
 - O teste `tests/saas-children.php` valida leitura da operação interna, IDs de outra empresa, seleção de conta não autorizada, vínculo suspenso, tokens antigos e migração incompleta. Também cobre conta externa com flags forçadamente habilitadas, membership owner e usuário admin, garantindo negação explícita.
-- `README.md` contém lista de arquivos, progresso e próximo bloco. **Status CI a conferir antes de mudar para “validado”.**
+- [x] [CI #39033292358](https://github.com/vitoryvensreis/task/actions/runs/39033292358) concluída com sucesso: PHP/JS, MySQL 8 e MariaDB 10.11; deploy `skipped`. Teste da seleção externa forjada validado.
+- `README.md` contém lista de arquivos, progresso e próximo bloco. **CI aprovada (não implantado).**
 
 **Limite de escopo:** essas rotas são a primeira base verificável de autenticação/SQL multiempresa. Elas NÃO corrigem as consultas globais das rotas antigas (`demands.list`, `clients.list`, `finance.*`, `files.*`, realtime, downloads, workers). O SaaS segue DESLIGADO, `main` e VPS não devem receber esta branch.
 

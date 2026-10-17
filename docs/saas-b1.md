@@ -137,9 +137,11 @@ php bin/migrate-saas-children.php --apply --backup-manifest=/CAMINHO/VALIDADO/ma
 
 **Retomada exata:** B1.2c-2b.1 testado e aprovado; continuar **B1.2c-2b.2** com isolamento da Outbox/eventos, fila de WhatsApp, cron/workers, notificações e realtime; depois CRUD legado por tenant, uploads/downloads e demais tabelas/logs. Revisar concorrência e índices únicos por empresa e FKs compostas antes de B1.3.
 
-## B1.2c-2b.2a — Outbox transacional com ownership (em homologação, SEM publicação)
+## B1.2c-2b.2a — Outbox transacional com ownership (CI aprovada, SEM publicação)
 
 **Objetivo:** garantir que a mutação de uma task e seu evento persistam atomicamente, associados à empresa correta, **sem expor eventos ao trabalhador legado que consome `event_outbox` globalmente.** Arquitetura deliberada: duas filas independentes durante a transição.
+
+**Validação final:** [GitHub Actions #39039309891](https://github.com/vitoryvensreis/task/actions/runs/39039309891) — código PHP/JavaScript, MySQL 8 e MariaDB 10.11 aprovados. Deploy VPS `skipped`. O PR permanece em rascunho; testes não representam homologação de event consumers/WhatsApp/realtime.
 
 ### Implementação nesta etapa
 - [x] `database/migrations/032_saas_event_outbox.sql` e `database/schema.sql`: nova `saas_event_outbox` com `tenant_account_id NOT NULL`, FK de conta/ator, chave única tenant + event_key, payload JSON, data disponível, tentativas e índices adequados para inspeção futura por empresa. O código histórico do SaaS schema 20 continua removido.
@@ -156,7 +158,7 @@ php bin/migrate-saas-children.php --apply --backup-manifest=/CAMINHO/VALIDADO/ma
 
 ### Ponto de retomada — B1.2c-2b.2b
 
-1. Confirmar CI de B1.2c-2b.2a MySQL 8 + MariaDB 10.11 e atualizar README/diário com a execução aprovada.
+1. CI B1.2c-2b.2a confirmada (run #39039309891). Iniciar consumidores/filas `tenant_account_id` próprios, sem ativar nenhum publisher legado.
 2. Migrar ownership e dependências restantes de `audit_log`, `notifications`, `push_delivery_log`, `whatsapp_messages`, `chat_*`, logs de worker e tokens; validar orfandade e FKs.
 3. Desenvolver **consumidores novos e separados**, obrigando `tenant_account_id` também nas consultas de automações, runs, envio, templates de conteúdo, destinatários e canais de realtime. Não encaminhar eventos SaaS aos workers antigos.
 4. Testar empresas A/B com URLs, canais, subscribers, credenciais, tentativa de replay e eventos atrasados; atestar ausência de mensagens ou arquivos cruzados. Implementar política segura de retry/idempotência.

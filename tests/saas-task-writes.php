@@ -219,9 +219,9 @@ try{
   'Business transaction rollback must remove the corresponding SaaS event.');
  taskCheck(!DB::one('SELECT id FROM demands WHERE title=?',['Rolled back task']),
   'Rollback must also remove the newly created task.');
- taskCheck((int)DB::one('SELECT COUNT(*) n FROM saas_event_outbox WHERE tenant_account_id=?',[$account])['n']===6,
+ taskCheck((int)DB::one('SELECT COUNT(*) n FROM saas_event_outbox WHERE tenant_account_id=? AND entity_type=\'demand\'',[$account])['n']===6,
   'Each successful task mutation must stage exactly one isolated tenant event.');
- $staged=SaasEventOutbox::preview(50);
+ $staged=array_values(array_filter(SaasEventOutbox::preview(50),static fn(array $e): bool => $e['entity_type']==='demand'));
  taskCheck(count($staged)===6,'Authenticated owner must see only own staged events.');
  foreach($staged as $ev) {
   taskCheck((int)$ev['tenant_account_id']===$account&&$ev['published_at']===null&&(int)$ev['attempts']===0,

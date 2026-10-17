@@ -25,6 +25,7 @@ try {
 
     installed();
     Auth::load();
+    SaasLegacyBoundary::enforce();
     if (Auth::$origin !== 'web') fail('Realtime disponível apenas para sessão web autenticada.', 403);
     checkCsrf();
 

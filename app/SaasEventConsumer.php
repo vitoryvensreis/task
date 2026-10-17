@@ -77,7 +77,12 @@ final class SaasEventConsumer {
   if($payload['tenant_account_id']!==$accountId||$payload['entity_id']!==$taskId)
    throw new RuntimeException('saas_event_tenant_mismatch');
   $expectedKey=hash('sha256','taskesc:saas:v1:'.$accountId.':'.$type.':'.$taskId.':'.$version);
-  $expectedHash=hash('sha256',json_encode([$accountId,$type,'demand',$taskId,$json,$creator],JSON_THROW_ON_ERROR));
+  // MySQL 8 may normalize/reorder JSON object keys on storage, while
+  // MariaDB keeps the original text. The producer hashes a key-sorted
+  // representation: reconstruct EXACTLY that representation on both DBs.
+  ksort($payload,SORT_STRING);
+  $canonicalJson=json_encode($payload,JSON_THROW_ON_ERROR|JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+  $expectedHash=hash('sha256',json_encode([$accountId,$type,'demand',$taskId,$canonicalJson,$creator],JSON_THROW_ON_ERROR));
   if(!hash_equals($expectedKey,(string)$event['event_key'])||
     !hash_equals($expectedHash,(string)$event['event_hash']))
    throw new RuntimeException('saas_event_integrity_failure');

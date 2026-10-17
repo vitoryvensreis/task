@@ -199,7 +199,20 @@ jobs:
           chmod 700 ~/.ssh
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -p "$VPS_PORT" -H "$VPS_HOST" >> ~/.ssh/known_hosts
+          # The VPS can take longer to accept SSH shortly after a reboot.
+          # Retry only host-key discovery; never bypass known_hosts validation.
+          for attempt in 1 2 3 4 5; do
+            if timeout 16 ssh-keyscan -T 10 -p "$VPS_PORT" -H "$VPS_HOST" > /tmp/taskesc-ssh-known-hosts 2>/dev/null && test -s /tmp/taskesc-ssh-known-hosts; then
+              cat /tmp/taskesc-ssh-known-hosts >> ~/.ssh/known_hosts
+              break
+            fi
+            echo "::warning::SSH host-key scan indisponível (tentativa $attempt/5)."
+            sleep $((attempt * 4))
+          done
+          if ! test -s /tmp/taskesc-ssh-known-hosts; then
+            echo "::error::VPS SSH não respondeu após cinco tentativas; nenhuma alteração remota foi realizada."
+            exit 1
+          fi
 
       - name: Diagnosticar WhatsApp antes de reiniciar o worker (somente leitura)
         env:

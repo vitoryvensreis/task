@@ -41,7 +41,7 @@ try {
  $db->exec('CREATE TABLE account_members (account_id BIGINT UNSIGNED,user_id INT,membership_role VARCHAR(20),status VARCHAR(20)) ENGINE=InnoDB');
  $db->exec('CREATE TABLE account_settings (account_id BIGINT UNSIGNED,`key` VARCHAR(100),value LONGTEXT) ENGINE=InnoDB');
  foreach(['saas_event_outbox','saas_event_receipts','saas_delivery_jobs','saas_channel_secrets','saas_internal_inbox'] as $table)
-  $db->exec('CREATE TABLE `'.$table.'` (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY) ENGINE=InnoDB');
+  $db->exec('CREATE TABLE `'.$table.'` (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,tenant_account_id BIGINT UNSIGNED NOT NULL) ENGINE=InnoDB');
  DB::insert('accounts',['slug'=>'taskesc-existing-operation','account_type'=>'internal','status'=>'active']);
  DB::run('INSERT INTO account_members (account_id,user_id,membership_role,status) VALUES (1,?,?,?)',[$user,'owner','active']);
  DB::run('INSERT INTO account_settings (account_id,`key`,value) VALUES (1,?,?)',['saas.multi_account_enabled','0']);

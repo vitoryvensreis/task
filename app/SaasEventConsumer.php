@@ -5,7 +5,7 @@ declare(strict_types=1);
  * SaaS B1.2c-2b.2b.1: a strictly INTERNAL, DB-only event preparation consumer.
  *
  * Not installed in cron, HTTP APIs or queues. NO provider calls, fanout,
- * published_at changes, retries or external side effects. A held receipt means
+ * published_at changes, retries or external side effects. Only demand events are\n * consumed here; catalog events remain queued for their dedicated consumer. A held receipt means
  * ONLY that the event passed consistency checks and was durably prepared.
  */
 final class SaasEventConsumer {
@@ -129,7 +129,7 @@ final class SaasEventConsumer {
    self::ready($accountId);
    $now=(new DateTimeImmutable('now',new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u');
    $rows=DB::all('SELECT e.* FROM saas_event_outbox e'.
-    ' WHERE e.tenant_account_id=? AND e.published_at IS NULL AND e.available_at<=?'.
+    ' WHERE e.tenant_account_id=? AND e.entity_type=\'demand\' AND e.published_at IS NULL AND e.available_at<=?'.
     ' AND NOT EXISTS (SELECT 1 FROM saas_event_receipts r'.
     ' WHERE r.tenant_account_id=e.tenant_account_id AND r.outbox_id=e.id)'.
     ' ORDER BY e.available_at,e.id LIMIT '.$limit.' FOR UPDATE',[$accountId,$now]);

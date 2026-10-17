@@ -1,5 +1,29 @@
 # TaskEsc — gestão de jobs, tarefas, agenda e arquivos
 
+## SaaS — Bloco 1 (fundação multiempresa) — diário de desenvolvimento
+
+**Última atualização:** 17/10/2026 · **Branch:** `feat/saas-b1-foundation` · **Estado:** B1.1 implementado na branch; B1.2/B1.3 pendentes. **Não liberado em produção.**
+
+**Documento de continuidade detalhado:** [docs/saas-b1.md](docs/saas-b1.md). Ao retomar o projeto, consulte este bloco e o documento ANTES de qualquer migração.
+
+| Etapa | Situação | Resultado / próximo passo |
+| --- | --- | --- |
+| B1.1 — tabelas de contas e vínculo de usuários | ✅ Implementado na branch, testes pendentes/CI | `accounts`, `account_members`, `account_settings`; conta interna para legado; migração idempotente com backup obrigatório, modo multiempresa bloqueado |
+| B1.1 — proteção inicial e verificações | ✅ Código e testes adicionados | `AccountContext` valida o vínculo; testes no MySQL/MariaDB; NÃO conectado a todas as rotas ainda |
+| B1.2 — `account_id` nas entidades operacionais | ⬜ Pendente | Backfill seguro e índices por conta para clientes, tasks, projetos, financeiro, arquivos etc. |
+| B1.2 — isolamento backend, APIs e realtime | ⬜ Pendente | Filtrar e autorizar cada request/worker/arquivo/canal; testes cruzados entre empresas |
+| B1.2 — restrições de recursos do SaaS | ⬜ Pendente | Desabilitar IA e calendários Google integrados para assinantes no servidor; manter disparos de automação |
+| B1.3 — ativação, homologação e migração segura | ⬜ Pendente | 2 empresas em testes; deploy com backup/rollback; habilitar contas externas só após isolamento completo |
+| Bloco 2 — cargos e permissões personalizadas | ⬜ Próximo bloco | Iniciar somente após base multiempresa confiável |
+| Blocos 4/5 — planos, licenças avulsas, Asaas | ⬜ Futuro | Não incluídos no Bloco 1 |
+
+**Arquivos B1.1:** `database/migrations/031_saas_accounts_foundation.sql`, `database/schema.sql`, `app/SaasFoundationMigration.php`, `app/AccountContext.php`, `bin/migrate-saas-foundation.php`, `tests/saas-foundation.php`, `.github/workflows/deploy.yml`, `docs/saas-b1.md`.
+
+**Ponto exato onde paramos:** implementar **B1.2 (vínculo de `account_id` nas tabelas operacionais e isolamento rigoroso das queries)**. B1.1 NÃO significa que o sistema já possa atender duas empresas. O schema operacional continua **30**, sem recriar o schema **20** removido. O comando de migração só roda manualmente após backup validado e não foi adicionado ao deploy automático.
+
+---
+
+
 Preparação opcional de Redis/Centrifugo, com feature flag desligada: [Realtime — Passo 1](docs/realtime-step1.md).
 Infraestrutura transacional de eventos, sem publisher/frontend: [Realtime — Passo 2](docs/realtime-step2.md).
 

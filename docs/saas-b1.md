@@ -47,11 +47,11 @@ php bin/migrate-saas-domain.php --dry-run --backup-manifest=/CAMINHO/VALIDADO/ma
 php bin/migrate-saas-domain.php --apply --backup-manifest=/CAMINHO/VALIDADO/manifest.txt
 ```
 
-**Retomada:** B1.2b está implementado na branch (CI a confirmar). Depois, B1.2c — autorização por conta em todos os módulos, com testes agressivos contra vazamento.
+**Retomada:** B1.2b está implementado na branch, com CI aprovado. Próximo trabalho: B1.2c — autorização por conta em todos os módulos, com testes agressivos contra vazamento.
 
 ## B1.2b — ownership por dependência em 16 tabelas filhas
 
-**Estado:** implementação inicial na branch `feat/saas-b1-foundation`, sem deploy e sem ativar contas externas. Testes da matriz MySQL/MariaDB em execução; registrar o link CI aprovado antes de dar como validada.
+**Estado:** B1.2b implementado e validado em CI; não implantado. [Execução #39032439643](https://github.com/vitoryvensreis/task/actions/runs/39032439643): PHP/JS, MySQL 8, MariaDB 10.11 aprovados; deploy ignorado. Sem ativar contas externas.
 
 ### Entregue
 
@@ -79,7 +79,7 @@ php bin/migrate-saas-children.php --apply --backup-manifest=/CAMINHO/VALIDADO/ma
 
 **Riscos conhecidos:** `calendars.account_id` continua referenciando `google_accounts.id`. Os campos novos usam `tenant_account_id`. IDs de entidades não são prova de autorização. `SaasChildMigration::relationIssues` é um verificador de consistência/bloqueio e não substitui autorização em endpoints. Assinantes externos continuam bloqueados.
 
-**Ponto de retomada após CI verde:** B1.2c — planejar e migrar as entidades restantes (sem pai seguro), propagar ownership de toda inserção, integrar `AccountContext` e `AccountOwnership` às rotas/serviços e aos processos assíncronos; testar acesso cruzado A/B antes de ativar clientes SaaS.
+**Ponto exato de retomada (CI verde):** B1.2c — planejar e migrar as entidades restantes (sem pai seguro), propagar ownership de toda inserção, integrar `AccountContext` e `AccountOwnership` às rotas/serviços e aos processos assíncronos; testar acesso cruzado A/B antes de ativar clientes SaaS.
 
 ## Pendente — B1.2: propagação e isolamento por conta
 
@@ -116,7 +116,7 @@ O manifesto precisa ser o do backup pré-deploy, em `storage/backups/`, com refe
 ## Ponto exato de retomada
 
 1. PR #113 e CI #39030497373 aprovados na fase B1.1; não mesclar com `main` nem executar o CLI em produção sem homologação e decisão explícita de rollout.
-2. Confirmar CI do **B1.2b**; continuar o **B1.2c pelos dados sem pai confiável e isolamento dos controladores**, sem tocar no schema 20.
+2. CI B1.2b validado (#39032439643). Iniciar o **B1.2c pelos dados sem pai confiável e isolamento dos controladores**, sem tocar no schema 20.
 3. Continuar B1.2c: integrar `AccountOwnership` e `AccountContext` às APIs de cada módulo e a todos os jobs em lotes pequenos; fechar o teste A/B para cada módulo.
 4. Atualizar este README e este arquivo com commits, verificações concluídas, bloqueios e o próximo trabalho pendente.
 

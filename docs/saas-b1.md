@@ -186,7 +186,7 @@ php bin/migrate-saas-children.php --apply --backup-manifest=/CAMINHO/VALIDADO/ma
 3. Criar workers totalmente novos de automações/entregas com autorização e deduplicação. Testar concorrência real, canais errados, IDs cruzados, eventos atrasados e tenants suspensos.
 4. Propagar ownership de logs, tokens, notificações e tabelas restantes; isolar APIs antigas, chat, arquivos e demais processos. Somente após auditoria end-to-end, liberar B1.3. IA e Google Calendar integrados continuam **exclusivos da operação interna**, enquanto os disparos por automações serão disponibilizados mediante isolamento seguro.
 
-## B1.2c-2b.2b.2a — Fila de entrega por tenant, sem transporte (CI a confirmar)
+## B1.2c-2b.2b.2a — Fila de entrega por tenant, sem transporte (CI aprovada)
 
 **Objetivo:** transformar recibos `held` verificados em intenções de entrega persistentes, usando uma única empresa e um único canal interno gerado no servidor. Não é integração WhatsApp/push/realtime nem processamento de automações. **`held`, `retry` e `dead` indicam somente estados de planejamento/validação, nunca entrega ao destinatário.**
 
@@ -200,9 +200,11 @@ php bin/migrate-saas-children.php --apply --backup-manifest=/CAMINHO/VALIDADO/ma
 - [x] `recordFailure(accountId,jobId,expectedAttempts,code)` para registrar **falha de validação/teste**, não falha de WhatsApp real. Aplica CAS, espera exponencial 30s/60s/120s/240s (limite de 1h em geral), máximo de 5 tentativas e estado `dead` na quinta. A fila NÃO é consumida por cron; `forOwner` mostra metadados sem payload ou segredos.
 - [x] Teste CI em `tests/saas-task-writes.php`: banco legado simulado, migração idempotente, A/B, receipts adulterados, replay, bloqueio de retry prematuro, concorrência de versão, DLQ e nenhum evento/WhatsApp/notificação publicado. Fixture histórica do `tests/saas-foundation.php` atualizada devido à FK da fila.
 
-**Pendência de validação:** aguardar matriz PHP/JS, MySQL 8 e MariaDB 10.11 e acrescentar URL e resultado aqui e no README.
+**CI aprovada:** [GitHub Actions #39054715478](https://github.com/vitoryvensreis/task/actions/runs/39054715478): PHP/JS, MySQL 8 e MariaDB 10.11 verdes, deploy na VPS ignorado. O job `validate` disponibiliza ZIP completo `taskesc-realtime-full` por 7 dias. Nenhum teste de provedor real ou envio WhatsApp foi realizado, por decisão de segurança.
 
 ### Próxima retomada precisa — B1.2c-2b.2b.2b
+
+**Ponto de continuação:** construir resolver de credenciais/destinatários por tenant; worker novo e isolado para automações e deliveries, teste de idempotência com provedores, tratamento de timeout/retry com conciliação e logs por empresa. Os estados internos `retry/dead` atuais não significam falha de envio — somente a infraestrutura foi testada. Nenhuma funcionalidade de envio foi habilitada por esta etapa.
 
 Criar autorização completa de canais/destinatários, credenciais por tenant, workers reais de eventos e automações (sem tocar no `AutomationWorker` legado), políticas de entrega/idempotência externas e reconciliação após timeout, fila DLQ operacional, usuários e tokens com contexto tenant, notificações e uploads/downloads/financeiro/chat. Testar clientes A/B, contas suspensas, membros removidos, canais errados e credenciais de outra empresa. Somente então preparar B1.3 e eventual lançamento do SaaS; não liberar calendário Google integrado ou assistente IA aos assinantes, mantendo apenas automações de disparo quando seguras.
 

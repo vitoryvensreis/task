@@ -118,6 +118,25 @@ php bin/migrate-saas-children.php --apply --backup-manifest=/CAMINHO/VALIDADO/ma
 
 **Ponto exato de retomada após CI verde #39034250506 — B1.2c-2b:** identificar e associar owner de logs/chat/notifications/outbox/tokens/WhatsApp; autenticação por empresa, migrar endpoints legados módulo a módulo, implementar mutações de tasks com efeitos transacionais e não transacionais isolados; testar IDs misturados, escritas concorrentes, canais realtime, arquivos, relatórios e filas. Depois índices únicos por empresa, FKs compostas, NOT NULL e B1.3 homologação/ativação controlada.
 
+## B1.2c-2b.1 — Tasks: mutações isoladas em estágio (WIP)
+
+**Status:** código na branch PR #113 e suíte CI em execução. Nenhuma rota do Kanban legado ou da produção foi substituída. Empresas externas seguem bloqueadas diretamente no código de `SaasRequestScope`.
+
+**Arquivos:** `app/SaasTaskWriteApi.php`, `public/api.php`, `tests/saas-task-writes.php`, `.github/workflows/deploy.yml`.
+
+- [x] Rotas de sessão POST `saas.task.save`, `saas.task.move`, `saas.task.archive` sob CSRF, com `SaasRequestScope::owner()` verificando empresa e proprietários em todas as chamadas. Tokens antigos sem account não funcionam.
+- [x] Criação/edição verifica cliente ativo, categoria ativa, projeto com mesmo cliente e empresa, etapa ativa e responsável com membership ativo (e com vínculo ao cliente para `staff`). O identificador `tenant_account_id` é aplicado pelo servidor, nunca aceito do payload.
+- [x] Criação insere task e histórico de transição na mesma transação com `tenant_account_id`. Usa primeira etapa da própria conta. Defaults econômicos conservadores: valor 0, destino WhatsApp `none`, sem envio automático.
+- [x] Edição exige `version` correspondente e mantém data em UTC inalterada quando omitida, sem alteração implícita de etapa ou preço.
+- [x] Movimentação entre etapas com versionamento otimista e uma transição tenantizada; não reorganiza a ordem Kanban (reorder fica pendente). Mudança para concluída ajusta marcos de tempo, **mas ainda não emite automações/disparos**.
+- [x] Arquivamento soft delete só sem faturas, custos, arquivos, consumo, eventos, execuções automatizadas, vínculos de chat ou disparos WhatsApp; dados históricos permanecem. Nenhum cascade automático entre módulos.
+- [x] Lista de campos permitidos bloqueia alterações por payload de conta, preço, WhatsApp, templates, status financeiro, autores e outros campos ainda não isolados.
+- [x] Testes (MySQL 8 + MariaDB 10.11) verificam contas A/B, acessos forjados, conflitos de versão, dependências, membro removido, token bearer antigo, migração ausente, transições com tenant e ausência de efeitos assíncronos. **CI pendente de confirmação.**
+
+**Limitação crítica:** `audit_log` legada ainda não possui tenant; as novas rotas também não integram `AutomationEvent`, `DemandRealtime`, `Notify`, financeiro, upload, Google Drive ou o SaaS comercial. Essa implementação serve somente como base de segurança em ambiente não produtivo. **NÃO liberar outras empresas ou trocar a navegação Kanban por estas rotas.**
+
+**Retomada exata:** concluir/verificar CI de B1.2c-2b.1; continuar **B1.2c-2b.2** com isolamento da Outbox/eventos, fila de WhatsApp, cron/workers, notificações e realtime; depois CRUD legado por tenant, uploads/downloads e demais tabelas/logs. Revisar concorrência e índices únicos por empresa e FKs compostas antes de B1.3.
+
 ## Pendente — B1.2: propagação e isolamento por conta
 
 - [ ] Completar `tenant_account_id` (B1.2a cobre 15 raízes, demais tabelas e consultas pendentes), priorizar `clients`, `users`/vínculos, `demands`, `projects`, `stages`, `categories`, `contracts`, `invoices`, `payments`, `expenses`, `files`, `templates`, `automations`, `automation_runs`, `event_outbox`, `whatsapp_contacts`, mensagens/chat, agendas, Google, tokens e logs. O inventário precisa ser completado por relacionamento.

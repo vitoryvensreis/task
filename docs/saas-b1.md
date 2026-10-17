@@ -47,7 +47,39 @@ php bin/migrate-saas-domain.php --dry-run --backup-manifest=/CAMINHO/VALIDADO/ma
 php bin/migrate-saas-domain.php --apply --backup-manifest=/CAMINHO/VALIDADO/manifest.txt
 ```
 
-**Próxima retomada correta:** B1.2b — mapear as tabelas filhas por FK, migrar ownership derivado do pai e recusar registros órfãos e pais de contas divergentes. Depois B1.2c — autorização por conta em todos os módulos, com testes agressivos contra vazamento.
+**Retomada:** B1.2b está implementado na branch (CI a confirmar). Depois, B1.2c — autorização por conta em todos os módulos, com testes agressivos contra vazamento.
+
+## B1.2b — ownership por dependência em 16 tabelas filhas
+
+**Estado:** implementação inicial na branch `feat/saas-b1-foundation`, sem deploy e sem ativar contas externas. Testes da matriz MySQL/MariaDB em execução; registrar o link CI aprovado antes de dar como validada.
+
+### Entregue
+
+- [x] `app/SaasChildMigration.php` define a sequência determinística para `contract_items`, `cycles`, `cycle_items`, `demand_usage`, `transitions`, `comments`, `checklists`, `time_entries`, `files`, `reviews`, `change_requests`, `costs`, `payments`, `events`, `automation_runs` e `automation_run_steps`.
+- [x] `database/schema.sql` contém `tenant_account_id BIGINT UNSIGNED NULL` com índices `(tenant_account_id,id)` nas 16 tabelas, além das 15 raízes do B1.2a.
+- [x] A propriedade é derivada do pai: pagamentos → cobrança; arquivos → task; avaliações → arquivo; ciclos → contrato; eventos → calendário; execuções → automação.
+- [x] Validação de relacionamento adicional quando houver dois pais: `contract_items.category_id`, `cycle_items.category_id`, `demand_usage.cycle_item_id`, `files.drive_account_id`, `payments.refund_of` e `events.demand_id`. Inconsistências bloqueiam a migração, não são sobrescritas.
+- [x] `app/AccountOwnership.php` aceita as 16 tabelas adicionais para consultas protegidas por vínculo ativo (esta classe ainda NÃO está ligada aos controllers/rotas existentes).
+- [x] `bin/migrate-saas-children.php` é opt-in, roda fora de transação, exige manifesto de backup, SHA256 válido, schema 30, B1.1 e B1.2a aplicados, única conta interna e flags SaaS desligadas.
+- [x] `tests/saas-children.php` testa backfill e preservação de IDs, relações multiparentais, rejeição do schema 20, prevenção de migração concorrente/parcial e duas empresas com leitura cruzada negada.
+- [x] `.github/workflows/deploy.yml` executa a suíte nos bancos de testes; **não há acionamento do CLI pelo deploy**, nem acesso de produção nesse PR.
+
+**Marcador isolado:** `settings.saas_children_version = 3`, mantendo `settings.schema_version = 30`. Migração idempotente e DDL aditivo, sem remoção de dados. As colunas continuam NULLABLE enquanto o código legado ainda criar registros sem ownership. Não executar rollout produtivo antes da conclusão do B1.2c.
+
+**Ordem de execução manual FUTURA, apenas com backup validado e homologação aprovada:**
+
+```bash
+php bin/migrate-saas-foundation.php --apply --backup-manifest=/CAMINHO/VALIDADO/manifest.txt
+php bin/migrate-saas-domain.php --apply --backup-manifest=/CAMINHO/VALIDADO/manifest.txt
+php bin/migrate-saas-children.php --dry-run --backup-manifest=/CAMINHO/VALIDADO/manifest.txt
+php bin/migrate-saas-children.php --apply --backup-manifest=/CAMINHO/VALIDADO/manifest.txt
+```
+
+**Pendente para B1.2c e B1.3:** ownership e isolamento de `chat_threads`, `chat_messages`, `chat_message_tasks`, `notifications`, `audit_log`, `event_outbox`, `whatsapp_messages`, `mail_queue`, `push_subscriptions`, `push_delivery_log`, `ai_whatsapp_inbox` (apenas conta interna), `system_errors`, tokens/OAuth, idempotência, logs e demais tabelas sem pai único confiável. Migrar contas/fluxos desses dados com regras explícitas, não adivinhando empresa. Ajustar todas as escritas (inclusive inserts gerados por cron, API e workers), índices únicos por empresa, FKs compostas, autenticação e autorização por requisição, realtime, downloads, credenciais de integrações, relatórios e pagamentos.
+
+**Riscos conhecidos:** `calendars.account_id` continua referenciando `google_accounts.id`. Os campos novos usam `tenant_account_id`. IDs de entidades não são prova de autorização. `SaasChildMigration::relationIssues` é um verificador de consistência/bloqueio e não substitui autorização em endpoints. Assinantes externos continuam bloqueados.
+
+**Ponto de retomada após CI verde:** B1.2c — planejar e migrar as entidades restantes (sem pai seguro), propagar ownership de toda inserção, integrar `AccountContext` e `AccountOwnership` às rotas/serviços e aos processos assíncronos; testar acesso cruzado A/B antes de ativar clientes SaaS.
 
 ## Pendente — B1.2: propagação e isolamento por conta
 
@@ -84,7 +116,7 @@ O manifesto precisa ser o do backup pré-deploy, em `storage/backups/`, com refe
 ## Ponto exato de retomada
 
 1. PR #113 e CI #39030497373 aprovados na fase B1.1; não mesclar com `main` nem executar o CLI em produção sem homologação e decisão explícita de rollout.
-2. Continuar **B1.2b pelas tabelas filhas**, após verificar CI de B1.2a; confirmar migração de ownership derivado por relacionamentos, sem tocar no schema 20.
+2. Confirmar CI do **B1.2b**; continuar o **B1.2c pelos dados sem pai confiável e isolamento dos controladores**, sem tocar no schema 20.
 3. Continuar B1.2c: integrar `AccountOwnership` e `AccountContext` às APIs de cada módulo e a todos os jobs em lotes pequenos; fechar o teste A/B para cada módulo.
 4. Atualizar este README e este arquivo com commits, verificações concluídas, bloqueios e o próximo trabalho pendente.
 

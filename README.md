@@ -1,5 +1,7 @@
 # TaskEsc — gestão de jobs, tarefas, agenda e arquivos
 
+> **Estado mais recente (17/10/2026):** a fundação inativa da PR #113 foi integrada à `main` e publicada com sucesso na VPS pelo [deploy #39070465317](https://github.com/vitoryvensreis/task/actions/runs/39070465317). A PR #114 acrescenta bloqueio fail-closed para APIs e workers legados antes de existir qualquer conta externa. Seu pipeline prepara também migrações in-place 031–036 sob backup SHA256 recente, preflight e flags externas desativadas. **O Bloco 1 completo e a operação com várias empresas ainda NÃO estão liberados.** Informações de status anteriores abaixo são registros históricos.
+
 ## SaaS — Bloco 1 (fundação multiempresa) — diário de desenvolvimento
 
 **Última atualização:** 17/10/2026 · **Branch:** `feat/saas-b1-foundation` · **PR:** [#113](https://github.com/vitoryvensreis/task/pull/113) (rascunho) · **Estado:** B1.1 e B1.2a validados; B1.2b validado; B1.2c-1 validado; B1.2c-2a validado; B1.2c-2b.1 validado; B1.2c-2b.2a validado; B1.2c-2b.2b.1 validado; B1.2c-2b.2b.2a validado; B1.2c-2b.2b.2b.1 validado; B1.2c-2b.2b.2b.2a cofre de canais validado em CI; caixa interna B1.2c-2b.2b.2b.2b.1 validada em CI, workers/envios externos B1.2c-2b.2b.2b.2b.2/B1.3 pendentes. **Não liberado em produção.**

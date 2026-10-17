@@ -1,5 +1,7 @@
 # TaskEsc SaaS — Atualização gradual na VPS, site e banco JÁ EXISTENTES
 
+> **Atualização 17/10/2026:** a PR #113 de código inativo foi implantada com sucesso pelo [pipeline #39070465317](https://github.com/vitoryvensreis/task/actions/runs/39070465317). A PR #114 inclui a etapa opt-in de rollout de banco na própria pipeline `main`: backup remoto, cópia fora da VPS, `--release-check`, migrations SaaS 031–036 em ordem, novo `--release-check`, sem flags externas e sem habilitar envios externos. Se algum passo falhar, o pipeline deve PARAR; DDL já aplicado requer avaliação e restauração manual. **Não há confirmação de execução dessas migrações até o resultado de deploy da PR #114.** O texto abaixo reflete decisões anteriores e continua útil para backup/rollback.
+
 **Decisão do projeto (17/10/2026):** utilizar a mesma VPS, `task.escotilhaprodutora.com`, a instalação atual do TaskEsc e o banco MySQL/MariaDB existente. NÃO exigir subdomínio ou banco de homologação separados. **Isso não autoriza habilitar assinantes externos ou modificar os workers globais antes da auditoria.**
 
 **Estado atual:** documentação e ferramentas de pré-auditoria implementadas SOMENTE na branch `feat/saas-b1-foundation`, PR #113 em rascunho. **Nenhum deploy na VPS, migração ou alteração na base produtiva foi executado nesta etapa**. Ainda não existe autorização técnica para ativar o multiempresa.

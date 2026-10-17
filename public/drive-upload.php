@@ -4,7 +4,7 @@ require dirname(__DIR__).'/app/bootstrap.php';
 @set_time_limit(0);
 try {
  if(($_SERVER['REQUEST_METHOD']??'')!=='POST')fail('Método não permitido.',405);
- installed();Auth::load();checkCsrf();
+ installed();Auth::load();SaasLegacyBoundary::enforce();checkCsrf();
  $token=(string)($_GET['token']??'');$offset=integer($_SERVER['HTTP_X_CHUNK_START']??-1,0,PHP_INT_MAX);
  $binary=file_get_contents('php://input');if($binary===false)fail('Não foi possível ler o bloco enviado.',400);
  out(Files::uploadChunk($token,$binary,$offset));

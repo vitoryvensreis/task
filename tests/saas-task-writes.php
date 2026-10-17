@@ -41,7 +41,7 @@ try{
  taskCheck(SaasOutboxMigration::issues()===['missing_saas_event_outbox'],'Missing isolated event table must be detected.');
  taskCheck(SaasOutboxMigration::apply()['outbox_version']===4,'Missing isolated event outbox migration.');
  taskCheck(SaasOutboxMigration::issues()===[],'SaaS outbox migration must create correct schema.');
- taskCheck(SaasOutboxMigration::apply()['publisher_enabled']===false,'Migration must remain idempotent and inert.');
+ taskCheck(SaasOutboxMigration::apply()['publishers_enabled']===false,'Migration must remain idempotent and inert.');
  $accountB=DB::insert('accounts',['slug'=>'ci-foreign','name'=>'Other company','account_type'=>'customer','status'=>'active','created_at'=>now(),'updated_at'=>now()]);
  DB::run('DELETE FROM account_members WHERE account_id=? AND user_id=?',[$account,$outsider]);
  DB::insert('account_members',['account_id'=>$accountB,'user_id'=>$outsider,'membership_role'=>'owner','status'=>'active','joined_at'=>now()]);

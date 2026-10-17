@@ -37,6 +37,7 @@ try{
  taskCheck(SaasDomainMigration::apply()['domain_version']===2,'Missing domain migration.');
  taskCheck(SaasChildMigration::apply()['children_version']===3,'Missing child migration.');
  taskCheck(SaasOutboxMigration::issues()===[],'Fresh SaaS outbox schema must be valid.');
+ $db->exec('DROP TABLE saas_internal_inbox');
  $db->exec('DROP TABLE saas_channel_secrets');
  $db->exec('DROP TABLE saas_delivery_jobs');
  $db->exec('DROP TABLE saas_event_receipts');
@@ -58,6 +59,10 @@ try{
  taskCheck(SaasChannelMigration::apply()['vault_version']===7,'Vault migration must apply before extra accounts exist.');
  taskCheck(SaasChannelMigration::issues()===[],'Vault schema/indexes/FKs must validate.');
  taskCheck(SaasChannelMigration::apply()['live_transports_enabled']===false,'Vault migration must remain disabled and idempotent.');
+ taskCheck(SaasInternalInboxMigration::issues()===['missing_saas_internal_inbox'],'Missing inbox must be detected.');
+ taskCheck(SaasInternalInboxMigration::apply()['inbox_version']===8,'Inbox migration requires single internal account.');
+ taskCheck(SaasInternalInboxMigration::issues()===[],'Inbox schema/indexes/FKs must validate.');
+ taskCheck(SaasInternalInboxMigration::apply()['outbound_enabled']===false,'Repeated inbox migration must remain inert.');
  taskCheck((int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0)===30,'Operational schema must remain 30.');
  $accountB=DB::insert('accounts',['slug'=>'ci-foreign','name'=>'Other company','account_type'=>'customer','status'=>'active','created_at'=>now(),'updated_at'=>now()]);
  DB::run('DELETE FROM account_members WHERE account_id=? AND user_id=?',[$account,$outsider]);
@@ -314,6 +319,39 @@ try{
   (int)DB::one('SELECT COUNT(*) n FROM whatsapp_messages')['n']===0 &&
   (int)DB::one('SELECT COUNT(*) n FROM saas_event_outbox WHERE published_at IS NOT NULL')['n']===0,
   'Resolving recipients must not send notifications or publish any events.');
+
+ // B1.2c-2b.2b.2b.2b.1: internal-only inbox delivery with live permission checks.
+ $inboxResult=SaasInternalInbox::stage($account,$ownedJob);
+ taskCheck($inboxResult['eligible']===2&&$inboxResult['new_inbox_items']===2&&
+  $inboxResult['external_delivery_enabled']===false,'Two authorized internal inbox entries must be created.');
+ taskCheck(SaasInternalInbox::stage($account,$ownedJob)['new_inbox_items']===0,
+  'Repeating the same job must not duplicate internal inbox entries.');
+ taskCheck((int)DB::one('SELECT COUNT(*) n FROM saas_internal_inbox WHERE tenant_account_id=?',[$accountB])['n']===0,
+  'Internal delivery must not copy events to another tenant.');
+ $differentTenantBlocked=false;
+ try{SaasInternalInbox::stage($accountB,$ownedJob);}catch(RuntimeException){$differentTenantBlocked=true;}
+ taskCheck($differentTenantBlocked,'Cross-account staging must fail.');
+ taskCheck(count(SaasInternalInbox::forCurrentUser())===1,
+  'Owner must see only their own inbox item, not the staff copy.');
+ Auth::$actor=['id'=>$staff,'role'=>'staff'];Auth::$user=['id'=>$staff,'role'=>'staff','is_preview'=>0];
+ taskCheck(count(SaasInternalInbox::forCurrentUser())===1,'Assigned staff must see their own inbox item.');
+ DB::run("UPDATE account_members SET status='inactive' WHERE account_id=? AND user_id=?",[$account,$staff]);
+ $revoked=false;
+ try{SaasInternalInbox::forCurrentUser();}catch(AppError){$revoked=true;}
+ taskCheck($revoked,'Revoked member must lose access to already persisted inbox entries.');
+ DB::run("UPDATE account_members SET status='active' WHERE account_id=? AND user_id=?",[$account,$staff]);
+ DB::run('DELETE FROM user_clients WHERE user_id=? AND client_id=?',[$staff,$client]);
+ taskCheck(SaasInternalInbox::forCurrentUser()===[],
+  'Staff removed from task client must not read historical inbox records.');
+ DB::insert('user_clients',['user_id'=>$staff,'client_id'=>$client,'can_approve'=>1]);
+ Auth::$actor=['id'=>$outsider,'role'=>'admin'];Auth::$user=['id'=>$outsider,'role'=>'admin','is_preview'=>0];
+ $external=false;
+ try{SaasInternalInbox::forCurrentUser();}catch(AppError|RuntimeException){$external=true;}
+ taskCheck($external,'Foreign company owner must not read internal inbox.');
+ Auth::$actor=['id'=>$admin,'role'=>'admin'];Auth::$user=['id'=>$admin,'role'=>'admin','is_preview'=>0];
+ taskCheck((int)DB::one('SELECT COUNT(*) n FROM notifications')['n']===0&&
+  (int)DB::one('SELECT COUNT(*) n FROM saas_event_outbox WHERE published_at IS NOT NULL')['n']===0,
+  'Internal inbox must not trigger legacy notifications or external publishing.');
 
  // A changed receipt must fail BEFORE creating its delivery intent.
  $target=(int)$jobs[0]['receipt_id'];

@@ -38,8 +38,12 @@ function cleanupAudit(): array {
    str_starts_with($s,'saas_')),REMOVED_SAAS_TABLES));
  if($extras)$errors[]='unknown_saas_tables';
  $present=array_values(array_intersect(REMOVED_SAAS_TABLES,$foundTables));
- $owned=DB::all("SELECT TABLE_NAME,COLUMN_NAME,DATA_TYPE,COLUMN_TYPE,IS_NULLABLE
+ $ownedAll=DB::all("SELECT TABLE_NAME,COLUMN_NAME,DATA_TYPE,COLUMN_TYPE,IS_NULLABLE
     FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND COLUMN_NAME='tenant_account_id'");
+ // Columns inside tables being dropped are NOT tenant columns to remove
+ // from the original schema; only count legacy domain/child tables.
+ $owned=array_values(array_filter($ownedAll,static fn(array $row):bool=>
+   !in_array($row['TABLE_NAME'],REMOVED_SAAS_TABLES,true)));
  $ownedNames=array_column($owned,'TABLE_NAME');
  $unknownOwned=array_diff($ownedNames,[...$expected,...REMOVED_SAAS_TABLES]);
  if($unknownOwned)$errors[]='unexpected_tenant_columns';

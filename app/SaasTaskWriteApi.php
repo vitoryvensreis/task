@@ -7,7 +7,8 @@ declare(strict_types=1);
  * Explicit staged API: no legacy notifications, automation, billing, Drive,
  * realtime, WhatsApp or external side effects. Do not wire this into the
  * normal Kanban or allow external tenants before the remaining modules are
- * fully tenant-scoped and events are transactional.
+ * fully tenant-scoped and events are transactional. Events are now staged
+ * atomically in saas_event_outbox, never delivered to legacy consumers.
  */
 final class SaasTaskWriteApi {
  private const SAVE_FIELDS=[
@@ -26,6 +27,8 @@ final class SaasTaskWriteApi {
  private static function tx(callable $operation): array {
   return DB::tx(static function()use($operation): array {
    $member=SaasRequestScope::owner();
+   // Every staged task mutation MUST commit its event atomically.
+   SaasEventOutbox::ready();
    $account=(int)$member['account_id'];
    $actor=(int)(Auth::$actor['id']??0);
    if($account<=0||$actor<=0)fail('Sessão de empresa inválida.',403);
@@ -179,6 +182,8 @@ final class SaasTaskWriteApi {
     DB::insert('transitions',['tenant_account_id'=>$account,'demand_id'=>$id,
      'from_stage'=>null,'to_stage'=>$stageId,'actor_id'=>$actor,'happened_at'=>$now]);
    }
+   // Only inert SaaS outbox staging: legacy automation/realtime workers cannot consume it.
+   SaasEventOutbox::task($account,$id,(int)($fields['version']??1),$old?'demand.updated':'demand.created',$actor);
    // The legacy audit log has no tenant column. Staged writes remain INTERNAL-
    // ONLY until audit/notifications/outbox are tenantized in later B1.2c work.
    audit('demand',$id,$old?'saas.update':'saas.create',
@@ -213,6 +218,7 @@ final class SaasTaskWriteApi {
    if($affected->rowCount()!==1)fail('A task foi alterada. Atualize e tente novamente.',409);
    DB::insert('transitions',['tenant_account_id'=>$account,'demand_id'=>(int)$task['id'],
     'from_stage'=>$from,'to_stage'=>(int)$to['id'],'actor_id'=>$actor,'happened_at'=>$now]);
+   SaasEventOutbox::task($account,(int)$task['id'],$version,'demand.stage_changed',$actor,['previous_stage_id'=>$from]);
    audit('demand',(int)$task['id'],'saas.stage',
     ['stage_id'=>$from,'version'=>$task['version']],
     ['stage_id'=>(int)$to['id'],'version'=>$version,'tenant_account_id'=>$account]);
@@ -244,6 +250,7 @@ final class SaasTaskWriteApi {
     ' WHERE id=? AND tenant_account_id=? AND version=? AND deleted_at IS NULL',
     [$now,$now,$version,$task['id'],$account,(int)$task['version']]);
    if($affected->rowCount()!==1)fail('A task foi alterada. Atualize e tente novamente.',409);
+   SaasEventOutbox::task($account,(int)$task['id'],$version,'demand.archived',$actor);
    audit('demand',(int)$task['id'],'saas.archive',
     ['version'=>$task['version'],'deleted_at'=>null],
     ['version'=>$version,'deleted_at'=>$now,'tenant_account_id'=>$account]);

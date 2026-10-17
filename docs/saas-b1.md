@@ -225,6 +225,29 @@ Criar autorização completa de canais/destinatários, credenciais por tenant, w
 
 **Ponto exato de retomada (CI verde):** isolar o modelo de credenciais e permissões por conta, criar o primeiro destino real interno protegido sem reutilizar canais globais, depois provedores/canais separados e workers reais com idempotência externa, rastreabilidade e tentativas auditadas. Só liberar outras empresas após B1.3 e fechamento de rotas legadas.
 
+## B1.2c-2b.2b.2b.2a — Cofre de canais e credenciais por empresa (staging, CI a confirmar)
+
+**Objetivo:** estabelecer armazenamento criptografado, autorização e rotação de tokens de provedores, antes de implementar/envocar qualquer worker real. Nesta fase, a única conta habilitada a CONFIGURAR credenciais é a conta interna Escotilha; **nenhum canal pode ser ativado**, mesmo quando houver um segredo válido.
+
+### Implementação
+
+- [x] `database/migrations/035_saas_channel_secrets.sql` / `database/schema.sql`: `saas_channel_secrets`, `tenant_account_id BIGINT UNSIGNED NOT NULL`, canal/provedor, envelope cifrado, fingerprint HMAC, revisão, status inicial `disabled`, responsável e data; unique `(tenant_account_id,channel)`, índices por conta/status e FK de contas/usuários.
+- [x] `app/SaasChannelMigration.php`: DDL aditivo, lock e validação de estrutura/tipos/indexação/FKs; exige schema operacional 30, B1.1/B1.2a/B1.2b/Outbox/recibos/delivery aplicados (marcadores 1–6), única conta interna ativa, flags SaaS externas em zero. Marcador separado `settings.saas_channels_version=7`; não recria o schema histórico 20.
+- [x] `bin/migrate-saas-channels.php`: migração exclusivamente manual `--dry-run` / `--apply`, exige manifesto SHA256 e dump real de backup. Não consta nos hooks de deploy.
+- [x] `app/SaasChannelVault.php`: enumeração fixa `whatsapp→wppconnect`, `email→smtp`, `push→webpush`, `realtime→centrifugo`. Operações `stage`, `verify` e `metadata` só para sessão web e membership `owner` da operação interna, não aceitam conta/chave de empresa enviada pelo cliente. Derivação da chave com HKDF-SHA256 a partir de `app_key` do servidor; criptografia AES-256-GCM com nonce aleatório e autenticação associada (AAD) de `tenant_account_id`, canal, provedor e revisão. Rotação incrementa revisão dentro da transação; status sempre `disabled`.
+- [x] Nenhum endpoint HTTP de configurar credenciais foi criado, nenhum worker sabe extrair/decriptografar o segredo e `metadata` retorna somente canal/provedor/revisão/status/data. Não há debug, logs de tokens, URL arbitrária de webhook ou permissão de provider real. Não preencher produção com tokens antes da homologação.
+- [x] `tests/saas-task-writes.php`: estrutura migrada, migração idempotente, rotação, revogação, adulteração por cópia de ciphertext entre canais, proteção da revisão antiga, metadados sem segredos, bloqueio de contas externas e bearer API antigo. `tests/saas-foundation.php` remove tabela nova antes de simular banco legado.
+
+**Riscos e limites:** a chave `app_key` deve permanecer protegida: alterar o `app_key` impossibilita descriptografar tokens previamente guardados e exigirá nova configuração, até haver um gerenciamento de chaves com versionamento/KMS. AAD impede a substituição silenciosa de tokens entre empresas/canais/revisões, não substitui autorização de acesso, segregação de rotas ou credenciais por provedor. O cofre ainda **não está conectado a deliveries, automações, WhatsApp, push ou realtime**.
+
+### Próximo ponto de retomada — B1.2c-2b.2b.2b.2b
+
+1. Confirmar CI MySQL 8/MariaDB 10.11 e registrar link. Não implantar esta branch.
+2. Construir configuração de canal por empresa com acesso seguro a credenciais, sem permitir URLs arbitrárias ou desvio para endpoints privados (SSRF), e autorização do tenant em toda chamada.
+3. Criar workers exclusivos para entrega com estado real de publicação/entrega, guardando idempotência de provedor, correlação da mensagem externa, conciliação após timeout, retry/backoff seguro e DLQ controlada. Não declarar `held` como enviado.
+4. Testar separação A/B inclusive nos dispositivos/assinaturas, destinatários, notificações, credenciais, tokens, canais realtime e banco de arquivos. Escotilha mantém IA e Google Agenda integrados exclusivamente na conta interna; clientes SaaS recebem automações de disparo somente após autorização end-to-end.
+5. Homologação B1.3 e somente depois rollout/Bloco 2 RBAC e monetização.
+
 ## Pendente — B1.2: propagação e isolamento por conta
 
 - [ ] Completar `tenant_account_id` (B1.2a cobre 15 raízes, demais tabelas e consultas pendentes), priorizar `clients`, `users`/vínculos, `demands`, `projects`, `stages`, `categories`, `contracts`, `invoices`, `payments`, `expenses`, `files`, `templates`, `automations`, `automation_runs`, `event_outbox`, `whatsapp_contacts`, mensagens/chat, agendas, Google, tokens e logs. O inventário precisa ser completado por relacionamento.

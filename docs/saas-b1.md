@@ -81,6 +81,26 @@ php bin/migrate-saas-children.php --apply --backup-manifest=/CAMINHO/VALIDADO/ma
 
 **Ponto exato de retomada (CI verde):** B1.2c — planejar e migrar as entidades restantes (sem pai seguro), propagar ownership de toda inserção, integrar `AccountContext` e `AccountOwnership` às rotas/serviços e aos processos assíncronos; testar acesso cruzado A/B antes de ativar clientes SaaS.
 
+## B1.2c-1 — Contexto HTTP e leitura isolada (WIP, branch do PR #113)
+
+**Implementado em código, não publicado:** 
+- `app/SaasRequestScope.php` exige os três marcadores válidos (`saas_foundation_version=1`, `saas_domain_version=2`, `saas_children_version=3`). Nenhuma rota SaaS funciona se faltar qualquer etapa. Resolve o usuário autenticado e valida o vínculo da sessão em **todas as requisições**; não aceita `account_id` enviado em chamadas de listagem como prova de permissão. As contas externas continuam bloqueadas enquanto o SaaS não estiver plenamente ativado.
+- `public/api.php`: novas ações experimentais `saas.context`, `saas.account_select` (POST com CSRF do middleware existente), `saas.records` e `saas.record`. Nenhuma ação legada foi substituída.
+- `app/SaasReadApi.php` permite APENAS consultas de clientes, projetos e tarefas, com projeções de colunas limitadas e escopo SQL obrigatório `tenant_account_id=?`. Projetos exigem cliente proprietário; tasks exigem cliente, categoria, etapa e projeto (quando existir) pertencentes à mesma conta. Não inclui dados financeiros, chaves, tokens, briefs ou anexos brutos.
+- Acesso restrito ao ADM com vínculo `owner`, previamente autenticado. Tokens de API antigos, sem empresa associada, **são rejeitados** em todas as novas ações SaaS.
+- O teste `tests/saas-children.php` valida leitura da operação interna, IDs de outra empresa, seleção de conta não autorizada, vínculo suspenso, tokens antigos e migração incompleta.
+- `README.md` contém lista de arquivos, progresso e próximo bloco. **Status CI a conferir antes de mudar para “validado”.**
+
+**Limite de escopo:** essas rotas são a primeira base verificável de autenticação/SQL multiempresa. Elas NÃO corrigem as consultas globais das rotas antigas (`demands.list`, `clients.list`, `finance.*`, `files.*`, realtime, downloads, workers). O SaaS segue DESLIGADO, `main` e VPS não devem receber esta branch.
+
+### Retomada exata B1.2c-2
+
+1. Concluir definição de proprietário das tabelas restantes (chat, notificações, logs, outbox, filas, WhatsApp, AI interna, tokens e eventos sem relação determinística), com verificações de integridade.
+2. Vincular `tenant_account_id` a cada criação, edição e exclusão de registros, com consistência de pais e autorização em todas as rotas existentes; evitar que uma escrita antiga gere registros com NULL.
+3. Implementar novas credenciais/tokens vinculados à empresa, sessão multiempresa e contas de usuário sem depender do `users.role` global; revogar o contexto imediatamente após perda de membership.
+4. Aplicar ownership ao armazenamento/URLs assinadas, uploads e downloads; aos workers, notificações, realtime/Centrifugo e Outbox. Fechar testes A/B reais incluindo IDs trocados, filas e mensagens.
+5. Concluir índices únicos e FKs compostas por empresa, habilitar NOT NULL apenas depois do saneamento; testar rollback. Somente após tudo aprovado avançar para B1.3.
+
 ## Pendente — B1.2: propagação e isolamento por conta
 
 - [ ] Completar `tenant_account_id` (B1.2a cobre 15 raízes, demais tabelas e consultas pendentes), priorizar `clients`, `users`/vínculos, `demands`, `projects`, `stages`, `categories`, `contracts`, `invoices`, `payments`, `expenses`, `files`, `templates`, `automations`, `automation_runs`, `event_outbox`, `whatsapp_contacts`, mensagens/chat, agendas, Google, tokens e logs. O inventário precisa ser completado por relacionamento.

@@ -37,6 +37,7 @@ try{
  taskCheck(SaasDomainMigration::apply()['domain_version']===2,'Missing domain migration.');
  taskCheck(SaasChildMigration::apply()['children_version']===3,'Missing child migration.');
  taskCheck(SaasOutboxMigration::issues()===[],'Fresh SaaS outbox schema must be valid.');
+ $db->exec('DROP TABLE saas_delivery_jobs');
  $db->exec('DROP TABLE saas_event_receipts');
  $db->exec('DROP TABLE saas_event_outbox');
  taskCheck(SaasOutboxMigration::issues()===['missing_saas_event_outbox'],'Missing isolated event table must be detected.');
@@ -47,6 +48,10 @@ try{
  taskCheck(SaasReceiptMigration::apply()['receipts_version']===5,'Staged receipt migration must complete before another account exists.');
  taskCheck(SaasReceiptMigration::issues()===[],'Receipt schema must have tenant/unique keys and FKs.');
  taskCheck(SaasReceiptMigration::apply()['delivery_enabled']===false,'Receipt migration must remain idempotent and inert.');
+ taskCheck(SaasDeliveryMigration::issues()===['missing_saas_delivery_jobs'],'Missing delivery staging table must be detected.');
+ taskCheck(SaasDeliveryMigration::apply()['delivery_version']===6,'Delivery migration must apply before new accounts exist.');
+ taskCheck(SaasDeliveryMigration::issues()===[],'Delivery table and its tenant FK/indexes must be valid.');
+ taskCheck(SaasDeliveryMigration::apply()['external_delivery_enabled']===false,'Repeated migration must remain idempotent and inert.');
  $accountB=DB::insert('accounts',['slug'=>'ci-foreign','name'=>'Other company','account_type'=>'customer','status'=>'active','created_at'=>now(),'updated_at'=>now()]);
  DB::run('DELETE FROM account_members WHERE account_id=? AND user_id=?',[$account,$outsider]);
  DB::insert('account_members',['account_id'=>$accountB,'user_id'=>$outsider,'membership_role'=>'owner','status'=>'active','joined_at'=>now()]);
@@ -203,6 +208,77 @@ try{
   'Preparing receipts must never acknowledge publication or consume held outbox.');
  taskCheck(count(SaasEventConsumer::heldForOwner(50))===6,
   'Verified owner should inspect six safe receipt projections.');
+
+
+ // B1.2c-2b.2b.2a: only internal-event delivery intents may be staged.
+ $queued=SaasDeliveryQueue::stage($account,50);
+ taskCheck($queued['selected']===6&&$queued['staged']===6&&$queued['delivered']===0,
+  'Six verified receipts should produce only six held internal delivery intents.');
+ taskCheck(SaasDeliveryQueue::stage($account,50)['staged']===0,
+  'Replaying the same receipts must not create duplicate delivery jobs.');
+ taskCheck((int)DB::one('SELECT COUNT(*) n FROM saas_delivery_jobs WHERE tenant_account_id=?',[$accountB])['n']===0,
+  'No delivery intent from account B may be staged during account A batch.');
+ $otherRejected=false;
+ try{SaasDeliveryQueue::stage($accountB,10);}catch(RuntimeException){$otherRejected=true;}
+ taskCheck($otherRejected,'A customer account must be blocked from the unfinished delivery worker.');
+ $jobs=SaasDeliveryQueue::forOwner(50);
+ taskCheck(count($jobs)===6,'Only six tenant A jobs should appear to its owner.');
+ foreach($jobs as $job)
+  taskCheck($job['destination_scope']==='saas.account.'.$account.'.events'&&
+   $job['channel']==='internal_event'&&$job['status']==='held'&&(int)$job['attempts']===0,
+   'Job channel/scope/status must be derived by the server and never from untrusted input.');
+
+ // A changed receipt must fail BEFORE creating its delivery intent.
+ $target=(int)$jobs[0]['receipt_id'];
+ DB::run('DELETE FROM saas_delivery_jobs WHERE tenant_account_id=? AND receipt_id=?',[$account,$target]);
+ $originalHash=(string)DB::one('SELECT event_hash FROM saas_event_receipts WHERE id=?',[$target])['event_hash'];
+ DB::run('UPDATE saas_event_receipts SET event_hash=? WHERE id=?',[str_repeat('f',64),$target]);
+ $integrityFailure=false;
+ try{SaasDeliveryQueue::stage($account,50);}catch(RuntimeException){$integrityFailure=true;}
+ taskCheck($integrityFailure,'Corrupted receipt hash must prevent staging.');
+ taskCheck((int)DB::one('SELECT COUNT(*) n FROM saas_delivery_jobs WHERE tenant_account_id=?',[$account])['n']===5,
+  'Failed staging batch must not leave a partial job.');
+ DB::run('UPDATE saas_event_receipts SET event_hash=? WHERE id=?',[$originalHash,$target]);
+ taskCheck(SaasDeliveryQueue::stage($account,50)['staged']===1,
+  'Fixed receipt can be staged exactly once.');
+
+ // Failure handling is a CAS transition; retry has exponential backoff,
+ // and the fifth failed validation moves the job to the dead-letter state.
+ $jobId=(int)DB::one('SELECT id FROM saas_delivery_jobs WHERE tenant_account_id=? ORDER BY id LIMIT 1',[$account])['id'];
+ $foreignBlocked=false;
+ try{SaasDeliveryQueue::recordFailure($accountB,$jobId,0,'temporary_timeout');}
+ catch(RuntimeException){$foreignBlocked=true;}
+ taskCheck($foreignBlocked,'Cannot modify another account delivery job by guessing an ID.');
+ $firstFail=SaasDeliveryQueue::recordFailure($account,$jobId,0,'temporary_timeout');
+ taskCheck($firstFail['status']==='retry'&&$firstFail['attempts']===1&&$firstFail['external_delivery_enabled']===false,
+  'First validation failure must schedule retry without sending anything.');
+ $staleBlocked=false;
+ try{SaasDeliveryQueue::recordFailure($account,$jobId,0,'temporary_timeout');}
+ catch(RuntimeException){$staleBlocked=true;}
+ taskCheck($staleBlocked,'Stale retry attempt must not double-increment.');
+ $earlyBlocked=false;
+ try{SaasDeliveryQueue::recordFailure($account,$jobId,1,'temporary_timeout');}
+ catch(RuntimeException){$earlyBlocked=true;}
+ taskCheck($earlyBlocked,'Retry cannot run earlier than the backoff deadline.');
+ for($attempt=1;$attempt<5;$attempt++){
+  DB::run('UPDATE saas_delivery_jobs SET available_at=? WHERE id=?',
+   ['2000-01-01 00:00:00.000000',$jobId]);
+  $result=SaasDeliveryQueue::recordFailure($account,$jobId,$attempt,'temporary_timeout');
+  taskCheck($result['attempts']===$attempt+1&&
+   $result['status']===($attempt===4?'dead':'retry'),
+   'Retry must eventually reach the dead-letter state.');
+ }
+ $deadBlocked=false;
+ try{SaasDeliveryQueue::recordFailure($account,$jobId,5,'temporary_timeout');}
+ catch(InvalidArgumentException){$deadBlocked=true;}
+ taskCheck($deadBlocked,'Dead-letter jobs must not be retried without a separate recovery flow.');
+ taskCheck((int)DB::one('SELECT COUNT(*) n FROM saas_delivery_jobs WHERE status=? AND tenant_account_id=?',
+  ['dead',$account])['n']===1,'Expected exactly one dead-letter job.');
+ taskCheck((int)DB::one('SELECT COUNT(*) n FROM saas_event_outbox WHERE published_at IS NOT NULL')['n']===0,
+  'Delivery intent and retries must not mark an event as published.');
+ taskCheck((int)DB::one('SELECT COUNT(*) n FROM whatsapp_messages')['n']===0&&
+  (int)DB::one('SELECT COUNT(*) n FROM notifications')['n']===0,
+  'No WhatsApp or notifications may be sent while delivery transport is disabled.');
 
  // Corrupt metadata is rejected and rolled back instead of silently consumed.
  $bad=DB::insert('saas_event_outbox',[

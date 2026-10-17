@@ -6,6 +6,19 @@
 **Produção:** nenhuma mudança nem criação de contas SaaS deve ser feita automaticamente. O deploy da branch está desabilitado pelo workflow (só `main` faz deploy). O schema operacional continua 30.
 **Aviso:** o schema **20** do SaaS antigo é historicamente removido, proibido e **não** será recriado.
 
+## Decisão mais recente — mesma infraestrutura, sem staging separado
+
+**17/10/2026:** o proprietário confirmou que a implantação final será **na VPS, domínio e banco já utilizados pelo TaskEsc**, sem outro subdomínio e sem outro MySQL. Isto **não** implica liberar SaaS antes de B1.3. A produção ainda não foi alterada.
+
+- Novo `app/SaasInPlacePreflight.php`, auditoria somente SELECT da versão operacional 30, flags, marcadores das migrações SaaS 1–8, presença de conta única interna e esquema SaaS 20 removido. Em caso de bloqueio, devolve `ready_for_manual_review=false`. Não toca em dados nem configurações.
+- `bin/saas-inplace-preflight.php --check` executa o diagnóstico sem backup. `--release-check --backup-manifest=/CAMINHO/ABSOLUTO/...txt` acrescenta verificação de backup do banco SHA256 com idade máxima de 2h. **Não realiza implantação ou migração em nenhum dos modos**.
+- Testes do preflight adicionados à suíte `tests/saas-task-writes.php` no MySQL 8/MariaDB 10.11: banco legado sem marcadores aprovado para revisão, banco com conta externa existente bloqueado, nenhuma modificação em `settings`. **Validação CI do novo código ainda em andamento.**
+- Plano operacional: [docs/saas-deploy-inplace.md](saas-deploy-inplace.md). Guia antigo de staging com outro banco mantido como documento histórico, mas **não adotado**.
+- **Risco crítico:** migrações B1.2a/B1.2b executam ALTER TABLE e backfill em 31 tabelas em produção; o rollback DDL não é transacional. Exigir janela, backup e recuperação testada, locks/volumetria e ausência de usuários externos, antes de qualquer `--apply`. Os workers e rotas atuais continuam globais e precisam ser isolados.
+- O conector de GitHub usado aqui não disponibiliza SSH nem disparo de workflow remoto: **não foi executada atualização na VPS**, e não se deve afirmar que o TaskEsc público já está atualizado.
+
+**Ponto de retomada atualizado:** confirmar CI verde do preflight; obter meio de execução autorizado na VPS existente; conferir `main` atual, versão DB, backup local e externo e executar apenas o diagnóstico; planejar atualização de código com flags SaaS desligadas, sem mesclar acidentalmente o PR #113 ainda incompleto. Seguir B1.2c-2b.2b.2b.2b.2 (entregas/isolamento dos workers) em branch com CI e resguardar módulos legados.
+
 ## Meta do Bloco 1
 
 Introduzir uma camada de contas assinantes ACIMA dos clientes comerciais atuais. `clients.id` continua sendo o cliente atendido pela empresa; `accounts.id` é a empresa que usa o TaskEsc. Antes de habilitar qualquer nova conta, todo módulo de leitura, escrita, tempo real, API, arquivos e worker precisa verificar a identidade e autorização da conta.

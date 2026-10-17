@@ -120,7 +120,7 @@ php bin/migrate-saas-children.php --apply --backup-manifest=/CAMINHO/VALIDADO/ma
 
 ## B1.2c-2b.1 — Tasks: mutações isoladas em estágio (WIP)
 
-**Status:** código na branch PR #113 e suíte CI em execução. Nenhuma rota do Kanban legado ou da produção foi substituída. Empresas externas seguem bloqueadas diretamente no código de `SaasRequestScope`.
+**Status:** código implementado e validado pela [CI #39035332655](https://github.com/vitoryvensreis/task/actions/runs/39035332655) (PHP/JS, MySQL 8, MariaDB 10.11 aprovados, deploy skipped). Nenhuma rota do Kanban legado ou da produção foi substituída. Empresas externas seguem bloqueadas diretamente no código de `SaasRequestScope`.
 
 **Arquivos:** `app/SaasTaskWriteApi.php`, `public/api.php`, `tests/saas-task-writes.php`, `.github/workflows/deploy.yml`.
 
@@ -131,11 +131,11 @@ php bin/migrate-saas-children.php --apply --backup-manifest=/CAMINHO/VALIDADO/ma
 - [x] Movimentação entre etapas com versionamento otimista e uma transição tenantizada; não reorganiza a ordem Kanban (reorder fica pendente). Mudança para concluída ajusta marcos de tempo, **mas ainda não emite automações/disparos**.
 - [x] Arquivamento soft delete só sem faturas, custos, arquivos, consumo, eventos, execuções automatizadas, vínculos de chat ou disparos WhatsApp; dados históricos permanecem. Nenhum cascade automático entre módulos.
 - [x] Lista de campos permitidos bloqueia alterações por payload de conta, preço, WhatsApp, templates, status financeiro, autores e outros campos ainda não isolados.
-- [x] Testes (MySQL 8 + MariaDB 10.11) verificam contas A/B, acessos forjados, conflitos de versão, dependências, membro removido, token bearer antigo, migração ausente, transições com tenant e ausência de efeitos assíncronos. **CI pendente de confirmação.**
+- [x] Testes (MySQL 8 + MariaDB 10.11) verificam contas A/B, acessos forjados, conflitos de versão, dependências, membro removido, token bearer antigo, migração ausente, transições com tenant e ausência de efeitos assíncronos. **CI aprovada, não implantado.**
 
 **Limitação crítica:** `audit_log` legada ainda não possui tenant; as novas rotas também não integram `AutomationEvent`, `DemandRealtime`, `Notify`, financeiro, upload, Google Drive ou o SaaS comercial. Essa implementação serve somente como base de segurança em ambiente não produtivo. **NÃO liberar outras empresas ou trocar a navegação Kanban por estas rotas.**
 
-**Retomada exata:** concluir/verificar CI de B1.2c-2b.1; continuar **B1.2c-2b.2** com isolamento da Outbox/eventos, fila de WhatsApp, cron/workers, notificações e realtime; depois CRUD legado por tenant, uploads/downloads e demais tabelas/logs. Revisar concorrência e índices únicos por empresa e FKs compostas antes de B1.3.
+**Retomada exata:** B1.2c-2b.1 testado e aprovado; continuar **B1.2c-2b.2** com isolamento da Outbox/eventos, fila de WhatsApp, cron/workers, notificações e realtime; depois CRUD legado por tenant, uploads/downloads e demais tabelas/logs. Revisar concorrência e índices únicos por empresa e FKs compostas antes de B1.3.
 
 ## Pendente — B1.2: propagação e isolamento por conta
 

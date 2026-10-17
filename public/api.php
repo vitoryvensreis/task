@@ -18,6 +18,12 @@ try {
  if($action==='preview.stop'){checkCsrf();out(Auth::previewStop());}
  if(($_SERVER['REQUEST_METHOD']??'GET')!=='GET'&&Auth::$origin!=='api'){checkCsrf();Auth::guardPreviewWrite();}
  $result=match($action){
+  // SaaS B1.2c-1: staged isolated read routes. Not linked into legacy UI.
+  // Login/session membership must be verified on EVERY request.
+  'saas.context'=>SaasRequestScope::status(),
+  'saas.account_select'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?SaasRequestScope::select($p):fail('Método não permitido.',405),
+  'saas.records'=>SaasReadApi::listing($p),
+  'saas.record'=>SaasReadApi::get($p),
   'account.get'=>Auth::profile(),
   'account.save'=>Auth::profileSave($p),
   'account.password'=>Auth::passwordChange($p),

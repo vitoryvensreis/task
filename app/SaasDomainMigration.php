@@ -113,7 +113,7 @@ final class SaasDomainMigration {
    'projects.clients'=>"SELECT COUNT(*) n FROM projects p JOIN clients c ON c.id=p.client_id WHERE c.tenant_account_id IS NOT NULL AND c.tenant_account_id<>?",
    'contracts.clients'=>"SELECT COUNT(*) n FROM contracts x JOIN clients c ON c.id=x.client_id WHERE c.tenant_account_id IS NOT NULL AND c.tenant_account_id<>?",
    'demands.clients'=>"SELECT COUNT(*) n FROM demands d JOIN clients c ON c.id=d.client_id WHERE c.tenant_account_id IS NOT NULL AND c.tenant_account_id<>?",
-   'demands.projects'=>"SELECT COUNT(*) n FROM demands d JOIN projects p ON p.id=d.project_id JOIN clients c ON c.id=d.client_id WHERE p.client_id<>c.id",
+   'demands.projects'=>"SELECT COUNT(*) n FROM demands d JOIN projects p ON p.id=d.project_id JOIN clients c ON c.id=d.client_id WHERE p.client_id<>c.id AND ?>0",
    'demands.categories'=>"SELECT COUNT(*) n FROM demands d JOIN categories c ON c.id=d.category_id WHERE c.tenant_account_id IS NOT NULL AND c.tenant_account_id<>?",
    'demands.stages'=>"SELECT COUNT(*) n FROM demands d JOIN stages s ON s.id=d.stage_id WHERE s.tenant_account_id IS NOT NULL AND s.tenant_account_id<>?",
    'invoices.clients'=>"SELECT COUNT(*) n FROM invoices i JOIN clients c ON c.id=i.client_id WHERE c.tenant_account_id IS NOT NULL AND c.tenant_account_id<>?"

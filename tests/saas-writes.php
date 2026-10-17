@@ -43,6 +43,7 @@ try {
  $legacy=(int)$first['account_id'];
  swCheck(SaasDomainMigration::apply()['domain_version']===2,'Domain migration must precede writes.');
  swCheck(SaasChildMigration::apply()['children_version']===3,'Child migration must precede writes.');
+ swCheck(SaasOutboxMigration::apply()['outbox_version']===4,'SaaS catalog writes require transactional outbox migration.');
  DB::run('UPDATE account_members SET membership_role=? WHERE account_id=? AND user_id=?',
   ['member',$legacy,$member]);
  if(session_status()!==PHP_SESSION_ACTIVE)session_start();

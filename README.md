@@ -10,13 +10,15 @@
 | --- | --- | --- |
 | B1.1 — tabelas de contas e vínculo de usuários | ✅ Implementado e validado na branch | `accounts`, `account_members`, `account_settings`; conta interna para legado; migração idempotente com backup obrigatório, modo multiempresa bloqueado |
 | B1.1 — proteção inicial e verificações | ✅ Código e testes aprovados na CI | `AccountContext` valida o vínculo; testes no MySQL/MariaDB; NÃO conectado a todas as rotas ainda |
-| B1.2a — `tenant_account_id` em 15 tabelas principais | 🟡 Implementado na branch; validação/integração pendente | Migração aditiva com backfill e guardas; MySQL/MariaDB em CI; SEM usar nas rotas legadas ainda |
+| B1.2a — `tenant_account_id` em 15 tabelas principais | ✅ Implementado e CI aprovada, NÃO implantado | Migração aditiva e backfill testados em MySQL 8/MariaDB 10.11; rotas legadas ainda sem isolamento |
 | B1.2b — tabelas filhas e índices por conta | ⬜ Pendente | Backfill pelos FKs, consistência de pais, índices compostos e travas de integridade |
 | B1.2c — isolamento backend, APIs e realtime | ⬜ Pendente | Filtrar e autorizar cada request/worker/arquivo/canal; testes cruzados entre empresas |
 | B1.2 — restrições de recursos do SaaS | ⬜ Pendente | Desabilitar IA e calendários Google integrados para assinantes no servidor; manter disparos de automação |
 | B1.3 — ativação, homologação e migração segura | ⬜ Pendente | 2 empresas em testes; deploy com backup/rollback; habilitar contas externas só após isolamento completo |
 | Bloco 2 — cargos e permissões personalizadas | ⬜ Próximo bloco | Iniciar somente após base multiempresa confiável |
 | Blocos 4/5 — planos, licenças avulsas, Asaas | ⬜ Futuro | Não incluídos no Bloco 1 |
+
+**B1.2a validado:** [GitHub Actions #39031554658](https://github.com/vitoryvensreis/task/actions/runs/39031554658) — validação PHP/JS, MySQL 8 e MariaDB 10.11 aprovadas; **deploy skipped**. As correções de fixture (created_at de projetos e membership revogado no teste A/B) já estão incluídas. Nenhuma alteração foi aplicada à VPS.
 
 **Arquivos B1.2a:** `app/SaasDomainMigration.php`, `app/AccountOwnership.php`, `bin/migrate-saas-domain.php`, `tests/saas-domain.php`, `database/schema.sql` e matriz CI. Coluna `tenant_account_id` foi escolhida porque `calendars.account_id` já identifica a conta Google. O schema operacional permanece **30**.
 

@@ -30,13 +30,13 @@ final class SaasRequestScope {
  }
 
  private static function allowed(array $membership): array {
-  if(($membership['account_type']??'')==='internal')return $membership;
-  $flags=DB::all('SELECT `key`,value FROM account_settings WHERE account_id=? AND `key` IN (?,?)',
-   [(int)$membership['account_id'],'saas.external_signup_enabled','saas.multi_account_enabled']);
-  $f=[];foreach($flags as $flag)$f[$flag['key']]=$flag['value'];
-  // Tenant onboarding must not be unlocked by a guessed id or one missing flag.
-  if(($f['saas.multi_account_enabled']??'')!=='1'||($f['saas.external_signup_enabled']??'')!=='1')
+  // B1.2c-1 is intentionally single-operation-only. Account flags are NOT
+  // a substitute for the audit gate that B1.3 must implement. Even a manually
+  // modified account_settings row must never activate external tenant access.
+  if(($membership['account_type']??'')!=='internal')
    fail('Acesso a empresas externas ainda não habilitado.',403);
+  if(($membership['slug']??'')!==AccountContext::LEGACY_SLUG)
+   fail('Conta interna desconhecida.',403);
   return $membership;
  }
 
@@ -80,8 +80,4 @@ final class SaasRequestScope {
   return $membership;
  }
 
- public static function clearForTests(): void {
-  // Intentionally unavailable to HTTP clients. Tests clear $_SESSION directly.
-  throw new LogicException('Use the session lifecycle to clear account selection.');
- }
 }

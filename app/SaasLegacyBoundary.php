@@ -2,29 +2,39 @@
 declare(strict_types=1);
 
 /**
- * Defense-in-depth for routes that still use single-operation, global SQL.
- * Until these controllers have been tenant-scoped, never let a customer
- * membership or a customer-selected session call the legacy surface.
+ * Transitional fail-closed isolation boundary.
  *
- * This gate is intentionally independent from rollout flags: manually
- * inserting a customer account must not expose the legacy API.
+ * No legacy controller, MCP API, download or worker can safely run against
+ * customer tenants until all its SQL and provider side-effects are scoped.
+ * A legacy administrator could otherwise read customer data even if the
+ * customer's own login were denied. Therefore block ALL legacy operations
+ * whenever any external account exists or a multi-account flag is enabled.
+ *
+ * This protection is intentionally independent from UI flags. Replace it
+ * only after tenant-aware controllers AND workers pass cross-tenant checks.
  */
 final class SaasLegacyBoundary {
- public static function enforce(): void {
-  Auth::load();
-  $userId=(int)(Auth::$actor['id']??Auth::$user['id']??0);
-  if($userId<1)fail('Autenticação necessária.',401);
+ public static function assertSingleOperation(): void {
   $foundation=DB::one('SELECT value FROM settings WHERE `key`=?',
     [SaasFoundationMigration::MARKER]);
   if(($foundation['value']??'')!=='1')return;
 
-  // Old installations, before their first customer account, keep working.
-  // Any customer record (even suspended) enables the strict separation gate.
-  if(!DB::one("SELECT id FROM accounts WHERE account_type<>'internal' LIMIT 1"))return;
-  $membership=AccountContext::legacyForUser($userId);
-  $internalId=(int)$membership['account_id'];
-  $selected=(int)($_SESSION['taskesc_saas_account']??0);
-  if($selected!==0&&$selected!==$internalId)
-   fail('Troque para a operação interna antes de abrir este recurso.',403);
+  $external=DB::one("SELECT id FROM accounts WHERE account_type<>'internal' LIMIT 1");
+  $enabled=DB::one(
+   "SELECT account_id FROM account_settings
+     WHERE `key` IN ('saas.multi_account_enabled','saas.external_signup_enabled')
+       AND value<>'0' LIMIT 1"
+  );
+  if($external||$enabled)
+   throw new RuntimeException('saas_legacy_surface_requires_tenant_scoping');
+ }
+
+ public static function enforce(): void {
+  Auth::load();
+  try {self::assertSingleOperation();}
+  catch(RuntimeException $e) {
+   if($e->getMessage()!=='saas_legacy_surface_requires_tenant_scoping')throw $e;
+   fail('Este recurso ainda não está isolado entre empresas.',503);
+  }
  }
 }

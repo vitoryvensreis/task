@@ -41,7 +41,6 @@ if(strlen($raw)>1048576){
 try{
     $payload=json_decode($raw,true,64,JSON_THROW_ON_ERROR);
     if(!is_array($payload))throw new JsonException('Object required');
-    SaasLegacyBoundary::assertSingleOperation();
     $result=WppWebhook::handle($payload);
     http_response_code(202);
     echo json(['ok'=>true]+$result);

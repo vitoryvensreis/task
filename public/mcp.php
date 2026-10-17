@@ -19,7 +19,7 @@ function mcpTools(): array{return[
  ];}
 try{
  if(!is_file(ROOT.'/storage/installed.lock'))mcpError(null,-32000,'Sistema ainda não instalado.');
- Auth::load();SaasLegacyBoundary::enforce();$raw=file_get_contents('php://input');$req=json_decode($raw?:'{}',true,512,JSON_THROW_ON_ERROR);if(!is_array($req))mcpError(null,-32600,'JSON-RPC inválido.');$id=$req['id']??null;$method=$req['method']??'';$params=$req['params']??[];
+ Auth::load();$raw=file_get_contents('php://input');$req=json_decode($raw?:'{}',true,512,JSON_THROW_ON_ERROR);if(!is_array($req))mcpError(null,-32600,'JSON-RPC inválido.');$id=$req['id']??null;$method=$req['method']??'';$params=$req['params']??[];
  if($method==='initialize')mcpResult($id,['protocolVersion'=>'2025-03-26','capabilities'=>['tools'=>['listChanged'=>false]],'serverInfo'=>['name'=>'taskesc','version'=>'1.0.0'],'instructions'=>'Você opera o TaskEsc do produtor audiovisual. Antes de ações, confirme o cliente, demanda, agenda e versão quando necessário. Informe códigos, valores, datas e a situação efetiva. Nunca invente dados.']);
  if($method==='notifications/initialized'){http_response_code(202);exit;}
  if($method==='ping')mcpResult($id,[]);

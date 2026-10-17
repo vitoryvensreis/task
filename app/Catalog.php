@@ -88,7 +88,6 @@ public static function clientSave(array $p): array {
   DB::tx(function() use(&$id,$old,$row,$cleanLinks): void {
    $isNew=!$old;
    if($id)DB::update('users',$id,$row);else $id=DB::insert('users',$row+['created_at'=>now()]);
-   AccountContext::syncInternalUser($id,(string)$row['role'],(int)$row['active']===1);
    DB::run('DELETE FROM user_clients WHERE user_id=?',[$id]);
    foreach($cleanLinks as $link){
     DB::insert('user_clients',['user_id'=>$id,'client_id'=>$link['client_id'],'can_approve'=>$link['can_approve'],'can_finance'=>$link['can_finance']]);

@@ -2,7 +2,7 @@
 declare(strict_types=1);
 require dirname(__DIR__).'/app/bootstrap.php';
 try{
- installed();SaasLegacyBoundary::assertSingleOperation();$key=(string)($_GET['key']??(getenv('TASKESC_CRON_KEY')?:getenv('STUDIOFLOW_CRON_KEY')?:''));if(PHP_SAPI!=='cli'&&!hash_equals((string)config('cron_key'),$key)){http_response_code(403);exit('Forbidden');}
+ installed();$key=(string)($_GET['key']??(getenv('TASKESC_CRON_KEY')?:getenv('STUDIOFLOW_CRON_KEY')?:''));if(PHP_SAPI!=='cli'&&!hash_equals((string)config('cron_key'),$key)){http_response_code(403);exit('Forbidden');}
  $result=['commercial_invoices'=>Finance::syncCommercialInvoices(),'cycles'=>Finance::ensureCycles(),'google'=>Google::sync(),'mail'=>Notify::flush(),'ran_at'=>now()];
  DB::run("INSERT INTO settings (`key`,value) VALUES ('last_cron_at',?) ON DUPLICATE KEY UPDATE value=VALUES(value)",[$result['ran_at']]);DB::run("INSERT INTO settings (`key`,value) VALUES ('last_cron_error','') ON DUPLICATE KEY UPDATE value=''");
  $result['health_watch']=SystemHealth::watch();

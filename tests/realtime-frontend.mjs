@@ -23,7 +23,7 @@ check(app.includes('setInterval(async()=>')&&app.includes('30000'),'HTTP polling
 check(index.includes("$appJsVersion=is_file(ROOT.'/public/assets/app.js')?filemtime"),'app.js must use filemtime cache busting');
 check(index.includes("$realtimeJsVersion=is_file(ROOT.'/public/assets/realtime-client.js')?filemtime"),'realtime client must use filemtime cache busting');
 check(sw.includes("cache:'reload'")&&sw.includes("scriptOrStyle"),'service worker must prefer network for JS/CSS while online');
-check(sw.includes("taskesc-shell-v3.27.1-network-recovery"),'service worker recovery must use a fresh shell cache');
+check(sw.includes("taskesc-shell-v3.27.0-realtime6"),'service worker cache generation must be bumped');
 check(!app.includes("chat:'chat'"),'chat must not be exposed as a page route');
 check(app.includes("window.addEventListener('taskesc:realtime-publication'")&&app.includes("startsWith('chat.')"),'admin chat must consume realtime publications');
 check(app.includes("api('chat.contacts')")&&app.includes("api('chat.messages'")&&app.includes("api('chat.send'"),'admin chat frontend must use authenticated chat endpoints');

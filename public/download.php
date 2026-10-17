@@ -2,7 +2,7 @@
 declare(strict_types=1);
 require dirname(__DIR__).'/app/bootstrap.php';
 try {
- installed();Auth::load();SaasLegacyBoundary::enforce();$id=integer($_GET['id']??0,1);$inline=!empty($_GET['inline']);
+ installed();Auth::load();$id=integer($_GET['id']??0,1);$inline=!empty($_GET['inline']);
  $f=DB::one('SELECT f.*,d.client_id FROM files f JOIN demands d ON d.id=f.demand_id WHERE f.id=? AND d.deleted_at IS NULL',[$id]);
  if(!$f)fail('Arquivo não encontrado.',404);Auth::demand((int)$f['demand_id']);if(Auth::$user['role']==='client'&&!$f['shared'])fail('Arquivo privado.',403);
  if($f['url']){header('Location: '.$f['url'],true,302);exit;}

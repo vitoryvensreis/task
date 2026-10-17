@@ -12,52 +12,10 @@
 <body>
   <main class="card">
     <div class="icon">T</div>
-    <h1>Não foi possível carregar o TaskEsc</h1>
+    <h1>Você está sem conexão</h1>
     <div class="bar"></div>
-    <p id="connection-status" role="status" aria-live="polite">Estamos verificando a conexão com o servidor. Esta tela pode aparecer quando a rede ou o TaskEsc estão temporariamente indisponíveis.</p>
-    <button type="button" id="retry">Verificar conexão novamente</button>
-  <script>
-    (() => {
-      'use strict';
-      const status = document.getElementById('connection-status');
-      const retry = document.getElementById('retry');
-      let busy = false;
-      const verify = async () => {
-        if (busy) return;
-        busy = true;
-        retry.disabled = true;
-        status.textContent = 'Verificando a conexão com o TaskEsc...';
-        try {
-          // Check the actual origin, not the browser's often misleading online flag.
-          const url = '/health.php?offline_probe=' + Date.now();
-          const response = await fetch(url, {cache:'no-store', credentials:'same-origin'});
-          if (!response.ok) {
-            status.textContent = 'O servidor respondeu, mas está temporariamente indisponível (HTTP ' + response.status + ').';
-            return;
-          }
-          const data = await response.json();
-          if (data.status !== 'ok' || data.database !== true) {
-            status.textContent = 'A internet está funcionando, mas o TaskEsc ainda não terminou de iniciar.';
-            return;
-          }
-          status.textContent = 'Servidor disponível. Abrindo o TaskEsc...';
-          const page = new URL(window.location.href);
-          page.searchParams.set('online_retry', String(Date.now()));
-          window.location.replace(page.toString());
-        } catch (_) {
-          status.textContent = 'Não foi possível alcançar o servidor. Confira sua conexão ou aguarde o restabelecimento do site.';
-        } finally {
-          busy = false;
-          retry.disabled = false;
-        }
-      };
-      retry.addEventListener('click', verify);
-      window.addEventListener('online', verify);
-      document.addEventListener('visibilitychange', () => { if (!document.hidden) verify(); });
-      setInterval(() => { if (!document.hidden) verify(); }, 15000);
-      verify();
-    })();
-  </script>
+    <p>O TaskEsc precisa de internet para sincronizar demandas, arquivos e atualizações com segurança. Assim que a conexão voltar, tente novamente.</p>
+    <button onclick="location.reload()">Tentar novamente</button>
   </main>
 </body>
 </html>

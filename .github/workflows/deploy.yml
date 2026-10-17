@@ -52,7 +52,6 @@ jobs:
           php tests/ai-whatsapp-providers.php
           php tests/wppconnect-contract.php
           php tests/automation-contract.php
-          bash -n ops/saas-stage-code-only.sh
           python3 -m py_compile ops/realtime-step1.py ops/realtime-step3.py ops/realtime-step4.py ops/automation-worker.py ops/ai-whatsapp-worker.py ops/wppconnect-webhook-probe.py
           python3 tests/realtime-ops.py
           rm -rf ops/__pycache__
@@ -166,16 +165,10 @@ jobs:
           php tests/ai-whatsapp-inbox.php
           php tests/ai-whatsapp-access.php
           php tests/ai-whatsapp-tools.php
-          php tests/saas-foundation.php
-          php tests/saas-domain.php
-          php tests/saas-children.php
-          php tests/saas-writes.php
-          # SaaS staged outbox: transactional staging, zero external dispatch, MySQL/MariaDB
-          php tests/saas-task-writes.php
 
   deploy:
     name: Deploy na VPS
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     needs: [validate, outbox-tests]
 
@@ -199,20 +192,7 @@ jobs:
           chmod 700 ~/.ssh
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          # The VPS can take longer to accept SSH shortly after a reboot.
-          # Retry only host-key discovery; never bypass known_hosts validation.
-          for attempt in 1 2 3 4 5; do
-            if timeout 16 ssh-keyscan -T 10 -p "$VPS_PORT" -H "$VPS_HOST" > /tmp/taskesc-ssh-known-hosts 2>/dev/null && test -s /tmp/taskesc-ssh-known-hosts; then
-              cat /tmp/taskesc-ssh-known-hosts >> ~/.ssh/known_hosts
-              break
-            fi
-            echo "::warning::SSH host-key scan indisponível (tentativa $attempt/5)."
-            sleep $((attempt * 4))
-          done
-          if ! test -s /tmp/taskesc-ssh-known-hosts; then
-            echo "::error::VPS SSH não respondeu após cinco tentativas; nenhuma alteração remota foi realizada."
-            exit 1
-          fi
+          ssh-keyscan -p "$VPS_PORT" -H "$VPS_HOST" >> ~/.ssh/known_hosts
 
       - name: Diagnosticar WhatsApp antes de reiniciar o worker (somente leitura)
         env:
@@ -471,29 +451,6 @@ jobs:
             php bin/migrate-ai-whatsapp-access.php "--backup-manifest=$BACKUP_MANIFEST"
             php bin/migrate-ai-whatsapp-tools.php "--backup-manifest=$BACKUP_MANIFEST"
             php bin/migrate-whatsapp-contacts.php "--backup-manifest=$BACKUP_MANIFEST"
-          REMOTE
-
-      - name: Aplicar fundação SaaS inativa no banco existente
-        timeout-minutes: 30
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_PORT: ${{ secrets.VPS_PORT }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-          BACKUP_MANIFEST: ${{ steps.backup.outputs.backup_manifest }}
-        run: |
-          set -euo pipefail
-          printf -v REMOTE_COMMAND 'DEPLOY_PATH=%q BACKUP_MANIFEST=%q bash -s' "$DEPLOY_PATH" "$BACKUP_MANIFEST"
-          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "$REMOTE_COMMAND" <<'REMOTE'
-            set -euo pipefail
-            cd "$DEPLOY_PATH"
-            # Backup + SHA256 recentes e flags externas desligadas.
-            php bin/saas-inplace-preflight.php --release-check "--backup-manifest=$BACKUP_MANIFEST"
-            for name in foundation domain children outbox receipts delivery channels inbox; do
-              php "bin/migrate-saas-$name.php" --apply "--backup-manifest=$BACKUP_MANIFEST"
-            done
-            php bin/saas-inplace-preflight.php --release-check "--backup-manifest=$BACKUP_MANIFEST"
-            echo "Fundação SaaS concluída em modo inativo (sem contas externas)."
           REMOTE
 
       - name: Auditoria de integridade sem alterações de dados

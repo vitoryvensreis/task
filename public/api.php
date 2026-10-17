@@ -11,30 +11,13 @@ try {
  if($action==='auth.2fa'){installed();out(Auth::twoFactorVerify($p));}
  if($action==='auth.logout'){session_start();$_SESSION=[];if(ini_get('session.use_cookies')){$params=session_get_cookie_params();setcookie(session_name(),'',['expires'=>time()-42000,'path'=>$params['path'],'domain'=>$params['domain'],'secure'=>$params['secure'],'httponly'=>$params['httponly'],'samesite'=>$params['samesite']??'Lax']);}session_destroy();out(['logged_out'=>true]);}
  installed();
- if($action==='auth.me'){Auth::load();SaasLegacyBoundary::enforce();out(['user'=>Auth::$user,'csrf'=>csrf()]);}
- if($action==='meta'){Auth::load();SaasLegacyBoundary::enforce();out(Catalog::meta());}
+ if($action==='auth.me'){Auth::load();out(['user'=>Auth::$user,'csrf'=>csrf()]);}
+ if($action==='meta'){Auth::load();out(Catalog::meta());}
  Auth::load();
- if(!str_starts_with($action,'saas.'))SaasLegacyBoundary::enforce();
  if($action==='preview.start'){checkCsrf();out(Auth::previewStart($p));}
  if($action==='preview.stop'){checkCsrf();out(Auth::previewStop());}
  if(($_SERVER['REQUEST_METHOD']??'GET')!=='GET'&&Auth::$origin!=='api'){checkCsrf();Auth::guardPreviewWrite();}
  $result=match($action){
-  // SaaS B1.2c-1: staged isolated read routes. Not linked into legacy UI.
-  // Login/session membership must be verified on EVERY request.
-  'saas.context'=>SaasRequestScope::status(),
-  'saas.account_select'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?SaasRequestScope::select($p):fail('Método não permitido.',405),
-  'saas.inbox'=>SaasInternalInbox::forCurrentUser(integer($p['limit']??30,1,100)),
-  'saas.records'=>SaasReadApi::listing($p),
-  'saas.record'=>SaasReadApi::get($p),
-  // B1.2c-2a — opt-in scoped mutations (POST + CSRF; bearer tokens denied).
-  'saas.client.save'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?SaasWriteApi::clientSave($p):fail('Método não permitido.',405),
-  'saas.client.archive'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?SaasWriteApi::clientArchive($p):fail('Método não permitido.',405),
-  'saas.project.save'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?SaasWriteApi::projectSave($p):fail('Método não permitido.',405),
-  'saas.project.delete'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?SaasWriteApi::projectDelete($p):fail('Método não permitido.',405),
-  // B1.2c-2b staged tasks. No legacy automations, notifications or realtime.
-  'saas.task.save'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?SaasTaskWriteApi::save($p):fail('Método não permitido.',405),
-  'saas.task.move'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?SaasTaskWriteApi::move($p):fail('Método não permitido.',405),
-  'saas.task.archive'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?SaasTaskWriteApi::archive($p):fail('Método não permitido.',405),
   'account.get'=>Auth::profile(),
   'account.save'=>Auth::profileSave($p),
   'account.password'=>Auth::passwordChange($p),

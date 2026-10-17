@@ -210,6 +210,21 @@ Criar autorização completa de canais/destinatários, credenciais por tenant, w
 
 **Nunca mesclar o PR #113 antes de proteger todas as rotas existentes. Nenhum job desta etapa foi enviado a qualquer provedor ou canal realtime.**
 
+## B1.2c-2b.2b.2b.1 — Roteamento de destinatários internos por tenant (CI aguardando)
+
+**Escopo:** `app/SaasDeliveryRouting.php` implementa um *resolvedor de permissões*, não um transportador nem um worker habilitado. Ele só recebe `accountId` e `jobId`; não recebe destinatários, telefone, e-mail, texto de mensagem, credenciais nem um canal escolhido pela aplicação cliente.
+
+- [x] Exige schema SaaS fundação + domínio + filhos + Outbox/recibos + `saas_delivery_version=6`, única conta `internal` ativa e flags de multiempresa/desbloqueio externas desligadas.
+- [x] Consulta a fila, recibo, Outbox e task com chaves `tenant_account_id` correspondentes. Exige evento intacto (hash JSON canônico, tipo, versão, conta, relacionamentos) e job `held` ou `retry` com canal `internal_event` e destino do tipo `saas.account.<id>.events`. Não roteia jobs `dead` nem publicados.
+- [x] Destinatários internos autorizados por consulta **atual**, não pelo momento da criação do evento: usuários ativos com `account_members.status='active'`, administradores proprietários (`membership_role='owner'`) e responsável atual da task, desde que pertença à equipe e, para `staff`, mantenha `user_clients` para o cliente da task.
+- [x] Devolve apenas IDs dos usuários, contagem e metadados de conta/canal seguro. **Não lê telefone/e-mail ou quaisquer tokens de provedor; não salva destinatários nem envia mensagens.**
+- [x] Testes no `tests/saas-task-writes.php`: A/B, revogação de membership, remoção de relação `staff`→cliente, conta suspensa, destino adulterado e status `dead`; prova de que nenhuma notificação nem evento publicado foi produzido.
+- [ ] Confirmar CI PHP/JS, MySQL 8 e MariaDB 10.11 e registrar aqui e no README.
+
+**O que NÃO foi entregue:** comunicação WhatsApp, notificações/push, WebSocket/realtime, processamento real de automações, autenticação API multiempresa, execução em cron, conciliação de falhas externas e armazenamento seguro de credenciais por conta. A entrega externa continua pendente da **B1.2c-2b.2b.2b.2**. Não misturar este resolvedor com `Notify`, `AutomationWorker` ou `RealtimeOutboxWorker` legados.
+
+**Ponto exato de retomada após CI:** isolar o modelo de credenciais e permissões por conta, criar o primeiro destino real interno protegido sem reutilizar canais globais, depois provedores/canais separados e workers reais com idempotência externa, rastreabilidade e tentativas auditadas. Só liberar outras empresas após B1.3 e fechamento de rotas legadas.
+
 ## Pendente — B1.2: propagação e isolamento por conta
 
 - [ ] Completar `tenant_account_id` (B1.2a cobre 15 raízes, demais tabelas e consultas pendentes), priorizar `clients`, `users`/vínculos, `demands`, `projects`, `stages`, `categories`, `contracts`, `invoices`, `payments`, `expenses`, `files`, `templates`, `automations`, `automation_runs`, `event_outbox`, `whatsapp_contacts`, mensagens/chat, agendas, Google, tokens e logs. O inventário precisa ser completado por relacionamento.

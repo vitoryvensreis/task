@@ -72,6 +72,9 @@ try {
   'account_type'=>'customer','status'=>'active','created_at'=>now(),'updated_at'=>now()]);
  DB::insert('account_members',['account_id'=>$foreignAccount,'user_id'=>$other,
   'membership_role'=>'owner','status'=>'active','joined_at'=>now()]);
+ // A user provisioned into another tenant after B1.1 MUST NOT retain a legacy
+ // membership. B1.1 purposely backfills all pre-existing administrators.
+ DB::run('DELETE FROM account_members WHERE account_id=? AND user_id=?',[$legacy,$other]);
  $foreignClient=DB::insert('clients',['tenant_account_id'=>$foreignAccount,
   'name'=>'Confidential client B','created_at'=>now()]);
  $foreignProject=DB::insert('projects',['tenant_account_id'=>$foreignAccount,'client_id'=>$foreignClient,

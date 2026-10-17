@@ -2,15 +2,15 @@
 declare(strict_types=1);
 $port=getenv('OUTBOX_TEST_PORT');
 if(!$port||!ctype_digit((string)$port))throw new RuntimeException('Only the disposable CI database may run these tests.');
-define('ROOT',dirname(__DIR__));
-@unlink(ROOT.'/config/config.php');
+$root=dirname(__DIR__);
+@unlink($root.'/config/config.php');
 $config=[
  'base_url'=>'http://localhost','timezone'=>'America/Fortaleza',
  'db'=>['host'=>'127.0.0.1','port'=>(int)$port,'name'=>'taskesc_test','user'=>'root','password'=>'taskesc-ci-only'],
  'app_key'=>bin2hex(random_bytes(32))
 ];
-file_put_contents(ROOT.'/config/config.php',"<?php\nreturn ".var_export($config,true).";\n");
-require ROOT.'/app/bootstrap.php';
+file_put_contents($root.'/config/config.php',"<?php\nreturn ".var_export($config,true).";\n");
+require $root.'/app/bootstrap.php';
 function b12(bool $ok,string $message): void {if(!$ok)throw new RuntimeException($message);}
 function b12Reject(callable $callback,string $message): void {
  try{$callback();}catch(AppError|RuntimeException|LogicException){return;}
@@ -79,6 +79,8 @@ try {
  b12Reject(fn()=>AccountOwnership::row('users',$admin,$account,$admin),'Unscoped table must not be allowed.');
 
  $foreignAccount=DB::insert('accounts',['slug'=>'second-account-fixture','name'=>'Other company','account_type'=>'customer','status'=>'active','created_at'=>now(),'updated_at'=>now()]);
+ // Simulate removing the staff member from the legacy company; B1.1 had originally added all existing users.
+ DB::run('DELETE FROM account_members WHERE account_id=? AND user_id=?',[$account,$otherUser]);
  DB::insert('account_members',['account_id'=>$foreignAccount,'user_id'=>$otherUser,'membership_role'=>'member','status'=>'active','joined_at'=>now()]);
  $foreignClient=DB::insert('clients',['tenant_account_id'=>$foreignAccount,'name'=>'Foreign client','created_at'=>now()]);
  $foreignStage=DB::insert('stages',['tenant_account_id'=>$foreignAccount,'name'=>'Foreign stage','kind'=>'inbox']);

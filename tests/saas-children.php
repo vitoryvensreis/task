@@ -137,9 +137,12 @@ try {
  childCheck(in_array('secondary_events_demand_id',SaasChildMigration::relationIssues(true),true),
   'Event linked to another tenant task must be detected.');
  DB::run('UPDATE events SET demand_id=? WHERE id=?',[$demand,$event]);
- childCheck(SaasChildMigration::relationIssues(true)===['parent_files'] ||
-  in_array('parent_files',SaasChildMigration::relationIssues(true),true),
-  'Fixture with foreign file pointing to legacy task must be caught before onboarding.');
+ DB::run('UPDATE files SET tenant_account_id=? WHERE id=?',[$legacy,$foreignFile]);
+ childCheck(in_array('parent_files',SaasChildMigration::relationIssues(true),true),
+  'File ownership differing from its parent task must be detected.');
+ DB::run('UPDATE files SET tenant_account_id=? WHERE id=?',[$other,$foreignFile]);
+ childCheck(SaasChildMigration::relationIssues(true)===[],
+  'The restored foreign and legacy child graph must be consistent.');
  childReject(fn()=>SaasChildMigration::apply(),'Legacy backfill must not execute when more than one account exists.');
  echo "SaaS B1.2b: child backfill, related parents, A/B isolation, retries, schema-20 block and CI guard OK\n";
 }catch(Throwable $e){fwrite(STDERR,$e->getMessage()."\n");exit(1);}

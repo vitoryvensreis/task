@@ -2,14 +2,14 @@
 
 ## SaaS — Bloco 1 (fundação multiempresa) — diário de desenvolvimento
 
-**Última atualização:** 17/10/2026 · **Branch:** `feat/saas-b1-foundation` · **Estado:** B1.1 implementado na branch; B1.2/B1.3 pendentes. **Não liberado em produção.**
+**Última atualização:** 17/10/2026 · **Branch:** `feat/saas-b1-foundation` · **PR:** [#113](https://github.com/vitoryvensreis/task/pull/113) (rascunho) · **Estado:** B1.1 implementado e validado na CI; B1.2/B1.3 pendentes. **Não liberado em produção.**
 
 **Documento de continuidade detalhado:** [docs/saas-b1.md](docs/saas-b1.md). Ao retomar o projeto, consulte este bloco e o documento ANTES de qualquer migração.
 
 | Etapa | Situação | Resultado / próximo passo |
 | --- | --- | --- |
-| B1.1 — tabelas de contas e vínculo de usuários | ✅ Implementado na branch, testes pendentes/CI | `accounts`, `account_members`, `account_settings`; conta interna para legado; migração idempotente com backup obrigatório, modo multiempresa bloqueado |
-| B1.1 — proteção inicial e verificações | ✅ Código e testes adicionados | `AccountContext` valida o vínculo; testes no MySQL/MariaDB; NÃO conectado a todas as rotas ainda |
+| B1.1 — tabelas de contas e vínculo de usuários | ✅ Implementado e validado na branch | `accounts`, `account_members`, `account_settings`; conta interna para legado; migração idempotente com backup obrigatório, modo multiempresa bloqueado |
+| B1.1 — proteção inicial e verificações | ✅ Código e testes aprovados na CI | `AccountContext` valida o vínculo; testes no MySQL/MariaDB; NÃO conectado a todas as rotas ainda |
 | B1.2 — `account_id` nas entidades operacionais | ⬜ Pendente | Backfill seguro e índices por conta para clientes, tasks, projetos, financeiro, arquivos etc. |
 | B1.2 — isolamento backend, APIs e realtime | ⬜ Pendente | Filtrar e autorizar cada request/worker/arquivo/canal; testes cruzados entre empresas |
 | B1.2 — restrições de recursos do SaaS | ⬜ Pendente | Desabilitar IA e calendários Google integrados para assinantes no servidor; manter disparos de automação |
@@ -18,6 +18,8 @@
 | Blocos 4/5 — planos, licenças avulsas, Asaas | ⬜ Futuro | Não incluídos no Bloco 1 |
 
 **Arquivos B1.1:** `database/migrations/031_saas_accounts_foundation.sql`, `database/schema.sql`, `app/SaasFoundationMigration.php`, `app/AccountContext.php`, `bin/migrate-saas-foundation.php`, `tests/saas-foundation.php`, `.github/workflows/deploy.yml`, `docs/saas-b1.md`.
+
+**Testes:** [GitHub Actions #39030497373](https://github.com/vitoryvensreis/task/actions/runs/39030497373) — validação de código, MySQL 8 e MariaDB 10.11 aprovados; deploy na VPS **ignorado** no PR. PR permanece em rascunho para impedir aprovação precoce.
 
 **Ponto exato onde paramos:** implementar **B1.2 (vínculo de `account_id` nas tabelas operacionais e isolamento rigoroso das queries)**. B1.1 NÃO significa que o sistema já possa atender duas empresas. O schema operacional continua **30**, sem recriar o schema **20** removido. O comando de migração só roda manualmente após backup validado e não foi adicionado ao deploy automático.
 

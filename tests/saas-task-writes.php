@@ -36,7 +36,12 @@ try{
  $account=(int)SaasFoundationMigration::apply()['account_id'];
  taskCheck(SaasDomainMigration::apply()['domain_version']===2,'Missing domain migration.');
  taskCheck(SaasChildMigration::apply()['children_version']===3,'Missing child migration.');
+ taskCheck(SaasOutboxMigration::issues()===[],'Fresh SaaS outbox schema must be valid.');
+ $db->exec('DROP TABLE saas_event_outbox');
+ taskCheck(SaasOutboxMigration::issues()===['missing_saas_event_outbox'],'Missing isolated event table must be detected.');
  taskCheck(SaasOutboxMigration::apply()['outbox_version']===4,'Missing isolated event outbox migration.');
+ taskCheck(SaasOutboxMigration::issues()===[],'SaaS outbox migration must create correct schema.');
+ taskCheck(SaasOutboxMigration::apply()['publisher_enabled']===false,'Migration must remain idempotent and inert.');
  $accountB=DB::insert('accounts',['slug'=>'ci-foreign','name'=>'Other company','account_type'=>'customer','status'=>'active','created_at'=>now(),'updated_at'=>now()]);
  DB::run('DELETE FROM account_members WHERE account_id=? AND user_id=?',[$account,$outsider]);
  DB::insert('account_members',['account_id'=>$accountB,'user_id'=>$outsider,'membership_role'=>'owner','status'=>'active','joined_at'=>now()]);
@@ -78,6 +83,13 @@ try{
  taskCheck((int)$stored['tenant_account_id']===$account&&(int)$stored['assigned_to']===$staff
    &&(int)$stored['created_by']===$admin&&$stored['whatsapp_recipient_mode']==='none'
    &&(int)$stored['amount_cents']===0,'Task created with forbidden attributes.');
+ // Transactional idempotence: repeating the identical event must reuse the row.
+ $sameId=DB::tx(fn()=>SaasEventOutbox::task($account,$id,1,'demand.created',$admin));
+ taskCheck($sameId>0&&(int)DB::one('SELECT COUNT(*) n FROM saas_event_outbox WHERE tenant_account_id=?',[$account])['n']===1,
+  'Idempotent retry of an identical event must not create a second row.');
+ $outsideRejected=false;
+ try{SaasEventOutbox::task($account,$id,1,'demand.created',$admin);}catch(LogicException){$outsideRejected=true;}
+ taskCheck($outsideRejected,'Event write outside the shared transaction must be forbidden.');
  taskCheck((int)DB::one('SELECT COUNT(*) n FROM transitions WHERE demand_id=? AND tenant_account_id=?',[$id,$account])['n']===1,
   'Initial transition must be owned and atomic.');
  taskCheck((int)DB::one('SELECT COUNT(*) n FROM notifications')['n']===0
@@ -131,8 +143,28 @@ try{
  DB::insert('files',['tenant_account_id'=>$account,'demand_id'=>$fileId,'author_id'=>$admin,
   'label'=>'File','created_at'=>now()]);
  taskDenied(fn()=>SaasTaskWriteApi::archive(['id'=>$fileId,'version'=>1]),409,'Task with files archived.');
+ // Failed mutations roll back both business records and staged outbox rows.
+ $prior=(int)DB::one('SELECT COUNT(*) n FROM saas_event_outbox')['n'];
+ $rolled=false;
+ try{DB::tx(function()use($base){
+   SaasTaskWriteApi::save(array_merge($base,['title'=>'Rolled back task']));
+   throw new RuntimeException('intentional_rollback');
+  });}catch(RuntimeException $e){$rolled=$e->getMessage()==='intentional_rollback';}
+ taskCheck($rolled,'Rollback fixture must throw.');
+ taskCheck((int)DB::one('SELECT COUNT(*) n FROM saas_event_outbox')['n']===$prior,
+  'Business transaction rollback must remove the corresponding SaaS event.');
+ taskCheck(!DB::one('SELECT id FROM demands WHERE title=?',['Rolled back task']),
+  'Rollback must also remove the newly created task.');
  taskCheck((int)DB::one('SELECT COUNT(*) n FROM saas_event_outbox WHERE tenant_account_id=?',[$account])['n']===6,
   'Each successful task mutation must stage exactly one isolated tenant event.');
+ $staged=SaasEventOutbox::preview(50);
+ taskCheck(count($staged)===6,'Authenticated owner must see only own staged events.');
+ foreach($staged as $ev) {
+  taskCheck((int)$ev['tenant_account_id']===$account&&$ev['published_at']===null&&(int)$ev['attempts']===0,
+   'Staged events must never be automatically claimed or published.');
+  taskCheck(!str_contains((string)$ev['payload_json'],'Record in studio'),
+   'Brief or private text must not be stored in staged event payloads.');
+ }
  taskCheck((int)DB::one('SELECT COUNT(*) n FROM event_outbox')['n']===0,
   'No staged SaaS event may leak into the legacy outbox.');
  taskCheck((int)DB::one("SELECT COUNT(*) n FROM audit_log WHERE entity='demand' AND action LIKE 'saas.%'")['n']===6,

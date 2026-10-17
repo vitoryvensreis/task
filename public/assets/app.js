@@ -92,9 +92,9 @@
     document.querySelectorAll('[data-push-test]').forEach(b=>b.onclick=()=>testPush(b));
     await updatePushControls();
   }
-    const ROUTES={dashboard:'dashboard',kanban:'kanban',demands:'tasks',agenda:'agenda',clients:'clientes',services:'servicos',finance:'financeiro',reports:'relatorios',automations:'automacoes',logs:'saude-logs','ai-monitor':'monitoramento-ia',settings:'configuracoes'};
+    const ROUTES={dashboard:'dashboard',kanban:'kanban',demands:'tasks',agenda:'agenda',clients:'clientes',contacts:'contatos',services:'servicos',finance:'financeiro',reports:'relatorios',automations:'automacoes',logs:'saude-logs','ai-monitor':'monitoramento-ia',settings:'configuracoes'};
   const ROUTE_PAGES=Object.fromEntries(Object.entries(ROUTES).map(([k,v])=>[v,k]));
-  function readRoute(){let path=location.pathname;if(BASE&&path.startsWith(BASE))path=path.slice(BASE.length);path=path.replace(/^\/+|\/+$/g,'');const parts=path.split('/').filter(Boolean);let page=ROUTE_PAGES[parts[0]]||'';let taskId=0;if(parts[0]==='kanban'&&parts[1]==='task'&&/^\d+$/.test(parts[2]||'')){page='kanban';taskId=Number(parts[2])}if(!page&&location.hash){const legacy=location.hash.replace(/^#/,'').split('/');page=['dashboard','kanban','demands','agenda','clients','services','finance','reports','automations','logs','ai-monitor','settings'].includes(legacy[0])?legacy[0]:'';if(legacy[0]==='demands'&&/^\d+$/.test(legacy[1]||'')){page='kanban';taskId=Number(legacy[1])}}return {page:page||'dashboard',taskId}}
+  function readRoute(){let path=location.pathname;if(BASE&&path.startsWith(BASE))path=path.slice(BASE.length);path=path.replace(/^\/+|\/+$/g,'');const parts=path.split('/').filter(Boolean);let page=ROUTE_PAGES[parts[0]]||'';let taskId=0;if(parts[0]==='kanban'&&parts[1]==='task'&&/^\d+$/.test(parts[2]||'')){page='kanban';taskId=Number(parts[2])}if(!page&&location.hash){const legacy=location.hash.replace(/^#/,'').split('/');page=['dashboard','kanban','demands','agenda','clients','contacts','services','finance','reports','automations','logs','ai-monitor','settings'].includes(legacy[0])?legacy[0]:'';if(legacy[0]==='demands'&&/^\d+$/.test(legacy[1]||'')){page='kanban';taskId=Number(legacy[1])}}return {page:page||'dashboard',taskId}}
   const initialRoute=readRoute();
   const S={user:null,meta:null,csrf:'',page:initialRoute.page,pendingTaskId:initialRoute.taskId,demands:[],dashboard:null,timer:null,chatPeerId:0,chatContacts:[],chatUnread:0,chatOpen:false};
   const realtimeOwnedChannels=new Set(),realtimeSeen=new Map(),realtimePending=new Map();
@@ -824,6 +824,7 @@
       ...(staff?[['agenda','calendar-days','Agenda','◷']]:[]),
       ...(admin?[
         ['clients','users','Clientes','♙'],
+        ['contacts','users','Contatos','☏'],
         ['services','briefcase','Serviços','✦'],
         ['finance','wallet','Financeiro','R$'],
         ['reports','chart-bar','Relatórios','▤'],
@@ -847,7 +848,7 @@
   document.addEventListener('click',e=>{if(!e.target.closest('.notification-shell'))closeNotifications()});
   document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeNotifications();closeAdminChat()}});
   $('#logout').onclick=async()=>{try{await api('auth.logout',{},'POST',false)}finally{showLogin()}};$('#preview-exit').onclick=async()=>{try{showPageLoader();await api('preview.stop',{},'POST');location.href=routeUrl('dashboard')}catch(x){hidePageLoader();toast(x.message,true)}};$('#menu').onclick=()=>{const open=!$('.sidebar').classList.contains('open');$('.sidebar').classList.toggle('open',open);document.body.classList.toggle('nav-open',open)};$('#nav-backdrop')?.addEventListener('click',closeMobileNav);$('#new-demand').onclick=()=>openDemand();
-  async function go(page,push=false,visualLoad=false,preserveView=null){const previousPage=S.page;if(previousPage==='automations'&&page!=='automations'&&automationEditorState?.dirty&&!confirm('Você tem alterações não salvas nesta automação. Deseja descartá-las?'))return;const keepView=preserveView===null?(page===previousPage&&!push):!!preserveView,viewState=keepView?captureViewState():null;if(page==='agenda'&&previousPage!=='agenda'){window.taskescAgendaView=window.matchMedia&&window.matchMedia('(max-width:760px)').matches?'day':'week';window.taskescAgendaDate=null}if(visualLoad)showPageLoader();if(push&&page!==S.page)history.pushState({},'',routeUrl(page));S.page=page;syncRealtimeChannels();closeNotifications();document.body.classList.toggle('kanban-page',page==='kanban');document.querySelectorAll('.nav-btn').forEach(b=>{const active=b.dataset.page===page;b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});const names={dashboard:['VISÃO GERAL','Dashboard'],kanban:['PRODUÇÃO','Kanban'],demands:['PRODUÇÃO','Tasks'],agenda:['PLANEJAMENTO','Agenda'],clients:['RELACIONAMENTO','Clientes'],services:['PRODUÇÃO','Serviços'],finance:['COMERCIAL','Financeiro'],reports:['INDICADORES','Relatórios'],automations:['AUTOMAÇÃO','Automações'],logs:['SISTEMA','Saúde & Logs'],'ai-monitor':['INTELIGÊNCIA','Monitoramento IA'],settings:['SISTEMA','Configurações']};if(page==='settings'&&S.user.role!=='admin')names.settings=['CONTA','Minha conta'];$('#page-kicker').textContent=names[page]?.[0]||'';$('#page-title').textContent=names[page]?.[1]||page;closeMobileNav();try{await (({dashboard:renderDashboard,kanban:renderKanban,demands:renderDemandList,agenda:renderAgenda,clients:renderClients,services:renderServices,finance:renderFinance,reports:renderReports,automations:renderAutomations,logs:renderSystemLogs,'ai-monitor':renderAiMonitor,settings:renderSettings}[page]||renderDashboard)());if(page==='kanban'&&S.pendingTaskId){const id=S.pendingTaskId;S.pendingTaskId=0;await openDemand(id)}}catch(e){toast(e.message,true);$('#content').innerHTML=`<div class="empty">${esc(e.message)}</div>`}finally{if(viewState)restoreViewState(viewState);else if(page!==previousPage)requestAnimationFrame(()=>window.scrollTo({left:0,top:0,behavior:'auto'}));if(page==='kanban'&&page!==previousPage)requestAnimationFrame(()=>requestAnimationFrame(()=>{const board=$('.kanban');if(board)board.scrollLeft=0}));if(visualLoad)hidePageLoader()}}
+  async function go(page,push=false,visualLoad=false,preserveView=null){const previousPage=S.page;if(previousPage==='automations'&&page!=='automations'&&automationEditorState?.dirty&&!confirm('Você tem alterações não salvas nesta automação. Deseja descartá-las?'))return;const keepView=preserveView===null?(page===previousPage&&!push):!!preserveView,viewState=keepView?captureViewState():null;if(page==='agenda'&&previousPage!=='agenda'){window.taskescAgendaView=window.matchMedia&&window.matchMedia('(max-width:760px)').matches?'day':'week';window.taskescAgendaDate=null}if(visualLoad)showPageLoader();if(push&&page!==S.page)history.pushState({},'',routeUrl(page));S.page=page;syncRealtimeChannels();closeNotifications();document.body.classList.toggle('kanban-page',page==='kanban');document.querySelectorAll('.nav-btn').forEach(b=>{const active=b.dataset.page===page;b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});const names={dashboard:['VISÃO GERAL','Dashboard'],kanban:['PRODUÇÃO','Kanban'],demands:['PRODUÇÃO','Tasks'],agenda:['PLANEJAMENTO','Agenda'],clients:['RELACIONAMENTO','Clientes'],contacts:['RELACIONAMENTO','Contatos'],services:['PRODUÇÃO','Serviços'],finance:['COMERCIAL','Financeiro'],reports:['INDICADORES','Relatórios'],automations:['AUTOMAÇÃO','Automações'],logs:['SISTEMA','Saúde & Logs'],'ai-monitor':['INTELIGÊNCIA','Monitoramento IA'],settings:['SISTEMA','Configurações']};if(page==='settings'&&S.user.role!=='admin')names.settings=['CONTA','Minha conta'];$('#page-kicker').textContent=names[page]?.[0]||'';$('#page-title').textContent=names[page]?.[1]||page;closeMobileNav();try{await (({dashboard:renderDashboard,kanban:renderKanban,demands:renderDemandList,agenda:renderAgenda,clients:renderClients,contacts:renderContacts,services:renderServices,finance:renderFinance,reports:renderReports,automations:renderAutomations,logs:renderSystemLogs,'ai-monitor':renderAiMonitor,settings:renderSettings}[page]||renderDashboard)());if(page==='kanban'&&S.pendingTaskId){const id=S.pendingTaskId;S.pendingTaskId=0;await openDemand(id)}}catch(e){toast(e.message,true);$('#content').innerHTML=`<div class="empty">${esc(e.message)}</div>`}finally{if(viewState)restoreViewState(viewState);else if(page!==previousPage)requestAnimationFrame(()=>window.scrollTo({left:0,top:0,behavior:'auto'}));if(page==='kanban'&&page!==previousPage)requestAnimationFrame(()=>requestAnimationFrame(()=>{const board=$('.kanban');if(board)board.scrollLeft=0}));if(visualLoad)hidePageLoader()}}
   function refresh(){return go(S.page,false,false,true)};
   window.addEventListener('popstate',()=>{const r=readRoute();S.pendingTaskId=r.taskId;go(r.page,false,true)});
   function dashboardDelta(current,previous){current=Number(current||0);previous=Number(previous||0);if(previous===0)return current===0?{text:'0%',cls:'neutral'}:{text:'+100%',cls:'positive'};const pct=Math.round(((current-previous)/previous)*100);return {text:(pct>0?'+':'')+pct+'%',cls:pct>0?'positive':pct<0?'negative':'neutral'}}
@@ -1094,6 +1095,70 @@
     const html=`<div class="modal-backdrop"><div class="modal compact"><div class="modal-head"><div><span class="eyebrow">DESATIVAR</span><h3>Desativar serviço</h3><div class="help">O serviço deixará de aparecer nas novas tasks.</div></div><button type="button" class="close" data-close><span class="icon-slot"><i data-lucide="x" class="ui-icon" aria-hidden="true"></i><span class="icon-fallback" aria-hidden="true">×</span></span></button></div><div class="notice"><b>${esc(service.name)}</b><br>${count} task(s) atualmente vinculada(s).</div><div class="field-help">As tasks existentes continuam com este serviço no histórico. Nada será apagado.</div><div class="form-actions"><button type="button" class="ghost" data-close>Cancelar</button><button type="button" class="danger" id="confirm-service-delete">Desativar serviço</button></div></div></div>`;
     $('#modal-root').innerHTML=html;$$('[data-close]').forEach(x=>x.onclick=closeModal);
     $('#confirm-service-delete').onclick=async()=>{const btn=$('#confirm-service-delete');btn.disabled=true;btn.textContent='Desativando…';try{await api('services.delete',{id:Number(service.id)},'POST');S.meta=await api('meta');toast('Serviço desativado');closeModal();stableRender(renderServices)}catch(x){toast(x.message,true);btn.disabled=false;btn.textContent='Desativar serviço'}};
+  }
+
+
+  const contactsDirectory={q:'',page:1};
+  const contactPhoneLabel=value=>{
+    const digits=String(value||'').replace(/\D/g,'');
+    if(digits.length===13&&digits.startsWith('55'))return '+55 ('+digits.slice(2,4)+') '+digits.slice(4,9)+'-'+digits.slice(9);
+    if(digits.length===12&&digits.startsWith('55'))return '+55 ('+digits.slice(2,4)+') '+digits.slice(4,8)+'-'+digits.slice(8);
+    return '+'+digits;
+  };
+  function openContactEditor(contact=null){
+    if(S.user?.role!=='admin')return;
+    const editing=!!contact?.id;
+    $('#modal-root').innerHTML=`<div class="modal-backdrop contacts-backdrop"><div class="modal compact contacts-edit-modal" role="dialog" aria-modal="true" aria-labelledby="contacts-editor-title"><div class="modal-head"><div><h3 id="contacts-editor-title">${editing?'Editar contato':'Novo contato'}</h3><div class="help">Agenda de WhatsApp compartilhada entre as tasks.</div></div><button type="button" class="close" data-contact-close aria-label="Fechar">${icon('x','×')}</button></div><form id="contacts-editor-form" class="contacts-editor-form"><div class="field"><label for="contacts-edit-name">Nome do contato <em>*</em></label><input class="input" id="contacts-edit-name" name="name" maxlength="190" autocomplete="name" value="${esc(contact?.name||'')}" placeholder="Ex.: Augusto Silva" required></div><div class="field"><label for="contacts-edit-phone">WhatsApp (DDI + DDD) <em>*</em></label><input class="input" id="contacts-edit-phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="25" value="${esc(contact?.phone||'')}" placeholder="+55 85 99999-9999" required><small class="field-help">Um número só pode pertencer a um contato na agenda.</small></div><div class="form-actions"><button type="button" class="ghost" data-contact-close>Cancelar</button><button type="submit" class="primary" id="contacts-editor-save">${icon('save','✓')} ${editing?'Salvar alterações':'Adicionar contato'}</button></div></form></div></div>`;
+    const root=$('#modal-root'),close=()=>closeModal();
+    root.querySelectorAll('[data-contact-close]').forEach(b=>b.addEventListener('click',close));
+    root.querySelector('.contacts-backdrop')?.addEventListener('click',event=>{if(event.target===event.currentTarget)close()});
+    const form=$('#contacts-editor-form');
+    form.onsubmit=async event=>{
+      event.preventDefault();if(form.dataset.busy==='1')return;
+      const name=String(form.elements.name.value||'').trim(),phone=String(form.elements.phone.value||'').trim();
+      if(!name||!phone){toast('Preencha nome e WhatsApp.',true);return}
+      const saveBtn=$('#contacts-editor-save');form.dataset.busy='1';saveBtn.disabled=true;
+      try{
+        await api('whatsapp_contacts.save',{id:Number(contact?.id||0),name,phone},'POST');
+        toast(editing?'Contato atualizado':'Contato adicionado à agenda');close();await renderContacts();
+      }catch(error){toast(error.message,true);form.dataset.busy='0';saveBtn.disabled=false}
+    };
+    paintIcons();$('#contacts-edit-name')?.focus();
+  }
+  async function renderContacts(){
+    if(S.user.role!=='admin')throw new Error('Acesso restrito ao administrador.');
+    $('#content').innerHTML=`<div class="contacts-directory"><div class="section-title contacts-directory-head"><div><span class="eyebrow">AGENDA DE WHATSAPP</span><h3>Contatos</h3><div class="panel-sub">Gerencie os destinatários e reutilize os contatos ao configurar o WhatsApp das tasks.</div></div><button type="button" class="primary" id="contacts-new">${icon('plus','+')} Adicionar contato</button></div><section class="panel contacts-directory-panel"><div class="contacts-directory-toolbar"><div class="search-box contacts-directory-search"><span>${icon('search','⌕')}</span><input id="contacts-query" class="input" type="search" autocomplete="off" value="${esc(contactsDirectory.q)}" placeholder="Pesquisar nome ou WhatsApp" aria-label="Pesquisar contatos"></div><small id="contacts-total" aria-live="polite">Carregando…</small></div><div id="contacts-directory-list" aria-live="polite"><div class="empty slim">Carregando contatos…</div></div><div class="contacts-directory-pager" id="contacts-directory-pager"></div></section><p class="contacts-directory-hint">${icon('shield-check','✓')} Excluir um contato da agenda não altera números já salvos nas tasks.</p></div>`;
+    $('#contacts-new').onclick=()=>openContactEditor();
+    const list=$('#contacts-directory-list'),total=$('#contacts-total'),pager=$('#contacts-directory-pager');
+    let sequence=0,searchTimer=0;
+    const load=async()=>{
+      const current=++sequence;
+      try{
+        const data=await api('whatsapp_contacts.list',{paginate:1,q:contactsDirectory.q,page:contactsDirectory.page,per_page:20});
+        if(current!==sequence||S.page!=='contacts'||!list.isConnected)return;
+        const rows=data.rows||[],pg=data.pagination||{total:rows.length,page:1,pages:1};
+        contactsDirectory.page=Number(pg.page||1);
+        total.textContent=Number(pg.total||0)+' contato(s) encontrado(s)';
+        list.innerHTML=rows.length?`<div class="contacts-directory-table-wrap"><table class="table contacts-directory-table"><thead><tr><th>Nome</th><th>WhatsApp</th><th class="contacts-actions-head">Ações</th></tr></thead><tbody>${rows.map(c=>`<tr><td><span class="contacts-name-cell"><span class="contacts-avatar">${icon('users','•')}</span><strong>${esc(c.name)}</strong></span></td><td><span class="contacts-phone">${esc(contactPhoneLabel(c.phone))}</span></td><td><div class="contacts-row-actions"><button type="button" class="mini-btn" data-contact-edit="${Number(c.id)}" aria-label="Editar ${esc(c.name)}">${icon('pencil','✎')} Editar</button><button type="button" class="mini-btn contacts-delete-btn" data-contact-delete="${Number(c.id)}" aria-label="Excluir ${esc(c.name)}">${icon('trash-2','×')} Excluir</button></div></td></tr>`).join('')}</tbody></table></div>`:`<div class="empty slim">${contactsDirectory.q?'Nenhum contato encontrado para esta busca.':'Sua agenda ainda está vazia. Clique em Adicionar contato para começar.'}</div>`;
+        pager.innerHTML=pg.pages>1?`<span>Página ${Number(pg.page)} de ${Number(pg.pages)}</span><div><button type="button" class="ghost" id="contacts-prev" ${pg.page<=1?'disabled':''}>${icon('chevron-left','‹')} Anterior</button><button type="button" class="ghost" id="contacts-next" ${pg.page>=pg.pages?'disabled':''}>Próxima ${icon('chevron-right','›')}</button></div>`:'';
+        list.querySelectorAll('[data-contact-edit]').forEach(button=>button.onclick=()=>openContactEditor(rows.find(c=>Number(c.id)===Number(button.dataset.contactEdit))));
+        list.querySelectorAll('[data-contact-delete]').forEach(button=>button.onclick=async()=>{
+          const c=rows.find(x=>Number(x.id)===Number(button.dataset.contactDelete));if(!c)return;
+          if(!confirm('Excluir "'+c.name+'" da agenda?\\n\\nO WhatsApp já gravado nas tasks não será alterado.'))return;
+          button.disabled=true;
+          try{await api('whatsapp_contacts.delete',{id:Number(c.id)},'POST');toast('Contato excluído da agenda');await load()}
+          catch(error){toast(error.message,true);button.disabled=false}
+        });
+        $('#contacts-prev')?.addEventListener('click',()=>{contactsDirectory.page=Math.max(1,contactsDirectory.page-1);load()});
+        $('#contacts-next')?.addEventListener('click',()=>{contactsDirectory.page=Math.min(Number(pg.pages),contactsDirectory.page+1);load()});
+        paintIcons();
+      }catch(error){if(current!==sequence||S.page!=='contacts')return;list.innerHTML='<div class="empty slim">Não foi possível carregar a agenda.</div>';total.textContent='';pager.innerHTML='';toast(error.message,true)}
+    };
+    $('#contacts-query').addEventListener('input',event=>{
+      contactsDirectory.q=event.target.value;contactsDirectory.page=1;
+      clearTimeout(searchTimer);searchTimer=setTimeout(load,250);
+    });
+    await load();paintIcons();
   }
 
   async function renderClients(){

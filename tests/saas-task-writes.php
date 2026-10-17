@@ -37,12 +37,12 @@ try{
  taskCheck(SaasDomainMigration::apply()['domain_version']===2,'Missing domain migration.');
  taskCheck(SaasChildMigration::apply()['children_version']===3,'Missing child migration.');
  taskCheck(SaasOutboxMigration::issues()===[],'Fresh SaaS outbox schema must be valid.');
+ $db->exec('DROP TABLE saas_event_receipts');
  $db->exec('DROP TABLE saas_event_outbox');
  taskCheck(SaasOutboxMigration::issues()===['missing_saas_event_outbox'],'Missing isolated event table must be detected.');
  taskCheck(SaasOutboxMigration::apply()['outbox_version']===4,'Missing isolated event outbox migration.');
  taskCheck(SaasOutboxMigration::issues()===[],'SaaS outbox migration must create correct schema.');
  taskCheck(SaasOutboxMigration::apply()['publishers_enabled']===false,'Migration must remain idempotent and inert.');
- $db->exec('DROP TABLE saas_event_receipts');
  taskCheck(SaasReceiptMigration::issues()===['missing_saas_event_receipts'],'Missing staged receipt table must be detected.');
  taskCheck(SaasReceiptMigration::apply()['receipts_version']===5,'Staged receipt migration must complete before another account exists.');
  taskCheck(SaasReceiptMigration::issues()===[],'Receipt schema must have tenant/unique keys and FKs.');

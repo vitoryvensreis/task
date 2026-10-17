@@ -250,6 +250,27 @@ Criar autorização completa de canais/destinatários, credenciais por tenant, w
 4. Testar separação A/B inclusive nos dispositivos/assinaturas, destinatários, notificações, credenciais, tokens, canais realtime e banco de arquivos. Escotilha mantém IA e Google Agenda integrados exclusivamente na conta interna; clientes SaaS recebem automações de disparo somente após autorização end-to-end.
 5. Homologação B1.3 e somente depois rollout/Bloco 2 RBAC e monetização.
 
+## B1.2c-2b.2b.2b.2b.1 — Entrega interna em banco com isolamento por empresa
+
+**Implementado na branch do PR #113, testes PHP/JS + MySQL 8 + MariaDB 10.11 aprovados. Não implantado.**
+
+- [x] `database/migrations/036_saas_internal_inbox.sql` + `database/schema.sql`: `saas_internal_inbox` com empresa/job/destinatário obrigatórios, `UNIQUE(tenant_account_id,delivery_job_id,recipient_user_id)`, FK e índices por empresa/usuário/entidade.
+- [x] `app/SaasInternalInboxMigration.php`: exige schema operacional 30, migrações SaaS 1–7 aplicadas, única conta interna e flags multiempresa/desbloqueio desligadas. Marcador `settings.saas_internal_inbox_version=8`. CLI manual `bin/migrate-saas-inbox.php` condicionada a dump+manifesto SHA256 já validado, não ligado a deploy automático.
+- [x] `app/SaasInternalInbox.php`: `stage(accountId,jobId)` cria entradas idempotentes com transação, restrição da empresa e roteamento via `SaasDeliveryRouting`. Não entrega a outros provedores, nem modifica `published_at`, status da outbox ou `notifications` legado. **Sem cron ativo.**
+- [x] `forCurrentUser(limit)` e rota `saas.inbox`: só retorna ID do item, tipo de evento, entidade e data do usuário da própria sessão, refazendo validação de `account_members.status`, papel do usuário e vínculo `user_clients` quando funcionário. Retirada de acesso oculta entradas anteriores.
+- [x] `tests/saas-task-writes.php`: testes de migração, idempotência, contas A/B, revogação de vínculo, remoção da relação com cliente, impossibilidade de leitura por outra empresa, sem publicação/WhatsApp. Fixture B1.1 limpa FKs em ordem segura. `.github/workflows/deploy.yml` agora exige `github.ref=='refs/heads/main'` para deploy de produção, inclusive dispatch manual.
+
+### Pedido de VPS — o que pode ser feito agora
+
+O **deploy na VPS ainda não foi executado**. O GitHub possui um workflow que acessa a VPS usando secrets, porém ele atualiza diretamente o diretório e workers de produção e não pode ser disparado na branch WIP. Nenhuma sessão SSH remota foi executada por estas ferramentas. Não há confirmação de um subdomínio/vhost, banco de homologação ou configurações segregadas. Por segurança, não foi feito merge em `main`, migração no banco ativo ou reinício de serviços.
+
+- [x] Criado `ops/saas-stage-code-only.sh` para preparar em servidor um release **somente de código** num diretório de staging previamente autorizado com arquivo `.taskesc-saas-staging-allow`, fora da produção; sem DB/vhost/cron/serviço ou migração.
+- [x] Publicado [guia completo para homologação segregada](saas-vps-homologacao.md).
+- [ ] Executar o script por SSH autorizado na VPS, após confirmar separação de diretórios e validar o acesso ao servidor. Antes de tornar a homologação navegável: criar DB e credenciais próprias, domínio/vhost de teste, backup/rollback e desligar quaisquer e-mails, WhatsApp, realtime e workers.
+- [ ] Aplicar migrações 031–036 **somente na base separada**, validar isolamento A/B, saúde das rotas e preservação de produção.
+
+**Próxima retomada:** B1.2c-2b.2b.2b.2b.2 — ligar uma fila interna somente após autenticação/escopo completo em cada operação, implementar consumidores reais por canal e logs por tenant, idempotência externa e conciliação, depois proteger módulos legados (arquivos/chat/financeiro/IA/Google exclusivo interno) e homologar B1.3. Não confundir caixa interna persistida com evento enviado em tempo real.
+
 ## Pendente — B1.2: propagação e isolamento por conta
 
 - [ ] Completar `tenant_account_id` (B1.2a cobre 15 raízes, demais tabelas e consultas pendentes), priorizar `clients`, `users`/vínculos, `demands`, `projects`, `stages`, `categories`, `contracts`, `invoices`, `payments`, `expenses`, `files`, `templates`, `automations`, `automation_runs`, `event_outbox`, `whatsapp_contacts`, mensagens/chat, agendas, Google, tokens e logs. O inventário precisa ser completado por relacionamento.

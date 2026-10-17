@@ -137,6 +137,33 @@ php bin/migrate-saas-children.php --apply --backup-manifest=/CAMINHO/VALIDADO/ma
 
 **Retomada exata:** B1.2c-2b.1 testado e aprovado; continuar **B1.2c-2b.2** com isolamento da Outbox/eventos, fila de WhatsApp, cron/workers, notificações e realtime; depois CRUD legado por tenant, uploads/downloads e demais tabelas/logs. Revisar concorrência e índices únicos por empresa e FKs compostas antes de B1.3.
 
+## B1.2c-2b.2a — Outbox transacional com ownership (em homologação, SEM publicação)
+
+**Objetivo:** garantir que a mutação de uma task e seu evento persistam atomicamente, associados à empresa correta, **sem expor eventos ao trabalhador legado que consome `event_outbox` globalmente.** Arquitetura deliberada: duas filas independentes durante a transição.
+
+### Implementação nesta etapa
+- [x] `database/migrations/032_saas_event_outbox.sql` e `database/schema.sql`: nova `saas_event_outbox` com `tenant_account_id NOT NULL`, FK de conta/ator, chave única tenant + event_key, payload JSON, data disponível, tentativas e índices adequados para inspeção futura por empresa. O código histórico do SaaS schema 20 continua removido.
+- [x] `app/SaasOutboxMigration.php` aplica DDL de forma idempotente com MySQL advisory lock. Requer schema operacional 30, marcadores B1.1=1, B1.2a=2, B1.2b=3, única conta interna, flags `saas.external_signup_enabled=0` e `saas.multi_account_enabled=0`. Inspeciona tipos, índices e FKs. **Não altera `settings.schema_version`**, usa `settings.saas_outbox_version=4`.
+- [x] `bin/migrate-saas-outbox.php`: CLI exclusivamente manual com `--dry-run` / `--apply`, manifesto e dump de backup íntegro SHA256; **não** incluído no deploy automático.
+- [x] `app/SaasEventOutbox.php`: staging de eventos `demand.created`, `demand.updated`, `demand.stage_changed`, `demand.archived` dentro da transação MySQL existente; valida `Auth::$actor`, vínculo com conta, tipo permitido, proprietário e versão atual da task. Identificação idempotente SHA256 por empresa/evento/task/versão, hash que identifica conflito; só copia metadados de IDs e etapas do servidor (nenhum briefing, número de WhatsApp, dados financeiros, URLs ou chaves).
+- [x] `app/SaasTaskWriteApi.php`: criação, edição, movimentação e arquivamento chamam a nova fila **antes do commit**. Se o evento falhar, também falha/rollback a alteração da task. Histórico `transitions` segue no mesmo escopo.
+- [x] `tests/saas-task-writes.php`: migração em banco legado simulado (retirada da tabela staging no banco de teste), reexecução idempotente, duplicata do mesmo evento sem duplicação, rollback de negócio+evento, contagem por tenant, bloqueio de publisher, filtro de payload sensível e confirmação de que `event_outbox` legado não recebeu eventos.
+- [x] `tests/saas-foundation.php`: ao simular banco anterior ao B1, remove primeiro `saas_event_outbox`, respeitando a FK account introduzida na instalação limpa.
+
+### Bloqueio intencional de efeitos externos
+
+`saas_event_outbox` **não é consumida por nenhum worker existente.** `AutomationWorker` ainda faz busca global em `automations` e `event_outbox`. `RealtimeOutboxWorker`, notificações, WhatsApp, push e Centrifugo ainda não verificam completamente tenant ownership. Publicar ou consumir os novos eventos nesses workers seria inseguro. Portanto, **nenhum disparo, broadcast ou automação é feito por esta etapa**. O valor entregue é a infraestrutura de evento durável e transacional, para liberar consumidores isolados mais tarde.
+
+### Ponto de retomada — B1.2c-2b.2b
+
+1. Confirmar CI de B1.2c-2b.2a MySQL 8 + MariaDB 10.11 e atualizar README/diário com a execução aprovada.
+2. Migrar ownership e dependências restantes de `audit_log`, `notifications`, `push_delivery_log`, `whatsapp_messages`, `chat_*`, logs de worker e tokens; validar orfandade e FKs.
+3. Desenvolver **consumidores novos e separados**, obrigando `tenant_account_id` também nas consultas de automações, runs, envio, templates de conteúdo, destinatários e canais de realtime. Não encaminhar eventos SaaS aos workers antigos.
+4. Testar empresas A/B com URLs, canais, subscribers, credenciais, tentativa de replay e eventos atrasados; atestar ausência de mensagens ou arquivos cruzados. Implementar política segura de retry/idempotência.
+5. Somente após a separação funcional, conectar o Kanban/CRUD do SaaS ao fluxo isolado e executar B1.3. Manter o TaskEsc legado em pleno funcionamento.
+
+**Regra principal:** não mesclar esta branch, habilitar outra empresa ou executar migração na VPS antes de terminar isolamento/CI e preparar rollback testado.
+
 ## Pendente — B1.2: propagação e isolamento por conta
 
 - [ ] Completar `tenant_account_id` (B1.2a cobre 15 raízes, demais tabelas e consultas pendentes), priorizar `clients`, `users`/vínculos, `demands`, `projects`, `stages`, `categories`, `contracts`, `invoices`, `payments`, `expenses`, `files`, `templates`, `automations`, `automation_runs`, `event_outbox`, `whatsapp_contacts`, mensagens/chat, agendas, Google, tokens e logs. O inventário precisa ser completado por relacionamento.

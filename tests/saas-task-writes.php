@@ -37,6 +37,7 @@ try{
  taskCheck(SaasDomainMigration::apply()['domain_version']===2,'Missing domain migration.');
  taskCheck(SaasChildMigration::apply()['children_version']===3,'Missing child migration.');
  taskCheck(SaasOutboxMigration::issues()===[],'Fresh SaaS outbox schema must be valid.');
+ $db->exec('DROP TABLE saas_channel_secrets');
  $db->exec('DROP TABLE saas_delivery_jobs');
  $db->exec('DROP TABLE saas_event_receipts');
  $db->exec('DROP TABLE saas_event_outbox');
@@ -52,6 +53,12 @@ try{
  taskCheck(SaasDeliveryMigration::apply()['delivery_version']===6,'Delivery migration must apply before new accounts exist.');
  taskCheck(SaasDeliveryMigration::issues()===[],'Delivery table and its tenant FK/indexes must be valid.');
  taskCheck(SaasDeliveryMigration::apply()['external_delivery_enabled']===false,'Repeated migration must remain idempotent and inert.');
+ // Stage a new migration on disposable SQL, preserving the legacy schema marker.
+ taskCheck(SaasChannelMigration::issues()===['missing_saas_channel_secrets'],'Missing vault table must be detected.');
+ taskCheck(SaasChannelMigration::apply()['vault_version']===7,'Vault migration must apply before extra accounts exist.');
+ taskCheck(SaasChannelMigration::issues()===[],'Vault schema/indexes/FKs must validate.');
+ taskCheck(SaasChannelMigration::apply()['live_transports_enabled']===false,'Vault migration must remain disabled and idempotent.');
+ taskCheck((int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0)===30,'Operational schema must remain 30.');
  $accountB=DB::insert('accounts',['slug'=>'ci-foreign','name'=>'Other company','account_type'=>'customer','status'=>'active','created_at'=>now(),'updated_at'=>now()]);
  DB::run('DELETE FROM account_members WHERE account_id=? AND user_id=?',[$account,$outsider]);
  DB::insert('account_members',['account_id'=>$accountB,'user_id'=>$outsider,'membership_role'=>'owner','status'=>'active','joined_at'=>now()]);
@@ -69,6 +76,37 @@ try{
  $client=(int)SaasWriteApi::clientSave(['name'=>'Account A client'])['id'];
  $project=(int)SaasWriteApi::projectSave(['name'=>'Account A project','client_id'=>$client])['id'];
  DB::insert('user_clients',['user_id'=>$staff,'client_id'=>$client,'can_approve'=>1]);
+
+ // Encryption at rest and AAD bound to tenant/channel/provider/revision.
+ $fake='ci-not-a-real-secret-for-whatsapp-provider-2026';
+ $staged=SaasChannelVault::stage('whatsapp',$fake);
+ taskCheck($staged['status']==='disabled'&&$staged['revision']===1&&
+   $staged['external_delivery_enabled']===false,'Credential staging must not enable a provider.');
+ taskCheck(SaasChannelVault::verify('whatsapp'),'GCM should verify a staged credential.');
+ $stored=DB::one('SELECT secret_envelope,revision,status FROM saas_channel_secrets WHERE tenant_account_id=? AND channel=?',[$account,'whatsapp']);
+ taskCheck(!str_contains($stored['secret_envelope'],$fake)&&str_starts_with($stored['secret_envelope'],'v1:'),
+  'Plaintext must never be stored at rest.');
+ $rotation=SaasChannelVault::stage('whatsapp','ci-not-a-real-rotated-secret-for-whatsapp-2026');
+ taskCheck($rotation['revision']===2&&SaasChannelVault::verify('whatsapp'),'Rotation must update revision and seal.');
+ taskCheck((int)DB::one('SELECT COUNT(*) n FROM saas_channel_secrets WHERE tenant_account_id=?',[$account])['n']===1,
+  'Rotation must never duplicate the tenant/channel row.');
+ $current=DB::one('SELECT secret_envelope FROM saas_channel_secrets WHERE tenant_account_id=? AND channel=?',[$account,'whatsapp'])['secret_envelope'];
+ DB::run('UPDATE saas_channel_secrets SET secret_envelope=? WHERE tenant_account_id=? AND channel=?',[$stored['secret_envelope'],$account,'whatsapp']);
+ taskCheck(!SaasChannelVault::verify('whatsapp'),'Old revision cannot decrypt under new revision AAD.');
+ DB::run('UPDATE saas_channel_secrets SET secret_envelope=? WHERE tenant_account_id=? AND channel=?',[$current,$account,'whatsapp']);
+ taskCheck(SaasChannelVault::verify('whatsapp'),'Restored encrypted token must verify.');
+ taskCheck(SaasChannelVault::stage('realtime','ci-fake-realtime-transport-token-long-value')['status']==='disabled',
+  'Staged realtime must stay disabled.');
+ $meta=SaasChannelVault::metadata();
+ taskCheck(count($meta)===2&&!array_key_exists('secret_envelope',$meta[0])&&
+  !array_key_exists('fingerprint',$meta[0]),'Metadata must not expose secrets or ciphertext.');
+ $originalRealtime=DB::one('SELECT secret_envelope FROM saas_channel_secrets WHERE tenant_account_id=? AND channel=?',[$account,'realtime'])['secret_envelope'];
+ DB::run('UPDATE saas_channel_secrets SET secret_envelope=? WHERE tenant_account_id=? AND channel=?',[$current,$account,'realtime']);
+ taskCheck(!SaasChannelVault::verify('realtime'),'Ciphertext copied across channels must fail GCM AAD.');
+ DB::run('UPDATE saas_channel_secrets SET secret_envelope=? WHERE tenant_account_id=? AND channel=?',[$originalRealtime,$account,'realtime']);
+ taskDenied(fn()=>SaasChannelVault::stage('arbitrary',$fake),422,'Unknown provider must be rejected.');
+ taskDenied(fn()=>SaasChannelVault::stage('email','short'),422,'Too-short token must be rejected.');
+
  $base=['client_id'=>$client,'project_id'=>$project,'category_id'=>1,'title'=>'Interview recording','brief'=>'Record in studio'];
  $denied=[
   ['client_id'=>$clientB],['category_id'=>$categoryB],['project_id'=>$projectB],
@@ -349,9 +387,11 @@ try{
  Auth::$actor=['id'=>$staff,'role'=>'admin'];Auth::$user=['id'=>$staff,'role'=>'admin','is_preview'=>0];
  taskDenied(fn()=>SaasTaskWriteApi::save($base+['title'=>'Member bypass']),403,'Non-owner wrote task.');
  Auth::$actor=['id'=>$outsider,'role'=>'admin'];Auth::$user=['id'=>$outsider,'role'=>'admin','is_preview'=>0];
+ taskDenied(fn()=>SaasChannelVault::stage('whatsapp','ci-foreign-owner-token-long-value'),403,'External account owner must not stage credentials.');
  taskDenied(fn()=>SaasTaskWriteApi::save($base+['title'=>'External bypass']),403,'Foreign owner wrote task.');
  Auth::$actor=['id'=>$admin,'role'=>'admin'];Auth::$user=['id'=>$admin,'role'=>'admin','is_preview'=>0];
  Auth::$origin='api';
+ taskDenied(fn()=>SaasChannelVault::stage('push','ci-fake-push-provider-token-long-value'),403,'Unscoped API token must not stage credentials.');
  taskDenied(fn()=>SaasTaskWriteApi::save($base+['title'=>'Bearer bypass']),403,'Legacy API token wrote task.');
  Auth::$origin='web';
  DB::run("UPDATE account_members SET status='inactive' WHERE account_id=? AND user_id=?",[$account,$admin]);

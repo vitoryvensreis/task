@@ -83,9 +83,13 @@ final class SaasChildMigration {
    $parent=$map['parent'];$fk=$map['fk'];
    if(!self::hasColumn($table)){$issues[]='column_missing_'.$table;continue;}
    // LEFT JOIN catches orphans even if a historical FK was disabled.
+   // Child parents may still be NULL during the preflight: they are
+   // backfilled in the dependency order. Roots must already be owned.
+   $parentMustBeOwned=$requireChildOwnership||!array_key_exists($parent,self::CHILDREN);
    $q="SELECT COUNT(*) n FROM `$table` c LEFT JOIN `$parent` p ON p.id=c.`$fk`
-    WHERE p.id IS NULL OR p.tenant_account_id IS NULL
-    OR (c.tenant_account_id IS NOT NULL AND c.tenant_account_id<>p.tenant_account_id)";
+    WHERE p.id IS NULL";
+   if($parentMustBeOwned)$q.=' OR p.tenant_account_id IS NULL';
+   $q.=' OR (c.tenant_account_id IS NOT NULL AND c.tenant_account_id<>p.tenant_account_id)';
    if($requireChildOwnership)$q.=' OR c.tenant_account_id IS NULL';
    if((int)(DB::one($q)['n']??0)>0)$issues[]='parent_'.$table;
   }
@@ -93,11 +97,13 @@ final class SaasChildMigration {
    $map=self::CHILDREN[$table];
    // During preflight, the primary owner comes from the resolved parent.
    $parent=$map['parent'];$primaryFk=$map['fk'];
+   $otherMustBeOwned=$requireChildOwnership||!array_key_exists($other,self::CHILDREN);
    $q="SELECT COUNT(*) n FROM `$table` c
     JOIN `$parent` p ON p.id=c.`$primaryFk`
     LEFT JOIN `$other` x ON x.id=c.`$fk`
-    WHERE c.`$fk` IS NOT NULL AND
-     (x.id IS NULL OR x.tenant_account_id IS NULL OR p.tenant_account_id<>x.tenant_account_id)";
+    WHERE c.`$fk` IS NOT NULL AND (x.id IS NULL";
+   if($otherMustBeOwned)$q.=' OR x.tenant_account_id IS NULL';
+   $q.=' OR (p.tenant_account_id IS NOT NULL AND x.tenant_account_id IS NOT NULL AND p.tenant_account_id<>x.tenant_account_id))';
    if((int)(DB::one($q)['n']??0)>0)$issues[]='secondary_'.$table.'_'.$fk;
   }
   return $issues;

@@ -23,6 +23,7 @@ final class RealtimeOutboxWorker
     public function processBatch(int $limit = self::DEFAULT_BATCH): array
     {
         if ($limit < 1 || $limit > 100) throw new InvalidArgumentException('Invalid worker batch size.');
+        if(class_exists(SaasLegacyBoundary::class))SaasLegacyBoundary::assertSingleOperation();
         $result = ['selected' => 0, 'published' => 0, 'retried' => 0, 'locked' => 0, 'skipped' => 0];
         $events = EventOutbox::due($limit, $this->maxAttempts);
         $result['selected'] = count($events);

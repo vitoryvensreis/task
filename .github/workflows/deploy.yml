@@ -460,6 +460,29 @@ jobs:
             php bin/migrate-whatsapp-contacts.php "--backup-manifest=$BACKUP_MANIFEST"
           REMOTE
 
+      - name: Aplicar fundação SaaS inativa no banco existente
+        timeout-minutes: 30
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          BACKUP_MANIFEST: ${{ steps.backup.outputs.backup_manifest }}
+        run: |
+          set -euo pipefail
+          printf -v REMOTE_COMMAND 'DEPLOY_PATH=%q BACKUP_MANIFEST=%q bash -s' "$DEPLOY_PATH" "$BACKUP_MANIFEST"
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "$REMOTE_COMMAND" <<'REMOTE'
+            set -euo pipefail
+            cd "$DEPLOY_PATH"
+            # Backup + SHA256 recentes e flags externas desligadas.
+            php bin/saas-inplace-preflight.php --release-check "--backup-manifest=$BACKUP_MANIFEST"
+            for name in foundation domain children outbox receipts delivery channels inbox; do
+              php "bin/migrate-saas-$name.php" --apply "--backup-manifest=$BACKUP_MANIFEST"
+            done
+            php bin/saas-inplace-preflight.php --release-check "--backup-manifest=$BACKUP_MANIFEST"
+            echo "Fundação SaaS concluída em modo inativo (sem contas externas)."
+          REMOTE
+
       - name: Auditoria de integridade sem alterações de dados
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}

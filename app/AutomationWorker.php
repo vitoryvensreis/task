@@ -10,6 +10,7 @@ final class AutomationWorker
 
     public static function tick(int $eventBatch=100,int $runBatch=20): array
     {
+        if(class_exists(SaasLegacyBoundary::class))SaasLegacyBoundary::assertSingleOperation();
         self::recoverStale();
         $ingested=self::ingestOutbox(max(1,min(500,$eventBatch)));
         $scheduled=self::scheduleDueTriggers();

@@ -1,7 +1,7 @@
 <?php
 final class ApiV1 {
  public static function handle(string $method,string $path,array $p): mixed {
-  Auth::load();if(Auth::$origin!=='api')fail('Use um token Bearer da API do TaskEsc.',401);
+  Auth::load();SaasLegacyBoundary::enforce();if(Auth::$origin!=='api')fail('Use um token Bearer da API do TaskEsc.',401);
   $method=strtoupper($method);$write=in_array($method,['POST','PUT','PATCH','DELETE'],true);Auth::scope($write?'api.write':'api.read');
   $parts=array_values(array_filter(explode('/',trim($path,'/')),'strlen'));
   if(!$parts)return self::index();

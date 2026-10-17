@@ -144,5 +144,43 @@ try {
  childCheck(SaasChildMigration::relationIssues(true)===[],
   'The restored foreign and legacy child graph must be consistent.');
  childReject(fn()=>SaasChildMigration::apply(),'Legacy backfill must not execute when more than one account exists.');
+
+ // B1.2c-1: request identity must come from active membership, not a URL id.
+ if(session_status()!==PHP_SESSION_ACTIVE)session_start();
+ $_SESSION=[];Auth::$origin='web';
+ Auth::$user=['id'=>$user,'role'=>'admin','active'=>1,'is_preview'=>0];
+ Auth::$actor=Auth::$user;Auth::$previewClientId=null;
+ $status=SaasRequestScope::status();
+ childCheck((int)$status['account']['id']===$legacy,'Default context resolves verified legacy membership only.');
+ $list=SaasReadApi::listing(['resource'=>'clients']);
+ childCheck(count($list['rows'])===1&&(int)$list['rows'][0]['id']===$client,'Read API must list only legacy tenant clients.');
+ childCheck(!array_key_exists('document',$list['rows'][0]),'Read API must not return unnecessary sensitive client fields.');
+ childCheck(count(SaasReadApi::listing(['resource'=>'projects'])['rows'])===1,'Project list must have same-tenant parent.');
+ $tasks=SaasReadApi::listing(['resource'=>'tasks']);
+ childCheck(count($tasks['rows'])===1&&(int)$tasks['rows'][0]['id']===$demand,'Scoped tasks must exclude cross-company parent category/stage.');
+ childCheck(!array_key_exists('brief',$tasks['rows'][0]),'Read API must not expose task briefs by default.');
+ childCheck((int)SaasReadApi::get(['resource'=>'tasks','id'=>$demand])['id']===$demand,'Scoped task get works.');
+ childReject(fn()=>SaasReadApi::get(['resource'=>'tasks','id'=>$foreignDemand]),'Tenant A cannot fetch tenant B task.');
+ childReject(fn()=>SaasReadApi::get(['resource'=>'clients','id'=>$foreignClient]),'Tenant A cannot fetch tenant B client.');
+ childReject(fn()=>SaasReadApi::listing(['resource'=>'google_accounts']),'Unapproved resources must not be exposed by generic query.');
+ childReject(fn()=>SaasRequestScope::select(['account_id'=>$other]),'Cannot select another account without membership.');
+ childCheck((int)SaasRequestScope::select(['account_id'=>$legacy])['account']['id']===$legacy,'Account selection requires active membership.');
+ childCheck((int)SaasRequestScope::resolve()['account_id']===$legacy,'Account selection persists in session with verification.');
+ Auth::$origin='api';
+ childReject(fn()=>SaasRequestScope::resolve(),'Unscoped bearer API tokens must be rejected.');
+ Auth::$origin='web';
+ DB::run("UPDATE account_members SET status='inactive' WHERE account_id=? AND user_id=?",[$legacy,$user]);
+ childReject(fn()=>SaasRequestScope::resolve(),'Revoked account membership must be rejected even if session remains selected.');
+ DB::run("UPDATE account_members SET status='active' WHERE account_id=? AND user_id=?",[$legacy,$user]);
+ Auth::$user=['id'=>$outsider,'role'=>'staff','active'=>1,'is_preview'=>0];Auth::$actor=Auth::$user;
+ $_SESSION=[];
+ childReject(fn()=>SaasRequestScope::select(['account_id'=>$other]),'External account selection remains disabled until SaaS activation.');
+ childReject(fn()=>SaasReadApi::listing(['resource'=>'clients']),'Staff cannot bypass the account owner requirement.');
+ Auth::$user=['id'=>$user,'role'=>'admin','active'=>1,'is_preview'=>0];Auth::$actor=Auth::$user;
+ DB::run("UPDATE settings SET value='0' WHERE `key`=?",[SaasChildMigration::MARKER]);
+ childReject(fn()=>SaasRequestScope::status(),'Missing child migration must block all new SaaS routes.');
+ DB::run("UPDATE settings SET value='3' WHERE `key`=?",[SaasChildMigration::MARKER]);
+ $_SESSION=[];
+
  echo "SaaS B1.2b: child backfill, related parents, A/B isolation, retries, schema-20 block and CI guard OK\n";
 }catch(Throwable $e){fwrite(STDERR,$e->getMessage()."\n");exit(1);}

@@ -28,6 +28,40 @@ CREATE TABLE IF NOT EXISTS event_outbox (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 
 CREATE TABLE users (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(150) NOT NULL, email VARCHAR(190) NOT NULL UNIQUE, whatsapp_phone VARCHAR(20) NULL, ai_assistant_enabled TINYINT NOT NULL DEFAULT 0, password_hash VARCHAR(255) NOT NULL, role VARCHAR(20) NOT NULL DEFAULT 'client', active TINYINT NOT NULL DEFAULT 1, email_notifications TINYINT NOT NULL DEFAULT 1, weekly_report TINYINT NOT NULL DEFAULT 0, twofa_secret VARCHAR(190) NULL, twofa_enabled TINYINT NOT NULL DEFAULT 0, twofa_recovery_json TEXT NULL, last_login_at DATETIME NULL, last_login_ip VARCHAR(45) NULL, created_at DATETIME NOT NULL) ENGINE=InnoDB;
+-- B1.1: estruturas aditivas multiempresa. Bootstrap de vínculos EXPLÍCITO via migração 031.
+CREATE TABLE IF NOT EXISTS accounts (
+ id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+ slug VARCHAR(100) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ name VARCHAR(190) NOT NULL,
+ account_type VARCHAR(20) NOT NULL DEFAULT 'customer',
+ status VARCHAR(20) NOT NULL DEFAULT 'active',
+ created_at DATETIME NOT NULL,
+ updated_at DATETIME NOT NULL,
+ PRIMARY KEY (id),
+ UNIQUE KEY uq_accounts_slug (slug),
+ KEY idx_accounts_status (status,id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE IF NOT EXISTS account_members (
+ account_id BIGINT UNSIGNED NOT NULL,
+ user_id INT NOT NULL,
+ membership_role VARCHAR(20) NOT NULL DEFAULT 'member',
+ status VARCHAR(20) NOT NULL DEFAULT 'active',
+ joined_at DATETIME NOT NULL,
+ PRIMARY KEY (account_id,user_id),
+ KEY idx_account_members_user (user_id,status,account_id),
+ CONSTRAINT fk_account_members_account FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE RESTRICT,
+ CONSTRAINT fk_account_members_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE IF NOT EXISTS account_settings (
+ account_id BIGINT UNSIGNED NOT NULL,
+ `key` VARCHAR(100) NOT NULL,
+ value LONGTEXT NOT NULL,
+ updated_at DATETIME NOT NULL,
+ PRIMARY KEY (account_id,`key`),
+ CONSTRAINT fk_account_settings_account FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 CREATE TABLE clients (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(190) NOT NULL, brand VARCHAR(190) NOT NULL DEFAULT '', commercial_type VARCHAR(20) NOT NULL DEFAULT 'one_off', monthly_amount_cents BIGINT NOT NULL DEFAULT 0, monthly_payment_day TINYINT UNSIGNED NOT NULL DEFAULT 10, drive_account_id INT NULL, drive_folder_id VARCHAR(255) NULL, email VARCHAR(190) NOT NULL DEFAULT '', phone VARCHAR(60) NOT NULL DEFAULT '', whatsapp_phone VARCHAR(20) NULL, document VARCHAR(40) NOT NULL DEFAULT '', notes TEXT, brand_url TEXT, active TINYINT NOT NULL DEFAULT 1, created_at DATETIME NOT NULL, INDEX(drive_account_id)) ENGINE=InnoDB;
 CREATE TABLE user_clients (user_id INT NOT NULL, client_id INT NOT NULL, can_approve TINYINT NOT NULL DEFAULT 1, can_finance TINYINT NOT NULL DEFAULT 0, PRIMARY KEY(user_id,client_id), FOREIGN KEY(user_id) REFERENCES users(id), FOREIGN KEY(client_id) REFERENCES clients(id)) ENGINE=InnoDB;
 CREATE TABLE stages (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(80) NOT NULL, kind VARCHAR(20) NOT NULL, color VARCHAR(7) NOT NULL DEFAULT '#737373', position INT NOT NULL DEFAULT 0, active TINYINT NOT NULL DEFAULT 1) ENGINE=InnoDB;

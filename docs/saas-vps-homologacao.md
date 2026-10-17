@@ -1,5 +1,8 @@
 # TaskEsc SaaS — Homologação segura na VPS (sem tocar na produção)
 
+> **Plano anterior, não adotado:** a decisão posterior é usar a instalação e banco existentes. Consulte [atualização gradual na infraestrutura atual](saas-deploy-inplace.md). Este documento permanece apenas como referência de uma alternativa isolada; **não criar subdomínio nem banco novo para atender ao pedido atual**.
+
+
 **Estado:** procedimento preparado na branch `feat/saas-b1-foundation`; **a execução na VPS ainda não ocorreu**. O PR #113 continua WIP e não está liberado para merge/deploy de produção.
 
 ## Por que o workflow existente NÃO pode ser utilizado

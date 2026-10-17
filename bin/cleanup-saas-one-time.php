@@ -178,7 +178,12 @@ try{
  }finally{DB::run('SELECT RELEASE_LOCK(?)',[$lock]);}
 }catch(Throwable $e){
  $message=$e->getMessage();
+ $blockers=[];
+ if(str_starts_with($message,'preflight_blocked:')){
+  foreach(explode(',',substr($message,18)) as $item)
+   if(preg_match('/\A[a-z0-9_]+\z/D',$item))$blockers[]=$item;
+ }
  $code=preg_match('/\A[a-z0-9_]+\z/D',$message)?$message:'cleanup_blocked';
- fwrite(STDERR,json(['status'=>'blocked','code'=>$code]).PHP_EOL);
+ fwrite(STDERR,json(['status'=>'blocked','code'=>$code,'blockers'=>array_values(array_unique($blockers))]).PHP_EOL);
  exit(1);
 }

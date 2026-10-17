@@ -228,6 +228,55 @@ try{
    $job['channel']==='internal_event'&&$job['status']==='held'&&(int)$job['attempts']===0,
    'Job channel/scope/status must be derived by the server and never from untrusted input.');
 
+ // B1.2c-2b.2b.2b.1: derive recipients from active memberships,
+ // never an event payload, WhatsApp phone, email or arbitrary URL.
+ $ownedJob=(int)DB::one(
+  'SELECT j.id FROM saas_delivery_jobs j'.
+  ' JOIN saas_event_receipts r ON r.id=j.receipt_id AND r.tenant_account_id=j.tenant_account_id'.
+  ' JOIN saas_event_outbox e ON e.id=r.outbox_id AND e.tenant_account_id=j.tenant_account_id'.
+  ' WHERE j.tenant_account_id=? AND e.entity_id=? LIMIT 1',
+  [$account,$id])['id'];
+ $routing=SaasDeliveryRouting::recipients($account,$ownedJob);
+ taskCheck($routing['recipient_user_ids']===[$admin,$staff]&&
+  $routing['recipient_count']===2&&$routing['external_delivery_enabled']===false,
+  'Owner and assigned, client-authorized staff must be derived safely.');
+ taskCheck(!in_array($outsider,$routing['recipient_user_ids'],true),
+  'User from account B must never receive account A internal events.');
+ $wrongAccount=false;
+ try{SaasDeliveryRouting::recipients($accountB,$ownedJob);}catch(RuntimeException){$wrongAccount=true;}
+ taskCheck($wrongAccount,'Guessing an account B scope must not reveal account A delivery.');
+ DB::run("UPDATE account_members SET status='inactive' WHERE account_id=? AND user_id=?",[$account,$staff]);
+ taskCheck(SaasDeliveryRouting::recipients($account,$ownedJob)['recipient_user_ids']===[$admin],
+  'Revoking the assigned member must remove their delivery authorization immediately.');
+ DB::run("UPDATE account_members SET status='active' WHERE account_id=? AND user_id=?",[$account,$staff]);
+ DB::run('DELETE FROM user_clients WHERE user_id=? AND client_id=?',[$staff,$client]);
+ taskCheck(SaasDeliveryRouting::recipients($account,$ownedJob)['recipient_user_ids']===[$admin],
+  'Removing the staff-client relationship must remove routing rights.');
+ DB::insert('user_clients',['user_id'=>$staff,'client_id'=>$client,'can_approve'=>1]);
+ $scope=(string)DB::one('SELECT destination_scope FROM saas_delivery_jobs WHERE id=?',[$ownedJob])['destination_scope'];
+ DB::run('UPDATE saas_delivery_jobs SET destination_scope=? WHERE id=?',['saas.account.999999.events',$ownedJob]);
+ $badDestination=false;
+ try{SaasDeliveryRouting::recipients($account,$ownedJob);}catch(RuntimeException){$badDestination=true;}
+ taskCheck($badDestination,'Forged realtime/channel scope must be rejected.');
+ DB::run('UPDATE saas_delivery_jobs SET destination_scope=? WHERE id=?',[$scope,$ownedJob]);
+ $storedStatus=(string)DB::one('SELECT status FROM saas_delivery_jobs WHERE id=?',[$ownedJob])['status'];
+ DB::run("UPDATE saas_delivery_jobs SET status='dead' WHERE id=?",[$ownedJob]);
+ $deadRoute=false;
+ try{SaasDeliveryRouting::recipients($account,$ownedJob);}catch(RuntimeException){$deadRoute=true;}
+ taskCheck($deadRoute,'Dead-letter jobs must not route to recipients.');
+ DB::run('UPDATE saas_delivery_jobs SET status=? WHERE id=?',[$storedStatus,$ownedJob]);
+ DB::run("UPDATE accounts SET status='suspended' WHERE id=?",[$account]);
+ $suspendedRoute=false;
+ try{SaasDeliveryRouting::recipients($account,$ownedJob);}catch(RuntimeException){$suspendedRoute=true;}
+ taskCheck($suspendedRoute,'Suspended account must not route events.');
+ DB::run("UPDATE accounts SET status='active' WHERE id=?",[$account]);
+ taskCheck(SaasDeliveryRouting::recipients($account,$ownedJob)['recipient_count']===2,
+  'Routing must recover only after active account, membership and client assignment return.');
+ taskCheck((int)DB::one('SELECT COUNT(*) n FROM notifications')['n']===0 &&
+  (int)DB::one('SELECT COUNT(*) n FROM whatsapp_messages')['n']===0 &&
+  (int)DB::one('SELECT COUNT(*) n FROM saas_event_outbox WHERE published_at IS NOT NULL')['n']===0,
+  'Resolving recipients must not send notifications or publish any events.');
+
  // A changed receipt must fail BEFORE creating its delivery intent.
  $target=(int)$jobs[0]['receipt_id'];
  DB::run('DELETE FROM saas_delivery_jobs WHERE tenant_account_id=? AND receipt_id=?',[$account,$target]);

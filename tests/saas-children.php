@@ -175,6 +175,15 @@ try {
  Auth::$user=['id'=>$outsider,'role'=>'staff','active'=>1,'is_preview'=>0];Auth::$actor=Auth::$user;
  $_SESSION=[];
  childReject(fn()=>SaasRequestScope::select(['account_id'=>$other]),'External account selection remains disabled until SaaS activation.');
+ // Even misconfigured feature flags and a global admin must not activate an
+ // external account while the remaining legacy endpoints are not tenant-safe.
+ DB::run("INSERT INTO account_settings (account_id,`key`,value,updated_at) VALUES (?,?,?,?)",[$other,'saas.multi_account_enabled','1',now()]);
+ DB::run("INSERT INTO account_settings (account_id,`key`,value,updated_at) VALUES (?,?,?,?)",[$other,'saas.external_signup_enabled','1',now()]);
+ DB::run("UPDATE account_members SET membership_role='owner' WHERE account_id=? AND user_id=?",[$other,$outsider]);
+ Auth::$user=['id'=>$outsider,'role'=>'admin','active'=>1,'is_preview'=>0];Auth::$actor=Auth::$user;
+ childReject(fn()=>SaasRequestScope::select(['account_id'=>$other]),'Misconfigured external account flags must never bypass B1.3 gate.');
+ Auth::$user=['id'=>$outsider,'role'=>'staff','active'=>1,'is_preview'=>0];Auth::$actor=Auth::$user;
+
  childReject(fn()=>SaasReadApi::listing(['resource'=>'clients']),'Staff cannot bypass the account owner requirement.');
  Auth::$user=['id'=>$user,'role'=>'admin','active'=>1,'is_preview'=>0];Auth::$actor=Auth::$user;
  DB::run("UPDATE settings SET value='0' WHERE `key`=?",[SaasChildMigration::MARKER]);

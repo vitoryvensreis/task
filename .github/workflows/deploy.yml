@@ -169,6 +169,7 @@ jobs:
           php tests/saas-domain.php
           php tests/saas-children.php
           php tests/saas-writes.php
+          # SaaS staged outbox: transactional staging, zero external dispatch, MySQL/MariaDB
           php tests/saas-task-writes.php
 
   deploy:

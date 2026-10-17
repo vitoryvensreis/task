@@ -167,6 +167,7 @@ jobs:
           php tests/ai-whatsapp-tools.php
           php tests/saas-foundation.php
           php tests/saas-domain.php
+          php tests/saas-children.php
 
   deploy:
     name: Deploy na VPS

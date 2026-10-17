@@ -94,13 +94,29 @@ php bin/migrate-saas-children.php --apply --backup-manifest=/CAMINHO/VALIDADO/ma
 
 **Limite de escopo:** essas rotas são a primeira base verificável de autenticação/SQL multiempresa. Elas NÃO corrigem as consultas globais das rotas antigas (`demands.list`, `clients.list`, `finance.*`, `files.*`, realtime, downloads, workers). O SaaS segue DESLIGADO, `main` e VPS não devem receber esta branch.
 
-### Retomada exata B1.2c-2
+### Retomada exata B1.2c-2 (agora em B1.2c-2b após validar a primeira escrita)
 
 1. Concluir definição de proprietário das tabelas restantes (chat, notificações, logs, outbox, filas, WhatsApp, AI interna, tokens e eventos sem relação determinística), com verificações de integridade.
 2. Vincular `tenant_account_id` a cada criação, edição e exclusão de registros, com consistência de pais e autorização em todas as rotas existentes; evitar que uma escrita antiga gere registros com NULL.
 3. Implementar novas credenciais/tokens vinculados à empresa, sessão multiempresa e contas de usuário sem depender do `users.role` global; revogar o contexto imediatamente após perda de membership.
 4. Aplicar ownership ao armazenamento/URLs assinadas, uploads e downloads; aos workers, notificações, realtime/Centrifugo e Outbox. Fechar testes A/B reais incluindo IDs trocados, filas e mensagens.
 5. Concluir índices únicos e FKs compostas por empresa, habilitar NOT NULL apenas depois do saneamento; testar rollback. Somente após tudo aprovado avançar para B1.3.
+
+## B1.2c-2a — Primeira camada de escrita tenant-safe (em validação)
+
+**Implementado apenas na branch do PR #113; sem deployment na VPS.** Mantém o hard block de empresas externas mesmo se `account_settings` for alterada manualmente.
+
+- [x] `app/SaasWriteApi.php`: `clientSave` (criação e edição de campos permitidos), `clientArchive` (soft delete apenas sem projetos, contratos, demandas, faturas ou vínculos), `projectSave` (criação e edição com cliente verificado), `projectDelete` (exclusão física apenas de projeto sem tasks ou faturas).
+- [x] Transações MySQL, validação de owner ativo e conta interna a **cada operação**, leitura `FOR UPDATE` e cláusula `tenant_account_id=?` em updates e deletes. A aplicação não aceita `tenant_account_id`, `account_id`, `created_by` ou `owner_id` de payload.
+- [x] `public/api.php` recebe rotas `saas.client.save`, `saas.client.archive`, `saas.project.save`, `saas.project.delete`, todas exclusivamente POST e sob CSRF do middleware. Tokens bearer antigos sem tenant são negados.
+- [x] Trilha de auditoria gerada em `audit_log` (legada). **Importante: o log ainda não possui tenant ownership e não pode ser compartilhado entre contas.** Planejar sua migração B1.2c-2b antes do uso externo.
+- [x] Sem chamar `Catalog::clientSave` ou `Demands::stage` porque hoje esses métodos geram usuários, notificações, eventos, workers e outras operações sem tenant.
+- [x] `tests/saas-writes.php` testa criação/edição, campos permitidos, validação de pai, exclusões sem dependências, A/B com IDs forjados, administradores sem owner, sessões revogadas, bearer antigo e migrações incompletas.
+- [x] Teste conectado à matriz MySQL 8 / MariaDB 10.11. **CI em andamento; validar log antes de dar etapa como concluída.**
+
+**Limites conscientes:** não são rotas do frontend normal nem substituem `clients.save`/`projects.save`. Não emitem automação, push, eventos realtime ou notificações. Não oferecem CRUD completo de tasks: a movimentação exige preservar `transitions`, `automation_runs`, `event_outbox` e outros efeitos laterais sob tenant. As contas comerciais externas continuam inacessíveis.
+
+**Próximo trabalho B1.2c-2b:** identificar e associar owner de logs/chat/notifications/outbox/tokens/WhatsApp; autenticação por empresa, migrar endpoints legados módulo a módulo, implementar mutações de tasks com efeitos transacionais e não transacionais isolados; testar IDs misturados, escritas concorrentes, canais realtime, arquivos, relatórios e filas. Depois índices únicos por empresa, FKs compostas, NOT NULL e B1.3 homologação/ativação controlada.
 
 ## Pendente — B1.2: propagação e isolamento por conta
 

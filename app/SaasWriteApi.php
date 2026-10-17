@@ -88,7 +88,7 @@ final class SaasWriteApi {
    $old=self::activeClient($id,$account);
    foreach([
     'projects'=>'client_id','demands'=>'client_id','contracts'=>'client_id',
-    'invoices'=>'client_id','user_clients'=>'client_id'
+    'invoices'=>'client_id','user_clients'=>'client_id','templates'=>'recurring_client_id'
    ] as $table=>$fk){
     if(DB::one('SELECT 1 FROM `'.$table.'` WHERE `'.$fk.'`=? LIMIT 1',[$id]))
      fail('Cliente possui registros vinculados e não pode ser arquivado por esta operação.',409);

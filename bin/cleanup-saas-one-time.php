@@ -30,7 +30,7 @@ const REMOVED_SAAS_MARKERS=[
 
 function cleanupAudit(): array {
  $errors=[];
- $schema=(int)(DB::one("SELECT value FROM settings WHERE \`key\`='schema_version'")['value']??0);
+ $schema=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);
  if($schema!==30)$errors[]='schema_30_required';
  $expected=[...REMOVED_SAAS_ROOTS,...REMOVED_SAAS_CHILDREN];
  $foundTables=array_column(DB::all('SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE()'),'TABLE_NAME');
@@ -43,7 +43,7 @@ function cleanupAudit(): array {
  $ownedNames=array_column($owned,'TABLE_NAME');
  $unknownOwned=array_diff($ownedNames,[...$expected,...REMOVED_SAAS_TABLES]);
  if($unknownOwned)$errors[]='unexpected_tenant_columns';
- $markers=DB::all("SELECT \`key\`,value FROM settings WHERE \`key\` LIKE 'saas%'");
+ $markers=DB::all("SELECT `key`,value FROM settings WHERE `key` LIKE 'saas%'");
  $markerValues=[];
  foreach($markers as $row){
   $key=(string)$row['key'];
@@ -93,7 +93,7 @@ function cleanupAudit(): array {
    if(count($accounts)!==1||$accounts[0]['slug']!=='taskesc-existing-operation'||
       $accounts[0]['account_type']!=='internal'||$accounts[0]['status']!=='active')
     $errors[]='noninternal_or_extra_accounts';
-   $settings=DB::all('SELECT \`key\`,value FROM account_settings');
+   $settings=DB::all('SELECT `key`,value FROM account_settings');
    foreach($settings as $row){
     if(!in_array($row['key'],[
       'saas.external_signup_enabled','saas.multi_account_enabled',
@@ -108,7 +108,7 @@ function cleanupAudit(): array {
    'saas_event_receipts','saas_event_outbox'
   ] as $table){
    if(in_array($table,$present,true)&&
-      (int)(DB::one('SELECT COUNT(*) n FROM \`'.$table.'\`')['n']??0)!==0)
+      (int)(DB::one('SELECT COUNT(*) n FROM `'.$table.'`')['n']??0)!==0)
     $errors[]='saas_queue_or_credentials_not_empty';
   }
  }
@@ -162,11 +162,11 @@ try{
   // DDL has implicit commits. An uninterrupted, verified full backup is
   // required. Foreign-key drop order follows the exact SaaS schema graph.
   foreach(REMOVED_SAAS_TABLES as $table)
-   DB::run('DROP TABLE \`'.$table.'\`');
+   DB::run('DROP TABLE `'.$table.'`');
   foreach([...array_reverse(REMOVED_SAAS_CHILDREN),...REMOVED_SAAS_ROOTS] as $table)
-   DB::run('ALTER TABLE \`'.$table.'\` DROP INDEX \`idx_saas_'.$table.'\`, DROP COLUMN \`tenant_account_id\`');
+   DB::run('ALTER TABLE `'.$table.'` DROP INDEX `idx_saas_'.$table.'`, DROP COLUMN `tenant_account_id`');
   foreach([...array_keys(REMOVED_SAAS_MARKERS),'saas.external_signup_enabled','saas.multi_account_enabled'] as $key)
-   DB::run('DELETE FROM settings WHERE \`key\`=?',[$key]);
+   DB::run('DELETE FROM settings WHERE `key`=?',[$key]);
   $after=cleanupAudit();
   if($after['state']!=='already_clean'||$after['blockers'])
    throw new RuntimeException('post_cleanup_schema_mismatch');

@@ -50,6 +50,43 @@ try {
  $_SESSION=[];Auth::$origin='web';Auth::$previewClientId=null;
  Auth::$actor=['id'=>$admin,'role'=>'admin'];Auth::$user=['id'=>$admin,'role'=>'admin','is_preview'=>0];
 
+
+ // New users created by the legacy UI must inherit internal SaaS membership.
+ $internalUser=Catalog::userSave([
+  'name'=>'New internal staff','email'=>'fresh-internal-staff@ci.invalid',
+  'whatsapp_phone'=>'5585999887766','password'=>'CItestPassword1234',
+  'role'=>'staff','active'=>1,'clients'=>[]
+ ]);
+ $internalId=(int)$internalUser['id'];
+ $linked=DB::one('SELECT membership_role,status FROM account_members WHERE account_id=? AND user_id=?',
+  [$legacy,$internalId]);
+ swCheck($linked&&$linked['membership_role']==='member'&&$linked['status']==='active',
+  'New TaskEsc user was not linked atomically to the existing internal account.');
+ Catalog::userSave([
+  'id'=>$internalId,'name'=>'New internal owner','email'=>'fresh-internal-staff@ci.invalid',
+  'whatsapp_phone'=>'5585999887766','role'=>'admin','active'=>1,'clients'=>[]
+ ]);
+ $linked=DB::one('SELECT membership_role FROM account_members WHERE account_id=? AND user_id=?',
+  [$legacy,$internalId]);
+ swCheck(($linked['membership_role']??'')==='owner','Legacy admin promotion did not sync membership role.');
+ DB::run("UPDATE account_members SET status='inactive' WHERE account_id=? AND user_id=?",[$legacy,$internalId]);
+ Catalog::userSave([
+  'id'=>$internalId,'name'=>'Renamed internal owner','email'=>'fresh-internal-staff@ci.invalid',
+  'whatsapp_phone'=>'5585999887766','role'=>'admin','active'=>1,'clients'=>[]
+ ]);
+ swCheck((string)DB::one('SELECT status FROM account_members WHERE account_id=? AND user_id=?',
+  [$legacy,$internalId])['status']==='inactive',
+  'Legacy profile edits must never reactivate a revoked SaaS membership.');
+ Catalog::userSave([
+  'id'=>$internalId,'name'=>'Disabled internal owner','email'=>'fresh-internal-staff@ci.invalid',
+  'whatsapp_phone'=>'5585999887766','role'=>'admin','active'=>0,'clients'=>[]
+ ]);
+ swCheck((string)DB::one('SELECT status FROM account_members WHERE account_id=? AND user_id=?',
+  [$legacy,$internalId])['status']==='inactive','Disabled users must stay revoked.');
+ $nonTxRejected=false;
+ try{AccountContext::syncInternalUser($internalId,'staff',true);}catch(LogicException){$nonTxRejected=true;}
+ swCheck($nonTxRejected,'Membership sync outside the user transaction must be rejected.');
+
  // Account must always come from active owner membership, never request data.
  swReject(fn()=>SaasWriteApi::clientSave(['name'=>'Hijack','account_id'=>100]),403,'Forged account_id accepted.');
  swReject(fn()=>SaasWriteApi::clientSave(['name'=>'Hijack','tenant_account_id'=>100]),403,'Forged tenant_account_id accepted.');

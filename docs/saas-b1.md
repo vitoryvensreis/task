@@ -166,6 +166,26 @@ php bin/migrate-saas-children.php --apply --backup-manifest=/CAMINHO/VALIDADO/ma
 
 **Regra principal:** não mesclar esta branch, habilitar outra empresa ou executar migração na VPS antes de terminar isolamento/CI e preparar rollback testado.
 
+## B1.2c-2b.2b.1 — Pré-consumidor isolado e recibos HELD (em validação)
+
+**Escopo:** preparar eventos por empresa com persistência e idempotência, **sem disparar nada**. A fila SaaS `saas_event_outbox` não é consumida pelos workers antigos.
+
+- [x] `database/migrations/033_saas_event_receipts.sql` e `database/schema.sql`: tabela `saas_event_receipts` com FK para conta e Outbox, `tenant_account_id BIGINT UNSIGNED NOT NULL`, UNIQUE `(tenant_account_id,outbox_id)`, estado inicial `held`, índice de inspeção por conta. Não há status `delivered` ou liberação de publicações nesta etapa.
+- [x] `app/SaasReceiptMigration.php`: migração idempotente e serializada; exige schema 30 e marcadores 1/2/3/4. Bloqueia contas externas e flags ativadas, verifica tipos, índices e FKs; grava `settings.saas_receipts_version=5` sem atualizar a versão operacional.
+- [x] `bin/migrate-saas-receipts.php`: exclusivamente manual, `--dry-run`/`--apply`, requer manifesto e backup SHA256 íntegro. Não conectado a deploy/cron.
+- [x] `app/SaasEventConsumer.php`: método `prepareBatch(accountId,limit)`, executado apenas por teste, sem rota HTTP nem agendador. Rejeita empresa externa, exige conta interna ativa e flags SaaS desabilitadas; busca somente eventos da empresa, disponíveis e ainda sem recibo, bloqueia linha com `FOR UPDATE` e cria recibo em transação. Valida chave de idempotência, integridade SHA256, tipo permitido, metadados de payload e relações tarefa/cliente/categoria/etapa/projeto. Recria JSON **canônico** para verificar o hash igual no MySQL 8 e MariaDB 10.11.
+- [x] `tests/saas-task-writes.php`: teste de migração independente, A/B (nenhum evento da empresa B consumido ao preparar A), repetição sem duplicação, bloqueio da conta externa, eventos malformados e nenhuma mudança em `published_at`. `tests/saas-foundation.php` reproduz o esquema antigo removendo primeiro as tabelas novas que possuem FKs.
+- [ ] A confirmar: CI MySQL 8/MariaDB 10.11 deste último commit de código. Anotar link e resultado aqui e no README.
+
+**Atenção sobre retry:** o pré-consumidor não incrementa `attempts` nem agenda novos disparos, pois ainda **não existe entrega de mensagens**. Eventos inválidos são recusados/rollback da preparação, permanecendo na Outbox para diagnóstico e correção. Não usar os recibos `held` como prova de publicação, envio ou execução de automação. Não ligar os cronjobs legados à tabela `saas_event_receipts`.
+
+### Ponto exato para retomar — B1.2c-2b.2b.2
+
+1. Confirmar CI deste subbloco e manutenção do deploy VPS `skipped`.
+2. Projetar fila de ações/entregas por conta com verificação de membership, credenciais e destino (WhatsApp, notificações, push e realtime), idempotência, tentativas limitadas, retry/backoff e DLQ; nenhuma consulta global de destinatários.
+3. Criar workers totalmente novos de automações/entregas com autorização e deduplicação. Testar concorrência real, canais errados, IDs cruzados, eventos atrasados e tenants suspensos.
+4. Propagar ownership de logs, tokens, notificações e tabelas restantes; isolar APIs antigas, chat, arquivos e demais processos. Somente após auditoria end-to-end, liberar B1.3. IA e Google Calendar integrados continuam **exclusivos da operação interna**, enquanto os disparos por automações serão disponibilizados mediante isolamento seguro.
+
 ## Pendente — B1.2: propagação e isolamento por conta
 
 - [ ] Completar `tenant_account_id` (B1.2a cobre 15 raízes, demais tabelas e consultas pendentes), priorizar `clients`, `users`/vínculos, `demands`, `projects`, `stages`, `categories`, `contracts`, `invoices`, `payments`, `expenses`, `files`, `templates`, `automations`, `automation_runs`, `event_outbox`, `whatsapp_contacts`, mensagens/chat, agendas, Google, tokens e logs. O inventário precisa ser completado por relacionamento.

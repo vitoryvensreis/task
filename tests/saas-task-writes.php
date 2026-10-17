@@ -30,6 +30,13 @@ try{
  }
  $db->exec('SET FOREIGN_KEY_CHECKS=1');
  $db->exec(file_get_contents(ROOT.'/database/schema.sql'));
+ $beforeAudit=(int)DB::one('SELECT COUNT(*) n FROM settings')['n'];
+ $audit=SaasInPlacePreflight::inspect();
+ taskCheck($audit['mode']==='read_only'&&$audit['schema_version']===30&&
+  $audit['ready_for_manual_review']===true&&$audit['external_tenant_activation_authorized']===false,
+  'Read-only in-place audit must accept legacy schema30 without activating SaaS.');
+ taskCheck((int)DB::one('SELECT COUNT(*) n FROM settings')['n']===$beforeAudit,
+  'Production preflight must never mutate settings.');
  $admin=DB::insert('users',['name'=>'Account owner','email'=>'task-owner@ci.invalid','role'=>'admin','password_hash'=>'x','created_at'=>now()]);
  $staff=DB::insert('users',['name'=>'Editor','email'=>'task-editor@ci.invalid','role'=>'staff','password_hash'=>'x','created_at'=>now()]);
  $outsider=DB::insert('users',['name'=>'Other company owner','email'=>'task-outsider@ci.invalid','role'=>'admin','password_hash'=>'x','created_at'=>now()]);
@@ -65,6 +72,10 @@ try{
  taskCheck(SaasInternalInboxMigration::apply()['outbound_enabled']===false,'Repeated inbox migration must remain inert.');
  taskCheck((int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0)===30,'Operational schema must remain 30.');
  $accountB=DB::insert('accounts',['slug'=>'ci-foreign','name'=>'Other company','account_type'=>'customer','status'=>'active','created_at'=>now(),'updated_at'=>now()]);
+ $blockedAudit=SaasInPlacePreflight::inspect();
+ taskCheck(!$blockedAudit['ready_for_manual_review']&&
+  in_array('outras_empresas_ja_cadastradas',$blockedAudit['blockers'],true),
+  'Read-only preflight must block in-place migrations with additional tenants.');
  DB::run('DELETE FROM account_members WHERE account_id=? AND user_id=?',[$account,$outsider]);
  DB::insert('account_members',['account_id'=>$accountB,'user_id'=>$outsider,'membership_role'=>'owner','status'=>'active','joined_at'=>now()]);
  $clientB=DB::insert('clients',['tenant_account_id'=>$accountB,'name'=>'Other company client','created_at'=>now()]);

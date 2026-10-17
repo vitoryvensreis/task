@@ -87,6 +87,11 @@ try {
  swCheck(DB::one('SELECT name FROM clients WHERE id=?',[$foreignClient])['name']==='Confidential client B','Foreign records mutated.');
 
  $empty=SaasWriteApi::clientSave(['name'=>'Temporary empty client']);$emptyId=(int)$empty['id'];
+ $templateId=DB::insert('templates',['tenant_account_id'=>$legacy,'name'=>'Recurring content',
+  'category_id'=>1,'brief'=>'Demo template','details_json'=>'{}','checklist_json'=>'[]',
+  'recurring_client_id'=>$emptyId]);
+ swReject(fn()=>SaasWriteApi::clientArchive(['id'=>$emptyId]),409,'Recurring client template must block archive.');
+ DB::run('DELETE FROM templates WHERE id=?',[$templateId]);
  swCheck(SaasWriteApi::clientArchive(['id'=>$emptyId])['archived']===true,'Empty client should archive safely.');
  swReject(fn()=>SaasWriteApi::clientSave(['id'=>$emptyId,'name'=>'Revive']),409,'Inactive client unexpectedly editable.');
  swReject(fn()=>SaasWriteApi::clientArchive(['id'=>$emptyId]),409,'Double archive should fail.');

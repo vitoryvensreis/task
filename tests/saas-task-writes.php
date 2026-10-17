@@ -453,6 +453,16 @@ try{
  DB::run("UPDATE settings SET value='0' WHERE `key`=?",[SaasChildMigration::MARKER]);
  taskDenied(fn()=>SaasTaskWriteApi::save($base+['title'=>'No migration']),503,'Incomplete migration allowed writes.');
  DB::run("UPDATE settings SET value='3' WHERE `key`=?",[SaasChildMigration::MARKER]);
+ // Legacy APIs, MCP, file downloads and realtime must never accept a
+ // session belonging to a customer tenant, regardless of the rollout flag.
+ SaasLegacyBoundary::enforce();
+ $_SESSION['taskesc_saas_account']=$accountB;
+ taskDenied(fn()=>SaasLegacyBoundary::enforce(),403,'Foreign selected account reached the legacy surface.');
+ unset($_SESSION['taskesc_saas_account']);
+ Auth::$actor=['id'=>$outsider,'role'=>'admin'];Auth::$user=['id'=>$outsider,'role'=>'admin','is_preview'=>0];
+ taskDenied(fn()=>SaasLegacyBoundary::enforce(),403,'Customer owner reached the global legacy surface.');
+ Auth::$actor=['id'=>$admin,'role'=>'admin'];Auth::$user=['id'=>$admin,'role'=>'admin','is_preview'=>0];
+ SaasLegacyBoundary::enforce();
  echo "SaaS B1.2c-2b.1: versioned tasks, scoped parents, transitions, archival, A/B and zero side effects OK\n";
 }catch(Throwable $e){
  fwrite(STDERR,$e->getMessage()."\n");exit(1);

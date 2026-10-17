@@ -119,14 +119,14 @@ try{
  taskDenied(fn()=>SaasTaskWriteApi::archive(['id'=>$id,'version'=>4]),404,'Second archive accepted.');
 
  // Financial linkage must block an archive, preserving accounting history.
- $live=SaasTaskWriteApi::save($base+['title'=>'Paid task']);
+ $live=SaasTaskWriteApi::save(array_merge($base,['title'=>'Paid task']));
  $liveId=(int)$live['id'];
  DB::insert('invoices',['tenant_account_id'=>$account,'client_id'=>$client,'demand_id'=>$liveId,
   'description'=>'Invoice','amount_cents'=>100,'due_on'=>'2026-11-30','created_at'=>now()]);
  taskDenied(fn()=>SaasTaskWriteApi::archive(['id'=>$liveId,'version'=>1]),409,'Invoiced task archived.');
  taskCheck(DB::one('SELECT deleted_at FROM demands WHERE id=?',[$liveId])['deleted_at']===null,
   'Denied archive modified task.');
- $fileTask=SaasTaskWriteApi::save($base+['title'=>'Task with files']);$fileId=(int)$fileTask['id'];
+ $fileTask=SaasTaskWriteApi::save(array_merge($base,['title'=>'Task with files']));$fileId=(int)$fileTask['id'];
  DB::insert('files',['tenant_account_id'=>$account,'demand_id'=>$fileId,'author_id'=>$admin,
   'label'=>'File','created_at'=>now()]);
  taskDenied(fn()=>SaasTaskWriteApi::archive(['id'=>$fileId,'version'=>1]),409,'Task with files archived.');

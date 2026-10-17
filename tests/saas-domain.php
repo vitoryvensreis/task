@@ -32,7 +32,7 @@ try {
  $admin=DB::insert('users',['name'=>'Owner','email'=>'b12-owner@ci.invalid','role'=>'admin','password_hash'=>'fake','active'=>1,'created_at'=>now()]);
  $otherUser=DB::insert('users',['name'=>'Other User','email'=>'b12-guest@ci.invalid','role'=>'staff','password_hash'=>'fake','active'=>1,'created_at'=>now()]);
  $client=DB::insert('clients',['name'=>'Legacy client','created_at'=>now()]);
- $project=DB::insert('projects',['client_id'=>$client,'name'=>'Legacy project']);
+ $project=DB::insert('projects',['client_id'=>$client,'name'=>'Legacy project','created_at'=>now()]);
  $demand=DB::insert('demands',[
   'client_id'=>$client,'project_id'=>$project,'category_id'=>1,'stage_id'=>1,
   'title'=>'Existing task','brief'=>'unchanged','details_json'=>'{}','due_at'=>now(),
@@ -83,7 +83,7 @@ try {
  $foreignClient=DB::insert('clients',['tenant_account_id'=>$foreignAccount,'name'=>'Foreign client','created_at'=>now()]);
  $foreignStage=DB::insert('stages',['tenant_account_id'=>$foreignAccount,'name'=>'Foreign stage','kind'=>'inbox']);
  $foreignCategory=DB::insert('categories',['tenant_account_id'=>$foreignAccount,'name'=>'Foreign service','fields_json'=>'[]']);
- $foreignProject=DB::insert('projects',['tenant_account_id'=>$foreignAccount,'client_id'=>$foreignClient,'name'=>'Foreign project']);
+ $foreignProject=DB::insert('projects',['tenant_account_id'=>$foreignAccount,'client_id'=>$foreignClient,'name'=>'Foreign project','created_at'=>now()]);
  b12(count(AccountOwnership::listing('clients',$account,$admin))===1,'Legacy list must not include foreign client.');
  b12(count(AccountOwnership::listing('clients',$foreignAccount,$otherUser))===1,'Foreign list must see only own client.');
  b12Reject(fn()=>AccountOwnership::row('clients',$foreignClient,$account,$admin),'Cannot fetch foreign client with own account.');

@@ -22,6 +22,7 @@ try {
   // Login/session membership must be verified on EVERY request.
   'saas.context'=>SaasRequestScope::status(),
   'saas.account_select'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?SaasRequestScope::select($p):fail('Método não permitido.',405),
+  'saas.inbox'=>SaasInternalInbox::forCurrentUser(integer($p['limit']??30,1,100)),
   'saas.records'=>SaasReadApi::listing($p),
   'saas.record'=>SaasReadApi::get($p),
   // B1.2c-2a — opt-in scoped mutations (POST + CSRF; bearer tokens denied).

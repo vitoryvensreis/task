@@ -225,7 +225,7 @@ Criar autorização completa de canais/destinatários, credenciais por tenant, w
 
 **Ponto exato de retomada (CI verde):** isolar o modelo de credenciais e permissões por conta, criar o primeiro destino real interno protegido sem reutilizar canais globais, depois provedores/canais separados e workers reais com idempotência externa, rastreabilidade e tentativas auditadas. Só liberar outras empresas após B1.3 e fechamento de rotas legadas.
 
-## B1.2c-2b.2b.2b.2a — Cofre de canais e credenciais por empresa (staging, CI a confirmar)
+## B1.2c-2b.2b.2b.2a — Cofre de canais e credenciais por empresa (CI aprovada, staging)
 
 **Objetivo:** estabelecer armazenamento criptografado, autorização e rotação de tokens de provedores, antes de implementar/envocar qualquer worker real. Nesta fase, a única conta habilitada a CONFIGURAR credenciais é a conta interna Escotilha; **nenhum canal pode ser ativado**, mesmo quando houver um segredo válido.
 
@@ -238,11 +238,13 @@ Criar autorização completa de canais/destinatários, credenciais por tenant, w
 - [x] Nenhum endpoint HTTP de configurar credenciais foi criado, nenhum worker sabe extrair/decriptografar o segredo e `metadata` retorna somente canal/provedor/revisão/status/data. Não há debug, logs de tokens, URL arbitrária de webhook ou permissão de provider real. Não preencher produção com tokens antes da homologação.
 - [x] `tests/saas-task-writes.php`: estrutura migrada, migração idempotente, rotação, revogação, adulteração por cópia de ciphertext entre canais, proteção da revisão antiga, metadados sem segredos, bloqueio de contas externas e bearer API antigo. `tests/saas-foundation.php` remove tabela nova antes de simular banco legado.
 
+**Validação registrada:** [GitHub Actions #39063150470](https://github.com/vitoryvensreis/task/actions/runs/39063150470), sem provedores ativos nem migração produtiva. Testes utilizaram apenas tokens fictícios de CI e confirmaram GCM/AAD, rotação e isolamento de acesso.
+
 **Riscos e limites:** a chave `app_key` deve permanecer protegida: alterar o `app_key` impossibilita descriptografar tokens previamente guardados e exigirá nova configuração, até haver um gerenciamento de chaves com versionamento/KMS. AAD impede a substituição silenciosa de tokens entre empresas/canais/revisões, não substitui autorização de acesso, segregação de rotas ou credenciais por provedor. O cofre ainda **não está conectado a deliveries, automações, WhatsApp, push ou realtime**.
 
 ### Próximo ponto de retomada — B1.2c-2b.2b.2b.2b
 
-1. Confirmar CI MySQL 8/MariaDB 10.11 e registrar link. Não implantar esta branch.
+1. [CI #39063150470](https://github.com/vitoryvensreis/task/actions/runs/39063150470) aprovada: PHP/JavaScript, MySQL 8 e MariaDB 10.11, deploy ignorado. Não implantar esta branch.
 2. Construir configuração de canal por empresa com acesso seguro a credenciais, sem permitir URLs arbitrárias ou desvio para endpoints privados (SSRF), e autorização do tenant em toda chamada.
 3. Criar workers exclusivos para entrega com estado real de publicação/entrega, guardando idempotência de provedor, correlação da mensagem externa, conciliação após timeout, retry/backoff seguro e DLQ controlada. Não declarar `held` como enviado.
 4. Testar separação A/B inclusive nos dispositivos/assinaturas, destinatários, notificações, credenciais, tokens, canais realtime e banco de arquivos. Escotilha mantém IA e Google Agenda integrados exclusivamente na conta interna; clientes SaaS recebem automações de disparo somente após autorização end-to-end.

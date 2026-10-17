@@ -36,6 +36,7 @@ try{
  $account=(int)SaasFoundationMigration::apply()['account_id'];
  taskCheck(SaasDomainMigration::apply()['domain_version']===2,'Missing domain migration.');
  taskCheck(SaasChildMigration::apply()['children_version']===3,'Missing child migration.');
+ taskCheck(SaasOutboxMigration::apply()['outbox_version']===4,'Missing isolated event outbox migration.');
  $accountB=DB::insert('accounts',['slug'=>'ci-foreign','name'=>'Other company','account_type'=>'customer','status'=>'active','created_at'=>now(),'updated_at'=>now()]);
  DB::run('DELETE FROM account_members WHERE account_id=? AND user_id=?',[$account,$outsider]);
  DB::insert('account_members',['account_id'=>$accountB,'user_id'=>$outsider,'membership_role'=>'owner','status'=>'active','joined_at'=>now()]);
@@ -130,6 +131,10 @@ try{
  DB::insert('files',['tenant_account_id'=>$account,'demand_id'=>$fileId,'author_id'=>$admin,
   'label'=>'File','created_at'=>now()]);
  taskDenied(fn()=>SaasTaskWriteApi::archive(['id'=>$fileId,'version'=>1]),409,'Task with files archived.');
+ taskCheck((int)DB::one('SELECT COUNT(*) n FROM saas_event_outbox WHERE tenant_account_id=?',[$account])['n']===6,
+  'Each successful task mutation must stage exactly one isolated tenant event.');
+ taskCheck((int)DB::one('SELECT COUNT(*) n FROM event_outbox')['n']===0,
+  'No staged SaaS event may leak into the legacy outbox.');
  taskCheck((int)DB::one("SELECT COUNT(*) n FROM audit_log WHERE entity='demand' AND action LIKE 'saas.%'")['n']===6,
   'All successful task changes must appear in legacy audit (internal only).');
 

@@ -165,7 +165,6 @@ jobs:
           php tests/ai-whatsapp-inbox.php
           php tests/ai-whatsapp-access.php
           php tests/ai-whatsapp-tools.php
-          php tests/saas-cleanup.php
 
   deploy:
     name: Deploy na VPS
@@ -452,25 +451,6 @@ jobs:
             php bin/migrate-ai-whatsapp-access.php "--backup-manifest=$BACKUP_MANIFEST"
             php bin/migrate-ai-whatsapp-tools.php "--backup-manifest=$BACKUP_MANIFEST"
             php bin/migrate-whatsapp-contacts.php "--backup-manifest=$BACKUP_MANIFEST"
-          REMOTE
-
-      - name: Limpeza definitiva das estruturas SaaS B1 com backup verificado
-        timeout-minutes: 25
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_PORT: ${{ secrets.VPS_PORT }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-          BACKUP_MANIFEST: ${{ steps.backup.outputs.backup_manifest }}
-        run: |
-          set -euo pipefail
-          printf -v REMOTE_COMMAND 'DEPLOY_PATH=%q BACKUP_MANIFEST=%q bash -s' "$DEPLOY_PATH" "$BACKUP_MANIFEST"
-          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "$REMOTE_COMMAND" <<'REMOTE'
-            set -euo pipefail
-            cd "$DEPLOY_PATH"
-            php bin/cleanup-saas-one-time.php --check
-            php bin/cleanup-saas-one-time.php --apply "--backup-manifest=$BACKUP_MANIFEST"
-            php bin/cleanup-saas-one-time.php --check
           REMOTE
 
       - name: Auditoria de integridade sem alterações de dados

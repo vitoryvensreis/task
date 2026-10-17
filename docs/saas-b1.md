@@ -1,5 +1,7 @@
 # TaskEsc SaaS — Bloco 1: Fundação multiempresa
 
+> **Atualização de rollout — 17/10/2026:** PR #113 integrada; [deploy da fundação inativa aprovado](https://github.com/vitoryvensreis/task/actions/runs/39070465317). Na PR #114, as rotas e workers legados passam a falhar fechados sempre que existir conta externa ou flags multiempresa habilitadas; isso evita vazamentos enquanto o isolamento completo não está concluído. A PR também prepara a execução sequencial e idempotente das migrações SaaS 031–036 na VPS existente, SOMENTE após preflight com backup SHA256 recente. O CI/deploy desta segunda etapa precisa ser confirmado. **Não liberar assinantes externos, não ativar flags SaaS, não confundir deploy da fundação com B1.3 concluído.** As notas abaixo documentam etapas e decisões anteriores.
+
 **Registro de retomada — 2026-10-17.** Branch de desenvolvimento: `feat/saas-b1-foundation`.
 **Estado:** B1.1 implementado e validado por CI; homologação/rollout ainda pendentes; B1 completo **não concluído**.
 **PR:** [#113](https://github.com/vitoryvensreis/task/pull/113), em rascunho. **CI:** [execução #39030497373](https://github.com/vitoryvensreis/task/actions/runs/39030497373), testes PHP/JavaScript/MySQL 8/MariaDB 10.11 aprovados, deploy omitido.

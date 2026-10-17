@@ -32,11 +32,20 @@ Introduzir uma camada de contas assinantes ACIMA dos clientes comerciais atuais.
 - [x] 15 raízes cobertas: `clients`, `stages`, `categories`, `projects`, `contracts`, `demands`, `invoices`, `automations`, `whatsapp_contacts`, `expense_categories`, `expense_rules`, `expenses`, `templates`, `google_accounts`, `calendars`.
 - [x] `app/AccountOwnership.php`: escopo explícito de leitura/listagem por conta verificada e validação dos parentes (cliente/projeto/etapa/categoria) da task. **Ainda não acoplado aos endpoints existentes, de propósito.**
 - [x] `bin/migrate-saas-domain.php`: comando exclusivamente manual `--dry-run` ou `--apply`, exige manifesto de backup com SHA256 real e schema 30.
-- [x] `tests/saas-domain.php`: testes de migração de banco legado simulado, idempotência, preservação dos IDs, duas empresas fictícias, tentativas de leitura cruzada e vínculos cruzados. Conectado à matriz MySQL 8/MariaDB 10.11. **Status de CI a conferir no PR antes da próxima etapa.**
+- [x] `tests/saas-domain.php`: testes de migração de banco legado simulado, idempotência, preservação dos IDs, duas empresas fictícias, tentativas de leitura cruzada e vínculos cruzados. Conectado à matriz MySQL 8/MariaDB 10.11. **CI aprovada:** [GitHub Actions #39031554658](https://github.com/vitoryvensreis/task/actions/runs/39031554658) (MySQL 8, MariaDB 10.11, PHP/JS; deploy ignorado).
 
 **Limitações críticas desta etapa:** `tenant_account_id` é inicialmente **NULLABLE** porque os controllers legados não enviam ownership nos novos INSERTs. Nunca usar essa coluna como prova de isolamento completo. Os dados atuais são associados à conta interna somente quando o CLI for autorizado e o backup for validado. A rotina de backfill se recusa a atuar se existir outra conta. O próximo passo precisa propagar account id em TODAS as escritas, backfills restantes, validações por JOIN e FKs compostas; depois endurecer NOT NULL. Nenhum onboarding externo antes disso.
 
 **Ausente ainda:** `payments`, `contract_items`, `cycles`, `cycle_items`, `demand_usage`, `transitions`, `comments`, `checklists`, `time_entries`, `files`, `reviews`, `change_requests`, `costs`, `events`, `notifications`, `audit_log`, `event_outbox`, `automation_runs`, `automation_run_steps`, `whatsapp_messages`, `mail_queue`, `chat_threads`, `chat_messages`, `chat_message_tasks`, `push_subscriptions`, `push_delivery_log`, `ai_whatsapp_inbox` (interno), `system_errors`, tokens e demais tabelas. Fila, realtime, workers e rotas ainda NÃO estão isolados.
+
+**Resultado da validação B1.2a:** 2026-10-17, testes aprovados em MySQL 8 e MariaDB 10.11. Commit com testes de escopo A/B: `de38f9f44a2b`; commits subsequentes alteraram somente documentação. O PR #113 permanece em rascunho e a base da VPS não foi migrada.
+
+**Comandos de homologação B1.2a, apenas após backup real validado e fundação B1.1 aplicada:**
+
+```bash
+php bin/migrate-saas-domain.php --dry-run --backup-manifest=/CAMINHO/VALIDADO/manifest.txt
+php bin/migrate-saas-domain.php --apply --backup-manifest=/CAMINHO/VALIDADO/manifest.txt
+```
 
 **Próxima retomada correta:** B1.2b — mapear as tabelas filhas por FK, migrar ownership derivado do pai e recusar registros órfãos e pais de contas divergentes. Depois B1.2c — autorização por conta em todos os módulos, com testes agressivos contra vazamento.
 

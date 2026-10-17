@@ -354,7 +354,11 @@ try{
   'Internal inbox must not trigger legacy notifications or external publishing.');
 
  // A changed receipt must fail BEFORE creating its delivery intent.
- $target=(int)$jobs[0]['receipt_id'];
+ $unlinked=DB::one('SELECT j.receipt_id FROM saas_delivery_jobs j WHERE j.tenant_account_id=?'.
+  ' AND NOT EXISTS (SELECT 1 FROM saas_internal_inbox i WHERE i.tenant_account_id=j.tenant_account_id'.
+  ' AND i.delivery_job_id=j.id) ORDER BY j.id DESC LIMIT 1',[$account]);
+ taskCheck($unlinked!==null,'Tampering fixture requires a job without inbox FK dependencies.');
+ $target=(int)$unlinked['receipt_id'];
  DB::run('DELETE FROM saas_delivery_jobs WHERE tenant_account_id=? AND receipt_id=?',[$account,$target]);
  $originalHash=(string)DB::one('SELECT event_hash FROM saas_event_receipts WHERE id=?',[$target])['event_hash'];
  DB::run('UPDATE saas_event_receipts SET event_hash=? WHERE id=?',[str_repeat('f',64),$target]);

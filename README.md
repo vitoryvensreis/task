@@ -2,7 +2,7 @@
 
 ## SaaS — Bloco 1 (fundação multiempresa) — diário de desenvolvimento
 
-**Última atualização:** 17/10/2026 · **Branch:** `feat/saas-b1-foundation` · **PR:** [#113](https://github.com/vitoryvensreis/task/pull/113) (rascunho) · **Estado:** B1.1 e B1.2a validados; B1.2b validado; B1.2c-1 implementado sob teste; B1.2c-2/B1.3 pendentes. **Não liberado em produção.**
+**Última atualização:** 17/10/2026 · **Branch:** `feat/saas-b1-foundation` · **PR:** [#113](https://github.com/vitoryvensreis/task/pull/113) (rascunho) · **Estado:** B1.1 e B1.2a validados; B1.2b validado; B1.2c-1 implementado e validado; B1.2c-2/B1.3 pendentes. **Não liberado em produção.**
 
 **Documento de continuidade detalhado:** [docs/saas-b1.md](docs/saas-b1.md). Ao retomar o projeto, consulte este bloco e o documento ANTES de qualquer migração.
 
@@ -12,7 +12,7 @@
 | B1.1 — proteção inicial e verificações | ✅ Código e testes aprovados na CI | `AccountContext` valida o vínculo; testes no MySQL/MariaDB; NÃO conectado a todas as rotas ainda |
 | B1.2a — `tenant_account_id` em 15 tabelas principais | ✅ Implementado e CI aprovada, NÃO implantado | Migração aditiva e backfill testados em MySQL 8/MariaDB 10.11; rotas legadas ainda sem isolamento |
 | B1.2b — ownership em 16 tabelas filhas | ✅ CI aprovada, NÃO implantado | Backfill por FK e checagens multiparentais aprovados no MySQL 8/MariaDB 10.11; ainda sem isolamento operacional |
-| B1.2c-1 — contexto de requisição + leituras isoladas | 🟡 Implementado, CI em andamento | Seleção de empresa validada por sessão, bloqueio de tokens antigos, leitura isolada de clientes/projetos/tasks; sem alterar APIs legadas |
+| B1.2c-1 — contexto de requisição + leituras isoladas | ✅ CI aprovada, NÃO implantado | Contexto validado por sessão; seleção CSRF; clientes/projetos/tasks filtrados; tokens antigos e empresas externas bloqueados |
 | B1.2c-2 — escritas e demais módulos | ⬜ Pendente | Usuários, CRUD, financeiro, arquivos, chat, filas/Outbox, workers, notificações, realtime, API/MCP, índices/FKs e testes adversariais completos |
 | B1.2 — restrições de recursos do SaaS | ⬜ Pendente | Desabilitar IA e calendários Google integrados para assinantes no servidor; manter disparos de automação |
 | B1.3 — ativação, homologação e migração segura | ⬜ Pendente | 2 empresas em testes; deploy com backup/rollback; habilitar contas externas só após isolamento completo |
@@ -22,6 +22,8 @@
 **B1.2a validado:** [GitHub Actions #39031554658](https://github.com/vitoryvensreis/task/actions/runs/39031554658) — validação PHP/JS, MySQL 8 e MariaDB 10.11 aprovadas; **deploy skipped**. As correções de fixture (created_at de projetos e membership revogado no teste A/B) já estão incluídas. Nenhuma alteração foi aplicada à VPS.
 
 **B1.2b validado:** [GitHub Actions #39032439643](https://github.com/vitoryvensreis/task/actions/runs/39032439643) — PHP/JavaScript, MySQL 8 e MariaDB 10.11 aprovados; deploy na VPS `skipped`. A etapa **não** permite novas empresas nem elimina a necessidade das verificações nas rotas existentes.
+
+**B1.2c-1 validado:** [GitHub Actions #39033292358](https://github.com/vitoryvensreis/task/actions/runs/39033292358): código PHP/JS, MySQL 8, MariaDB 10.11 aprovados; deploy na VPS ignorado. Os testes cobrem seleção forjada, membership revogado, tokens de API antigos e flags externas alteradas manualmente. **Ainda não altera nenhuma rota legada nem libera multiempresa.**
 
 **Arquivos B1.2c-1:** `app/SaasRequestScope.php`, `app/SaasReadApi.php`, `public/api.php` e `tests/saas-children.php`. As novas rotas `saas.context`, `saas.account_select` (POST com CSRF), `saas.records` e `saas.record` são estritamente experimentais: exigem marcadores das migrações B1.1/B1.2a/B1.2b, sessões com vínculo ativo, proprietário ADM, e não aceitam bearer tokens sem contexto de empresa. Recursos permitidos: projeções seguras de `clients`, `projects`, `demands`, sempre filtradas por `tenant_account_id`. **Nenhuma rota legada foi alterada; não libera SaaS.**
 
@@ -33,7 +35,7 @@
 
 **Testes:** [GitHub Actions #39030497373](https://github.com/vitoryvensreis/task/actions/runs/39030497373) — validação de código, MySQL 8 e MariaDB 10.11 aprovados; deploy na VPS **ignorado** no PR. PR permanece em rascunho para impedir aprovação precoce.
 
-**Ponto exato onde paramos:** validar CI da primeira etapa **B1.2c-1**, então implementar **B1.2c-2**: contexto tenant em autenticação e tokens novos, escrita de registros, queries existentes, tabelas sem pai confiável, APIs/MCP, arquivos, fila/Outbox, workers, notificações e realtime. Ainda faltam controles de escrita, autorização e índices únicos/FKs por conta. **Não mesclar o PR nem implantar na VPS.** B1.1 NÃO significa que o sistema já possa atender duas empresas. O schema operacional continua **30**, sem recriar o schema **20** removido. O comando de migração só roda manualmente após backup validado e não foi adicionado ao deploy automático.
+**Ponto exato onde paramos:** testes B1.2c-1 aprovados; implementar **B1.2c-2**: contexto tenant em autenticação e tokens novos, escrita de registros, queries existentes, tabelas sem pai confiável, APIs/MCP, arquivos, fila/Outbox, workers, notificações e realtime. Ainda faltam controles de escrita, autorização e índices únicos/FKs por conta. **Não mesclar o PR nem implantar na VPS.** B1.1 NÃO significa que o sistema já possa atender duas empresas. O schema operacional continua **30**, sem recriar o schema **20** removido. O comando de migração só roda manualmente após backup validado e não foi adicionado ao deploy automático.
 
 ---
 

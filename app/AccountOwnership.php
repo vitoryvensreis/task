@@ -7,7 +7,7 @@ declare(strict_types=1);
  */
 final class AccountOwnership {
  private static function safeTable(string $table): string {
-  if(!in_array($table,SaasDomainMigration::ROOT_TABLES,true))
+  if(!in_array($table,SaasDomainMigration::ROOT_TABLES,true)&&!array_key_exists($table,SaasChildMigration::CHILDREN))
    throw new InvalidArgumentException('This resource is not explicitly tenant-scoped.');
   return '`'.$table.'`';
  }

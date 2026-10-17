@@ -131,5 +131,29 @@ CREATE TABLE templates (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(190) NOT
 INSERT INTO stages (id,name,kind,color,position) VALUES (1,'Recebidas','inbox','#666666',1),(2,'Em análise','analysis','#777777',2),(3,'Aguardando material','waiting','#8a8a8a',3),(4,'Planejadas','planned','#9a9a9a',4),(5,'Em produção','production','#b8b8b8',5),(6,'Em aprovação','approval','#d1d1d1',6),(7,'Ajustes','production','#a7a7a7',7),(8,'Concluídas','completed','#f0f0f0',8),(9,'Canceladas','cancelled','#5a5a5a',9),(10,'Arquivadas','archived','#444444',10);
 INSERT INTO categories (id,name,fields_json) VALUES (1,'Design gráfico','[]'),(2,'Edição de vídeo','[]'),(3,'Filmagem','[]'),(4,'Fotografia','[]'),(5,'Motion design','[]');
 INSERT INTO calendars(name) VALUES ('Produção');
+-- B1.2c-2b.2a: inert SaaS event staging (no publisher, manual activation only).
+CREATE TABLE IF NOT EXISTS saas_event_outbox (
+ id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+ tenant_account_id BIGINT UNSIGNED NOT NULL,
+ event_key CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ event_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ event_type VARCHAR(100) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ entity_type VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ entity_id BIGINT UNSIGNED NOT NULL,
+ payload_json JSON NOT NULL,
+ created_by INT NULL,
+ created_at DATETIME(6) NOT NULL,
+ available_at DATETIME(6) NOT NULL,
+ published_at DATETIME(6) NULL,
+ attempts INT UNSIGNED NOT NULL DEFAULT 0,
+ last_error VARCHAR(190) NULL,
+ PRIMARY KEY (id),
+ UNIQUE KEY uq_saas_outbox_account_key (tenant_account_id,event_key),
+ KEY idx_saas_outbox_pending (tenant_account_id,published_at,available_at,id),
+ KEY idx_saas_outbox_entity (tenant_account_id,entity_type,entity_id,id),
+ CONSTRAINT fk_saas_outbox_account FOREIGN KEY (tenant_account_id) REFERENCES accounts(id) ON DELETE RESTRICT,
+ CONSTRAINT fk_saas_outbox_actor FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 INSERT INTO settings (`key`,value) VALUES ('schema_version','30'),('brand_name','TaskEsc'),('brand_color','#ffffff'),('logo_url',''),('timezone','America/Fortaleza'),('upload_mb','0'),('retention_days','365'),('drive_account_id',''),('drive_root_folder_id',''),('min_delivery_business_hours','24'),('last_cron_at',''),('last_cron_error',''),('monitor_email',''),('browser_notifications','1'),('dashboard_default_period','month');
 

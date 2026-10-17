@@ -15,6 +15,7 @@ final class SaasWriteApi {
 
  private static function ownerTx(callable $operation): array {
   return DB::tx(static function()use($operation): array {
+   SaasEventOutbox::ready();
    $membership=SaasRequestScope::owner();
    $accountId=(int)$membership['account_id'];
    $actorId=(int)(Auth::$actor['id']??0);
@@ -71,6 +72,7 @@ final class SaasWriteApi {
    }else {
     $id=DB::insert('clients',$fields+['tenant_account_id'=>$account,'active'=>1,'created_at'=>now()]);
    }
+   SaasEventOutbox::catalog($account,'client',$id,'client.saved',$actor);
    audit('client',$id,$old?'saas.update':'saas.create',
     $old?['name'=>$old['name'],'brand'=>$old['brand']]:null,
     ['name'=>$name,'brand'=>$brand,'tenant_account_id'=>$account]);
@@ -94,6 +96,7 @@ final class SaasWriteApi {
      fail('Cliente possui registros vinculados e não pode ser arquivado por esta operação.',409);
    }
    DB::run('UPDATE clients SET active=0 WHERE id=? AND tenant_account_id=? AND active=1',[$id,$account]);
+   SaasEventOutbox::catalog($account,'client',$id,'client.archived',$actor);
    audit('client',$id,'saas.archive',['name'=>$old['name']],['active'=>0,'tenant_account_id'=>$account]);
    return ['id'=>$id,'archived'=>true];
   });
@@ -121,6 +124,7 @@ final class SaasWriteApi {
     $id=DB::insert('projects',['tenant_account_id'=>$account,'client_id'=>$clientId,
      'name'=>$name,'description'=>$description,'created_at'=>now()]);
    }
+   SaasEventOutbox::catalog($account,'project',$id,'project.saved',$actor);
    audit('project',$id,$old?'saas.update':'saas.create',
     $old?['name'=>$old['name'],'client_id'=>$old['client_id']]:null,
     ['name'=>$name,'client_id'=>$clientId,'tenant_account_id'=>$account]);
@@ -141,6 +145,7 @@ final class SaasWriteApi {
      fail('Projeto com tasks ou cobranças não pode ser excluído.',409);
    $deleted=DB::run('DELETE FROM projects WHERE id=? AND tenant_account_id=?',[$id,$account]);
    if($deleted->rowCount()!==1)fail('Projeto indisponível para exclusão.',409);
+   SaasEventOutbox::catalog($account,'project',$id,'project.deleted',$actor);
    audit('project',$id,'saas.delete',['name'=>$old['name'],'client_id'=>$old['client_id']],['tenant_account_id'=>$account]);
    return ['id'=>$id,'deleted'=>true];
   });

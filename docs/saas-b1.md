@@ -186,6 +186,28 @@ php bin/migrate-saas-children.php --apply --backup-manifest=/CAMINHO/VALIDADO/ma
 3. Criar workers totalmente novos de automações/entregas com autorização e deduplicação. Testar concorrência real, canais errados, IDs cruzados, eventos atrasados e tenants suspensos.
 4. Propagar ownership de logs, tokens, notificações e tabelas restantes; isolar APIs antigas, chat, arquivos e demais processos. Somente após auditoria end-to-end, liberar B1.3. IA e Google Calendar integrados continuam **exclusivos da operação interna**, enquanto os disparos por automações serão disponibilizados mediante isolamento seguro.
 
+## B1.2c-2b.2b.2a — Fila de entrega por tenant, sem transporte (CI a confirmar)
+
+**Objetivo:** transformar recibos `held` verificados em intenções de entrega persistentes, usando uma única empresa e um único canal interno gerado no servidor. Não é integração WhatsApp/push/realtime nem processamento de automações. **`held`, `retry` e `dead` indicam somente estados de planejamento/validação, nunca entrega ao destinatário.**
+
+### Implementado
+
+- [x] `database/migrations/034_saas_delivery_jobs.sql` e `database/schema.sql` definem `saas_delivery_jobs`, `tenant_account_id BIGINT UNSIGNED NOT NULL`, FK da empresa, FK do recibo, `UNIQUE(tenant_account_id,receipt_id,channel)`, índices de status/disponibilidade, datas, tentativas e código de falha.
+- [x] `app/SaasDeliveryMigration.php` valida schema operacional 30 e marcadores do B1.1 até B1.2c-2b.2b.1 (1–5), índices e FKs. Exige a **única conta interna** e flags externas desligadas. Marcador separado `settings.saas_delivery_version=6`; não recria SaaS histórico schema 20.
+- [x] `bin/migrate-saas-delivery.php` é CLI manual com `--dry-run`/`--apply`, manifesto + dump e SHA256 íntegro. Não roda no deploy.
+- [x] `SaasEventConsumer::assertInternalReady` e `verifyEvent` permitem o reuso explícito dos mesmos validadores, inclusive hash de JSON canonizado e parentesco com task/cliente/categoria/projeto/etapa.
+- [x] `app/SaasDeliveryQueue.php`: método `stage(accountId,limit)` aceita somente recibos `held` da mesma conta. Fila `internal_event` com endereço `saas.account.{accountId}.events` **montado exclusivamente pelo servidor**, sem usar dados da requisição ou de destinatários externos. Chave única e `FOR UPDATE` impedem jobs duplicados; nenhum status `delivered` existe.
+- [x] `recordFailure(accountId,jobId,expectedAttempts,code)` para registrar **falha de validação/teste**, não falha de WhatsApp real. Aplica CAS, espera exponencial 30s/60s/120s/240s (limite de 1h em geral), máximo de 5 tentativas e estado `dead` na quinta. A fila NÃO é consumida por cron; `forOwner` mostra metadados sem payload ou segredos.
+- [x] Teste CI em `tests/saas-task-writes.php`: banco legado simulado, migração idempotente, A/B, receipts adulterados, replay, bloqueio de retry prematuro, concorrência de versão, DLQ e nenhum evento/WhatsApp/notificação publicado. Fixture histórica do `tests/saas-foundation.php` atualizada devido à FK da fila.
+
+**Pendência de validação:** aguardar matriz PHP/JS, MySQL 8 e MariaDB 10.11 e acrescentar URL e resultado aqui e no README.
+
+### Próxima retomada precisa — B1.2c-2b.2b.2b
+
+Criar autorização completa de canais/destinatários, credenciais por tenant, workers reais de eventos e automações (sem tocar no `AutomationWorker` legado), políticas de entrega/idempotência externas e reconciliação após timeout, fila DLQ operacional, usuários e tokens com contexto tenant, notificações e uploads/downloads/financeiro/chat. Testar clientes A/B, contas suspensas, membros removidos, canais errados e credenciais de outra empresa. Somente então preparar B1.3 e eventual lançamento do SaaS; não liberar calendário Google integrado ou assistente IA aos assinantes, mantendo apenas automações de disparo quando seguras.
+
+**Nunca mesclar o PR #113 antes de proteger todas as rotas existentes. Nenhum job desta etapa foi enviado a qualquer provedor ou canal realtime.**
+
 ## Pendente — B1.2: propagação e isolamento por conta
 
 - [ ] Completar `tenant_account_id` (B1.2a cobre 15 raízes, demais tabelas e consultas pendentes), priorizar `clients`, `users`/vínculos, `demands`, `projects`, `stages`, `categories`, `contracts`, `invoices`, `payments`, `expenses`, `files`, `templates`, `automations`, `automation_runs`, `event_outbox`, `whatsapp_contacts`, mensagens/chat, agendas, Google, tokens e logs. O inventário precisa ser completado por relacionamento.

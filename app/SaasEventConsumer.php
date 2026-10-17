@@ -39,6 +39,17 @@ final class SaasEventConsumer {
   self::internalAccount($accountId);
  }
 
+ /** Check the staged worker prerequisites without consuming any events. */
+ public static function assertInternalReady(int $accountId): void {
+  self::ready($accountId);
+ }
+
+ /** Verify a full outbox row before deriving any delivery intent. */
+ public static function verifyEvent(array $event,int $accountId): void {
+  self::ready($accountId);
+  self::validate($event,$accountId);
+ }
+
  /** Hard fail on a corrupted, foreign or inconsistent event: NEVER silently
   * acknowledge it. Historic versions may be earlier than the current task.
   */

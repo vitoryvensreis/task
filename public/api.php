@@ -24,6 +24,11 @@ try {
   'saas.account_select'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?SaasRequestScope::select($p):fail('Método não permitido.',405),
   'saas.records'=>SaasReadApi::listing($p),
   'saas.record'=>SaasReadApi::get($p),
+  // B1.2c-2a — opt-in scoped mutations (POST + CSRF; bearer tokens denied).
+  'saas.client.save'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?SaasWriteApi::clientSave($p):fail('Método não permitido.',405),
+  'saas.client.archive'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?SaasWriteApi::clientArchive($p):fail('Método não permitido.',405),
+  'saas.project.save'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?SaasWriteApi::projectSave($p):fail('Método não permitido.',405),
+  'saas.project.delete'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?SaasWriteApi::projectDelete($p):fail('Método não permitido.',405),
   'account.get'=>Auth::profile(),
   'account.save'=>Auth::profileSave($p),
   'account.password'=>Auth::passwordChange($p),

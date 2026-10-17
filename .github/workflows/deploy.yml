@@ -169,6 +169,7 @@ jobs:
           php tests/saas-domain.php
           php tests/saas-children.php
           php tests/saas-writes.php
+          php tests/saas-task-writes.php
 
   deploy:
     name: Deploy na VPS

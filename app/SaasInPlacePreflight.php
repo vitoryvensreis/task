@@ -79,8 +79,8 @@ final class SaasInPlacePreflight {
   return [
    'mode'=>'read_only','schema_version'=>$schema,
    'account_count'=>$accountCount,'migration_markers'=>$versions,
-   'external_signup_enabled'=>false,'multi_account_release_approved'=>false,
-   'production_deployed'=>false,'backup_verified'=>false,
+   'external_tenant_activation_authorized'=>false,
+   'performed_deploy'=>false,'backup_verified'=>false,
    'ready_for_manual_review'=>count($blocks)===0,
    'blockers'=>array_values(array_unique($blocks))
   ];

@@ -61,6 +61,7 @@ jobs:
           set -e
           node --check public/assets/app.js
           node --check public/assets/master.js
+          node --check public/assets/master-console.js
           node --check public/assets/master-settings.js
           node --check public/assets/master-operations.js
           node tests/master-dashboard-render.mjs

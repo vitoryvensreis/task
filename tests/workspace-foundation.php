@@ -15,6 +15,7 @@ require ROOT.'/app/DB.php';
 require ROOT.'/app/WorkspaceFoundation.php';
 require ROOT.'/app/WorkspaceFoundationGuard.php';
 require ROOT.'/app/WorkspaceContext.php';
+require ROOT.'/app/MasterSupport.php';
 require ROOT.'/app/Auth.php';
 require ROOT.'/app/WorkspaceCatalog.php';
 require ROOT.'/app/WorkspacePreferences.php';
@@ -137,6 +138,33 @@ try{
  testws((string)DB::one('SELECT status FROM workspace_members WHERE user_id=? AND workspace_id=?',
   [$fresh,$ws])['status']==='active','Explicitly reactivating a disabled user should restore access.');
 
+
+ // B9: Master may authenticate only after explicit verification; no tenant
+ // data is available without an active, audited support session.
+ $master=DB::insert('users',['name'=>'Verified platform Master',
+   'email'=>WorkspaceFoundation::MASTER_EMAIL,'password_hash'=>'test',
+   'role'=>'admin','active'=>1,'created_at'=>now()]);
+ DB::run("UPDATE platform_master_identities SET user_id=?,status='verified',verified_at=?,updated_at=? WHERE email=?",
+   [$master,now(),now(),WorkspaceFoundation::MASTER_EMAIL]);
+ $_SESSION=['user_id'=>$master];Auth::$user=null;Auth::$actor=null;Auth::$workspace=null;Auth::$previewClientId=null;Auth::$origin='web';
+ testws(Auth::load()['role']==='master','Verified Master should start in platform-only mode.');
+ refuses(fn()=>Auth::workspaceId(),'Master must not inherit owner workspace.');
+ testws(MasterSupport::workspaceList()['workspaces'][0]['id']===$ws,
+   'Master should see workspace metadata, not inherit its contents.');
+ $support=DB::insert('workspace_support_sessions',['workspace_id'=>$ws,
+   'master_user_id'=>$master,'reason'=>'Temporary CI support session',
+   'started_at'=>now(),'expires_at'=>gmdate('Y-m-d H:i:s',time()+7200)]);
+ $_SESSION['workspace_support_id']=$support;
+ Auth::$user=null;Auth::$actor=null;Auth::$workspace=null;
+ testws(Auth::load()['role']==='admin'&&(int)Auth::$user['id']===$owner
+   &&(int)Auth::$actor['id']===$master&&MasterSupport::isSupport(),
+   'Master must be attributed separately from selected workspace owner.');
+ DB::run('UPDATE workspace_support_sessions SET expires_at=? WHERE id=?',
+   [gmdate('Y-m-d H:i:s',time()-60),$support]);
+ Auth::$user=null;Auth::$actor=null;Auth::$workspace=null;
+ testws(Auth::load()['role']==='master'&&!MasterSupport::isSupport(),
+   'Expired support session must immediately revoke tenant context.');
+ $_SESSION=['user_id'=>$owner];Auth::$user=null;Auth::$actor=null;Auth::$workspace=null;Auth::$origin='web';
  $newClient=DB::insert('clients',['name'=>'Legacy user interface keeps default',
   'created_at'=>gmdate('Y-m-d H:i:s')]);
  testws((int)(DB::one('SELECT workspace_id FROM clients WHERE id=?',[$newClient])['workspace_id']??0)===$ws,

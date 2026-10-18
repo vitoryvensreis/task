@@ -45,7 +45,7 @@ final class AiWhatsAppAgendaTools {
  }
  private static function label(string $iso): string {return (new DateTimeImmutable($iso))->setTimezone(new DateTimeZone((string)config('timezone','America/Fortaleza')))->format('d/m/Y H:i');}
  public static function context(bool $private): array {
-  if(!$private||(Auth::$user['role']??'')!=='admin')return [];
+  if(!$private||(Auth::$user['role']??'')!=='admin'||(!MasterSupport::isSupport()&&!(WorkspaceContext::legacyCiFixture()&&defined('TASKESC_LEGACY_AI_CALENDAR_FIXTURE'))))return [];
   return ['calendars'=>array_map(static fn($c)=>['id'=>(int)$c['id'],'name'=>$c['name'],'write_enabled'=>(bool)$c['write_enabled']],array_slice(Agenda::calendars(),0,25))];
  }
  public static function run(string $name,array $args,bool $private): array {

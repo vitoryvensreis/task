@@ -2495,7 +2495,7 @@
         const list=accounts.map(a=>'<div class="panel" style="display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap;margin:8px 0"><div><b>'+esc(a.email)+'</b><div class="panel-sub">'+esc(a.status)+(a.drive_ready?' · Drive autorizado':' · Reconexão necessária')+'</div></div><button type="button" class="secondary" data-own-google="'+Number(a.id)+'" '+(!a.drive_ready?'disabled':'')+'>'+(Number(defaultDrive.account_id)===Number(a.id)?'Drive padrão':'Usar como padrão')+'</button></div>').join('');
         container.innerHTML=tabs+'<section class="panel"><div class="panel-head"><div><h3>Minhas contas Google</h3><div class="panel-sub">Só aparecem contas conectadas por você. Envie arquivos apenas usando um Drive autorizado.</div></div></div><button class="primary" type="button" id="company-connect-drive">+ Conectar Google Drive</button>'+ (list||'<div class="empty slim">Nenhuma conta Google Drive conectada.</div>')+'</section>';
         $('#company-connect-drive').onclick=async()=>{try{const res=await api('google.connect',{purpose:'drive',return_to:'settings'});location.href=res.url}catch(e){toast(e.message,true)}};
-        $('[data-own-google]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{await api('company.drive_default',{account_id:Number(b.dataset.ownGoogle)},'POST');toast('Google Drive atualizado.');await draw('google')}catch(e){toast(e.message,true);b.disabled=false}});
+        document.querySelectorAll('[data-own-google]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{await api('company.drive_default',{account_id:Number(b.dataset.ownGoogle)},'POST');toast('Google Drive atualizado.');await draw('google')}catch(e){toast(e.message,true);b.disabled=false}});
       }else{
         const users=await api('users.list');
         const team=users.filter(u=>['admin','staff'].includes(u.role));
@@ -2504,11 +2504,11 @@
         const form=$('#company-member-form');
         const open=(u)=>{form.reset();form.classList.remove('hidden');form.querySelector('[name="id"]').value=u?.id||0;form.querySelector('[name="name"]').value=u?.name||'';form.querySelector('[name="email"]').value=u?.email||'';form.querySelector('[name="whatsapp_phone"]').value=u?.whatsapp_phone||'';form.querySelector('[name="role"]').value=u?.role||'staff';form.querySelector('[name="active"]').value=String(u?.active??1);form.querySelector('[name="password"]').required=!u;$('#company-member-title').textContent=u?'Editar membro':'Novo membro';$('#company-member-password-info').textContent=u?'(deixe em branco para manter)':'(obrigatória ao criar)';form.scrollIntoView({behavior:'smooth',block:'center'});};
         $('#company-new-member').onclick=()=>open(null);
-        $('[data-team-edit]').forEach(b=>b.onclick=()=>{const u=team.find(x=>Number(x.id)===Number(b.dataset.teamEdit));if(u)open(u)});
+        document.querySelectorAll('[data-team-edit]').forEach(b=>b.onclick=()=>{const u=team.find(x=>Number(x.id)===Number(b.dataset.teamEdit));if(u)open(u)});
         $('#company-member-cancel').onclick=()=>form.classList.add('hidden');
         form.onsubmit=async e=>{e.preventDefault();const btn=form.querySelector('button[type="submit"]');btn.disabled=true;try{const data=Object.fromEntries(new FormData(form));const old=team.find(x=>Number(x.id)===Number(data.id));data.clients=old?.clients||[];data.email_notifications=old?.email_notifications??1;data.whatsapp_phone=data.whatsapp_phone.trim();if(!data.password)delete data.password;await api('users.save',data,'POST');toast('Membro salvo.');S.meta=await api('meta');await draw('team')}catch(err){toast(err.message,true);btn.disabled=false}};
       }
-      $('[data-company-tab]').forEach(b=>b.onclick=()=>draw(b.dataset.companyTab).catch(e=>toast(e.message,true)));
+      document.querySelectorAll('[data-company-tab]').forEach(b=>b.onclick=()=>draw(b.dataset.companyTab).catch(e=>toast(e.message,true)));
     };
     await draw();
   }

@@ -184,14 +184,21 @@ try {
     $email = 'realtime-smoke-'.$suffix.'@taskesc.invalid';
     $password = 'Smoke!'.bin2hex(random_bytes(12));
     $smokeStage = 'fixture_user';
-    $tempUserId = DB::insert('users', [
-        'name' => 'Realtime Smoke',
-        'email' => $email,
-        'password_hash' => password_hash($password, PASSWORD_DEFAULT),
-        'role' => 'staff',
-        'active' => 1,
-        'created_at' => now(),
-    ]);
+    $tempUserId = DB::tx(static function() use ($email,$password): int {
+        $workspace=DB::one('SELECT id FROM workspaces WHERE slug=? AND status=?',
+            [WorkspaceFoundation::SLUG,WorkspaceFoundation::STATUS]);
+        smokeNeed($workspace!==null,'workspace_smoke_prerequisite_missing');
+        $id=DB::insert('users', [
+            'name' => 'Realtime Smoke',
+            'email' => $email,
+            'password_hash' => password_hash($password, PASSWORD_DEFAULT),
+            'role' => 'staff',
+            'active' => 1,
+            'created_at' => now(),
+        ]);
+        WorkspaceContext::syncUser($id,(int)$workspace['id'],'staff',true);
+        return $id;
+    });
     smokeNeed($tempUserId > 0, 'smoke_user_create_failed');
 
     $smokeStage = 'session_start';

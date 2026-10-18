@@ -26,7 +26,7 @@
  let csrf;
  try{
   const auth=await request('auth.me');csrf=auth.csrf;
-  if(!auth.user?.is_master||auth.user.role!=='master'&&auth.user.is_support!==1){show('#master-login',true);return}
+  if(!auth.user?.is_master||!(auth.user.role==='master'||!!auth.user.is_support)){show('#master-login',true);return}
   const data=await request('master.workspaces');
   show('#master-panel',true);
   const root=$('#master-workspaces');

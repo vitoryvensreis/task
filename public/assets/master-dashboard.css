@@ -148,3 +148,17 @@ body.master-page{margin:0;background:var(--bg);color:var(--text)}
 @media(max-width:1250px){.master-app .master-stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:960px){.master-app .master-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.master-app #master-plans>.master-grid,.ms-grid{grid-template-columns:1fr}.master-app .master-dashboard-grid{grid-template-columns:1fr}}
 @media(max-width:720px){.master-app .content{padding:15px 12px 34px}.master-app .topbar{padding-inline:11px}.master-app .topbar h2{font-size:17px}.master-app .master-mini{padding:15px}.master-app .master-view>.master-grid{grid-template-columns:1fr}.ms-grid{grid-template-columns:1fr}.ms-panel{padding:15px}.ms-fields{grid-template-columns:1fr}.master-app .master-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.master-app .master-kpi{padding:12px}.ms-icon-preview{gap:6px}.ms-footer{flex-wrap:wrap}.master-app .top-actions .secondary{font-size:11px}.master-app #master-plans>.master-grid{grid-template-columns:1fr}}
+
+/* Keep the customer directory as compact cards aligned from the left. */
+.master-app #master-administrators>.master-grid,.master-app #master-workspaces>.master-grid{
+  grid-template-columns:repeat(auto-fill,minmax(min(100%,360px),420px));
+  justify-content:start;
+}
+.master-app #master-workspaces .master-mini form{display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+.master-app #master-workspaces .master-mini form label{width:100%;margin:0}
+.master-app #master-workspaces .master-mini form input{width:100%}
+@media(max-width:720px){
+ .master-app #master-administrators>.master-grid,.master-app #master-workspaces>.master-grid{
+  grid-template-columns:minmax(0,1fr);
+ }
+}

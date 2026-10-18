@@ -10,7 +10,6 @@ declare(strict_types=1);
  *
  * This script never issues INSERT/UPDATE/DELETE/ALTER and has no --apply mode.
  *
- * php bin/plan-second-workspace.php
  * php bin/plan-second-workspace.php --gabriella-email=<existing-email>
  */
 if(PHP_SAPI!=='cli'){http_response_code(404);exit;}
@@ -41,12 +40,12 @@ try {
   $email=strtolower(trim(substr($arg,strlen('--gabriella-email='))));
   if(!filter_var($email,FILTER_VALIDATE_EMAIL))throw new RuntimeException('invalid_candidate_email');
  }
+ // Require explicit identity. Never infer an existing user's account by a display name.
+ if($email===null)throw new RuntimeException('candidate_email_required');
  $sql='SELECT u.id,u.name,u.email,u.active,u.role,m.role member_role,m.status member_status
      FROM users u JOIN workspace_members m ON m.user_id=u.id AND m.workspace_id=?
-     WHERE ';
- $args=[(int)$original['id']];
- if($email!==null){$sql.='LOWER(u.email)=?';$args[]=$email;}
- else {$sql.='LOWER(u.name) LIKE ?';$args[]='gabriella%';}
+     WHERE LOWER(u.email)=?';
+ $args=[(int)$original['id'],$email];
  $matches=DB::all($sql.' LIMIT 3',$args);
  if(count($matches)!==1)throw new RuntimeException('gabriella_administrator_not_uniquely_found');
  $gabriella=$matches[0];
@@ -123,7 +122,7 @@ try {
 }catch(Throwable $e){
  $known=[
   'original_vitor_workspace_not_verified','unexpected_existing_workspaces',
-  'unsupported_argument','duplicate_email_argument','invalid_candidate_email',
+  'unsupported_argument','duplicate_email_argument','invalid_candidate_email','candidate_email_required',
   'gabriella_administrator_not_uniquely_found','gabriella_must_be_active_legacy_admin',
   'candidate_is_platform_master','candidate_already_has_multiple_workspaces'
  ];

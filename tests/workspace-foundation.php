@@ -20,6 +20,7 @@ require ROOT.'/app/Notify.php';
 require ROOT.'/app/Auth.php';
 require ROOT.'/app/WorkspaceCatalog.php';
 require ROOT.'/app/WorkspacePreferences.php';
+require ROOT.'/app/PlatformPlans.php';
 require ROOT.'/app/Catalog.php';
 require ROOT.'/app/Demands.php';
 function fail(string $message,int $status=422,array $details=[]):never {throw new RuntimeException($message,$status);}
@@ -197,6 +198,19 @@ try{
  testws(!WorkspaceFoundationGuard::valid(),'Old SaaS flag must be rejected.');
  DB::run("DELETE FROM settings WHERE `key`='saas_enabled'");
  testws(WorkspaceFoundationGuard::valid(),'Verification failed after removing forbidden flag.');
+ // Lightweight access-plan DDL compatibility on the existing disposable CI database.
+ $ddl=file_get_contents(ROOT.'/database/migrations/031_platform_access_plans.sql');
+ testws($ddl!==false,'Access-plan migration missing.');
+ foreach(preg_split('/;\\s*(?:\\r?\\n|$)/',$ddl) as $sql)
+  if(trim($sql)!=='')DB::run($sql);
+ DB::run("INSERT INTO platform_access_plans (name,code,price_cents,billing_period,features_json,team_limit,public_visible,active,created_at,updated_at)
+  VALUES ('Legado ilimitado','legacy-unlimited',0,'monthly',?,NULL,0,1,?,?)",
+  ['{"tasks":true,"automations":true,"contacts":true}',now(),now()]);
+ $planId=(int)DB::conn()->lastInsertId();
+ DB::run('INSERT INTO workspace_access_plans(workspace_id,plan_id,assigned_at) VALUES(?,?,?)',[$ws,$planId,now()]);
+ DB::run("INSERT INTO settings(\`key\`,value) VALUES('platform_access_v1','1')");
+ testws(PlatformPlans::workspacePlan($ws)['team_limit']===null,'Legacy plan was not unlimited.');
+ testws(PlatformPlans::publicList()===[],'Private legacy plan must not appear publicly.');
  echo "Workspace schema30 CI OK: owner, memberships, ".count(WorkspaceFoundation::DATA_TABLES).
   " mapped tables, preserved client/task/invoice/file, pending Master, calendar excluded, idempotence, second tenant blocked.\n";
 }catch(Throwable $e){fwrite(STDERR,'Workspace CI failed: '.$e->getMessage()."\n");exit(1);}

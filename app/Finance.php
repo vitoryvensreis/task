@@ -148,7 +148,7 @@ final class Finance {
   return $rows;
  }
  public static function expenseRules(array $p=[]): array {
-  Auth::admin();$w=!empty($p['active_only'])?'active=1 AND ':'1=1 AND ';$rows=DB::all("SELECT * FROM expense_rules WHERE $w".substr(self::wsWhere(),5)." ORDER BY active DESC,name,id DESC",self::args([]));
+  Auth::admin();$w=!empty($p['active_only'])?'active=1':'1=1';$rows=DB::all("SELECT * FROM expense_rules WHERE $w".self::wsWhere()." ORDER BY active DESC,name,id DESC",self::args([]));
   foreach($rows as &$row)$row['monthly_equivalent_cents']=$row['recurrence']==='yearly'?(int)round((int)$row['amount_cents']/12):(int)$row['amount_cents'];unset($row);return $rows;
  }
  private static function expenseCategoryName(mixed $value,bool $allowInactive=false): string {

@@ -45,11 +45,11 @@ final class Demands {
   $d=Auth::demand(integer($p['id']??0,1));
   if($d['draft']&&Auth::$user['role']==='client'&&$d['created_by']!=Auth::$user['id'])fail('Rascunho privado.',403);
   $id=(int)$d['id'];$client=Auth::$user['role']==='client';
-  $labels=DB::one('SELECT c.name AS client_name,c.commercial_type AS client_commercial_type,c.monthly_amount_cents,c.monthly_payment_day,ca.name AS category_name,s.name AS stage_name,s.kind AS stage_kind,s.color AS stage_color,u.name AS assigned_name FROM demands d JOIN clients c ON c.id=d.client_id JOIN categories ca ON ca.id=d.category_id JOIN stages s ON s.id=d.stage_id LEFT JOIN users u ON u.id=d.assigned_to WHERE d.id=?',[$id])??[];
+  $labels=DB::one('SELECT c.name AS client_name,c.commercial_type AS client_commercial_type,c.monthly_amount_cents,c.monthly_payment_day,ca.name AS category_name,s.name AS stage_name,s.kind AS stage_kind,s.color AS stage_color,u.name AS assigned_name FROM demands d JOIN clients c ON c.id=d.client_id'.(self::ci()?'':' AND c.workspace_id=d.workspace_id').' JOIN categories ca ON ca.id=d.category_id'.(self::ci()?'':' AND ca.workspace_id=d.workspace_id').' JOIN stages s ON s.id=d.stage_id'.(self::ci()?'':' AND s.workspace_id=d.workspace_id').' LEFT JOIN users u ON u.id=d.assigned_to WHERE d.id=?'.self::wsWhere('d'),self::wsArgs([$id]))??[];
   $d=self::visible(array_merge($d,$labels));
   $d['details']=decode($d['details_json']);
-  $d['comments']=DB::all('SELECT c.*,u.name AS author_name FROM comments c JOIN users u ON u.id=c.author_id WHERE demand_id=?'.($client?' AND internal=0':'').' ORDER BY c.id',[$id]);
-  $d['files']=DB::all('SELECT f.*,u.name AS author_name FROM files f JOIN users u ON u.id=f.author_id WHERE demand_id=?'.($client?' AND shared=1':'').' ORDER BY f.id DESC',[$id]);
+  $d['comments']=DB::all('SELECT c.*,u.name AS author_name FROM comments c JOIN users u ON u.id=c.author_id WHERE demand_id=?'.self::wsWhere('c').($client?' AND internal=0':'').' ORDER BY c.id',self::wsArgs([$id]));
+  $d['files']=DB::all('SELECT f.*,u.name AS author_name FROM files f JOIN users u ON u.id=f.author_id WHERE demand_id=?'.self::wsWhere('f').($client?' AND shared=1':'').' ORDER BY f.id DESC',self::wsArgs([$id]));
   foreach($d['files'] as &$f){
    unset($f['disk_name']);$f['download_url']=$f['url']?:base('download.php?id='.$f['id']);$mime=strtolower((string)($f['mime']??''));
    $inline=str_starts_with($mime,'image/')||str_starts_with($mime,'video/')||str_starts_with($mime,'audio/')||str_starts_with($mime,'text/')||$mime==='application/pdf';
@@ -57,17 +57,17 @@ final class Demands {
   }
   unset($f);
   $d['final_delivery_link']=null;foreach($d['files'] as $fileRow)if(($fileRow['kind']??'')==='final'&&($fileRow['storage_provider']??'')==='drive'){try{$d['final_delivery_link']=Google::finalDeliveryShareLink($d,$fileRow);}catch(Throwable $e){error_log('TaskEsc demand final link #'.$id.': '.$e->getMessage());$d['final_delivery_link']=null;}if($d['final_delivery_link'])break;}
-  $d['checklist']=DB::all('SELECT * FROM checklists WHERE demand_id=? ORDER BY id',[$id]);
-  $d['changes']=DB::all('SELECT r.*,u.name AS author_name FROM change_requests r JOIN users u ON u.id=r.user_id WHERE demand_id=? ORDER BY r.id DESC',[$id]);
+  $d['checklist']=DB::all('SELECT * FROM checklists WHERE demand_id=?'.self::wsWhere().' ORDER BY id',self::wsArgs([$id]));
+  $d['changes']=DB::all('SELECT r.*,u.name AS author_name FROM change_requests r JOIN users u ON u.id=r.user_id WHERE demand_id=?'.self::wsWhere('r').' ORDER BY r.id DESC',self::wsArgs([$id]));
   if(!$client){
-   $d['time']=DB::all('SELECT t.*,u.name AS user_name FROM time_entries t JOIN users u ON u.id=t.user_id WHERE demand_id=? ORDER BY t.id DESC',[$id]);
-   $d['history']=DB::all("SELECT a.*,u.name AS user_name FROM audit_log a LEFT JOIN users u ON u.id=a.user_id WHERE entity='demand' AND entity_id=? ORDER BY a.id DESC LIMIT 100",[$id]);
+   $d['time']=DB::all('SELECT t.*,u.name AS user_name FROM time_entries t JOIN users u ON u.id=t.user_id WHERE demand_id=?'.self::wsWhere('t').' ORDER BY t.id DESC',self::wsArgs([$id]));
+   $d['history']=DB::all("SELECT a.*,u.name AS user_name FROM audit_log a LEFT JOIN users u ON u.id=a.user_id WHERE entity='demand' AND entity_id=?".self::wsWhere('a')." ORDER BY a.id DESC LIMIT 100",self::wsArgs([$id]));
   }
-  if(Auth::$user['role']==='admin')$d['costs']=DB::all('SELECT * FROM costs WHERE demand_id=? ORDER BY id DESC',[$id]);
+  if(Auth::$user['role']==='admin')$d['costs']=DB::all('SELECT * FROM costs WHERE demand_id=?'.self::wsWhere().' ORDER BY id DESC',self::wsArgs([$id]));
   $timeline=[];
   foreach($d['comments'] as $x)$timeline[]=['at'=>$x['created_at'],'type'=>'comment','label'=>'Comentário','user_name'=>$x['author_name'],'detail'=>mb_substr((string)$x['body'],0,300)];
   foreach($d['files'] as $x)$timeline[]=['at'=>$x['created_at'],'type'=>'file','label'=>($x['kind']??'')==='final'?'Entrega final enviada':'Arquivo enviado','user_name'=>$x['author_name'],'detail'=>$x['original_name']??$x['label']??'Arquivo'];
-  foreach(DB::all('SELECT t.happened_at,t.from_stage,t.to_stage,u.name AS user_name,s1.name AS from_name,s2.name AS to_name FROM transitions t LEFT JOIN users u ON u.id=t.actor_id LEFT JOIN stages s1 ON s1.id=t.from_stage LEFT JOIN stages s2 ON s2.id=t.to_stage WHERE t.demand_id=? ORDER BY t.id',[$id]) as $x)$timeline[]=['at'=>$x['happened_at'],'type'=>'stage','label'=>'Etapa alterada','user_name'=>$x['user_name'],'detail'=>trim(($x['from_name']?:'Início').' → '.($x['to_name']?:'Etapa'))];
+  foreach(DB::all('SELECT t.happened_at,t.from_stage,t.to_stage,u.name AS user_name,s1.name AS from_name,s2.name AS to_name FROM transitions t LEFT JOIN users u ON u.id=t.actor_id LEFT JOIN stages s1 ON s1.id=t.from_stage LEFT JOIN stages s2 ON s2.id=t.to_stage WHERE t.demand_id=?'.self::wsWhere('t').' ORDER BY t.id',self::wsArgs([$id])) as $x)$timeline[]=['at'=>$x['happened_at'],'type'=>'stage','label'=>'Etapa alterada','user_name'=>$x['user_name'],'detail'=>trim(($x['from_name']?:'Início').' → '.($x['to_name']?:'Etapa'))];
   if(!$client)foreach($d['history']??[] as $x)$timeline[]=['at'=>$x['created_at'],'type'=>'audit','label'=>$x['action'],'user_name'=>$x['user_name']??'Sistema','detail'=>''];
   usort($timeline,fn($a,$b)=>strcmp((string)$b['at'],(string)$a['at']));$d['timeline']=array_slice($timeline,0,150);
   return $d;

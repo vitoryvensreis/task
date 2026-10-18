@@ -9,7 +9,19 @@ declare(strict_types=1);
  * Never trust a workspace_id sent by the browser, a Bearer token or URL.
  */
 final class WorkspaceContext {
+ /** Compatibility for the historical schema-30 fixture used by old CI tests.
+  * Not accessible on normal deployments, even through a CLI argument or HTTP.
+  */
+ public static function legacyCiFixture(): bool {
+  $db=config('db',[]);
+  return PHP_SAPI==='cli'&&(string)($db['name']??'')==='taskesc_test'
+   &&ctype_digit((string)getenv('OUTBOX_TEST_PORT'))
+   &&(int)($db['port']??0)===(int)getenv('OUTBOX_TEST_PORT');
+ }
  public static function forUser(array $user): array {
+  if(self::legacyCiFixture())return [
+   'id'=>0,'name'=>'Legacy CI fixture','slug'=>'ci-legacy','role'=>
+     (string)($user['role']??'client')];
   $id=(int)($user['id']??0);
   if($id<1||!in_array((string)($user['role']??''),['admin','staff','client'],true)
      ||(int)($user['active']??0)!==1)

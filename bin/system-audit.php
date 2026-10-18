@@ -43,8 +43,10 @@ try{
  $workspaceColumns=DB::all("SELECT TABLE_NAME,COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND COLUMN_NAME='workspace_id' ORDER BY TABLE_NAME");
  $workspaceValid=WorkspaceFoundationGuard::valid();
 
- if($cleanup&&$workspaceValid)
-  throw new RuntimeException('Refusing to delete the verified workspace foundation.');
+ // An interrupted installation must never be dropped by legacy cleanup.
+ if($cleanup&&($workspaceValid||$presentTables||$workspaceColumns||
+    DB::one('SELECT value FROM settings WHERE `key`=?',[WorkspaceFoundation::MARKER])))
+  throw new RuntimeException('Workspace data may not be removed by legacy SaaS cleanup.');
  if($cleanup){
   if($presentFlags)DB::run("DELETE FROM settings WHERE `key` IN ($marks)",$saasFlags);
   if($presentTables){

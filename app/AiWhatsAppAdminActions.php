@@ -46,7 +46,7 @@ final class AiWhatsAppAdminActions {
    self::tool('cancel_invoice','Preparar cancelamento de cobrança sem pagamentos, com confirmação.',['invoice_id'=>$id],['invoice_id']),
    self::tool('create_project','Preparar criação de projeto no cliente, mediante confirmação.',['client_id'=>$id,'name'=>['type'=>'string'],'description'=>['type'=>'string']],['client_id','name']),
   ];
-  if(!MasterSupport::isSupport()&&!(WorkspaceContext::legacyCiFixture()&&defined('TASKESC_LEGACY_AI_CALENDAR_FIXTURE')))$all=array_values(array_filter($all,static fn($t)=>($t['function']['name']??'')!=='list_events'));
+  if(!MasterSupport::isSupport()&&!(PHP_SAPI==='cli'&&getenv('GITHUB_ACTIONS')==='true'&&defined('TASKESC_LEGACY_AI_CALENDAR_FIXTURE')))$all=array_values(array_filter($all,static fn($t)=>($t['function']['name']??'')!=='list_events'));
   return $full?$all:array_values(array_filter($all,static fn($t)=>in_array($t['function']['name']??'',self::FINANCIAL_ACTIONS,true)));
  }
  private static function keys(array $data,array $allowed): void {

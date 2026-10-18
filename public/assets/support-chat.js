@@ -6,7 +6,7 @@
  const el=(tag,className='',label='')=>{const n=document.createElement(tag);if(className)n.className=className;if(label)n.textContent=label;return n};
  const emojiList=['😀','😁','😂','😊','😍','🥰','😎','🤔','😅','😢','😮','🙏','👍','👎','👏','🙌','💪','🤝','👋','❤️','🔥','✨','✅','⚠️','🎉','📎','📸','🚀','💬','📅','🛠️','💡'];
  let user=null,csrf='',threads=[],selected=null,root=null,fab=null,opened=false,refreshing=false,sending=false;
- let polling=null,masterRealtime=null,masterSubscription=null,requestedOpen=false,lastSeenMessage=0,lastSignalAt=0;
+ let polling=null,masterRealtime=null,masterSubscription=null,requestedOpen=false,lastSeenMessage=0,lastSignalAt=0,modalBackdrop=null;
  const threadKey=t=>t?String(t.workspace_id)+':'+String(t.tenant_user_id):'';
  const isMaster=()=>Boolean(user&&(user.role==='master'||user.is_support));
  const userId=()=>Number(user?.support_master_id||user?.id||0);
@@ -123,6 +123,7 @@
   if(!root||!user){requestedOpen=true;return}
   requestedOpen=false;opened=true;root.hidden=false;
   root.classList.remove('ts-conversation-active');
+  if(modalBackdrop&&isMaster())modalBackdrop.hidden=false;
   fab.hidden=true;
   $('.ts-search',root).value='';
   updateConnection();startPolling();
@@ -132,7 +133,7 @@
   }
  }
  function closePanel(){
-  opened=false;if(root){root.hidden=true;root.classList.remove('ts-conversation-active')}if(fab&&user&&!isMaster())fab.hidden=false;
+  opened=false;if(root){root.hidden=true;root.classList.remove('ts-conversation-active')}if(modalBackdrop)modalBackdrop.hidden=true;if(fab&&user&&!isMaster())fab.hidden=false;
   if(isMaster())window.dispatchEvent(new Event('taskesc:close-support'));
   if(polling)clearInterval(polling);polling=null;
   if(document.body.dataset.masterPage==='1'&&/\/master\/suporte\/?$/.test(location.pathname)){
@@ -234,8 +235,11 @@
    finally{sending=false;send.disabled=false}
   };
   fab.onclick=openPanel;
-  if(isMaster()&&$('#master-support')){
-   root.classList.add('ts-inline');$('#master-support').append(root);document.body.append(fab);fab.hidden=true;
+  if(isMaster()){
+   root.classList.add('ts-master-popup');root.setAttribute('role','dialog');root.setAttribute('aria-modal','true');
+   modalBackdrop=el('div','ts-master-overlay');modalBackdrop.hidden=true;
+   modalBackdrop.onclick=closePanel;
+   document.body.append(modalBackdrop,fab,root);fab.hidden=true;
   }else document.body.append(fab,root);
  }
  function handleRealtime(event){
@@ -291,10 +295,12 @@
  window.addEventListener('taskesc:leave-support',()=>{
   if(!isMaster()||!root)return;
   opened=false;root.hidden=true;root.classList.remove('ts-conversation-active');
+  if(modalBackdrop)modalBackdrop.hidden=true;
   if(polling)clearInterval(polling);polling=null;
  });
  window.addEventListener('online',()=>{if(opened)sync().catch(()=>{})});
  document.addEventListener('visibilitychange',()=>{if(opened&&!document.hidden)sync().catch(()=>{})});
+ document.addEventListener('keydown',event=>{if(event.key==='Escape'&&opened&&isMaster())closePanel()});
  document.addEventListener('taskesc:login',initialize);
  document.addEventListener('taskesc:logout',()=>{user=null;closePanel();if(fab)fab.hidden=true;if(masterRealtime){masterRealtime.disconnect();masterRealtime=null}});
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initialize);

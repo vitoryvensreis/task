@@ -239,6 +239,14 @@ window.MasterConsole=(()=>{
   f.onsubmit=async e=>{e.preventDefault();send.disabled=true;
    try{const result=await api(base,'master.invite_additional',csrf,Object.fromEntries(new FormData(f)));status(f,'Convite enviado para '+result.email);f.reset()}
    catch(err){status(f,err.message,true)}finally{send.disabled=false}};
+   grid.remove();
+   window.TaskEscMasterTabs.mount(host,[
+    {key:'perfil',label:'Minha conta',node:profile},
+    {key:'senha',label:'Senha',node:pw},
+    {key:'2fa',label:'Autenticação 2FA',node:two},
+    {key:'masters',label:'Administradores Master',node:list},
+    {key:'convites',label:'Convidar Master',node:invite}
+   ],'conta');
  }
  function banner(host){
   host.replaceChildren();

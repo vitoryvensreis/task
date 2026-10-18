@@ -199,3 +199,43 @@
  .ts-support-panel .ts-text{min-height:43px;max-height:100px}
  .ts-support-panel .ts-mobile-back{display:flex}
 }
+
+/* Master support dock — small WhatsApp-like popup, not a fullscreen page. */
+.master-page .ts-support-fab{
+ display:flex!important;position:fixed;right:22px;bottom:20px;z-index:9903;
+ width:58px;height:58px;justify-content:center;align-items:center;
+ font-size:25px!important;border-radius:14px;border:1px solid #386b68;
+ background:#168874;color:white;padding:0;box-shadow:0 12px 34px #0009;
+}
+.master-page .ts-support-fab .ts-support-indicator{
+ position:absolute;top:-9px;right:-8px;border:2px solid #10151b;
+ display:flex;align-items:center;justify-content:center;min-width:25px;height:25px;
+ padding:0 5px;border-radius:999px;background:#ef554e;color:white;font-size:11px;font-weight:800;
+ box-sizing:border-box;
+}
+.master-page .ts-support-fab .ts-support-indicator[hidden]{display:none!important}
+.ts-support-panel.ts-master-popup{
+ position:fixed;transform:none;left:auto;top:auto;
+ right:21px;bottom:88px;width:min(850px,calc(100vw - 40px));
+ height:min(660px,calc(100dvh - 115px));min-height:370px;
+ max-height:calc(100dvh - 115px);
+ z-index:9902;border-radius:10px;box-shadow:0 14px 70px #000b;
+}
+.ts-support-panel.ts-master-popup .ts-layout{grid-template-columns:minmax(235px,35%) minmax(0,1fr)}
+.ts-support-panel.ts-master-popup .ts-header{min-height:52px;padding:8px 13px}
+.ts-support-panel.ts-master-popup .ts-left-head{padding:11px 12px 8px}
+.ts-support-panel.ts-master-popup .ts-messages{padding:15px 20px}
+.ts-support-panel.ts-master-popup .ts-composer{padding:9px 12px}
+@media(max-width:720px){
+ .master-page .ts-support-fab{width:52px;height:52px;bottom:14px;right:12px;border-radius:12px}
+ .ts-support-panel.ts-master-popup{position:fixed;left:8px;right:8px;top:auto;bottom:75px;
+   width:calc(100vw - 16px);height:min(710px,calc(100dvh - 87px));max-height:calc(100dvh - 87px);
+   min-height:0;border:1px solid #303d49;border-radius:10px;transform:none}
+ .ts-support-panel.ts-master-popup .ts-layout{display:block;position:relative;min-height:0;flex:1}
+ .ts-support-panel.ts-master-popup .ts-left,.ts-support-panel.ts-master-popup .ts-right{position:absolute;inset:0;width:100%;height:100%}
+ .ts-support-panel.ts-master-popup .ts-left{display:flex}
+ .ts-support-panel.ts-master-popup .ts-right{display:none}
+ .ts-support-panel.ts-master-popup.ts-conversation-active .ts-left{display:none}
+ .ts-support-panel.ts-master-popup.ts-conversation-active .ts-right{display:flex}
+ .ts-support-panel.ts-master-popup .ts-messages{padding:13px 11px}
+}

@@ -307,3 +307,9 @@ body.master-page{margin:0;background:var(--bg);color:var(--text)}
  .master-inner-pane .master-dashboard-grid{grid-template-columns:1fr}
  .master-inner-pane .master-ops-toolbar{align-items:stretch}
 }
+
+/* The Gabriella proposal is visible, but cannot be mistaken for an active company. */
+.mc-customer-row.mc-customer-pending{border-style:dashed;border-color:#526578;background:#121b25}
+.mc-customer-row .mc-pending-state{display:inline-block;color:#e9c487;font-size:11px;font-weight:650;letter-spacing:.1px}
+.mc-customer-pending .mc-row-actions button{white-space:nowrap}
+@media(max-width:600px){.mc-customer-row.mc-customer-pending{gap:10px;padding:13px 11px}}

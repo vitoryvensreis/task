@@ -95,9 +95,12 @@ final class MasterSupport {
    FROM workspaces w JOIN users u ON u.id=w.owner_user_id
    LEFT JOIN workspace_access_plans a ON a.workspace_id=w.id
    LEFT JOIN platform_access_plans p ON p.id=a.plan_id WHERE 1=1".$filter." ORDER BY w.created_at DESC,w.id DESC LIMIT 100",$args);
-  return ['customers'=>$rows,'billing_enabled'=>false,
+  // Pending proposals are visible to Master, but are NOT active workspaces,
+  // must never be given a support session or tenant plan.
+  $pending=PlatformTenantProvisioning::pendingDirectory($search);
+  return ['customers'=>array_merge($rows,$pending),'billing_enabled'=>false,
    'billing_note'=>'As assinaturas SaaS ainda não geram cobranças. Faturas e pagamentos só terão status depois da integração Asaas e dos webhooks.',
-   'workspace_creation_enabled'=>false];
+   'workspace_creation_enabled'=>false,'pending_workspace_count'=>count($pending)];
  }
  /** Platform audit entries, filtered by workspace and action, without sensitive change payloads. */
  public static function platformAudit(array $p=[]): array {

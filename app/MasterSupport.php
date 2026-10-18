@@ -12,7 +12,7 @@ final class MasterSupport {
   $w=DB::one('SELECT w.id,w.name,w.slug,w.owner_user_id,w.status,u.active AS owner_active,u.role AS owner_role,u.email AS owner_email
     FROM workspaces w JOIN users u ON u.id=w.owner_user_id WHERE w.slug=?',
     [WorkspaceFoundation::SLUG]);
-  if($count!==1||!$w||$w['status']!==WorkspaceFoundation::STATUS||
+  if((!WorkspaceTenantMode::enabled()&&$count!==1)||!$w||$w['status']!==WorkspaceFoundation::STATUS||
      (int)$w['owner_active']!==1||$w['owner_role']!=='admin'||strtolower((string)$w['owner_email'])!==WorkspaceFoundation::OWNER_EMAIL)
    fail('Modo suporte indisponível: workspace único não verificado.',503);
   return $w;
@@ -33,16 +33,19 @@ final class MasterSupport {
   $w=self::singleWorkspace();
   $sessionId=(int)($_SESSION['workspace_support_id']??0);
   if(Auth::$origin!=='web'||$sessionId<1)return ['id'=>0,'name'=>'Plataforma TaskEsc','slug'=>'platform','role'=>'master'];
-  $session=DB::one('SELECT s.id,s.workspace_id,s.master_user_id,s.expires_at,s.ended_at
-    FROM workspace_support_sessions s WHERE s.id=? AND s.master_user_id=? AND s.workspace_id=?',
-    [$sessionId,(int)$user['id'],(int)$w['id']]);
-  if(!$session||$session['ended_at']!==null||$session['expires_at']<=now()){
+  $multi=WorkspaceTenantMode::enabled();
+  $session=DB::one('SELECT s.id,s.workspace_id,s.master_user_id,s.expires_at,s.ended_at,
+    w.name,w.slug,w.owner_user_id,w.status AS workspace_status
+    FROM workspace_support_sessions s JOIN workspaces w ON w.id=s.workspace_id
+    WHERE s.id=? AND s.master_user_id=?'.($multi?'':' AND s.workspace_id=?'),
+    $multi?[$sessionId,(int)$user['id']]:[$sessionId,(int)$user['id'],(int)$w['id']]);
+  if(!$session||!in_array((string)($session['workspace_status']??''),[WorkspaceFoundation::STATUS,...($multi?['active']:[])],true)||$session['ended_at']!==null||$session['expires_at']<=now()){
    unset($_SESSION['workspace_support_id']);
    return ['id'=>0,'name'=>'Plataforma TaskEsc','slug'=>'platform','role'=>'master'];
   }
-  return ['id'=>(int)$w['id'],'name'=>(string)$w['name'],
-    'slug'=>(string)$w['slug'],'role'=>'owner',
-    'support_session_id'=>$sessionId,'owner_user_id'=>(int)$w['owner_user_id']];
+  return ['id'=>(int)$session['workspace_id'],'name'=>(string)$session['name'],
+    'slug'=>(string)$session['slug'],'role'=>'owner',
+    'support_session_id'=>$sessionId,'owner_user_id'=>(int)$session['owner_user_id']];
  }
  public static function isActor(): bool {
   return Auth::$origin==='web'&&Auth::$actor!==null&&self::isVerified(Auth::$actor);
@@ -65,13 +68,14 @@ final class MasterSupport {
  public static function administrators(): array {
   Auth::load();if(!self::isActor())fail('Somente o ADM Master pode listar administradores.',403);
   $w=self::singleWorkspace();
+  $multi=WorkspaceTenantMode::enabled();
   return DB::all("SELECT u.id,u.name,u.email,u.active,u.twofa_enabled,wm.role AS workspace_role,
     w.id AS workspace_id,w.name AS workspace_name
     FROM workspace_members wm
     JOIN users u ON u.id=wm.user_id
     JOIN workspaces w ON w.id=wm.workspace_id
-    WHERE wm.workspace_id=? AND wm.role IN ('owner','admin')
-    ORDER BY wm.role='owner' DESC,u.name",[(int)$w['id']]);
+    WHERE ".($multi?'1=1':'wm.workspace_id=?')." AND wm.role IN ('owner','admin')
+    ORDER BY w.name,wm.role='owner' DESC,u.name",$multi?[]:[(int)$w['id']]);
  }
 
  /** Two-factor reset is a high-risk operation: password step-up + audit. */
@@ -91,7 +95,11 @@ final class MasterSupport {
     WHERE wm.workspace_id=w.id AND wm.status='active' AND member.active=1 AND wm.role IN ('admin','staff')
     AND wm.user_id<>w.owner_user_id) AS team_users,
    (SELECT COUNT(*) FROM workspace_members wm WHERE wm.workspace_id=w.id AND wm.role='admin' AND wm.status='active') AS admins,
-   (SELECT COUNT(*) FROM workspace_support_sessions ss WHERE ss.workspace_id=w.id) AS support_sessions
+   (SELECT COUNT(*) FROM workspace_support_sessions ss WHERE ss.workspace_id=w.id) AS support_sessions,
+   (SELECT COUNT(*) FROM clients c WHERE c.workspace_id=w.id) AS clients_count,
+   (SELECT COUNT(*) FROM projects pr WHERE pr.workspace_id=w.id) AS projects_count,
+   (SELECT COUNT(*) FROM demands d WHERE d.workspace_id=w.id) AS demands_count,
+   (SELECT COUNT(*) FROM automations au WHERE au.workspace_id=w.id) AS automations_count
    FROM workspaces w JOIN users u ON u.id=w.owner_user_id
    LEFT JOIN workspace_access_plans a ON a.workspace_id=w.id
    LEFT JOIN platform_access_plans p ON p.id=a.plan_id WHERE 1=1".$filter." ORDER BY w.created_at DESC,w.id DESC LIMIT 100",$args);
@@ -127,6 +135,13 @@ final class MasterSupport {
   if(!$master||!password_verify($password,(string)$master['password_hash']))
    fail('Confirme a senha do ADM Master para redefinir o 2FA.',403);
   $w=self::singleWorkspace();
+  if(WorkspaceTenantMode::enabled()){
+   $member=DB::one("SELECT w.id,w.name,w.slug,w.owner_user_id,w.status
+     FROM workspace_members wm JOIN workspaces w ON w.id=wm.workspace_id
+     WHERE wm.user_id=? AND wm.role IN ('owner','admin') AND wm.status='active'",[$target]);
+   if(!$member)fail('Administrador não pertence a um workspace ativo.',404);
+   $w=$member;
+  }
   return DB::tx(static function() use($target,$reason,$w):array {
    $user=DB::one("SELECT u.id,u.name,u.twofa_enabled,u.role,u.active
      FROM users u JOIN workspace_members wm ON wm.user_id=u.id
@@ -154,12 +169,13 @@ final class MasterSupport {
   Auth::load();
   if(!self::isActor())fail('Área exclusiva do ADM Master.',403);
   self::singleWorkspace();
+  $multi=WorkspaceTenantMode::enabled();
   $member=DB::one("SELECT
      COUNT(DISTINCT CASE WHEN u.active=1 AND wm.status='active' THEN u.id END) AS active_users,
      COUNT(DISTINCT CASE WHEN u.active=1 AND wm.status='active' AND wm.role IN ('owner','admin') THEN u.id END) AS active_admins
      FROM workspace_members wm JOIN users u ON u.id=wm.user_id
-     JOIN workspaces w ON w.id=wm.workspace_id WHERE w.slug=?",
-     [WorkspaceFoundation::SLUG])??[];
+     JOIN workspaces w ON w.id=wm.workspace_id WHERE ".($multi?'1=1':'w.slug=?'),
+     $multi?[]:[WorkspaceFoundation::SLUG])??[];
   $workspaces=(int)(DB::one('SELECT COUNT(*) n FROM workspaces')['n']??0);
   $plans=DB::one("SELECT
     COUNT(*) AS total,
@@ -173,8 +189,8 @@ final class MasterSupport {
   $byRole=DB::all("SELECT wm.role,COUNT(DISTINCT wm.user_id) AS total
     FROM workspace_members wm JOIN users u ON u.id=wm.user_id
     JOIN workspaces w ON w.id=wm.workspace_id
-    WHERE w.slug=? AND wm.status='active' AND u.active=1
-    GROUP BY wm.role", [WorkspaceFoundation::SLUG]);
+    WHERE ".($multi?'1=1':'w.slug=?')." AND wm.status='active' AND u.active=1
+    GROUP BY wm.role", $multi?[]:[WorkspaceFoundation::SLUG]);
   $byPlan=DB::all("SELECT p.id,p.name,COUNT(a.workspace_id) AS total
     FROM platform_access_plans p LEFT JOIN workspace_access_plans a ON a.plan_id=p.id
     GROUP BY p.id,p.name ORDER BY total DESC,p.name LIMIT 12");
@@ -183,9 +199,9 @@ final class MasterSupport {
   $registered=DB::all("SELECT DATE_FORMAT(wm.joined_at,'%Y-%m') AS month_key,
       COUNT(DISTINCT wm.user_id) AS total
     FROM workspace_members wm JOIN workspaces w ON w.id=wm.workspace_id
-    WHERE w.slug=? AND wm.joined_at>=?
+    WHERE ".($multi?'1=1':'w.slug=?')." AND wm.joined_at>=?
     GROUP BY DATE_FORMAT(wm.joined_at,'%Y-%m')
-    ORDER BY month_key", [WorkspaceFoundation::SLUG,$since]);
+    ORDER BY month_key", $multi?[$since]:[WorkspaceFoundation::SLUG,$since]);
   $index=[];foreach($registered as $row)$index[(string)$row['month_key']]=(int)$row['total'];
   $series=[];
   $cursor=new DateTimeImmutable($since,new DateTimeZone('UTC'));
@@ -201,8 +217,8 @@ final class MasterSupport {
     FROM workspaces w
     LEFT JOIN workspace_access_plans a ON a.workspace_id=w.id
     LEFT JOIN platform_access_plans p ON p.id=a.plan_id
-    WHERE w.slug=?
-    ORDER BY w.id DESC LIMIT 10",[WorkspaceFoundation::SLUG]);
+    WHERE ".($multi?'1=1':'w.slug=?')."
+    ORDER BY w.id DESC LIMIT 10",$multi?[]:[WorkspaceFoundation::SLUG]);
   return [
    'metrics'=>[
     'sales_cents'=>null,'revenue_cents'=>null,'billing_enabled'=>false,
@@ -230,9 +246,12 @@ final class MasterSupport {
     'support_expires_at'=>self::isSupport()
      ?(DB::one('SELECT expires_at FROM workspace_support_sessions WHERE id=?',
         [(int)Auth::$workspace['support_session_id']])['expires_at']??null):null,
-    'workspaces'=>[['id'=>(int)$w['id'],'name'=>(string)$w['name'],
-      'slug'=>(string)$w['slug'],'status'=>'staged']],
-    'multiworkspace_enabled'=>false];
+    'workspaces'=>WorkspaceTenantMode::enabled()?
+      DB::all("SELECT id,name,slug,status FROM workspaces
+        WHERE status IN ('staged','active') ORDER BY name"):
+      [['id'=>(int)$w['id'],'name'=>(string)$w['name'],
+       'slug'=>(string)$w['slug'],'status'=>'staged']],
+    'multiworkspace_enabled'=>WorkspaceTenantMode::enabled()];
  }
  public static function start(array $input): array {
   Auth::load();
@@ -241,7 +260,14 @@ final class MasterSupport {
   $reason=required($input,'reason',190);
   if(mb_strlen($reason)<8)fail('Informe o motivo do suporte (mínimo 8 caracteres).',422);
   $w=self::singleWorkspace();
-  if($workspaceId!==(int)$w['id'])fail('Workspace indisponível.',404);
+  if(WorkspaceTenantMode::enabled()){
+   $w=DB::one("SELECT w.id,w.name,w.slug,w.owner_user_id,w.status,
+      u.active AS owner_active,u.role AS owner_role FROM workspaces w
+      JOIN users u ON u.id=w.owner_user_id WHERE w.id=?",[$workspaceId]);
+   if(!$w||!in_array((string)$w['status'],[WorkspaceFoundation::STATUS,'active'],true)||
+      (int)$w['owner_active']!==1||$w['owner_role']!=='admin')
+    fail('Workspace indisponível.',404);
+  }elseif($workspaceId!==(int)$w['id'])fail('Workspace indisponível.',404);
   $masterId=(int)Auth::$actor['id'];
   $expires=gmdate('Y-m-d H:i:s',time()+self::SESSION_SECONDS);
   $id=DB::tx(static function()use($workspaceId,$masterId,$reason,$expires):int {

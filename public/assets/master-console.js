@@ -65,6 +65,9 @@ window.MasterConsole=(()=>{
      const person=el('div');person.append(el('strong','',w.name),
       el('span','',w.owner_name+' · '+w.owner_email));
      if(staged)person.append(el('span','mc-pending-state','● Pré-cadastro · Aguardando ativação'));
+     if(!staged)person.append(el('span','mc-company-usage',
+      fmt(w.clients_count)+' clientes · '+fmt(w.projects_count)+' projetos · '+
+      fmt(w.demands_count)+' tarefas · '+fmt(w.automations_count)+' automações'));
      ident.append(circle,person);row.append(ident);
      const plan=el('div','mc-cell');plan.append(el('small','','Plano'),el('strong','',w.plan_name||'Sem plano'));row.append(plan);
      const team=el('div','mc-cell');team.append(el('small','','Equipe'),el('strong','',fmt(w.team_users)+' membros'));row.append(team);
@@ -121,34 +124,162 @@ window.MasterConsole=(()=>{
   });
  }
  function showCustomer(w,admins,plans,refresh,base,csrf){
-  modal('Gerenciar '+w.name,'Gestão de plano, equipe, acessos e histórico de suporte da empresa.',(body,close)=>{
-   const stats=el('div','mc-profile-stats');
-   for(const [title,value] of [['Plano atual',w.plan_name||'Nenhum'],['Usuários ativos',fmt(w.active_users)],['Equipe',fmt(w.team_users)],['Suporte realizado',fmt(w.support_sessions)+' sessões']]){
-    const cell=el('div');cell.append(el('small','',title),el('strong','',value));stats.append(cell)
-   }body.append(stats);
-   const actions=el('div','mc-actions');
-   actions.append(button('↗ Entrar no workspace',()=>{close();startSupport(w,base,csrf)},'primary'));
-   body.append(actions);
-   const planForm=el('form','mc-form');planForm.append(el('h3','','Acesso e plano'));
-   const select=el('select','select');select.name='plan_id';
-   for(const p of plans.filter(x=>Number(x.active)===1)){
-    const o=el('option','',p.name+' · '+money(p.price_cents)+'/'+(cycles[p.billing_period]||p.billing_period).toLowerCase());
-    o.value=p.id;o.selected=Number(p.id)===Number(w.plan_id);select.append(o);
+  modal('Gerenciar '+w.name,'Dados da empresa, equipe, acesso e assinatura.',(body,close)=>{
+   async function render(){
+    body.replaceChildren(el('p','master-description','Carregando informações do workspace…'));
+    let d;
+    try{d=await api(base,'master.workspace_members',csrf,null,{workspace_id:Number(w.id)});}
+    catch(error){body.replaceChildren(el('p','mc-feedback error',error.message));return;}
+    body.replaceChildren();
+    const company=el('section','mc-detail-pane');
+    const header=el('div','mc-profile-stats');
+    const quota=d.team_limit===null?'Ilimitada':fmt(d.team_used)+' / '+fmt(d.team_limit);
+    for(const [title,value] of [
+      ['Usuários ativos',fmt(w.active_users)],
+      ['Equipe / limite',quota],
+      ['Clientes',fmt(w.clients_count)],
+      ['Tarefas',fmt(w.demands_count)],
+      ['Projetos',fmt(w.projects_count)],
+      ['Automações',fmt(w.automations_count)]
+    ]){
+     const cell=el('div');cell.append(el('small','',title),el('strong','',value));header.append(cell);
+    }
+    company.append(header);
+    const edit=el('form','mc-form');edit.append(el('h3','','Dados cadastrais'));
+    const name=field(edit,'Nome da empresa','name',d.workspace.name);
+    const email=field(edit,'E-mail comercial','company_email',d.workspace.company_email,'email');
+    const phone=field(edit,'Telefone comercial','company_phone',d.workspace.company_phone,'tel');
+    name.required=true;name.maxLength=190;
+    email.maxLength=190;phone.maxLength=25;
+    note(edit,'Identidade do proprietário',
+      d.workspace.owner_name+' · '+d.workspace.owner_email+' · Slug: '+d.workspace.slug+
+      '. O cadastro comercial não altera o login do proprietário nem o endereço do workspace.');
+    const save=el('button','primary','Salvar dados da empresa');save.type='submit';
+    edit.append(save,el('p','mc-feedback'));company.append(edit);
+    edit.onsubmit=async event=>{
+     event.preventDefault();save.disabled=true;
+     try{
+      const result=await api(base,'master.workspace_profile_save',csrf,{
+       workspace_id:Number(w.id),name:name.value.trim(),
+       company_email:email.value.trim(),company_phone:phone.value.trim()
+      });
+      w.name=result.name;
+      status(edit,'Dados atualizados com sucesso.');
+      await refresh();
+     }catch(error){status(edit,error.message,true)}
+     finally{save.disabled=false}
+    };
+    const access=el('section','mc-detail-pane');
+    access.append(el('h3','','Acesso de suporte'),
+      el('p','master-description','Acesso temporário ao ambiente com justificativa e histórico de auditoria.'));
+    access.append(button('↗ Entrar no workspace',()=>{close();startSupport(w,base,csrf)},'primary'));
+    const plan=el('section','mc-detail-pane');
+    const form=el('form','mc-form');form.append(el('h3','','Plano e limites'));
+    const planLabel=el('label','mc-field'),select=el('select','select');
+    for(const p of plans.filter(x=>Number(x.active)===1)){
+     const op=el('option','',p.name+' · '+money(p.price_cents)+' / '+(cycles[p.billing_period]||p.billing_period));
+     op.value=p.id;op.selected=Number(p.id)===Number(w.plan_id);select.append(op);
+    }
+    planLabel.append(el('span','','Plano atribuído'),select);form.append(planLabel);
+    const limits=el('div','mc-profile-stats');
+    const used=el('div');used.append(el('small','','Usuários adicionais ativos'),el('strong','',fmt(d.team_used)));
+    const allowed=el('div');allowed.append(el('small','','Limite atual'),el('strong','',d.team_limit===null?'Ilimitado':fmt(d.team_limit)));
+    limits.append(used,allowed);form.append(limits);
+    note(form,'Limite base do plano',
+      'Equipe padrão: '+(d.plan_team_limit===null?'Ilimitada':fmt(d.plan_team_limit))+
+      '. O limite específico desta empresa, quando cadastrado, tem prioridade sobre o plano.');
+    const submit=el('button','primary','Aplicar plano');submit.type='submit';
+    form.append(submit,el('p','mc-feedback'));plan.append(form);
+    form.onsubmit=async event=>{
+     event.preventDefault();submit.disabled=true;
+     try{await api(base,'master.plan_assign',csrf,{workspace_id:Number(w.id),plan_id:Number(select.value)});
+      status(form,'Plano aplicado.');await refresh();await render();
+     }catch(error){status(form,error.message,true)}
+     finally{submit.disabled=false}
+    };
+    const overrideForm=el('form','mc-form mc-limit-form');
+    overrideForm.append(el('h3','','Limite exclusivo do workspace'));
+    const override=field(overrideForm,'Máximo de usuários adicionais','team_limit_override',
+      d.team_limit_override===null?'':String(d.team_limit_override),'number');
+    override.min='1';override.max='100000';override.step='1';
+    override.placeholder='Vazio: seguir o plano';
+    note(overrideForm,'Personalização do limite',
+     'Defina um número para esta empresa ou deixe o campo vazio para usar o limite do plano. O proprietário não entra na contagem.');
+    const saveLimit=el('button','secondary','Salvar limite exclusivo');
+    saveLimit.type='submit';overrideForm.append(saveLimit,el('p','mc-feedback'));
+    overrideForm.onsubmit=async event=>{
+     event.preventDefault();saveLimit.disabled=true;
+     try{
+      await api(base,'master.workspace_limit_save',csrf,
+       {workspace_id:Number(w.id),team_limit_override:override.value.trim()});
+      await refresh();await render();
+     }catch(error){status(overrideForm,error.message,true)}
+     finally{saveLimit.disabled=false}
+    };
+    plan.append(overrideForm);
+    const team=el('section','mc-detail-pane');
+    team.append(el('h3','','Administradores e equipe'));
+    note(team,'Um proprietário por workspace',
+      'O proprietário não pode ser suspenso por este painel. Os membros e funções personalizadas são gerenciados pelo ADM da empresa.');
+    for(const member of d.members||[]){
+     const row=el('div','mc-team-row'),who=el('div');
+     const isOwner=Number(member.id)===Number(w.owner_user_id);
+     const role=isOwner?'Proprietário':member.role==='admin'?'ADM':member.custom_role_name||member.role;
+     const active=Number(member.active)===1&&member.status==='active';
+     who.append(el('strong','',member.name),
+      el('span','',member.email+' · '+role+' · '+(active?'Ativo':'Inativo')+
+        (member.twofa_enabled?' · 2FA ativo':'')));
+     row.append(who);
+     const controls=el('div','mc-actions');
+     if(member.role==='admin'||isOwner){
+      controls.append(button('Redefinir 2FA',()=>resetTwofa(member,base,csrf),'secondary'));
+     }
+     if(member.role==='admin'&&!isOwner){
+      controls.append(button(active?'Suspender ADM':'Reativar ADM',
+       ()=>changeAdminAccess(member,w,active,render,base,csrf),'secondary'));
+     }
+     row.append(controls);team.append(row);
+    }
+    const billing=el('section','mc-detail-pane');
+    billing.append(el('h3','','Assinatura e pagamentos'));
+    note(billing,'Asaas ainda não está conciliado',
+     'Sem faturas ou pagamentos SaaS confirmados. O plano cadastrado indica o acesso contratado, não prova que a assinatura foi paga.');
+    const meta=el('div','mc-profile-stats');
+    const billingPlan=el('div');billingPlan.append(el('small','','Plano cadastrado'),el('strong','',d.plan_name||'Sem plano'));
+    const billingState=el('div');billingState.append(el('small','','Situação financeira'),el('strong','','Não integrada'));
+    meta.append(billingPlan,billingState);billing.append(meta);
+    body.append(access);
+    window.TaskEscMasterTabs.mount(body,[
+     {key:'empresa',label:'Empresa',node:company},
+     {key:'plano',label:'Plano e limites',node:plan},
+     {key:'equipe',label:'Administradores',node:team},
+     {key:'suporte',label:'Acesso ao workspace',node:access},
+     {key:'assinatura',label:'Assinatura',node:billing}
+    ],'workspace-'+w.id);
    }
-   const label=el('label','mc-field');label.append(el('span','','Plano do workspace'),select);planForm.append(label);
-   const save=el('button','primary','Aplicar plano');save.type='submit';
-   planForm.append(save,el('p','mc-feedback'));body.append(planForm);
-   planForm.onsubmit=async e=>{e.preventDefault();save.disabled=true;try{await api(base,'master.plan_assign',csrf,{workspace_id:Number(w.id),plan_id:Number(select.value)});status(planForm,'Plano atualizado.');refresh()}
-    catch(err){status(planForm,err.message,true)}finally{save.disabled=false}};
-   const users=el('div','mc-team');users.append(el('h3','','Administradores da empresa'));
-   for(const u of admins.filter(x=>Number(x.workspace_id)===Number(w.id))){
-    const row=el('div','mc-team-row'),who=el('div');
-    who.append(el('strong','',u.name),el('span','',u.email+' · '+(u.twofa_enabled?'2FA ativo':'2FA desativado')));
-    row.append(who,button('Redefinir 2FA',()=>resetTwofa(u,base,csrf),'secondary'));users.append(row);
-   }body.append(users);
-   const billing=el('div','mc-billing');billing.append(el('h3','','Assinatura e histórico financeiro'));
-   note(billing,'Faturas não disponíveis','Nenhuma cobrança SaaS foi sincronizada. Quando o Asaas estiver ligado, aparecerão status, vencimentos, pagamentos, tentativas e notas.');
-   body.append(billing);
+   render().catch(error=>body.replaceChildren(el('p','mc-feedback error',error.message)));
+  });
+ }
+ function changeAdminAccess(member,w,currentlyActive,reload,base,csrf){
+  modal((currentlyActive?'Suspender':'Reativar')+' ADM · '+member.name,
+   'Ação administrativa com confirmação da senha Master e registro do motivo.',(body,close)=>{
+    const form=el('form','mc-form');
+    const why=field(form,'Motivo da alteração (mínimo 12 caracteres)','reason','');
+    why.required=true;why.minLength=12;why.maxLength=190;
+    const pw=field(form,'Senha atual do ADM Master','master_password','','password');pw.required=true;
+    const submit=el('button','primary',currentlyActive?'Confirmar suspensão':'Confirmar reativação');
+    submit.type='submit';form.append(submit,el('p','mc-feedback'));body.append(form);
+    form.onsubmit=async event=>{
+     event.preventDefault();submit.disabled=true;
+     try{
+      await api(base,'master.admin_access',csrf,{
+       workspace_id:Number(w.id),user_id:Number(member.id),
+       active:!currentlyActive,reason:why.value.trim(),master_password:pw.value
+      });
+      close();await reload();
+     }catch(error){status(form,error.message,true)}
+     finally{submit.disabled=false}
+    };
   });
  }
  function resetTwofa(u,base,csrf){

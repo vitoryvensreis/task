@@ -73,11 +73,15 @@ final class PlatformPlans {
     $assigned=DB::all('SELECT workspace_id FROM workspace_access_plans WHERE plan_id=?',[$id]);
     if($assigned&&$row['active']!==1)fail('Não é possível desativar um plano atribuído a algum workspace.',409);
     if($row['team_limit']!==null)foreach($assigned as $a){
+     $override=DB::one("SELECT value FROM workspace_settings
+       WHERE workspace_id=? AND `key`='master.team_limit_override'",[(int)$a['workspace_id']]);
+     $value=trim((string)($override['value']??''));
+     $limitToCheck=$value!==''&&ctype_digit($value)?(int)$value:(int)$row['team_limit'];
      $count=(int)(DB::one("SELECT COUNT(*) n FROM workspace_members wm
        JOIN users u ON u.id=wm.user_id JOIN workspaces w ON w.id=wm.workspace_id
        WHERE wm.workspace_id=? AND wm.role IN ('staff','admin') AND wm.status='active'
        AND u.active=1 AND u.id<>w.owner_user_id",[(int)$a['workspace_id']])['n']??0);
-     if($count>$row['team_limit'])fail('O limite proposto é inferior à equipe de um workspace que utiliza este plano.',409);
+     if($count>$limitToCheck)fail('O limite proposto é inferior à equipe de um workspace que utiliza este plano.',409);
     }
    }
    if($old)DB::update('platform_access_plans',$id,$row);
@@ -94,12 +98,18 @@ final class PlatformPlans {
   $planId=integer($p['plan_id']??0,1);
   return DB::tx(static function()use($workspaceId,$planId):array {
    $ws=DB::one('SELECT id,slug,status FROM workspaces WHERE id=? FOR UPDATE',[$workspaceId]);
-   if(!$ws||$ws['slug']!==WorkspaceFoundation::SLUG||
-      (int)(DB::one('SELECT COUNT(*) n FROM workspaces')['n']??0)!==1)
-    fail('Ativação multiempresa ainda não homologada.',403);
+   $multi=WorkspaceTenantMode::enabled();
+   if(!$ws||($multi?!in_array((string)$ws['status'],[WorkspaceFoundation::STATUS,'active'],true):
+      ($ws['slug']!==WorkspaceFoundation::SLUG||
+       (int)(DB::one('SELECT COUNT(*) n FROM workspaces')['n']??0)!==1)))
+    fail('Workspace indisponível para atribuição de plano.',403);
    $plan=DB::one('SELECT id,active,team_limit FROM platform_access_plans WHERE id=?',[$planId]);
    if(!$plan||(int)$plan['active']!==1)fail('Plano inativo ou não encontrado.',404);
-   $teamLimit=$plan['team_limit']===null?null:(int)$plan['team_limit'];
+   $override=DB::one("SELECT value FROM workspace_settings
+     WHERE workspace_id=? AND `key`='master.team_limit_override'",[$workspaceId]);
+   $value=trim((string)($override['value']??''));
+   $teamLimit=$value!==''&&ctype_digit($value)?(int)$value:
+     ($plan['team_limit']===null?null:(int)$plan['team_limit']);
    if($teamLimit!==null){
     $current=(int)(DB::one("SELECT COUNT(*) n FROM workspace_members wm
       JOIN users u ON u.id=wm.user_id
@@ -131,6 +141,13 @@ final class PlatformPlans {
       WHERE a.workspace_id=? AND p.active=1 LIMIT 1',[$workspaceId]);
   if(!$plan)fail('O ADM Master precisa atribuir um plano ativo a este workspace.',403);
   $plan['features']=decode((string)$plan['features_json'],[]);
+  $plan['plan_team_limit']=$plan['team_limit'];
+  $row=DB::one("SELECT value FROM workspace_settings
+    WHERE workspace_id=? AND `key`='master.team_limit_override'",[$workspaceId]);
+  $override=trim((string)($row['value']??''));
+  $plan['team_limit_override']=($override!==''&&ctype_digit($override)&&
+    (int)$override>=1&&(int)$override<=100000)?(int)$override:null;
+  if($plan['team_limit_override']!==null)$plan['team_limit']=$plan['team_limit_override'];
   unset($plan['features_json']);return $plan;
  }
 

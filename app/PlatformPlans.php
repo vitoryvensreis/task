@@ -73,11 +73,15 @@ final class PlatformPlans {
     $assigned=DB::all('SELECT workspace_id FROM workspace_access_plans WHERE plan_id=?',[$id]);
     if($assigned&&$row['active']!==1)fail('Não é possível desativar um plano atribuído a algum workspace.',409);
     if($row['team_limit']!==null)foreach($assigned as $a){
+     $override=DB::one("SELECT value FROM workspace_settings
+       WHERE workspace_id=? AND `key`='master.team_limit_override'",[(int)$a['workspace_id']]);
+     $value=trim((string)($override['value']??''));
+     $limitToCheck=$value!==''&&ctype_digit($value)?(int)$value:(int)$row['team_limit'];
      $count=(int)(DB::one("SELECT COUNT(*) n FROM workspace_members wm
        JOIN users u ON u.id=wm.user_id JOIN workspaces w ON w.id=wm.workspace_id
        WHERE wm.workspace_id=? AND wm.role IN ('staff','admin') AND wm.status='active'
        AND u.active=1 AND u.id<>w.owner_user_id",[(int)$a['workspace_id']])['n']??0);
-     if($count>$row['team_limit'])fail('O limite proposto é inferior à equipe de um workspace que utiliza este plano.',409);
+     if($count>$limitToCheck)fail('O limite proposto é inferior à equipe de um workspace que utiliza este plano.',409);
     }
    }
    if($old)DB::update('platform_access_plans',$id,$row);
@@ -99,7 +103,11 @@ final class PlatformPlans {
     fail('Ativação multiempresa ainda não homologada.',403);
    $plan=DB::one('SELECT id,active,team_limit FROM platform_access_plans WHERE id=?',[$planId]);
    if(!$plan||(int)$plan['active']!==1)fail('Plano inativo ou não encontrado.',404);
-   $teamLimit=$plan['team_limit']===null?null:(int)$plan['team_limit'];
+   $override=DB::one("SELECT value FROM workspace_settings
+     WHERE workspace_id=? AND `key`='master.team_limit_override'",[$workspaceId]);
+   $value=trim((string)($override['value']??''));
+   $teamLimit=$value!==''&&ctype_digit($value)?(int)$value:
+     ($plan['team_limit']===null?null:(int)$plan['team_limit']);
    if($teamLimit!==null){
     $current=(int)(DB::one("SELECT COUNT(*) n FROM workspace_members wm
       JOIN users u ON u.id=wm.user_id

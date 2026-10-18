@@ -98,9 +98,11 @@ final class PlatformPlans {
   $planId=integer($p['plan_id']??0,1);
   return DB::tx(static function()use($workspaceId,$planId):array {
    $ws=DB::one('SELECT id,slug,status FROM workspaces WHERE id=? FOR UPDATE',[$workspaceId]);
-   if(!$ws||$ws['slug']!==WorkspaceFoundation::SLUG||
-      (int)(DB::one('SELECT COUNT(*) n FROM workspaces')['n']??0)!==1)
-    fail('Ativação multiempresa ainda não homologada.',403);
+   $multi=WorkspaceTenantMode::enabled();
+   if(!$ws||($multi?!in_array((string)$ws['status'],[WorkspaceFoundation::STATUS,'active'],true):
+      ($ws['slug']!==WorkspaceFoundation::SLUG||
+       (int)(DB::one('SELECT COUNT(*) n FROM workspaces')['n']??0)!==1)))
+    fail('Workspace indisponível para atribuição de plano.',403);
    $plan=DB::one('SELECT id,active,team_limit FROM platform_access_plans WHERE id=?',[$planId]);
    if(!$plan||(int)$plan['active']!==1)fail('Plano inativo ou não encontrado.',404);
    $override=DB::one("SELECT value FROM workspace_settings

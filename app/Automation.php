@@ -75,12 +75,16 @@ final class Automation
         ];
     }
 
+    private static function ws(string $alias=''): string {
+        return WorkspaceContext::legacyCiFixture()?'':' AND '.($alias!==''?$alias.'.':'').'workspace_id='.(int)Auth::workspaceId();
+    }
+
     public static function list(array $p=[]): array
     {
         Auth::admin();
         $q=trim((string)($p['q']??''));
-        $params=[];$where='';
-        if($q!==''){$where=' WHERE a.name LIKE ?';$params[]='%'.$q.'%';}
+        $params=[];$where=' WHERE 1=1'.self::ws('a');
+        if($q!==''){$where.=' AND a.name LIKE ?';$params[]='%'.$q.'%';}
         $rows=DB::all("SELECT a.*,u.name created_by_name,
           (SELECT COUNT(*) FROM automation_runs r WHERE r.automation_id=a.id) run_count,
           (SELECT MAX(r.created_at) FROM automation_runs r WHERE r.automation_id=a.id) last_run_at,
@@ -93,7 +97,7 @@ final class Automation
     public static function get(array $p): array
     {
         Auth::admin();$id=integer($p['id']??0,1);
-        $row=DB::one('SELECT a.*,u.name created_by_name FROM automations a JOIN users u ON u.id=a.created_by WHERE a.id=?',[$id]);
+        $row=DB::one('SELECT a.*,u.name created_by_name FROM automations a JOIN users u ON u.id=a.created_by WHERE a.id=?'.self::ws('a'),[$id]);
         if(!$row)fail('Automação não encontrada.',404);
         $row['definition']=self::decodeDefinition((string)$row['definition_json']);
         unset($row['definition_json']);
@@ -103,14 +107,14 @@ final class Automation
           LEFT JOIN demands d ON d.id=r.entity_id AND r.entity_type='demand'
           LEFT JOIN clients c ON c.id=r.entity_id AND r.entity_type='client'
           LEFT JOIN invoices i ON i.id=r.entity_id AND r.entity_type='invoice'
-          WHERE r.automation_id=? ORDER BY r.id DESC LIMIT 30",[$id]);
+          WHERE r.automation_id=?".self::ws('r')." ORDER BY r.id DESC LIMIT 30",[$id]);
         return $row;
     }
 
     public static function save(array $p): array
     {
         Auth::admin();
-        $id=(int)($p['id']??0);$old=$id?DB::one('SELECT * FROM automations WHERE id=?',[$id]):null;
+        $id=(int)($p['id']??0);$old=$id?DB::one('SELECT * FROM automations WHERE id=?'.self::ws(),[$id]):null;
         if($id&&!$old)fail('Automação não encontrada.',404);
         if($old&&integer($p['version']??0,1)!==(int)$old['version'])fail('A automação foi alterada em outro acesso. Atualize antes de salvar.',409);
         $trigger=enumv((string)($p['trigger_event']??($old['trigger_event']??'')),array_keys(self::TRIGGERS),'gatilho');
@@ -134,7 +138,7 @@ final class Automation
         $now=now();
         $row=['name'=>$name,'trigger_event'=>$trigger,'definition_json'=>json($definition),'active'=>$active,'updated_at'=>$now];
         if($old){$row['version']=(int)$old['version']+1;DB::update('automations',$id,$row);}
-        else{$row+=['version'=>1,'created_by'=>(int)Auth::$user['id'],'created_at'=>$now];$id=DB::insert('automations',$row);}
+        else{$row+=['version'=>1,'created_by'=>(int)Auth::$user['id'],'created_at'=>$now];if(!WorkspaceContext::legacyCiFixture())$row['workspace_id']=Auth::workspaceId();$id=DB::insert('automations',$row);}
         audit('automation',$id,$old?'updated':'created',$old?['name'=>$old['name'],'trigger_event'=>$old['trigger_event'],'active'=>$old['active'],'version'=>$old['version']]:null,['name'=>$name,'trigger_event'=>$trigger,'active'=>$active,'version'=>$row['version']]);
         return ['id'=>$id,'version'=>(int)$row['version'],'active'=>$active];
     }
@@ -142,7 +146,7 @@ final class Automation
     public static function toggle(array $p): array
     {
         Auth::admin();$id=integer($p['id']??0,1);
-        $row=DB::one('SELECT id,active,version FROM automations WHERE id=?',[$id]);if(!$row)fail('Automação não encontrada.',404);
+        $row=DB::one('SELECT id,active,version FROM automations WHERE id=?'.self::ws(),[$id]);if(!$row)fail('Automação não encontrada.',404);
         $active=(int)(bool)($p['active']??0);
         DB::update('automations',$id,['active'=>$active,'version'=>(int)$row['version']+1,'updated_at'=>now()]);
         audit('automation',$id,$active?'activated':'paused',['active'=>(int)$row['active']],['active'=>$active]);
@@ -152,14 +156,14 @@ final class Automation
     public static function runs(array $p): array
     {
         Auth::admin();$id=integer($p['id']??0,1);
-        if(!DB::one('SELECT id FROM automations WHERE id=?',[$id]))fail('Automação não encontrada.',404);
+        if(!DB::one('SELECT id FROM automations WHERE id=?'.self::ws(),[$id]))fail('Automação não encontrada.',404);
         return DB::all("SELECT r.*,
           CASE WHEN r.entity_type='demand' THEN d.title WHEN r.entity_type='client' THEN c.name WHEN r.entity_type='invoice' THEN i.description ELSE NULL END subject_label
           FROM automation_runs r
           LEFT JOIN demands d ON d.id=r.entity_id AND r.entity_type='demand'
           LEFT JOIN clients c ON c.id=r.entity_id AND r.entity_type='client'
           LEFT JOIN invoices i ON i.id=r.entity_id AND r.entity_type='invoice'
-          WHERE r.automation_id=? ORDER BY r.id DESC LIMIT 100",[$id]);
+          WHERE r.automation_id=?".self::ws('r')." ORDER BY r.id DESC LIMIT 100",[$id]);
     }
 
     public static function validateDefinition(array $definition,string $trigger): array

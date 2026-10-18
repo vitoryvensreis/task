@@ -55,7 +55,7 @@ final class RealtimeAuth
             return array_values(array_unique($channels));
         }
 
-        foreach (DB::all('SELECT client_id FROM user_clients WHERE user_id=? ORDER BY client_id', [(int)$user['id']]) as $link) {
+        foreach (DB::all('SELECT client_id FROM user_clients WHERE user_id=?'.(WorkspaceContext::legacyCiFixture()?'':' AND workspace_id=?').' ORDER BY client_id',WorkspaceContext::legacyCiFixture()?[(int)$user['id']]:[(int)$user['id'],Auth::workspaceId()]) as $link) {
             $clientId = (int)($link['client_id'] ?? 0);
             if ($clientId > 0) $channels[] = 'client:'.$clientId;
         }
@@ -91,7 +91,7 @@ final class RealtimeAuth
         }
 
         if (preg_match('/^project:([1-9][0-9]{0,9})$/D', $channel, $m)) {
-            $project = DB::one('SELECT id,client_id FROM projects WHERE id=? LIMIT 1', [(int)$m[1]]);
+            $project = DB::one('SELECT id,client_id FROM projects WHERE id=?'.(WorkspaceContext::legacyCiFixture()?'':' AND workspace_id=?').' LIMIT 1',WorkspaceContext::legacyCiFixture()?[(int)$m[1]]:[(int)$m[1],Auth::workspaceId()]);
             if (!$project) fail('Projeto não encontrado.', 404);
             Auth::client((int)$project['client_id'], 'read');
             return;

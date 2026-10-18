@@ -1,5 +1,9 @@
 <?php
 final class Files {
+ private static function ci(): bool {return WorkspaceContext::legacyCiFixture();}
+ private static function where(string $alias=''): string {return self::ci()?'':' AND '.($alias!==''?$alias.'.':'').'workspace_id=?';}
+ private static function args(array $params): array {return self::ci()?$params:[...$params,Auth::workspaceId()];}
+ private static function row(array $v): array {return self::ci()?$v:($v+['workspace_id'=>Auth::workspaceId()]);}
  public static function add(array $p): array {
   $d=Auth::demand(integer($p['demand_id'],1),true);$staff=Auth::$user['role']!=='client';$kind=$staff?enumv($p['kind']??'input',['input','reference','review','final'],'tipo'):'input';$finalLink=null;
   $row=['demand_id'=>$d['id'],'author_id'=>Auth::$user['id'],'label'=>required($p,'label',255),'shared'=>$staff?(int)(bool)($p['shared']??1):1,'kind'=>$kind,'created_at'=>now()];
@@ -14,8 +18,8 @@ final class Files {
   }else fail('Envie um arquivo ou um link.');
   if(in_array($kind,['review','final'],true)&&!$row['shared'])fail('Uma versão para aprovação precisa estar compartilhada.');
   return DB::tx(function() use($d,$kind,$row,$finalLink): array {
-   Auth::demand((int)$d['id'],true);$save=$row;if(in_array($kind,['review','final'],true))$save['version_no']=(int)DB::one('SELECT COALESCE(MAX(version_no),0) AS n FROM files WHERE demand_id=?',[$d['id']])['n']+1;
-   $id=DB::insert('files',$save);audit('demand',$d['id'],'file.added',null,['file_id'=>$id,'version'=>$save['version_no']??null,'storage'=>$save['storage_provider']??'local']);Notify::demand($d,$kind==='review'?'Versão para aprovação':'Novo arquivo',$save['label'],!$save['shared']);
+   Auth::demand((int)$d['id'],true);$save=$row;if(in_array($kind,['review','final'],true))$save['version_no']=(int)DB::one('SELECT COALESCE(MAX(version_no),0) AS n FROM files WHERE demand_id=?'.self::where(),self::args([$d['id']]))['n']+1;
+   $id=DB::insert('files',self::row($save));audit('demand',$d['id'],'file.added',null,['file_id'=>$id,'version'=>$save['version_no']??null,'storage'=>$save['storage_provider']??'local']);Notify::demand($d,$kind==='review'?'Versão para aprovação':'Novo arquivo',$save['label'],!$save['shared']);
    DemandRealtime::emit('demand.file_added',$d,['change'=>'file.added','file_id'=>$id,'version_no'=>$save['version_no']??null,'shared'=>(int)$save['shared']],(int)Auth::$user['id'],[],!$save['shared']?'staff':'all');
    if($kind==='final')DemandRealtime::emit('demand.final_delivered',$d,['change'=>'final.delivered','file_id'=>$id,'version_no'=>$save['version_no']??null,'shared'=>(int)$save['shared']],(int)Auth::$user['id']);
    return ['id'=>$id,'version_no'=>$save['version_no']??null,'storage'=>$save['storage_provider']??'local','final_delivery_link'=>$finalLink];
@@ -49,7 +53,7 @@ final class Files {
  private static function finalizeDriveUpload(string $token,array $state,array $drive): array {
   $d=Auth::demand((int)$state['demand_id'],true);$uploadKey=$state['upload_key']??null;
   if($uploadKey){
-   $existing=DB::one('SELECT id,version_no,storage_provider,drive_file_id FROM files WHERE demand_id=? AND upload_key=? LIMIT 1',[$d['id'],$uploadKey]);
+   $existing=DB::one('SELECT id,version_no,storage_provider,drive_file_id FROM files WHERE demand_id=? AND upload_key=?'.self::where().' LIMIT 1',self::args([$d['id'],$uploadKey]));
    if($existing){
     if(!empty($drive['id'])&&($existing['drive_file_id']??'')!==$drive['id'])try{Google::deleteDriveFile((int)$state['account_id'],(string)$drive['id']);}catch(Throwable $e){error_log('TaskEsc duplicate upload cleanup: '.$e->getMessage());}
     unset($_SESSION['drive_uploads'][$token]);$response=['complete'=>true,'id'=>(int)$existing['id'],'version_no'=>$existing['version_no']!==null?(int)$existing['version_no']:null,'storage'=>$existing['storage_provider']??'drive','next_offset'=>(int)$state['size'],'final_delivery_link'=>$state['final_delivery_link']??null,'deduplicated'=>true];$_SESSION['drive_uploads_done'][$token]=$response+['user_id'=>(int)Auth::$user['id'],'expires'=>time()+900];return $response;
@@ -59,17 +63,17 @@ final class Files {
   $result=DB::tx(function() use($d,$state,$drive,$uploadKey): array {
    Auth::demand((int)$d['id'],true);
    // Serializes simultaneous finalizations for the same task, including uploads from other tabs.
-   DB::one('SELECT id FROM demands WHERE id=? FOR UPDATE',[(int)$d['id']]);
+   DB::one('SELECT id FROM demands WHERE id=?'.self::where().' FOR UPDATE',self::args([(int)$d['id']]));
    if($uploadKey){
-    $existing=DB::one('SELECT id,version_no,storage_provider,drive_file_id FROM files WHERE demand_id=? AND upload_key=? LIMIT 1 FOR UPDATE',[$d['id'],$uploadKey]);
+    $existing=DB::one('SELECT id,version_no,storage_provider,drive_file_id FROM files WHERE demand_id=? AND upload_key=?'.self::where().' LIMIT 1 FOR UPDATE',self::args([$d['id'],$uploadKey]));
     if($existing)return ['existing'=>$existing];
    }
    $row=['demand_id'=>$d['id'],'author_id'=>Auth::$user['id'],'label'=>$state['label'],'shared'=>(int)$state['shared'],'kind'=>$state['kind'],'created_at'=>now(),'original_name'=>mb_substr((string)$state['name'],0,255),'disk_name'=>null,'storage_provider'=>'drive','drive_file_id'=>$drive['id'],'drive_account_id'=>(int)$state['account_id'],'drive_web_view_url'=>$drive['webViewLink']??null,'mime'=>$drive['mimeType']??$state['mime'],'size_bytes'=>(int)($drive['size']??$state['size']),'upload_key'=>$uploadKey];
-   if(in_array($state['kind'],['review','final'],true))$row['version_no']=(int)DB::one('SELECT COALESCE(MAX(version_no),0) AS n FROM files WHERE demand_id=?',[$d['id']])['n']+1;
-   try{$id=DB::insert('files',$row);}
+   if(in_array($state['kind'],['review','final'],true))$row['version_no']=(int)DB::one('SELECT COALESCE(MAX(version_no),0) AS n FROM files WHERE demand_id=?'.self::where(),self::args([$d['id']]))['n']+1;
+   try{$id=DB::insert('files',self::row($row));}
    catch(PDOException $e){
     if(!$uploadKey||!str_contains(strtolower($e->getMessage()),'duplicate'))throw $e;
-    $existing=DB::one('SELECT id,version_no,storage_provider,drive_file_id FROM files WHERE upload_key=? LIMIT 1',[$uploadKey]);if(!$existing)throw $e;return ['existing'=>$existing];
+    $existing=DB::one('SELECT id,version_no,storage_provider,drive_file_id FROM files WHERE upload_key=?'.self::where().' LIMIT 1',self::args([$uploadKey]));if(!$existing)throw $e;return ['existing'=>$existing];
    }
    audit('demand',$d['id'],'file.added',null,['file_id'=>$id,'version'=>$row['version_no']??null,'storage'=>'drive']);Notify::demand($d,$state['kind']==='review'?'Versão para aprovação':'Novo arquivo',$row['label'],!$row['shared']);
    DemandRealtime::emit('demand.file_added',$d,['change'=>'file.added','file_id'=>$id,'version_no'=>$row['version_no']??null,'shared'=>(int)$row['shared']],(int)Auth::$user['id'],[],!$row['shared']?'staff':'all');
@@ -115,7 +119,7 @@ final class Files {
   foreach($_SESSION['drive_uploads']??[] as $key=>$state)if((int)($state['expires']??0)<time())unset($_SESSION['drive_uploads'][$key]);
   foreach($_SESSION['drive_uploads_done']??[] as $key=>$state)if((int)($state['expires']??0)<time())unset($_SESSION['drive_uploads_done'][$key]);
   if($uploadKey){
-   $existing=DB::one('SELECT id,version_no,storage_provider FROM files WHERE demand_id=? AND upload_key=? LIMIT 1',[$d['id'],$uploadKey]);
+   $existing=DB::one('SELECT id,version_no,storage_provider FROM files WHERE demand_id=? AND upload_key=?'.self::where().' LIMIT 1',self::args([$d['id'],$uploadKey]));
    if($existing)return ['complete'=>true,'id'=>(int)$existing['id'],'version_no'=>$existing['version_no']!==null?(int)$existing['version_no']:null,'storage'=>$existing['storage_provider']??'drive','next_offset'=>$size,'size'=>$size,'deduplicated'=>true];
    foreach($_SESSION['drive_uploads']??[] as $token=>$state)if(($state['upload_key']??null)===$uploadKey&&(int)($state['user_id']??0)===(int)Auth::$user['id']&&(int)($state['demand_id']??0)===(int)$d['id']){
     return ['upload_token'=>$token,'direct_url'=>(string)$state['location'],'chunk_size'=>(int)($state['chunk_size']??1048576),'next_offset'=>(int)($state['offset']??0),'size'=>$size,'unlimited'=>$limitMb===0,'resumed'=>true];
@@ -143,17 +147,17 @@ final class Files {
  }
 
  public static function delete(array $p): array {
-  Auth::staff();$id=integer($p['file_id']??0,1);$f=DB::one('SELECT * FROM files WHERE id=?',[$id]);if(!$f)fail('Anexo não encontrado.',404);$d=Auth::demand((int)$f['demand_id'],true);
+  Auth::staff();$id=integer($p['file_id']??0,1);$f=DB::one('SELECT * FROM files WHERE id=?'.self::where(),self::args([$id]));if(!$f)fail('Anexo não encontrado.',404);$d=Auth::demand((int)$f['demand_id'],true);
   if(($f['storage_provider']??'local')==='drive'&&!empty($f['drive_file_id'])&&!empty($f['drive_account_id']))Google::deleteDriveFile((int)$f['drive_account_id'],(string)$f['drive_file_id']);
   elseif(($f['storage_provider']??'local')==='local'&&!empty($f['disk_name'])){$path=ROOT.'/storage/uploads/'.basename((string)$f['disk_name']);if(is_file($path)&&!@unlink($path))throw new RuntimeException('Não foi possível remover o arquivo local.');}
   return DB::tx(function() use($id,$f,$d): array {
-   $current=DB::one('SELECT id,demand_id FROM files WHERE id=? FOR UPDATE',[$id]);if(!$current)return ['deleted'=>true,'id'=>$id];if((int)$current['demand_id']!==(int)$d['id'])fail('O anexo mudou de task durante a exclusão.',409);DB::run('UPDATE comments SET version_id=NULL WHERE version_id=?',[$id]);DB::run('DELETE FROM reviews WHERE file_id=?',[$id]);DB::run('DELETE FROM files WHERE id=?',[$id]);audit('demand',(int)$d['id'],'file.deleted',$f,['file_id'=>$id,'storage'=>$f['storage_provider']??'local']);if(!empty($f['shared']))Notify::demand($d,'Arquivo removido',$f['label']??$f['original_name']??$d['title']);DemandRealtime::emit('demand.file_deleted',$d,['change'=>'file.deleted','file_id'=>$id,'version_no'=>$f['version_no']??null,'shared'=>(int)($f['shared']??0)],(int)Auth::$user['id'],[],empty($f['shared'])?'staff':'all');return ['deleted'=>true,'id'=>$id];
+   $current=DB::one('SELECT id,demand_id FROM files WHERE id=?'.self::where().' FOR UPDATE',self::args([$id]));if(!$current)return ['deleted'=>true,'id'=>$id];if((int)$current['demand_id']!==(int)$d['id'])fail('O anexo mudou de task durante a exclusão.',409);DB::run('UPDATE comments SET version_id=NULL WHERE version_id=?',[$id]);DB::run('DELETE FROM reviews WHERE file_id=?',[$id]);DB::run('DELETE FROM files WHERE id=?',[$id]);audit('demand',(int)$d['id'],'file.deleted',$f,['file_id'=>$id,'storage'=>$f['storage_provider']??'local']);if(!empty($f['shared']))Notify::demand($d,'Arquivo removido',$f['label']??$f['original_name']??$d['title']);DemandRealtime::emit('demand.file_deleted',$d,['change'=>'file.deleted','file_id'=>$id,'version_no'=>$f['version_no']??null,'shared'=>(int)($f['shared']??0)],(int)Auth::$user['id'],[],empty($f['shared'])?'staff':'all');return ['deleted'=>true,'id'=>$id];
   });
  }
 
  public static function review(array $p): array {
   return DB::tx(function() use($p): array {
-   $f=DB::one('SELECT * FROM files WHERE id=? FOR UPDATE',[integer($p['file_id'],1)]);if(!$f||!$f['version_no'])fail('Versão não encontrada.',404);$d=Auth::demand((int)$f['demand_id'],true);Auth::client((int)$d['client_id'],'approve');if(!$f['shared']&&Auth::$user['role']==='client')fail('Arquivo privado.',403);$decision=enumv($p['decision']??'',['approved','changes'],'decisão');if($f['approval']===$decision)fail('Essa decisão já está registrada.');if($decision==='changes')required($p,'message');DB::update('files',$f['id'],['approval'=>$decision,'approved_by'=>Auth::$user['id'],'approved_at'=>now()]);DB::insert('reviews',['file_id'=>$f['id'],'user_id'=>Auth::$user['id'],'decision'=>$decision,'message'=>$p['message']??'','created_at'=>now()]);$latest=DB::one('SELECT id FROM files WHERE demand_id=? AND version_no IS NOT NULL ORDER BY version_no DESC LIMIT 1',[$d['id']]);$moved=false;if($decision==='changes'&&(int)$latest['id']===(int)$f['id']){$target=DB::one("SELECT * FROM stages WHERE active=1 ORDER BY (LOWER(name) LIKE '%ajuste%') DESC,(kind='production') DESC,position,id LIMIT 1");if(!$target)fail('Crie uma coluna ativa no Kanban para receber os ajustes.',409);DB::update('demands',$d['id'],['stage_id'=>$target['id'],'version'=>$d['version']+1,'updated_at'=>now(),'completed_at'=>null]);DB::insert('transitions',['demand_id'=>$d['id'],'from_stage'=>$d['stage_id'],'to_stage'=>$target['id'],'actor_id'=>Auth::$user['id'],'happened_at'=>now()]);$moved=true;}audit('demand',$d['id'],'review.'.$decision,null,['file_id'=>$f['id'],'version_no'=>$f['version_no'],'message'=>$p['message']??'']);Notify::demand($d,$decision==='approved'?'Versão aprovada':'Ajustes solicitados',$d['title']);$fresh=$moved?(DB::one('SELECT * FROM demands WHERE id=?',[$d['id']])?:$d):$d;DemandRealtime::emit('demand.file_reviewed',$fresh,['change'=>'file.reviewed','file_id'=>(int)$f['id'],'version_no'=>(int)$f['version_no'],'approval'=>$decision,'decision'=>$decision],(int)Auth::$user['id']);$rounds=(int)DB::one("SELECT COUNT(*) AS n FROM reviews r JOIN files f ON f.id=r.file_id WHERE f.demand_id=? AND r.decision='changes'",[$d['id']])['n'];return ['saved'=>true,'revision_rounds'=>$rounds,'exceeds_included'=>$rounds>(int)$d['revisions_limit']];
+   $f=DB::one('SELECT * FROM files WHERE id=?'.self::where().' FOR UPDATE',self::args([integer($p['file_id'],1)]));if(!$f||!$f['version_no'])fail('Versão não encontrada.',404);$d=Auth::demand((int)$f['demand_id'],true);Auth::client((int)$d['client_id'],'approve');if(!$f['shared']&&Auth::$user['role']==='client')fail('Arquivo privado.',403);$decision=enumv($p['decision']??'',['approved','changes'],'decisão');if($f['approval']===$decision)fail('Essa decisão já está registrada.');if($decision==='changes')required($p,'message');DB::update('files',$f['id'],['approval'=>$decision,'approved_by'=>Auth::$user['id'],'approved_at'=>now()]);DB::insert('reviews',self::row(['file_id'=>$f['id'],'user_id'=>Auth::$user['id'],'decision'=>$decision,'message'=>$p['message']??'','created_at'=>now()]));$latest=DB::one('SELECT id FROM files WHERE demand_id=? AND version_no IS NOT NULL'.self::where().' ORDER BY version_no DESC LIMIT 1',self::args([$d['id']]));$moved=false;if($decision==='changes'&&(int)$latest['id']===(int)$f['id']){$target=DB::one("SELECT * FROM stages WHERE active=1".self::where()." ORDER BY (LOWER(name) LIKE '%ajuste%') DESC,(kind='production') DESC,position,id LIMIT 1",self::args([]));if(!$target)fail('Crie uma coluna ativa no Kanban para receber os ajustes.',409);DB::update('demands',$d['id'],['stage_id'=>$target['id'],'version'=>$d['version']+1,'updated_at'=>now(),'completed_at'=>null]);DB::insert('transitions',self::row(['demand_id'=>$d['id'],'from_stage'=>$d['stage_id'],'to_stage'=>$target['id'],'actor_id'=>Auth::$user['id'],'happened_at'=>now()]));$moved=true;}audit('demand',$d['id'],'review.'.$decision,null,['file_id'=>$f['id'],'version_no'=>$f['version_no'],'message'=>$p['message']??'']);Notify::demand($d,$decision==='approved'?'Versão aprovada':'Ajustes solicitados',$d['title']);$fresh=$moved?(DB::one('SELECT * FROM demands WHERE id=?',[$d['id']])?:$d):$d;DemandRealtime::emit('demand.file_reviewed',$fresh,['change'=>'file.reviewed','file_id'=>(int)$f['id'],'version_no'=>(int)$f['version_no'],'approval'=>$decision,'decision'=>$decision],(int)Auth::$user['id']);$rounds=(int)DB::one("SELECT COUNT(*) AS n FROM reviews r JOIN files f ON f.id=r.file_id WHERE f.demand_id=? AND r.decision='changes'",[$d['id']])['n'];return ['saved'=>true,'revision_rounds'=>$rounds,'exceeds_included'=>$rounds>(int)$d['revisions_limit']];
   });
  }
 }

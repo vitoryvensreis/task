@@ -7,6 +7,15 @@ declare(strict_types=1);
  */
 final class AiWhatsAppAccess
 {
+    private static function eligibleJoin(): string {
+        if(WorkspaceContext::legacyCiFixture())return '';
+        $ws=DB::one('SELECT id FROM workspaces WHERE slug=? AND status=?',
+            [WorkspaceFoundation::SLUG,WorkspaceFoundation::STATUS]);
+        if(!$ws||(int)(DB::one('SELECT COUNT(*) n FROM workspaces')['n']??0)!==1)
+            throw new RuntimeException('WhatsApp AI requires one verified operational workspace.');
+        return ' JOIN workspace_members wm ON wm.user_id=u.id AND wm.workspace_id='.(int)$ws['id']." AND wm.status='active'";
+    }
+
     public static function decide(
         string $sender,
         string $chatType,
@@ -30,7 +39,7 @@ final class AiWhatsAppAccess
         if(!is_array($members)||!$members)return self::deny('group_members_unavailable');
         if(!self::memberVerified($sender,$members,$mappingProvider))return self::deny('sender_not_in_group');
 
-        $admins=DB::all("SELECT whatsapp_phone FROM users WHERE active=1 AND role='admin' AND whatsapp_phone IS NOT NULL AND whatsapp_phone<>''");
+        $admins=DB::all("SELECT u.whatsapp_phone FROM users u".self::eligibleJoin()." WHERE u.active=1 AND u.role='admin' AND u.whatsapp_phone IS NOT NULL AND u.whatsapp_phone<>''");
         foreach($admins as $row){
             $digits=(string)$row['whatsapp_phone'];
             if(!preg_match('/\\A[0-9]{10,15}\\z/D',$digits))continue;
@@ -56,7 +65,7 @@ final class AiWhatsAppAccess
             $jid=$mapping['phone'];
         }
         if(!preg_match('/\\A([0-9]{10,15})@(c\\.us|s\\.whatsapp\\.net)\\z/D',$jid,$m))return null;
-        $rows=DB::all('SELECT id,role,active,ai_assistant_enabled FROM users WHERE whatsapp_phone=? LIMIT 2',[$m[1]]);
+        $rows=DB::all('SELECT u.id,u.role,u.active,u.ai_assistant_enabled FROM users u'.self::eligibleJoin().' WHERE u.whatsapp_phone=? LIMIT 2',[$m[1]]);
         if(count($rows)!==1||(int)$rows[0]['active']!==1)return null;
         if(!in_array($rows[0]['role'],['admin','staff','client'],true))return null;
         return $rows[0];

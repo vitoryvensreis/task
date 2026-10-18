@@ -58,13 +58,13 @@ final class Google {
   $purpose=$s['purpose']??'calendar';$returnTo=$s['return_to']??($purpose==='drive'?'settings':'agenda');
   $tokens=self::http('https://oauth2.googleapis.com/token','POST',['code'=>required($q,'code'),'client_id'=>config('google_client_id'),'client_secret'=>config('google_client_secret'),'redirect_uri'=>base('google-callback.php'),'grant_type'=>'authorization_code','code_verifier'=>$s['verifier']],null,[],true);
   $info=self::http('https://www.googleapis.com/oauth2/v3/userinfo','GET',null,$tokens['access_token']);
-  $old=DB::one('SELECT * FROM google_accounts WHERE user_id=? AND google_sub=?',[Auth::$user['id'],$info['sub']]);
+  $old=DB::one('SELECT * FROM google_accounts WHERE user_id=? AND google_sub=?'.(WorkspaceContext::legacyCiFixture()?'':' AND workspace_id=?'),WorkspaceContext::legacyCiFixture()?[Auth::$user['id'],$info['sub']]:[Auth::$user['id'],$info['sub'],Auth::workspaceId()]);
   $refresh=$tokens['refresh_token']??($old&&!empty($old['refresh_token'])?secretDecrypt($old['refresh_token']):'');
   if(!$refresh)fail('O Google não forneceu acesso offline. Revogue a conexão anterior e conecte novamente.');
   $scopes=self::liveScopes((string)$tokens['access_token'],(string)($tokens['scope']??''));
   $row=['user_id'=>Auth::$user['id'],'google_sub'=>$info['sub'],'email'=>$info['email'],'access_token'=>secretEncrypt($tokens['access_token']),'refresh_token'=>secretEncrypt($refresh),'scopes'=>$scopes,'expires_at'=>gmdate('Y-m-d H:i:s',time()+(int)$tokens['expires_in']),'status'=>'connected','calendar_enabled'=>(int)str_contains($scopes,self::CALENDAR_SCOPE),'drive_enabled'=>(int)str_contains($scopes,self::DRIVE_SCOPE),'last_error'=>null];
-  if($old){$id=(int)$old['id'];DB::update('google_accounts',$id,$row);}else $id=DB::insert('google_accounts',$row);
-  if($purpose==='drive'&&$returnTo==='settings'&&(int)setting('drive_account_id','0')===0)DB::run("INSERT INTO settings (`key`,value) VALUES ('drive_account_id',?) ON DUPLICATE KEY UPDATE value=VALUES(value)",[(string)$id]);
+  if($old){$id=(int)$old['id'];DB::update('google_accounts',$id,$row);}else $id=DB::insert('google_accounts',$row+(WorkspaceContext::legacyCiFixture()?[]:['workspace_id'=>Auth::workspaceId()]));
+  if($purpose==='drive'&&$returnTo==='settings'&&(int)WorkspacePreferences::get('drive_account_id','0')===0)WorkspacePreferences::save('drive_account_id',(string)$id);
   if($purpose==='calendar')self::discover($id);
   return ['account_id'=>$id,'email'=>$info['email'],'purpose'=>$purpose,'return_to'=>$returnTo];
  }
@@ -134,22 +134,22 @@ final class Google {
  }
 
  public static function accounts(): array {
-  Auth::admin();$rows=DB::all('SELECT id,email,status,last_error,expires_at,scopes,calendar_enabled,drive_enabled FROM google_accounts WHERE user_id=? ORDER BY id',[Auth::$user['id']]);
+  Auth::admin();$rows=DB::all('SELECT id,email,status,last_error,expires_at,scopes,calendar_enabled,drive_enabled FROM google_accounts WHERE user_id=?'.(WorkspaceContext::legacyCiFixture()?'':' AND workspace_id=?').' ORDER BY id',WorkspaceContext::legacyCiFixture()?[Auth::$user['id']]:[Auth::$user['id'],Auth::workspaceId()]);
   foreach($rows as &$r){$r['drive_ready']=$r['status']==='connected'&&(bool)$r['drive_enabled']&&str_contains((string)($r['scopes']??''),self::DRIVE_SCOPE);$r['calendar_ready']=$r['status']==='connected'&&(bool)$r['calendar_enabled']&&str_contains((string)($r['scopes']??''),self::CALENDAR_SCOPE);}
   return $rows;
  }
 
  public static function disconnect(array $p): array {
-  Auth::admin();$a=DB::one('SELECT * FROM google_accounts WHERE id=? AND user_id=?',[integer($p['id'],1),Auth::$user['id']]);if(!$a)fail('Conta não encontrada.');
+  Auth::admin();$a=DB::one('SELECT * FROM google_accounts WHERE id=? AND user_id=?'.(WorkspaceContext::legacyCiFixture()?'':' AND workspace_id=?'),WorkspaceContext::legacyCiFixture()?[integer($p['id'],1),Auth::$user['id']]:[integer($p['id'],1),Auth::$user['id'],Auth::workspaceId()]);if(!$a)fail('Conta não encontrada.');
   DB::update('google_accounts',$a['id'],['status'=>'disconnected','access_token'=>'','refresh_token'=>'']);DB::run('UPDATE calendars SET selected=0,write_enabled=0 WHERE account_id=?',[$a['id']]);
-  if((int)setting('drive_account_id','0')===(int)$a['id']){DB::run("UPDATE settings SET value='' WHERE `key` IN ('drive_account_id','drive_root_folder_id')");}
+  if((int)WorkspacePreferences::get('drive_account_id','0')===(int)$a['id']){WorkspacePreferences::save('drive_account_id','');WorkspacePreferences::save('drive_root_folder_id','');}
   audit('google_account',$a['id'],'disconnected');return ['saved'=>true];
  }
 
  public static function driveAccountId(?int $clientId=null): int {
-  if($clientId){$client=DB::one('SELECT id,name,drive_account_id FROM clients WHERE id=?',[$clientId]);if(!$client)fail('Cliente não encontrado.',404);$id=(int)($client['drive_account_id']??0);if($id){$a=DB::one("SELECT id,scopes,status,drive_enabled FROM google_accounts WHERE id=?",[$id]);if($a&&$a['status']==='connected'&&(bool)$a['drive_enabled']&&str_contains((string)($a['scopes']??''),self::DRIVE_SCOPE))return $id;fail('O Google Drive configurado para '.$client['name'].' precisa ser reconectado no cadastro do cliente.',409);}}
-  $id=(int)setting('drive_account_id','0');
-  if($id){$a=DB::one("SELECT id,scopes,status,drive_enabled FROM google_accounts WHERE id=? AND status='connected'",[$id]);if($a&&(bool)$a['drive_enabled']&&str_contains((string)($a['scopes']??''),self::DRIVE_SCOPE))return $id;}
+  if($clientId){if(!WorkspaceContext::legacyCiFixture())WorkspaceCatalog::requireRecord('clients',$clientId);$client=DB::one('SELECT id,name,drive_account_id FROM clients WHERE id=?',[$clientId]);if(!$client)fail('Cliente não encontrado.',404);$id=(int)($client['drive_account_id']??0);if($id){if(!WorkspaceContext::legacyCiFixture())WorkspaceCatalog::validateDrive($id);$a=DB::one("SELECT id,scopes,status,drive_enabled FROM google_accounts WHERE id=?",[$id]);if($a&&$a['status']==='connected'&&(bool)$a['drive_enabled']&&str_contains((string)($a['scopes']??''),self::DRIVE_SCOPE))return $id;fail('O Google Drive configurado para '.$client['name'].' precisa ser reconectado no cadastro do cliente.',409);}}
+  $id=(int)WorkspacePreferences::get('drive_account_id','0');
+  if($id){if(!WorkspaceContext::legacyCiFixture())WorkspaceCatalog::validateDrive($id);$a=DB::one("SELECT id,scopes,status,drive_enabled FROM google_accounts WHERE id=? AND status='connected'",[$id]);if($a&&(bool)$a['drive_enabled']&&str_contains((string)($a['scopes']??''),self::DRIVE_SCOPE))return $id;}
   fail('Defina um Google Drive para este cliente ou configure um Drive padrão em Configurações.',409);
  }
 
@@ -163,14 +163,14 @@ final class Google {
  }
 
  public static function ensureDemandFolder(array $d): array {
-  $client=DB::one('SELECT id,name,drive_account_id,drive_folder_id FROM clients WHERE id=?',[(int)$d['client_id']]);if(!$client)fail('Cliente da task não encontrado.',404);$account=self::driveAccountId((int)$client['id']);
+  $client=DB::one('SELECT id,name,drive_account_id,drive_folder_id FROM clients WHERE id=?'.(WorkspaceContext::legacyCiFixture()?'':' AND workspace_id=?'),WorkspaceContext::legacyCiFixture()?[(int)$d['client_id']]:[(int)$d['client_id'],Auth::workspaceId()]);if(!$client)fail('Cliente da task não encontrado.',404);$account=self::driveAccountId((int)$client['id']);
   if(!empty($d['drive_folder_id'])&&self::driveFolderValid($account,(string)$d['drive_folder_id']))return ['account_id'=>$account,'folder_id'=>$d['drive_folder_id']];
   if(!empty($d['drive_folder_id']))DB::update('demands',(int)$d['id'],['drive_folder_id'=>null]);
   $clientRoot=(string)($client['drive_folder_id']??'');
   if($clientRoot&&!self::driveFolderValid($account,$clientRoot)){$clientRoot='';DB::update('clients',(int)$client['id'],['drive_folder_id'=>null]);}
   if(!$clientRoot){
    if(!empty($client['drive_account_id'])){$folder=self::createDriveFolder($account,'TaskEsc - '.$client['name']);$clientRoot=$folder['id'];DB::update('clients',(int)$client['id'],['drive_folder_id'=>$clientRoot]);}
-   else{$clientRoot=setting('drive_root_folder_id','');if($clientRoot&&!self::driveFolderValid($account,$clientRoot)){$clientRoot='';DB::run("INSERT INTO settings (`key`,value) VALUES ('drive_root_folder_id','') ON DUPLICATE KEY UPDATE value=''");}if(!$clientRoot){$folder=self::createDriveFolder($account,'TaskEsc');$clientRoot=$folder['id'];DB::run("INSERT INTO settings (`key`,value) VALUES ('drive_root_folder_id',?) ON DUPLICATE KEY UPDATE value=VALUES(value)",[$clientRoot]);}}
+   else{$clientRoot=WorkspacePreferences::get('drive_root_folder_id','');if($clientRoot&&!self::driveFolderValid($account,$clientRoot)){$clientRoot='';WorkspacePreferences::save('drive_root_folder_id','');}if(!$clientRoot){$folder=self::createDriveFolder($account,'TaskEsc');$clientRoot=$folder['id'];WorkspacePreferences::save('drive_root_folder_id',$clientRoot);}}
   }
   $name='Job #'.$d['id'].' - '.($d['title']??'Sem título');$folder=self::createDriveFolder($account,$name,$clientRoot);DB::update('demands',(int)$d['id'],['drive_folder_id'=>$folder['id']]);return ['account_id'=>$account,'folder_id'=>$folder['id']];
  }

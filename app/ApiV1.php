@@ -4,6 +4,16 @@ final class ApiV1 {
   Auth::load();if(Auth::$origin!=='api')fail('Use um token Bearer da API do TaskEsc.',401);
   $method=strtoupper($method);$write=in_array($method,['POST','PUT','PATCH','DELETE'],true);Auth::scope($write?'api.write':'api.read');
   $parts=array_values(array_filter(explode('/',trim($path,'/')),'strlen'));
+  if((Auth::$user['role']??'')==='staff'){
+   if(in_array($parts[0]??'', ['tasks','kanban'],true)){
+    $ability='tasks.read';
+    if($method==='POST')$ability=($parts[2]??'')==='move'?'tasks.move':(($parts[2]??'')==='comments'?'tasks.comment':'tasks.create');
+    else if(in_array($method,['PATCH','PUT'],true))$ability='tasks.edit';
+    else if($method==='DELETE')$ability=($parts[2]??'')==='files'?'tasks.files':'tasks.delete';
+    if(($parts[2]??'')==='files'&&$method==='GET')$ability='tasks.files';
+    Auth::requireAbility($ability);
+   }else if(($parts[0]??'')==='analysis')Auth::requireAbility('dashboard.view');
+  }
   if(!$parts)return self::index();
   if($parts[0]==='status'&&$method==='GET')return ['ok'=>true,'service'=>'TaskEsc API','version'=>'v1','time'=>now()];
   if($parts[0]==='me'&&$method==='GET')return ['user'=>Auth::$user,'scopes'=>preg_split('/\s+/',trim(Auth::$scopes))];

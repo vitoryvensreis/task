@@ -80,6 +80,10 @@ final class Auth {
    'client'=>['dashboard.view','tasks.read','tasks.create','tasks.edit','tasks.move','tasks.comment','tasks.files','agenda.read']
   ];
   $abilities=$map[$role]??[];
+  if($role==='staff'&&!WorkspaceContext::legacyCiFixture()&&(int)(self::$workspace['id']??0)>0){
+   $custom=WorkspaceRoles::effectiveStaffCapabilities((int)self::$workspace['id'],(int)self::$user['id']);
+   if($custom!==null)$abilities=$custom;
+  }
   if(!MasterSupport::isSupport())$abilities=array_values(array_diff($abilities,['agenda.read','agenda.write']));
   return $abilities;
  }

@@ -20,6 +20,7 @@ require ROOT.'/app/Notify.php';
 require ROOT.'/app/Auth.php';
 require ROOT.'/app/WorkspaceCatalog.php';
 require ROOT.'/app/WorkspacePreferences.php';
+require ROOT.'/app/WorkspaceRoles.php';
 require ROOT.'/app/PlatformPlans.php';
 require ROOT.'/app/SupportDesk.php';
 require ROOT.'/app/Catalog.php';
@@ -227,6 +228,22 @@ try{
  $supportMessages=SupportDesk::messages(['tenant_user_id'=>$staff,'workspace_id'=>999]);
  testws(count($supportMessages['messages'])===1,
   'Tenant support message scoping rejected its own thread.');
+ // B10 custom roles: only the scoped staff member receives the selected abilities.
+ $rolesDdl=file_get_contents(ROOT.'/database/migrations/033_workspace_custom_roles.sql');
+ testws($rolesDdl!==false,'Custom roles migration missing.');
+ foreach(preg_split('/;\\s*(?:\\r?\\n|$)/',$rolesDdl) as $statement)
+  if(trim($statement)!=='')DB::run($statement);
+ DB::run('ALTER TABLE workspace_members ADD COLUMN custom_role_id BIGINT UNSIGNED NULL');
+ $roleId=DB::insert('workspace_role_definitions',[
+  'workspace_id'=>$ws,'name'=>'Editor de teste','description'=>'Equipe limitada',
+  'abilities_json'=>'["dashboard.view","tasks.read","tasks.comment"]',
+  'active'=>1,'created_by'=>$owner,'created_at'=>now(),'updated_at'=>now()
+ ]);
+ DB::run('UPDATE workspace_members SET custom_role_id=? WHERE workspace_id=? AND user_id=?',[$roleId,$ws,$staff]);
+ $staffCaps=WorkspaceRoles::effectiveStaffCapabilities($ws,$staff);
+ testws($staffCaps===['dashboard.view','tasks.read','tasks.comment'],
+  'Custom role capabilities mismatch.');
+ testws(!in_array('tasks.delete',$staffCaps,true),'Staff role granted forbidden delete permission.');
  echo "Workspace schema30 CI OK: owner, memberships, ".count(WorkspaceFoundation::DATA_TABLES).
   " mapped tables, preserved client/task/invoice/file, pending Master, calendar excluded, idempotence, second tenant blocked.\n";
 }catch(Throwable $e){fwrite(STDERR,'Workspace CI failed: '.$e->getMessage()."\n");exit(1);}

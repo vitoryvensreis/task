@@ -83,7 +83,7 @@ public static function clientSave(array $p): array {
   return DB::all("SELECT a.id,a.entity_id AS client_id,a.action,a.before_json,a.after_json,a.origin,a.created_at,u.name AS user_name,u.email AS user_email,c.name AS client_name FROM audit_log a LEFT JOIN users u ON u.id=a.user_id LEFT JOIN clients c ON c.id=a.entity_id WHERE a.entity='client'".(WorkspaceContext::legacyCiFixture()?'':' AND a.workspace_id=?')." ORDER BY a.id DESC LIMIT ".$limit,WorkspaceContext::legacyCiFixture()?[]:[Auth::workspaceId()]);
  }
  public static function projectSave(array $p): array {Auth::admin();$client=integer($p['client_id']??0,1);Auth::client($client);$id=(int)($p['id']??0);if($id)WorkspaceCatalog::requireRecord('projects',$id);$row=['client_id'=>$client,'name'=>required($p,'name',190),'description'=>$p['description']??''];if($id)DB::update('projects',$id,$row);else $id=DB::insert('projects',$row+['created_at'=>now()]+(WorkspaceContext::legacyCiFixture()?[]:['workspace_id'=>Auth::workspaceId()]));audit('project',$id,'save',null,$row);return ['id'=>$id];}
- public static function users(): array {Auth::admin();$ws=Auth::workspaceId();if(WorkspaceContext::legacyCiFixture())return DB::all('SELECT id,name,email,whatsapp_phone,role,active,email_notifications,weekly_report,ai_assistant_enabled FROM users ORDER BY name');$rows=DB::all('SELECT u.id,u.name,u.email,u.whatsapp_phone,u.role,u.active,u.email_notifications,u.weekly_report,u.ai_assistant_enabled FROM users u JOIN workspace_members wm ON wm.user_id=u.id WHERE wm.workspace_id=? ORDER BY u.name',[$ws]);foreach($rows as &$r)$r['clients']=DB::all('SELECT * FROM user_clients WHERE user_id=? AND workspace_id=?',[$r['id'],$ws]);return $rows;}
+ public static function users(): array {Auth::admin();$ws=Auth::workspaceId();if(WorkspaceContext::legacyCiFixture())return DB::all('SELECT id,name,email,whatsapp_phone,role,active,email_notifications,weekly_report,ai_assistant_enabled FROM users ORDER BY name');$rows=DB::all('SELECT u.id,u.name,u.email,u.whatsapp_phone,u.role,u.active,u.email_notifications,u.weekly_report,u.ai_assistant_enabled,wm.custom_role_id FROM users u JOIN workspace_members wm ON wm.user_id=u.id WHERE wm.workspace_id=? ORDER BY u.name',[$ws]);foreach($rows as &$r)$r['clients']=DB::all('SELECT * FROM user_clients WHERE user_id=? AND workspace_id=?',[$r['id'],$ws]);return $rows;}
  public static function userSave(array $p): array {
   Auth::admin();
   $id=(int)($p['id']??0);$old=$id?DB::one('SELECT id,role,active,whatsapp_phone,ai_assistant_enabled FROM users WHERE id=?',[$id]):null;if($id&&!$old)fail('Usuário não encontrado.',404);if($id&&!WorkspaceContext::legacyCiFixture())WorkspaceContext::assertUserBelongs($id,Auth::workspaceId());
@@ -98,11 +98,15 @@ public static function clientSave(array $p): array {
   $links=$p['clients']??[];if(!is_array($links))fail('Vínculos de clientes inválidos.',422);$cleanLinks=[];
   if($role!=='admin')foreach($links as $link){$cid=integer($link['client_id']??0,1);Auth::client($cid);if(isset($cleanLinks[$cid]))continue;$cleanLinks[$cid]=['client_id'=>$cid,'can_approve'=>(int)(bool)($link['can_approve']??1),'can_finance'=>$role==='client'?(int)(bool)($link['can_finance']??0):0];}
   $workspaceId=Auth::workspaceId();
-  DB::tx(function() use(&$id,$old,$row,$cleanLinks,$workspaceId): void {
+  $oldMemberRoleId=(!WorkspaceContext::legacyCiFixture()&&$id>0)
+    ?(int)(DB::one('SELECT custom_role_id FROM workspace_members WHERE workspace_id=? AND user_id=?',[$workspaceId,$id])['custom_role_id']??0):0;
+  $customRoleId=array_key_exists('custom_role_id',$p)?integer($p['custom_role_id']??0,0):$oldMemberRoleId;
+  DB::tx(function() use(&$id,$old,$row,$cleanLinks,$workspaceId,$customRoleId): void {
    $isNew=!$old;
    if(!WorkspaceContext::legacyCiFixture())PlatformPlans::enforceTeamLimit($workspaceId,$id,(string)$row['role'],(int)$row['active']===1);
    if($id)DB::update('users',$id,$row);else $id=DB::insert('users',$row+['created_at'=>now()]);
    if(!WorkspaceContext::legacyCiFixture())WorkspaceContext::syncUser($id,$workspaceId,(string)$row['role'],(int)$row['active']===1,$old!==null&&(int)$old['active']===0&&(int)$row['active']===1);
+   WorkspaceRoles::assignToUser($workspaceId,$id,(string)$row['role'],$customRoleId);
    DB::run('DELETE FROM user_clients WHERE user_id=?'.(WorkspaceContext::legacyCiFixture()?'':' AND workspace_id=?'),WorkspaceContext::legacyCiFixture()?[$id]:[$id,$workspaceId]);
    foreach($cleanLinks as $link){
     DB::insert('user_clients',['user_id'=>$id,'client_id'=>$link['client_id'],'can_approve'=>$link['can_approve'],'can_finance'=>$link['can_finance']]+(WorkspaceContext::legacyCiFixture()?[]:['workspace_id'=>$workspaceId]));

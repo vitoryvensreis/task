@@ -45,6 +45,7 @@ try {
  if($action==='preview.start'){checkCsrf();out(Auth::previewStart($p));}
  if($action==='preview.stop'){checkCsrf();out(Auth::previewStop());}
  if(($_SERVER['REQUEST_METHOD']??'GET')!=='GET'&&Auth::$origin!=='api'){checkCsrf();Auth::guardPreviewWrite();}
+ WorkspaceRoles::requireForAction($action,$p);
  if(str_starts_with($action,'wpp.')||str_starts_with($action,'tokens.'))MasterSupport::requirePlatformSettings();
  if(str_starts_with($action,'demands.')||str_starts_with($action,'services.')||str_starts_with($action,'templates.'))PlatformPlans::requireModule('tasks');
  if(str_starts_with($action,'automation.'))PlatformPlans::requireModule('automations');
@@ -109,6 +110,8 @@ try {
   'projects.save'=>Catalog::projectSave($p),
   'users.list'=>Catalog::users(),
   'users.save'=>Catalog::userSave($p),
+  'company.roles'=>WorkspaceRoles::all(),
+  'company.role_save'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?WorkspaceRoles::save($p):fail('Método não permitido.',405),
   'settings.get'=>Catalog::settingsGet(),
   'settings.save'=>Catalog::settingsSave($p),
   'settings.logo_upload'=>Catalog::settingsLogoUpload(),

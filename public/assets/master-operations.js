@@ -32,56 +32,6 @@ window.TaskEscMasterOperations=(()=>{
   t.append(body);box.append(t);host.append(box);
  }
  const date=s=>s?String(s).slice(0,16):'—';
- async function ai(host,csrf,base){
-  host.replaceChildren();header(host,'Monitoramento de IA','Consumo de Gemini e Groq, uso de tokens e falhas de comunicação. Exclusivo do ADM Master.');
-  const filter=el('div','master-ops-toolbar'),period=el('select','select'),provider=el('select','select'),refresh=el('button','secondary','↻ Atualizar');
-  for(const days of [1,7,14,30]){const option=el('option','',days===1?'Hoje':'Últimos '+days+' dias');option.value=days;option.selected=days===7;period.append(option)}
-  for(const [value,label] of [['all','Todos os provedores'],['gemini','Gemini'],['groq','Groq']]){const option=el('option','',label);option.value=value;provider.append(option)}
-  const label=(name,input)=>{const node=el('label','ms-field');node.append(el('span','',name),input);return node};
-  filter.append(label('Período',period),label('Provedor',provider),refresh);host.append(filter);
-  const content=el('div');host.append(content);
-  const load=async()=>{
-   content.replaceChildren(el('p','master-description','Consultando métricas…'));
-   const d=await request(base,'master.ai_usage',{days:period.value,provider:provider.value});
-   content.replaceChildren();
-   const stats=el('div','master-stats');
-   card(stats,'CHAMADAS',num(d.requests),'HTTP aos provedores');
-   card(stats,'TOKENS',num(d.total_tokens),'Informados pelos modelos');
-   card(stats,'FALHAS',num(Number(d.http_errors||0)+Number(d.transport_errors||0)),'HTTP e conexão');
-   card(stats,'LATÊNCIA MÉDIA',d.avg_latency_ms!==null?(Number(d.avg_latency_ms)/1000).toFixed(2)+' s':'—',num(d.latency_samples)+' amostras');
-   const overview=panel(content,'Visão geral','Indicadores agregados do consumo de inteligência artificial.');overview.append(stats);
-   const grid=el('div','master-dashboard-grid');
-   const daily=panel(grid,'Solicitações por dia','Volume de chamadas e falhas HTTP por dia.');
-   const values=d.daily||[],max=Math.max(1,...values.map(x=>Number(x.requests)||0));
-   const bars=el('div','master-bars master-ops-bars');
-   bars.style.gridTemplateColumns='repeat('+Math.max(values.length,1)+',minmax(0,1fr))';
-   for(const x of values){
-    const col=el('div','master-bar-column'),space=el('div','master-bar-space');
-    const bar=el('div','master-bar');bar.style.height=Math.max(3,Math.round((Number(x.requests)||0)/max*93))+'%';
-    bar.title=x.date+': '+num(x.requests)+' chamada(s), '+num(x.errors)+' falha(s)';
-    space.append(bar);col.append(space,el('span','',String(x.date).slice(5)));bars.append(col);
-   }
-   daily.append(bars);
-   const source=panel(grid,'Origem da interpretação','Roteamento de solicitações de IA.');
-   const routes=d.routes||{},routeBox=el('div','master-ops-rows');
-   for(const [name,label] of [['fast_path','PHP direto'],['cache_hit','Cache reutilizado'],['model_route','Modelo de IA']]){
-    const row=el('div','master-ops-row');row.append(el('span','',label),el('strong','',num(routes[name])));routeBox.append(row);
-   }
-   source.append(routeBox);content.append(grid);
-   const providers=panel(content,'Uso por provedor','Contagem agregada, sem conteúdo de conversas.');
-   table(providers,['Provedor','Chamadas','Sucessos','Falhas','Tokens'],
-    Object.entries(d.providers||{}).map(([name,r])=>[name,num(r.requests),num(r.http_ok),num(r.errors),num(r.tokens)]));
-   overview.append(el('p','master-description',d.coverage||''));
-   window.TaskEscMasterTabs.mount(content,[
-    {key:'resumo',label:'Resumo',node:overview},
-    {key:'desempenho',label:'Desempenho',node:grid},
-    {key:'provedores',label:'Por provedor',node:providers}
-   ],'ia');
-  };
-  period.onchange=()=>load().catch(e=>{content.replaceChildren(el('p','master-description',e.message))});
-  provider.onchange=period.onchange;refresh.onclick=period.onchange;
-  await load();
- }
  async function health(host,csrf,base){
   host.replaceChildren();header(host,'Saúde & Logs','Diagnóstico das integrações, tarefas do servidor e auditoria. Acesso exclusivo do ADM Master.');
   const toolbar=el('div','master-ops-toolbar'),reload=el('button','secondary','↻ Atualizar'),state=el('span','master-operation-state');
@@ -173,5 +123,5 @@ window.TaskEscMasterOperations=(()=>{
   reload.onclick=()=>load().catch(e=>state.textContent=e.message);
   await load();
  }
- return {ai,health};
+ return {health};
 })();

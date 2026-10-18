@@ -14,6 +14,7 @@ function config(?string $key=null,mixed $default=null):mixed {
 require ROOT.'/app/DB.php';
 require ROOT.'/app/WorkspaceFoundation.php';
 require ROOT.'/app/WorkspaceFoundationGuard.php';
+function now():string {return gmdate('Y-m-d H:i:s');}
 function testws(bool $ok,string $message):void {if(!$ok)throw new RuntimeException($message);}
 function refuses(callable $operation,string $reason):void {
  try{$operation();}catch(RuntimeException|LogicException){return;}

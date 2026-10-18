@@ -97,3 +97,17 @@ INSERT INTO categories (id,name,fields_json) VALUES (1,'Design gráfico','[]'),(
 INSERT INTO calendars(name) VALUES ('Produção');
 INSERT INTO settings (`key`,value) VALUES ('schema_version','30'),('brand_name','TaskEsc'),('brand_color','#ffffff'),('logo_url',''),('timezone','America/Fortaleza'),('upload_mb','0'),('retention_days','365'),('drive_account_id',''),('drive_root_folder_id',''),('min_delivery_business_hours','24'),('last_cron_at',''),('last_cron_error',''),('monitor_email',''),('browser_notifications','1'),('dashboard_default_period','month');
 
+
+
+-- Workspace Database Stage 1 (schema 30 compatibility):
+-- Structure evolves via WorkspaceFoundation::apply(), which creates the
+-- workspace metadata tables AFTER the original owner user exists.
+-- The baseline schema.sql deliberately does not create workspace or SaaS
+-- tables. This preserves the historic schema-30 bootstrap and tests.
+-- database/migrations/034_workspace_db_stage1.sql documents the schema
+-- change; app/WorkspaceDatabaseStage1.php applies the guarded unique index:
+--   workspace_members(user_id) -> uq_ws_one_membership
+-- Tenant data: all existing 44 workspace_id BIGINT UNSIGNED NOT NULL columns
+-- and idx_ws_<table> indexes are preserved for the Vitor operation.
+-- Final DROP DEFAULT for legacy tenant columns requires scoped INSERT
+-- writers in Stage 2 and is not applied in this compatibility release.

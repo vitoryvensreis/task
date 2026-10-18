@@ -1,0 +1,17 @@
+-- TaskEsc / Stage 1 multiworkspace metadata
+-- Applied conditionally and idempotently by bin/migrate-workspace-db-stage1.php.
+-- DO NOT execute manually: CREATE INDEX/ALTER TABLE is guarded by metadata
+-- checks and existing-user uniqueness checks in the PHP migration.
+-- The retired schema-20 SaaS is intentionally NOT reintroduced.
+--
+-- MySQL / MariaDB:
+-- ALTER TABLE workspace_members ADD UNIQUE KEY uq_ws_one_membership(user_id);
+--
+-- Every business table in WorkspaceFoundation::DATA_TABLES must keep
+-- workspace_id BIGINT UNSIGNED NOT NULL and idx_ws_<table>(workspace_id,key).
+-- Legacy rows belong to the original Vitor workspace; no rows are copied.
+--
+-- Legacy DEFAULTs are deliberately NOT removed at this stage: some existing
+-- PHP INSERT statements do not yet pass workspace_id. Dropping those defaults
+-- without changing all writers would interrupt the production application.
+-- That DDL belongs to Stage 2 (atomic writer updates + default retirement).

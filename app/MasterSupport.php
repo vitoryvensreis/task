@@ -265,7 +265,8 @@ final class MasterSupport {
   }elseif($workspaceId!==(int)$w['id'])fail('Workspace indisponível.',404);
   $masterId=(int)Auth::$actor['id'];
   $expires=gmdate('Y-m-d H:i:s',time()+self::SESSION_SECONDS);
-  $id=DB::tx(static function()use($workspaceId,$masterId,$reason,$expires):int {
+  $writer=static function()use($workspaceId,$masterId,$reason,$expires):int {
+   return DB::tx(static function()use($workspaceId,$masterId,$reason,$expires):int {
    DB::run('UPDATE workspace_support_sessions SET ended_at=? WHERE master_user_id=? AND ended_at IS NULL',[now(),$masterId]);
    $id=DB::insert('workspace_support_sessions',[
     'workspace_id'=>$workspaceId,'master_user_id'=>$masterId,'reason'=>$reason,
@@ -275,7 +276,10 @@ final class MasterSupport {
      'before_json'=>null,'after_json'=>json(['reason'=>$reason,'expires_at'=>$expires]),
      'origin'=>'web','created_at'=>now()]);
    return $id;
-  });
+   });
+  };
+  $id=WorkspaceTenantMode::enabled()
+   ?WorkspaceJobScope::forWorkspace($workspaceId,$writer):$writer();
   session_regenerate_id(true);
   unset($_SESSION['preview_client_id']);$_SESSION['workspace_support_id']=$id;
   $_SESSION['csrf']=bin2hex(random_bytes(24));
@@ -286,7 +290,12 @@ final class MasterSupport {
   Auth::load();if(!self::isActor())fail('Área exclusiva do ADM Master.',403);
   $id=(int)($_SESSION['workspace_support_id']??0);
   $masterId=(int)Auth::$actor['id'];
-  if($id>0)DB::tx(static function()use($id,$masterId):void {
+  if($id>0){
+   $owner=DB::one('SELECT workspace_id FROM workspace_support_sessions
+     WHERE id=? AND master_user_id=?',[$id,$masterId]);
+   if($owner){
+    $writer=static function()use($id,$masterId):void {
+     DB::tx(static function()use($id,$masterId):void {
    $record=DB::one('SELECT id,workspace_id,ended_at FROM workspace_support_sessions WHERE id=? AND master_user_id=? FOR UPDATE',
      [$id,$masterId]);
    if($record&&$record['ended_at']===null){
@@ -295,7 +304,13 @@ final class MasterSupport {
       'user_id'=>$masterId,'entity'=>'workspace_support','entity_id'=>$id,
       'action'=>'ended','before_json'=>null,'after_json'=>null,'origin'=>'web','created_at'=>now()]);
    }
-  });
+     });
+    };
+    if(WorkspaceTenantMode::enabled())
+     WorkspaceJobScope::forWorkspace((int)$owner['workspace_id'],$writer);
+    else $writer();
+   }
+  }
   unset($_SESSION['workspace_support_id'],$_SESSION['preview_client_id']);
   session_regenerate_id(true);$_SESSION['csrf']=bin2hex(random_bytes(24));
   Auth::$user=null;Auth::$workspace=null;Auth::$previewClientId=null;

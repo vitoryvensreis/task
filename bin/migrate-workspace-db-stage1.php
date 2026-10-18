@@ -26,6 +26,8 @@ try {
  echo json(WorkspaceDatabaseStage1::apply()).PHP_EOL;
 }catch(Throwable $e){
  error_log('Workspace stage1 migration refused: '.$e->getMessage());
- fwrite(STDERR,json(['stage1_applied'=>false,'reason'=>'prerequisites_or_schema_invalid']).PHP_EOL);
+ $detail=(string)$e->getMessage();
+ $detail=mb_substr((string)preg_replace('/[^A-Za-z0-9_:.\\- ]/','_',$detail),0,180);
+ fwrite(STDERR,json(['stage1_applied'=>false,'reason'=>$detail,'exception'=>get_class($e)]).PHP_EOL);
  exit(2);
 }

@@ -18,7 +18,7 @@ final class WorkspaceTenantMode {
 
  /** Guard new rows at the database boundary when full isolation is enabled. */
  public static function insertData(string $table,array $data): array {
-  if(!self::enabled()||!isset(WorkspaceFoundation::DATA_TABLES[$table]))return $data;
+  if(!isset(WorkspaceFoundation::DATA_TABLES[$table])||!self::enabled())return $data;
   $scope=(int)(Auth::$workspace['id']??0);
   if($scope<1){
    $scope=WorkspaceJobScope::currentId();
@@ -31,9 +31,8 @@ final class WorkspaceTenantMode {
 
  /** Raw SQL writes must never fall through to the old default when enabled. */
  public static function assertSql(string $sql): void {
-  if(!self::enabled())return;
   if(!preg_match('/\A\s*INSERT\s+(?:IGNORE\s+)?INTO\s+`?([a-z_]+)`?\s*\(([^)]*)\)/i',$sql,$m))return;
-  if(!isset(WorkspaceFoundation::DATA_TABLES[strtolower($m[1])]))return;
+  if(!isset(WorkspaceFoundation::DATA_TABLES[strtolower($m[1])])||!self::enabled())return;
   if(!preg_match('/(?:\A|,)\s*`?workspace_id`?\s*(?:,|\z)/i',trim($m[2])))
    throw new LogicException('Scoped workspace_id required in raw SQL INSERT for '.$m[1]);
  }

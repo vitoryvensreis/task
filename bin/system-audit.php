@@ -33,32 +33,42 @@ try{
   if(!$outboxIssues)$info[]=['key'=>'event_outbox','message'=>'Outbox InnoDB, JSON e índices validados.','meta'=>['valid'=>true]];
  }
 
+ // The retired SaaS and the new SINGLE-workspace foundation are different.
+ // Never treat an unverified partial workspace structure as valid.
  $saasTables=['workspace_settings','workspace_members','workspaces'];
  $saasFlags=['saas_enabled','workspace_context_enabled','workspace_permissions_enabled','workspace_settings_enabled','signup_enabled','billing_enabled'];
-
  $presentTables=array_values(array_filter($saasTables,$tableExists));
  $marks=implode(',',array_fill(0,count($saasFlags),'?'));
  $presentFlags=DB::all("SELECT `key`,value FROM settings WHERE `key` IN ($marks) ORDER BY `key`",$saasFlags);
+ $workspaceColumns=DB::all("SELECT TABLE_NAME,COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND COLUMN_NAME='workspace_id' ORDER BY TABLE_NAME");
+ $workspaceValid=WorkspaceFoundationGuard::valid();
 
+ // An interrupted installation must never be dropped by legacy cleanup.
+ if($cleanup&&($workspaceValid||$presentTables||$workspaceColumns||
+    DB::one('SELECT value FROM settings WHERE `key`=?',[WorkspaceFoundation::MARKER])))
+  throw new RuntimeException('Workspace data may not be removed by legacy SaaS cleanup.');
  if($cleanup){
   if($presentFlags)DB::run("DELETE FROM settings WHERE `key` IN ($marks)",$saasFlags);
   if($presentTables){
    DB::run('SET FOREIGN_KEY_CHECKS=0');
-   try{
-    foreach($saasTables as $table)if($tableExists($table))DB::run("DROP TABLE `$table`");
-   }finally{DB::run('SET FOREIGN_KEY_CHECKS=1');}
+   try{foreach($saasTables as $table)if($tableExists($table))DB::run('DROP TABLE `'.$table.'`');}
+   finally{DB::run('SET FOREIGN_KEY_CHECKS=1');}
   }
   $presentTables=array_values(array_filter($saasTables,$tableExists));
   $presentFlags=DB::all("SELECT `key`,value FROM settings WHERE `key` IN ($marks) ORDER BY `key`",$saasFlags);
-  $info[]=['key'=>'saas_cleanup','message'=>'Limpeza SaaS executada.','meta'=>['remaining_tables'=>$presentTables,'remaining_flags'=>$presentFlags]];
+  $info[]=['key'=>'saas_cleanup','message'=>'Limpeza SaaS legado executada.','meta'=>['remaining_tables'=>$presentTables,'remaining_flags'=>$presentFlags]];
  }
 
- if($presentTables)$add($warnings,'saas_tables','Ainda existem tabelas da fundação SaaS.',array_values($presentTables));
- if($presentFlags)$add($warnings,'saas_flags','Ainda existem feature flags da fundação SaaS.',$presentFlags);
-
- $workspaceColumns=DB::all("SELECT TABLE_NAME,COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND COLUMN_NAME='workspace_id' ORDER BY TABLE_NAME");
- if($workspaceColumns)$add($warnings,'workspace_columns','Foram encontradas colunas workspace_id. Elas não são usadas pelo TaskEsc v3.25 e não foram removidas automaticamente.',$workspaceColumns);
- if(in_array($schema,['21','22','23','24','25','26','27','28','29','30'],true)&&($presentTables||$presentFlags||$workspaceColumns))$add($critical,'removed_saas_present','A Outbox não admite estruturas do SaaS removido.');
+ if($workspaceValid){
+  $info[]=['key'=>'workspace_foundation','message'=>'Workspace único preparado; isolamento multiempresa ainda não habilitado.','meta'=>['staged'=>true,'scope_enforced'=>false]];
+ }else{
+  if($presentTables)$add($warnings,'saas_tables','Foram encontradas tabelas de workspace sem validação.',$presentTables);
+  if($workspaceColumns)$add($warnings,'workspace_columns','Colunas de workspace não verificadas.',$workspaceColumns);
+ }
+ if($presentFlags)$add($warnings,'saas_flags','Flags antigas proibidas.',$presentFlags);
+ if(in_array($schema,['21','22','23','24','25','26','27','28','29','30'],true)&&
+   ((!$workspaceValid&&($presentTables||$workspaceColumns))||$presentFlags))
+  $add($critical,'removed_saas_present','Workspace não verificado ou flags do SaaS antigo presentes.');
 
  $essential=['users','clients','stages','categories','projects','demands','files','comments','invoices','payments','google_accounts','calendars','events','settings'];
  if(in_array($schema,['22','23','24','25','26','27','28','29','30'],true))array_push($essential,'chat_threads','chat_messages');

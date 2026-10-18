@@ -19,7 +19,7 @@ try{
  $removedTables=DB::all("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('workspaces','workspace_members','workspace_settings')");
  $removedColumns=DB::all("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND COLUMN_NAME='workspace_id'");
  $removedFlags=DB::all("SELECT `key` FROM settings WHERE `key` IN ('saas_enabled','workspace_context_enabled','workspace_permissions_enabled','workspace_settings_enabled','signup_enabled','billing_enabled')");
- if($removedTables||$removedColumns||$removedFlags)throw new RuntimeException('removed_saas_detected');
+ if($removedFlags||(($removedTables||$removedColumns)&&!WorkspaceFoundationGuard::valid()))throw new RuntimeException('removed_saas_detected');
  $fingerprint=static function(): array {
   $result=[];
   foreach(DB::all("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE' AND TABLE_NAME<>'event_outbox' ORDER BY TABLE_NAME") as $table){

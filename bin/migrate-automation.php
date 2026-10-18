@@ -19,7 +19,7 @@ try{
  $removedTables=DB::all("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('workspaces','workspace_members','workspace_settings')");
  $removedColumns=DB::all("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND COLUMN_NAME='workspace_id'");
  $removedFlags=DB::all("SELECT `key` FROM settings WHERE `key` IN ('saas_enabled','workspace_context_enabled','workspace_permissions_enabled','workspace_settings_enabled','signup_enabled','billing_enabled')");
- if($removedTables||$removedColumns||$removedFlags)throw new RuntimeException('removed_saas_detected');
+ if($removedFlags||(($removedTables||$removedColumns)&&!WorkspaceFoundationGuard::valid()))throw new RuntimeException('removed_saas_detected');
 
  $before=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);
  if(!in_array($before,[23,24,25,26,27,28,29,30],true))throw new RuntimeException('automation_schema_source_invalid');

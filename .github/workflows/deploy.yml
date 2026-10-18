@@ -165,6 +165,7 @@ jobs:
           php tests/ai-whatsapp-inbox.php
           php tests/ai-whatsapp-access.php
           php tests/ai-whatsapp-tools.php
+          php tests/workspace-foundation.php
 
   deploy:
     name: Deploy na VPS
@@ -430,6 +431,23 @@ jobs:
           ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "mkdir -p '$DEPLOY_PATH/public/assets/vendor'"
           scp -P "$VPS_PORT"             public/assets/vendor/centrifuge-5.7.4.js             public/assets/vendor/centrifuge-5.7.4.sha256             public/assets/vendor/centrifuge-js.LICENSE             "$VPS_USER@$VPS_HOST:$DEPLOY_PATH/public/assets/vendor/"
           ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "cd '$DEPLOY_PATH/public/assets/vendor' && sha256sum -c centrifuge-5.7.4.sha256 && test -s centrifuge-js.LICENSE"
+
+      - name: Criar workspace único e vincular dados existentes após backup
+        timeout-minutes: 40
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          BACKUP_MANIFEST: ${{ steps.backup.outputs.backup_manifest }}
+        run: |
+          set -euo pipefail
+          printf -v REMOTE 'DEPLOY_PATH=%q BACKUP_MANIFEST=%q bash -s' "$DEPLOY_PATH" "$BACKUP_MANIFEST"
+          ssh -o BatchMode=yes -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "$REMOTE" <<'REMOTE_SCRIPT'
+            set -euo pipefail
+            cd "$DEPLOY_PATH"
+            php bin/migrate-workspace-foundation.php --apply "--backup-manifest=$BACKUP_MANIFEST"
+          REMOTE_SCRIPT
 
       - name: Aplicar migrações realtime, chat e automações com backup validado
         env:

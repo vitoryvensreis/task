@@ -198,18 +198,18 @@ final class Finance {
    FROM payments p
    JOIN invoices i ON i.id=p.invoice_id
    JOIN clients c ON c.id=i.client_id
-   WHERE i.status<>'cancelled' AND i.deleted_at IS NULL AND p.paid_on BETWEEN ? AND ? AND p.amount_cents<>0
+   WHERE i.status<>'cancelled' AND i.deleted_at IS NULL AND p.paid_on BETWEEN ? AND ? AND p.amount_cents<>0".self::wsSql('i')."
    ORDER BY p.paid_on DESC,p.id DESC",[$from,$to]);
 
   $paidOperational=DB::all("SELECT e.id,e.description,e.vendor,e.category,e.amount_cents,e.paid_on AS movement_on,'expense' AS source_type,NULL AS task_title,NULL AS client_name
    FROM expenses e
-   WHERE e.deleted_at IS NULL AND e.payment_status='paid' AND e.paid_on BETWEEN ? AND ?
+   WHERE e.deleted_at IS NULL AND e.payment_status='paid' AND e.paid_on BETWEEN ? AND ?".self::wsSql('e')."
    ORDER BY e.paid_on DESC,e.id DESC",[$from,$to]);
   $paidTask=DB::all("SELECT co.id,co.description,'' AS vendor,'Custos de task' AS category,co.amount_cents,co.paid_on AS movement_on,'task_cost' AS source_type,d.title AS task_title,cl.name AS client_name
    FROM costs co
    JOIN demands d ON d.id=co.demand_id
    JOIN clients cl ON cl.id=d.client_id
-   WHERE co.payment_status='paid' AND co.paid_on BETWEEN ? AND ?
+   WHERE co.payment_status='paid' AND co.paid_on BETWEEN ? AND ?".self::wsSql('co')."
    ORDER BY co.paid_on DESC,co.id DESC",[$from,$to]);
   $paidOut=array_merge($paidOperational,$paidTask);
   usort($paidOut,fn($a,$b)=>strcmp((string)$b['movement_on'],(string)$a['movement_on'])?:((int)$b['id']<=> (int)$a['id']));
@@ -224,13 +224,13 @@ final class Finance {
 
   $pendingOperational=DB::all("SELECT e.id,e.description,e.vendor,e.category,e.amount_cents,e.spent_on AS movement_on,'expense' AS source_type,NULL AS task_title,NULL AS client_name
    FROM expenses e
-   WHERE e.deleted_at IS NULL AND e.payment_status<>'paid' AND e.spent_on BETWEEN ? AND ?
+   WHERE e.deleted_at IS NULL AND e.payment_status<>'paid' AND e.spent_on BETWEEN ? AND ?".self::wsSql('e')."
    ORDER BY e.spent_on,e.id",[$from,$to]);
   $pendingTask=DB::all("SELECT co.id,co.description,'' AS vendor,'Custos de task' AS category,co.amount_cents,co.spent_on AS movement_on,'task_cost' AS source_type,d.title AS task_title,cl.name AS client_name
    FROM costs co
    JOIN demands d ON d.id=co.demand_id
    JOIN clients cl ON cl.id=d.client_id
-   WHERE co.payment_status<>'paid' AND co.spent_on BETWEEN ? AND ?
+   WHERE co.payment_status<>'paid' AND co.spent_on BETWEEN ? AND ?".self::wsSql('co')."
    ORDER BY co.spent_on,co.id",[$from,$to]);
   $futureOut=array_merge($pendingOperational,$pendingTask);
   usort($futureOut,fn($a,$b)=>strcmp((string)$a['movement_on'],(string)$b['movement_on'])?:((int)$a['id']<=> (int)$b['id']));

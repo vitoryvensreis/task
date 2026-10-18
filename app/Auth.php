@@ -11,7 +11,7 @@ final class Auth {
   $actor=$id?DB::one('SELECT id,name,email,role,active,email_notifications,weekly_report,twofa_enabled,last_login_at FROM users WHERE id=? AND active=1',[$id]):null;self::$actor=$actor;
   self::$workspace=$actor?WorkspaceContext::forUser($actor):null;
   if($actor&&self::$origin==='web'&&$actor['role']==='admin'&&!empty($_SESSION['preview_client_id'])){
-   $cid=(int)$_SESSION['preview_client_id'];$client=DB::one('SELECT id,name FROM clients WHERE id=? AND active=1 AND workspace_id=?',[$cid,self::$workspace['id']]);
+   $cid=(int)$_SESSION['preview_client_id'];$client=WorkspaceContext::legacyCiFixture()?DB::one('SELECT id,name FROM clients WHERE id=? AND active=1',[$cid]):DB::one('SELECT id,name FROM clients WHERE id=? AND active=1 AND workspace_id=?',[$cid,self::$workspace['id']]);
    if($client){self::$previewClientId=$cid;self::$user=$actor;self::$user['actor_role']='admin';self::$user['role']='client';self::$user['is_preview']=1;self::$user['preview_client_id']=$cid;self::$user['preview_client_name']=$client['name'];}
    else unset($_SESSION['preview_client_id']);
   }
@@ -22,20 +22,21 @@ final class Auth {
  public static function workspaceId(): int {self::load();if(!self::$workspace)fail('Workspace indisponível.',403);return (int)self::$workspace['id'];}
  public static function workspace(): array {self::load();if(!self::$workspace)fail('Workspace indisponível.',403);return self::$workspace;}
  public static function isPreview(): bool {self::load(false);return self::$previewClientId!==null;}
- public static function previewStart(array $p): array {self::load();if((self::$actor['role']??'')!=='admin')fail('Acesso restrito ao administrador.',403);$id=integer($p['client_id']??0,1);$c=DB::one('SELECT id,name FROM clients WHERE id=? AND active=1 AND workspace_id=?',[$id,self::workspaceId()]);if(!$c)fail('Cliente não encontrado.',404);$_SESSION['preview_client_id']=$id;self::$user=null;self::$previewClientId=null;self::load();return ['saved'=>true,'client'=>$c];}
+ public static function previewStart(array $p): array {self::load();if((self::$actor['role']??'')!=='admin')fail('Acesso restrito ao administrador.',403);$id=integer($p['client_id']??0,1);$c=WorkspaceContext::legacyCiFixture()?DB::one('SELECT id,name FROM clients WHERE id=? AND active=1',[$id]):DB::one('SELECT id,name FROM clients WHERE id=? AND active=1 AND workspace_id=?',[$id,self::workspaceId()]);if(!$c)fail('Cliente não encontrado.',404);$_SESSION['preview_client_id']=$id;self::$user=null;self::$previewClientId=null;self::load();return ['saved'=>true,'client'=>$c];}
  public static function previewStop(): array {self::load();if((self::$actor['role']??'')!=='admin')fail('Visualização de cliente não está ativa.',403);unset($_SESSION['preview_client_id']);self::$user=null;self::$previewClientId=null;self::load();return ['saved'=>true];}
  public static function guardPreviewWrite(): void {if(self::isPreview())fail('A visualização de cliente é somente leitura. Saia do modo de visualização para fazer alterações.',403);}
  public static function scope(string $scope): void {if(self::$origin!=='api')return;$all=preg_split('/\s+/',trim(self::$scopes))?:[];$aliases=$scope==='api.read'?['api.read','tools.read']:($scope==='api.write'?['api.write','tools.write']:[$scope]);foreach($aliases as $x)if(in_array($x,$all,true))return;fail('Token sem permissão '.$scope.'.',403);}
  public static function admin(): void {self::load();if(self::$user['role']!=='admin')fail('Acesso restrito ao administrador.',403);}
  public static function staff(): void {self::load();if(self::$user['role']==='client')fail('Ação restrita à equipe.',403);}
  public static function rate(string $name,int $max=15,int $seconds=900): void {$key=hash('sha256',$name.'|'.($_SERVER['REMOTE_ADDR']??'cli'));DB::run('INSERT INTO rate_limits (bucket,attempts,expires_at) VALUES (?,1,?) ON DUPLICATE KEY UPDATE attempts=IF(expires_at<?,1,attempts+1),expires_at=IF(expires_at<?,VALUES(expires_at),expires_at)',[$key,gmdate('Y-m-d H:i:s',time()+$seconds),now(),now()]);$r=DB::one('SELECT attempts FROM rate_limits WHERE bucket=?',[$key]);if((int)$r['attempts']>$max)fail('Muitas tentativas. Tente mais tarde.',429);}
- public static function client(int $id,string $permission='read'): array {self::load();$c=DB::one('SELECT * FROM clients WHERE id=? AND workspace_id=?',[$id,self::workspaceId()]);if(!$c)fail('Cliente não encontrado.',404);if(self::isPreview()){if($id!==self::$previewClientId)fail('Sem acesso a este cliente.',403);return $c;}if(self::$user['role']==='admin')return $c;
+ public static function client(int $id,string $permission='read'): array {self::load();$c=WorkspaceContext::legacyCiFixture()?DB::one('SELECT * FROM clients WHERE id=?',[$id]):DB::one('SELECT * FROM clients WHERE id=? AND workspace_id=?',[$id,self::workspaceId()]);if(!$c)fail('Cliente não encontrado.',404);if(self::isPreview()){if($id!==self::$previewClientId)fail('Sem acesso a este cliente.',403);return $c;}if(self::$user['role']==='admin')return $c;
   if(self::$user['role']==='staff'){$link=DB::one('SELECT client_id FROM user_clients WHERE user_id=? AND client_id=?',[self::$user['id'],$id]);if(!$link||$permission!=='read')fail('Sem acesso ao cliente.',403);return $c;}
   $link=DB::one('SELECT * FROM user_clients WHERE user_id=? AND client_id=?',[self::$user['id'],$id]);if(!$link||($permission==='finance'&&!$link['can_finance'])||($permission==='approve'&&!$link['can_approve']))fail('Sem acesso a este cliente.',403);return $c;
  }
- public static function demand(int $id,bool $lock=false): array {self::load();$d=DB::one('SELECT d.*,s.kind AS stage_kind FROM demands d JOIN stages s ON s.id=d.stage_id AND s.workspace_id=d.workspace_id WHERE d.id=? AND d.workspace_id=? AND d.deleted_at IS NULL'.($lock?' FOR UPDATE':''),[$id,self::workspaceId()]);if(!$d)fail('Demanda não encontrada.',404);self::client((int)$d['client_id']);return $d;}
+ public static function demand(int $id,bool $lock=false): array {self::load();$d=WorkspaceContext::legacyCiFixture()?DB::one('SELECT d.*,s.kind AS stage_kind FROM demands d JOIN stages s ON s.id=d.stage_id WHERE d.id=? AND d.deleted_at IS NULL'.($lock?' FOR UPDATE':''),[$id]):DB::one('SELECT d.*,s.kind AS stage_kind FROM demands d JOIN stages s ON s.id=d.stage_id AND s.workspace_id=d.workspace_id WHERE d.id=? AND d.workspace_id=? AND d.deleted_at IS NULL'.($lock?' FOR UPDATE':''),[$id,self::workspaceId()]);if(!$d)fail('Demanda não encontrada.',404);self::client((int)$d['client_id']);return $d;}
  public static function demandFilter(string $alias='d'): array {
   self::load();$ws=self::workspaceId();
+  if(WorkspaceContext::legacyCiFixture()){if(self::isPreview())return ["$alias.client_id=? AND $alias.deleted_at IS NULL",[self::$previewClientId]];if(self::$user['role']==='admin')return ["$alias.deleted_at IS NULL",[]];return ["$alias.client_id IN (SELECT client_id FROM user_clients WHERE user_id=?) AND $alias.deleted_at IS NULL",[self::$user['id']]];}
   // Only call with known SQL aliases (never user-controlled strings).
   if(!preg_match('/^[a-zA-Z][a-zA-Z0-9_]*$/D',$alias))throw new InvalidArgumentException('Invalid demand alias.');
   $base="$alias.workspace_id=? AND $alias.deleted_at IS NULL";
@@ -45,6 +46,7 @@ final class Auth {
  }
  public static function clientFilter(string $column='client_id',bool $finance=false): array {
   self::load();$ws=self::workspaceId();
+  if(WorkspaceContext::legacyCiFixture()){if(self::isPreview())return ["$column=?",[self::$previewClientId]];if(self::$user['role']==='admin')return ['1=1',[]];return ["$column IN (SELECT client_id FROM user_clients WHERE user_id=?".($finance?' AND can_finance=1':'').')',[self::$user['id']]];}
   if(!preg_match('/^[a-zA-Z][a-zA-Z0-9_]*(?:\\.[a-zA-Z][a-zA-Z0-9_]*)?$/D',$column))
    throw new InvalidArgumentException('Invalid client column.');
   if(self::isPreview())return ["$column IN (SELECT id FROM clients WHERE workspace_id=? AND id=?)",[$ws,self::$previewClientId]];

@@ -33,6 +33,14 @@ try {
  if($action==='auth.me'){Auth::load();out(['user'=>Auth::$user,'csrf'=>csrf()]);}
  if($action==='meta'){Auth::load();out(Catalog::meta());}
  Auth::load();
+ if(str_starts_with($action,'support.')){
+  if($action==='support.list'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET')out(SupportDesk::threads());
+  if($action==='support.messages'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET')out(SupportDesk::messages($p));
+  if($action==='support.send'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST'){
+   checkCsrf();out(SupportDesk::send($p,$_FILES['image']??null));
+  }
+  fail('Método não permitido.',405);
+ }
  if((Auth::$user['role']??'')==='master')fail('Escolha um workspace no painel do ADM Master.',403);
  if($action==='preview.start'){checkCsrf();out(Auth::previewStart($p));}
  if($action==='preview.stop'){checkCsrf();out(Auth::previewStop());}

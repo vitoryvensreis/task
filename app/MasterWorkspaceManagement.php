@@ -45,6 +45,7 @@ final class MasterWorkspaceManagement {
   $plan=DB::one('SELECT p.name,p.team_limit,p.features_json,p.price_cents,p.billing_period
     FROM workspace_access_plans a JOIN platform_access_plans p ON p.id=a.plan_id
     WHERE a.workspace_id=?',[$id]);
+  $planEffective=$plan?PlatformPlans::workspacePlan($id):null;
   $used=0;
   foreach($members as $m){
    if($m['status']==='active'&&(int)$m['active']===1&&
@@ -59,7 +60,9 @@ final class MasterWorkspaceManagement {
      'company_email'=>$fields['master.company_email']??'',
      'company_phone'=>$fields['master.company_phone']??''],
    'members'=>$members,
-   'team_used'=>$used,'team_limit'=>$plan['team_limit']??null,
+   'team_used'=>$used,'team_limit'=>$planEffective['team_limit']??null,
+   'plan_team_limit'=>$plan['team_limit']??null,
+   'team_limit_override'=>$planEffective['team_limit_override']??null,
    'plan_name'=>$plan['name']??'Não atribuído',
    'billing'=>['enabled'=>false,'invoices'=>[],'payments'=>[],
      'status'=>'not_integrated']
@@ -94,6 +97,35 @@ final class MasterWorkspaceManagement {
    ]);
    return ['saved'=>true,'workspace_id'=>$id,'name'=>$name,
      'company_email'=>$email,'company_phone'=>$phone];
+  });
+ }
+
+ public static function saveLimit(array $p): array {
+  self::guard();Auth::rate('master-workspace-limit',15,3600);
+  $workspaceId=integer($p['workspace_id']??0,1);
+  $raw=trim((string)($p['team_limit_override']??''));
+  $limit=$raw===''?null:integer($raw,1,100000);
+  return DB::tx(static function()use($workspaceId,$limit):array {
+   $ws=self::operationalWorkspace($workspaceId,true);
+   $assigned=DB::one('SELECT p.id,p.name,p.team_limit FROM workspace_access_plans a
+     JOIN platform_access_plans p ON p.id=a.plan_id AND p.active=1 WHERE a.workspace_id=?',
+     [$workspaceId]);
+   if(!$assigned)fail('Atribua primeiro um plano ativo ao workspace.',409);
+   $used=(int)(DB::one("SELECT COUNT(*) n FROM workspace_members wm
+     JOIN users u ON u.id=wm.user_id WHERE wm.workspace_id=? AND wm.status='active'
+     AND wm.role IN ('admin','staff') AND u.active=1 AND u.id<>?",[$workspaceId,(int)$ws['owner_user_id']])['n']??0);
+   $effective=$limit??($assigned['team_limit']===null?null:(int)$assigned['team_limit']);
+   if($effective!==null&&$used>$effective)
+    fail('Não é possível aplicar limite inferior à equipe ativa.',409);
+   DB::run("INSERT INTO workspace_settings (workspace_id,`key`,value,updated_at)
+      VALUES (?,'master.team_limit_override',?,?)
+      ON DUPLICATE KEY UPDATE value=VALUES(value),updated_at=VALUES(updated_at)",
+      [$workspaceId,$limit===null?'':(string)$limit,now()]);
+   self::log($workspaceId,'workspace.team_limit_override',[
+     'override'=>$limit,'plan_limit'=>$assigned['team_limit'],'effective_limit'=>$effective
+   ]);
+   return ['saved'=>true,'team_limit_override'=>$limit,'team_limit'=>$effective,
+     'team_used'=>$used];
   });
  }
 

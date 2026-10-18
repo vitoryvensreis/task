@@ -212,7 +212,7 @@ final class WorkspaceFoundation {
    foreach(self::DATA_TABLES as $legacyTable=>$legacyKey)
     if(!self::tableExists($legacyTable)||!self::column($legacyTable,$legacyKey))
      throw new RuntimeException('Expected legacy schema30 table/key is missing: '.$legacyTable);
-   $allowedOwners=[...array_keys(self::DATA_TABLES),'workspace_members','workspace_settings','workspace_support_sessions'];
+   $allowedOwners=[...array_keys(self::DATA_TABLES),'workspace_members','workspace_settings','workspace_support_sessions','team_invitations'];
    $existingOwners=DB::all("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.COLUMNS
       WHERE TABLE_SCHEMA=DATABASE() AND COLUMN_NAME='workspace_id'");
    foreach($existingOwners as $row)

@@ -69,6 +69,17 @@ final class PlatformPlans {
     if(decode((string)$row['features_json'])!==['tasks'=>true,'automations'=>true,'contacts'=>true])
      fail('O plano legado deve manter todos os módulos ativos.',409);
    }
+   if($old){
+    $assigned=DB::all('SELECT workspace_id FROM workspace_access_plans WHERE plan_id=?',[$id]);
+    if($assigned&&$row['active']!==1)fail('Não é possível desativar um plano atribuído a algum workspace.',409);
+    if($row['team_limit']!==null)foreach($assigned as $a){
+     $count=(int)(DB::one("SELECT COUNT(*) n FROM workspace_members wm
+       JOIN users u ON u.id=wm.user_id JOIN workspaces w ON w.id=wm.workspace_id
+       WHERE wm.workspace_id=? AND wm.role IN ('staff','admin') AND wm.status='active'
+       AND u.active=1 AND u.id<>w.owner_user_id",[(int)$a['workspace_id']])['n']??0);
+     if($count>$row['team_limit'])fail('O limite proposto é inferior à equipe de um workspace que utiliza este plano.',409);
+    }
+   }
    if($old)DB::update('platform_access_plans',$id,$row);
    else $id=DB::insert('platform_access_plans',$row+['created_at'=>now()]);
    self::audit('plan.saved',null,['plan_id'=>$id,'name'=>$row['name'],'features'=>decode($row['features_json']),

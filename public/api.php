@@ -109,6 +109,8 @@ try {
   'projects.save'=>Catalog::projectSave($p),
   'users.list'=>Catalog::users(),
   'users.save'=>Catalog::userSave($p),
+  'company.roles'=>WorkspaceRoles::all(),
+  'company.role_save'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?WorkspaceRoles::save($p):fail('Método não permitido.',405),
   'settings.get'=>Catalog::settingsGet(),
   'settings.save'=>Catalog::settingsSave($p),
   'settings.logo_upload'=>Catalog::settingsLogoUpload(),

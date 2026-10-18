@@ -51,6 +51,12 @@ final class MasterSupport {
   Auth::load();
   if(!self::isSupport())fail('A agenda é exclusiva do ADM Master em modo suporte.',403);
  }
+ /** Platform-wide SMTP, branding, keys and WhatsApp are not tenant settings. */
+ public static function requirePlatformSettings(): void {
+  Auth::load();
+  if(WorkspaceContext::legacyCiFixture())return;
+  if(!self::isSupport())fail('Configuração exclusiva do ADM Master em modo suporte.',403);
+ }
  public static function workspaceList(): array {
   Auth::load();if(!self::isActor())fail('Área exclusiva do ADM Master.',403);
   $w=self::singleWorkspace();

@@ -58,24 +58,53 @@ window.MasterConsole=(()=>{
       'O status de pagamentos e o histórico de faturas serão exibidos aqui quando a sincronização Asaas estiver homologada. Não confundir com os recebimentos dos clientes do workspace.');
     const table=el('div','mc-customer-list');
     for(const w of data.customers||[]){
-     const row=el('article','mc-customer-row');
+     const staged=!!w.provisioning;
+     const row=el('article','mc-customer-row'+(staged?' mc-customer-pending':''));
      const ident=el('div','mc-customer-ident');
      const circle=el('div','mc-avatar',String(w.name||'E').slice(0,1).toUpperCase());
-     const person=el('div');person.append(el('strong','',w.name),el('span','',w.owner_name+' · '+w.owner_email));
+     const person=el('div');person.append(el('strong','',w.name),
+      el('span','',w.owner_name+' · '+w.owner_email));
+     if(staged)person.append(el('span','mc-pending-state','● Pré-cadastro · Aguardando ativação'));
      ident.append(circle,person);row.append(ident);
      const plan=el('div','mc-cell');plan.append(el('small','','Plano'),el('strong','',w.plan_name||'Sem plano'));row.append(plan);
      const team=el('div','mc-cell');team.append(el('small','','Equipe'),el('strong','',fmt(w.team_users)+' membros'));row.append(team);
-     const bill=el('div','mc-cell');bill.append(el('small','','Assinatura'),el('span','mc-chip','Não integrada'));row.append(bill);
+     const bill=el('div','mc-cell');bill.append(el('small','',staged?'Ambiente':'Assinatura'),
+      el('span','mc-chip',staged?'Não ativado':'Não integrada'));row.append(bill);
      const actions=el('div','mc-row-actions');
-     const detail=button('Gerenciar',()=>showCustomer(w,admins,plans,load,base,csrf),'primary');
-     const access=button('↗',()=>startSupport(w,base,csrf),'secondary');access.title='Entrar no workspace (suporte)';
-     actions.append(detail,access);row.append(actions);table.append(row);
+     if(staged){
+      const detail=button('Ver preparação',()=>showPendingCustomer(w),'secondary');
+      detail.title='Ambiente em preparação. Login independente será liberado após isolamento.';
+      actions.append(detail);
+     }else{
+      const detail=button('Gerenciar',()=>showCustomer(w,admins,plans,load,base,csrf),'primary');
+      const access=button('↗',()=>startSupport(w,base,csrf),'secondary');access.title='Entrar no workspace (suporte)';
+      actions.append(detail,access);
+     }
+     row.append(actions);table.append(row);
     }
     if(!data.customers?.length)result.append(el('div','master-empty','Nenhum cliente encontrado para essa busca.'));
     result.append(table);
    }catch(e){result.replaceChildren(el('p','mc-feedback error',e.message))}
   }
   await load();
+ }
+ function showPendingCustomer(w){
+  modal('Workspace Gabriella · preparação',
+   'Pré-cadastro persistido no TaskEsc. O segundo workspace operacional ainda não foi ativado.',
+   (body)=>{
+    const stats=el('div','mc-profile-stats');
+    for(const [k,v] of [['Proprietária',w.owner_name],['Clientes','0'],['Tasks','0'],['Dados financeiros','0']]){
+     const c=el('div');c.append(el('small','',k),el('strong','',v));stats.append(c);
+    }
+    body.append(stats);
+    const cfg=w.initial_config||{};
+    const modules=Object.entries(cfg.modules||{}).filter(([,v])=>v).map(([k])=>({tasks:'Tarefas',automations:'Automações',contacts:'Contatos'})[k]||k);
+    const board=(cfg.kanban_columns||[]).join('  →  ');
+    note(body,'Configuração inicial planejada',
+      'Módulos: '+(modules.join(', ')||'A definir')+'. Kanban: '+(board||'A definir')+'. Plano: escolha pendente no ADM Master.');
+    note(body,'Acesso não ativado',
+      'Gabriella permanece no workspace original até a ativação com isolamento multiempresa. Nenhum cliente, arquivo, tarefa ou lançamento foi copiado.');
+   });
  }
  function startSupport(w,base,csrf){
   modal('Acessar workspace','Toda sessão de suporte é auditada e expira automaticamente após duas horas.',(body,close)=>{

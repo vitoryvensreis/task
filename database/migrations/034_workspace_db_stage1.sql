@@ -5,7 +5,6 @@
 -- The retired schema-20 SaaS is intentionally NOT reintroduced.
 --
 -- MySQL / MariaDB:
--- ALTER TABLE workspaces ADD UNIQUE KEY uq_ws_one_owner(owner_user_id);
 -- ALTER TABLE workspace_members ADD UNIQUE KEY uq_ws_one_membership(user_id);
 --
 -- Every business table in WorkspaceFoundation::DATA_TABLES must keep

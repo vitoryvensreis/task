@@ -185,8 +185,9 @@ window.MasterConsole=(()=>{
     const used=el('div');used.append(el('small','','Usuários adicionais ativos'),el('strong','',fmt(d.team_used)));
     const allowed=el('div');allowed.append(el('small','','Limite atual'),el('strong','',d.team_limit===null?'Ilimitado':fmt(d.team_limit)));
     limits.append(used,allowed);form.append(limits);
-    note(form,'Limites aplicados pelo plano',
-      'O limite de equipe vem do plano contratado. Para alterar um limite, edite o plano em Planos de acesso; trocar o plano aqui atualiza esta empresa.');
+    note(form,'Limite base do plano',
+      'Equipe padrão: '+(d.plan_team_limit===null?'Ilimitada':fmt(d.plan_team_limit))+
+      '. O limite específico desta empresa, quando cadastrado, tem prioridade sobre o plano.');
     const submit=el('button','primary','Aplicar plano');submit.type='submit';
     form.append(submit,el('p','mc-feedback'));plan.append(form);
     form.onsubmit=async event=>{
@@ -196,6 +197,26 @@ window.MasterConsole=(()=>{
      }catch(error){status(form,error.message,true)}
      finally{submit.disabled=false}
     };
+    const overrideForm=el('form','mc-form mc-limit-form');
+    overrideForm.append(el('h3','','Limite exclusivo do workspace'));
+    const override=field(overrideForm,'Máximo de usuários adicionais','team_limit_override',
+      d.team_limit_override===null?'':String(d.team_limit_override),'number');
+    override.min='1';override.max='100000';override.step='1';
+    override.placeholder='Vazio: seguir o plano';
+    note(overrideForm,'Personalização do limite',
+     'Defina um número para esta empresa ou deixe o campo vazio para usar o limite do plano. O proprietário não entra na contagem.');
+    const saveLimit=el('button','secondary','Salvar limite exclusivo');
+    saveLimit.type='submit';overrideForm.append(saveLimit,el('p','mc-feedback'));
+    overrideForm.onsubmit=async event=>{
+     event.preventDefault();saveLimit.disabled=true;
+     try{
+      await api(base,'master.workspace_limit_save',csrf,
+       {workspace_id:Number(w.id),team_limit_override:override.value.trim()});
+      await refresh();await render();
+     }catch(error){status(overrideForm,error.message,true)}
+     finally{saveLimit.disabled=false}
+    };
+    plan.append(overrideForm);
     const team=el('section','mc-detail-pane');
     team.append(el('h3','','Administradores e equipe'));
     note(team,'Um proprietário por workspace',

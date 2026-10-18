@@ -170,7 +170,7 @@ window.MasterConsole=(()=>{
    price.min='0';price.step='0.01';price.required=true;
    const cycleLabel=el('label','mc-field'),cycle=el('select','select');cycle.name='billing_period';
    for(const [id,label] of Object.entries(cycles)){
-    const o=el('option','',label);o.value=id;o.selected===false;o.selected=(plan?.billing_period||'monthly')===id;cycle.append(o);
+    const o=el('option','',label);o.value=id;o.selected=(plan?.billing_period||'monthly')===id;cycle.append(o);
    }cycleLabel.append(el('span','','Recorrência'),cycle);form.append(cycleLabel);
    const limit=field(form,'Limite de usuários da equipe','team_limit',plan?.team_limit??2,'number');limit.min='1';limit.required=true;
    const feats=typeof plan?.features_json==='string'?JSON.parse(plan.features_json):plan?.features_json||{tasks:true,automations:true,contacts:true};
@@ -211,7 +211,7 @@ window.MasterConsole=(()=>{
   pf.onsubmit=async e=>{e.preventDefault();try{await api(base,'master.profile_save',csrf,{name:name.value});status(pf,'Perfil atualizado.')}catch(err){status(pf,err.message,true)}};
   const pw=card('Alterar senha','Use uma senha forte e exclusiva do ADM Master.');
   const pwf=el('form','mc-form');
-  field(pwf,'Senha atual','current_password','','password');field(pwf,'Nova senha','password','','password');field(pwf,'Confirmar nova senha','confirm_password','','password');
+  field(pwf,'Senha atual','current_password','','password');field(pwf,'Nova senha','new_password','','password');field(pwf,'Confirmar nova senha','confirm_password','','password');
   const pbtn=el('button','primary','Alterar senha');pbtn.type='submit';pwf.append(pbtn,el('p','mc-feedback'));pw.append(pwf);
   pwf.onsubmit=async e=>{e.preventDefault();try{await api(base,'master.password_save',csrf,Object.fromEntries(new FormData(pwf)));pwf.reset();status(pwf,'Senha alterada.')}catch(err){status(pwf,err.message,true)}};
   const two=card('Autenticação em duas etapas','Proteja seu acesso Master usando um aplicativo autenticador.');

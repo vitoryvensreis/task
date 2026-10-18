@@ -7,7 +7,7 @@ final class WppConnect
 
     public static function status(): array
     {
-        Auth::admin();
+        if(!MasterSupport::isActor())Auth::admin();
         $cfg=self::settings();
         if(!$cfg['configured'])return [
             'configured'=>false,
@@ -71,7 +71,7 @@ final class WppConnect
 
     public static function start(): array
     {
-        Auth::admin();self::requirePost();$cfg=self::requireConfigured();
+        if(!MasterSupport::isActor())Auth::admin();self::requirePost();$cfg=self::requireConfigured();
         $payload=['waitQrCode'=>false,'webhook'=>self::webhookUrl()];
         $response=self::request('POST','/api/'.rawurlencode($cfg['session']).'/start-session',$payload,true);
         return ['started'=>true,'session'=>$cfg['session'],'provider_status'=>(int)$response['status']];
@@ -79,7 +79,7 @@ final class WppConnect
 
     public static function qr(): array
     {
-        Auth::admin();$cfg=self::requireConfigured();
+        if(!MasterSupport::isActor())Auth::admin();$cfg=self::requireConfigured();
         $response=self::requestRaw('GET','/api/'.rawurlencode($cfg['session']).'/qrcode-session',true);
         $contentType=strtolower((string)($response['content_type']??''));
         if(str_starts_with($contentType,'image/png')){
@@ -112,7 +112,7 @@ final class WppConnect
 
     public static function sendTest(array $p): array
     {
-        Auth::admin();self::requirePost();$cfg=self::requireConfigured();
+        if(!MasterSupport::isActor())Auth::admin();self::requirePost();$cfg=self::requireConfigured();
         $phone=self::normalizePhone((string)($p['phone']??''));
         $message=trim((string)($p['message']??''));
         if($message==='')$message='TaskEsc · teste de integração WPPConnect';
@@ -136,7 +136,7 @@ final class WppConnect
     /** List only the IDs and names of groups belonging to the connected WhatsApp session. */
     public static function groups(): array
     {
-        Auth::admin();
+        if(!MasterSupport::isActor())Auth::admin();
         return ['groups'=>self::fetchGroups()];
     }
 

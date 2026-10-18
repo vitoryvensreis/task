@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS platform_tenant_provisioning (
  proposed_slug VARCHAR(100) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
  initial_config_json LONGTEXT NOT NULL,
  status VARCHAR(24) NOT NULL DEFAULT 'pending',
- workspace_id BIGINT UNSIGNED NULL,
+ activated_workspace_id BIGINT UNSIGNED NULL,
  created_at DATETIME NOT NULL,
  updated_at DATETIME NOT NULL,
  activated_at DATETIME NULL,
@@ -20,5 +20,5 @@ CREATE TABLE IF NOT EXISTS platform_tenant_provisioning (
  KEY idx_ptp_status (status,id),
  CONSTRAINT fk_ptp_source FOREIGN KEY (source_workspace_id) REFERENCES workspaces(id) ON DELETE RESTRICT,
  CONSTRAINT fk_ptp_owner FOREIGN KEY (prospective_owner_id) REFERENCES users(id) ON DELETE RESTRICT,
- CONSTRAINT fk_ptp_workspace FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE RESTRICT
+ CONSTRAINT fk_ptp_workspace FOREIGN KEY (activated_workspace_id) REFERENCES workspaces(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

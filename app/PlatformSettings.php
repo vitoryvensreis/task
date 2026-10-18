@@ -41,7 +41,7 @@ final class PlatformSettings {
    'upload_mb'=>(int)($settings['upload_mb']??0),
    'min_delivery_business_hours'=>(int)($settings['min_delivery_business_hours']??24),
    'icons'=>self::icons()
-  ],...self::cfgPublic()];
+  ],'asaas'=>PlatformAsaasCredentials::get(),...self::cfgPublic()];
  }
  private static function icons(): array {
   $dir=ROOT.'/public/uploads/branding/';

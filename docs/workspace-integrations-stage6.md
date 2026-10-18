@@ -34,3 +34,9 @@ Esta entrega inclui apenas um avanço seguro da Etapa 6, **não sua conclusão**
 - Cursor de eventos próprio para cada workspace no modo multiempresa; o estado original segue intocado no modo legado.
 - Rotinas de vencimento, reprocessamento e medição de fila recebem filtro do workspace autenticado no worker.
 - A migração de cursores depende do backup pré-deploy e não ativa outra empresa automaticamente.
+
+## Guarda transacional para gravadores restantes
+- O helper `DB::update()` agora inclui `AND workspace_id=?` para tabelas empresariais quando o modo multi está ativo.
+- SQL bruto `INSERT`, `UPDATE`, `DELETE` e `REPLACE` que não declararem workspace é rejeitado em modo multi (fail-closed).
+- Essas verificações não substituem o trabalho de isolar *todas* as consultas de leitura: a ativação definitiva ainda está bloqueada.
+- Até que todos os gravadores sejam compatíveis, os defaults do workspace legado **não devem ser removidos** da produção.

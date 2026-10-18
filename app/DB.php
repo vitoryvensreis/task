@@ -9,6 +9,14 @@ final class DB {
  public static function all(string $sql,array $args=[]): array {return self::run($sql,$args)->fetchAll();}
  public static function one(string $sql,array $args=[]): ?array {$v=self::run($sql,$args)->fetch();return $v===false?null:$v;}
  public static function insert(string $table,array $data): int {$data=WorkspaceTenantMode::insertData($table,$data);$cols=array_keys($data);self::run('INSERT INTO `'.$table.'` (`'.implode('`,`',$cols).'`) VALUES ('.implode(',',array_fill(0,count($cols),'?')).')',array_values($data));return (int)self::conn()->lastInsertId();}
- public static function update(string $table,int $id,array $data): void {self::run('UPDATE `'.$table.'` SET '.implode(',',array_map(fn($k)=>'`'.$k.'`=?',array_keys($data))).' WHERE id=?',[...array_values($data),$id]);}
+ public static function update(string $table,int $id,array $data): void {
+  $ws=WorkspaceTenantMode::requireTableScope($table);
+  if($ws>0&&array_key_exists('workspace_id',$data)&&(int)$data['workspace_id']!==$ws)
+   throw new LogicException('Cannot move record to another workspace.');
+  $sql='UPDATE `'.$table.'` SET '.implode(',',array_map(fn($k)=>'`'.$k.'`=?',array_keys($data))).' WHERE id=?';
+  $args=[...array_values($data),$id];
+  if($ws>0){$sql.=' AND workspace_id=?';$args[]=$ws;}
+  self::run($sql,$args);
+ }
  public static function tx(callable $fn): mixed {$db=self::conn();if($db->inTransaction())return $fn();$db->beginTransaction();try{$v=$fn();$db->commit();return $v;}catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}}
 }

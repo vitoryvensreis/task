@@ -687,7 +687,10 @@ final class Migrations {
   $columns=[];foreach($rows as $row)$columns[$row['COLUMN_NAME']]=$row['DATA_TYPE'];
   foreach(['id'=>'bigint','name'=>'varchar','phone'=>'varchar','created_by'=>'int','created_at'=>'datetime','updated_at'=>'datetime'] as $key=>$type)
    if(($columns[$key]??null)!==$type)$issues[]='column_'.$key;
-  if(!self::hasIndex('whatsapp_contacts','uq_whatsapp_contacts_phone'))$issues[]='unique_phone';
+  // Since migration 035, phone uniqueness is per workspace; accept either
+  // the original schema30 index or the workspace-scoped replacement.
+  if(!self::hasIndex('whatsapp_contacts','uq_whatsapp_contacts_phone')&&
+     !self::hasIndex('whatsapp_contacts','uq_ws_contact_phone'))$issues[]='unique_phone';
   if(!self::hasIndex('whatsapp_contacts','idx_whatsapp_contacts_name'))$issues[]='search_name';
   return $issues;
  }

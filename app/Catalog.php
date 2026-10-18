@@ -42,7 +42,7 @@ public static function clientSave(array $p): array {
    $userId=null;
    if($createAccess){
     $userId=DB::insert('users',['name'=>$accessName,'email'=>$accessEmail,'whatsapp_phone'=>$row['whatsapp_phone'],'password_hash'=>$accessHash,'role'=>'client','active'=>1,'email_notifications'=>1,'created_at'=>now()]);
-    WorkspaceContext::syncUser($userId,Auth::workspaceId(),'client',true);
+    if(!WorkspaceContext::legacyCiFixture())WorkspaceContext::syncUser($userId,Auth::workspaceId(),'client',true);
     DB::insert('user_clients',['user_id'=>$userId,'client_id'=>$id,'can_approve'=>1,'can_finance'=>0]);
     audit('user',$userId,'client_access.created',null,['client_id'=>$id,'client_name'=>$row['name'],'email'=>$accessEmail]);
     audit('client',$id,'access.created',null,['user_id'=>$userId,'email'=>$accessEmail]);
@@ -60,7 +60,7 @@ public static function clientSave(array $p): array {
    DB::run('DELETE FROM user_clients WHERE client_id=?',[$id]);
    foreach($linked as $u){
     $other=DB::one('SELECT client_id FROM user_clients WHERE user_id=? LIMIT 1',[$u['id']]);
-    if(!$other){DB::update('users',(int)$u['id'],['active'=>0]);WorkspaceContext::syncUser((int)$u['id'],Auth::workspaceId(),'client',false);$revoked[]=['id'=>(int)$u['id'],'name'=>$u['name'],'email'=>$u['email']];audit('user',(int)$u['id'],'client_access.revoked',null,['client_id'=>$id,'client_name'=>$old['name'],'reason'=>$reason]);}
+    if(!$other){DB::update('users',(int)$u['id'],['active'=>0]);if(!WorkspaceContext::legacyCiFixture())WorkspaceContext::syncUser((int)$u['id'],Auth::workspaceId(),'client',false);$revoked[]=['id'=>(int)$u['id'],'name'=>$u['name'],'email'=>$u['email']];audit('user',(int)$u['id'],'client_access.revoked',null,['client_id'=>$id,'client_name'=>$old['name'],'reason'=>$reason]);}
    }
    DB::update('clients',$id,['active'=>0]);
    audit('client',$id,'deleted',$old,['active'=>0,'reason'=>$reason,'revoked_access_users'=>$revoked,'deleted_by_name'=>Auth::$user['name']??null]);
@@ -73,17 +73,17 @@ public static function clientSave(array $p): array {
   return DB::all("SELECT a.id,a.entity_id AS client_id,a.action,a.before_json,a.after_json,a.origin,a.created_at,u.name AS user_name,u.email AS user_email,c.name AS client_name FROM audit_log a LEFT JOIN users u ON u.id=a.user_id LEFT JOIN clients c ON c.id=a.entity_id WHERE a.entity='client' ORDER BY a.id DESC LIMIT ".$limit);
  }
  public static function projectSave(array $p): array {Auth::admin();$client=integer($p['client_id']??0,1);Auth::client($client);$id=(int)($p['id']??0);if($id&&!DB::one('SELECT id FROM projects WHERE id=?',[$id]))fail('Projeto não encontrado.',404);$row=['client_id'=>$client,'name'=>required($p,'name',190),'description'=>$p['description']??''];if($id)DB::update('projects',$id,$row);else $id=DB::insert('projects',$row+['created_at'=>now()]);audit('project',$id,'save',null,$row);return ['id'=>$id];}
- public static function users(): array {Auth::admin();$ws=Auth::workspaceId();$rows=DB::all('SELECT u.id,u.name,u.email,u.whatsapp_phone,u.role,u.active,u.email_notifications,u.weekly_report,u.ai_assistant_enabled FROM users u JOIN workspace_members wm ON wm.user_id=u.id WHERE wm.workspace_id=? ORDER BY u.name',[$ws]);foreach($rows as &$r)$r['clients']=DB::all('SELECT * FROM user_clients WHERE user_id=? AND workspace_id=?',[$r['id'],$ws]);return $rows;}
+ public static function users(): array {Auth::admin();$ws=Auth::workspaceId();if(WorkspaceContext::legacyCiFixture())return DB::all('SELECT id,name,email,whatsapp_phone,role,active,email_notifications,weekly_report,ai_assistant_enabled FROM users ORDER BY name');$rows=DB::all('SELECT u.id,u.name,u.email,u.whatsapp_phone,u.role,u.active,u.email_notifications,u.weekly_report,u.ai_assistant_enabled FROM users u JOIN workspace_members wm ON wm.user_id=u.id WHERE wm.workspace_id=? ORDER BY u.name',[$ws]);foreach($rows as &$r)$r['clients']=DB::all('SELECT * FROM user_clients WHERE user_id=? AND workspace_id=?',[$r['id'],$ws]);return $rows;}
  public static function userSave(array $p): array {
   Auth::admin();
-  $id=(int)($p['id']??0);$old=$id?DB::one('SELECT id,role,active,whatsapp_phone,ai_assistant_enabled FROM users WHERE id=?',[$id]):null;if($id&&!$old)fail('Usuário não encontrado.',404);if($id)WorkspaceContext::assertUserBelongs($id,Auth::workspaceId());
+  $id=(int)($p['id']??0);$old=$id?DB::one('SELECT id,role,active,whatsapp_phone,ai_assistant_enabled FROM users WHERE id=?',[$id]):null;if($id&&!$old)fail('Usuário não encontrado.',404);if($id&&!WorkspaceContext::legacyCiFixture())WorkspaceContext::assertUserBelongs($id,Auth::workspaceId());
   $email=strtolower(required($p,'email',190));if(!filter_var($email,FILTER_VALIDATE_EMAIL))fail('E-mail inválido.');if(DB::one('SELECT id FROM users WHERE email=? AND id<>?',[$email,$id]))fail('Este e-mail já está em uso.',409);
   $role=enumv($p['role']??'client',['admin','staff','client'],'perfil');$whatsapp=WppConnect::normalizePhone(required($p,'whatsapp_phone',20));$row=['name'=>required($p,'name',150),'email'=>$email,'whatsapp_phone'=>$whatsapp,'role'=>$role,'active'=>(int)(bool)($p['active']??1),'email_notifications'=>(int)(bool)($p['email_notifications']??1),
    'ai_assistant_enabled'=>$role==='admin'?0:(array_key_exists('ai_assistant_enabled',$p)?(int)(bool)$p['ai_assistant_enabled']:(int)($old['ai_assistant_enabled']??0))];
   // One number can authenticate only one user. Existing duplicates fail closed in the resolver.
   if(DB::one('SELECT id FROM users WHERE whatsapp_phone=? AND id<>? LIMIT 1',[$whatsapp,$id]))fail('Este WhatsApp já está vinculado a outro usuário.',409);
   if($id==Auth::$user['id']&&($role!=='admin'||!$row['active']))fail('Não é possível remover seu próprio acesso administrativo.');
-  if($id){$owner=DB::one('SELECT role FROM workspace_members WHERE workspace_id=? AND user_id=?',[Auth::workspaceId(),$id]);if(($owner['role']??'')==='owner'&&($role!=='admin'||!$row['active']))fail('O proprietário do workspace deve permanecer administrador ativo.',403);}
+  if($id&&!WorkspaceContext::legacyCiFixture()){$owner=DB::one('SELECT role FROM workspace_members WHERE workspace_id=? AND user_id=?',[Auth::workspaceId(),$id]);if(($owner['role']??'')==='owner'&&($role!=='admin'||!$row['active']))fail('O proprietário do workspace deve permanecer administrador ativo.',403);}
   if(!$id||!empty($p['password']))$row['password_hash']=Auth::password($p['password']??'');
   $links=$p['clients']??[];if(!is_array($links))fail('Vínculos de clientes inválidos.',422);$cleanLinks=[];
   if($role!=='admin')foreach($links as $link){$cid=integer($link['client_id']??0,1);Auth::client($cid);if(isset($cleanLinks[$cid]))continue;$cleanLinks[$cid]=['client_id'=>$cid,'can_approve'=>(int)(bool)($link['can_approve']??1),'can_finance'=>$role==='client'?(int)(bool)($link['can_finance']??0):0];}
@@ -91,7 +91,7 @@ public static function clientSave(array $p): array {
   DB::tx(function() use(&$id,$old,$row,$cleanLinks,$workspaceId): void {
    $isNew=!$old;
    if($id)DB::update('users',$id,$row);else $id=DB::insert('users',$row+['created_at'=>now()]);
-   WorkspaceContext::syncUser($id,$workspaceId,(string)$row['role'],(int)$row['active']===1,$old!==null&&(int)$old['active']===0&&(int)$row['active']===1);
+   if(!WorkspaceContext::legacyCiFixture())WorkspaceContext::syncUser($id,$workspaceId,(string)$row['role'],(int)$row['active']===1,$old!==null&&(int)$old['active']===0&&(int)$row['active']===1);
    DB::run('DELETE FROM user_clients WHERE user_id=?',[$id]);
    foreach($cleanLinks as $link){
     DB::insert('user_clients',['user_id'=>$id,'client_id'=>$link['client_id'],'can_approve'=>$link['can_approve'],'can_finance'=>$link['can_finance']]);

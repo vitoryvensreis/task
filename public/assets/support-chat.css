@@ -239,3 +239,12 @@
  .ts-support-panel.ts-master-popup.ts-conversation-active .ts-right{display:flex}
  .ts-support-panel.ts-master-popup .ts-messages{padding:13px 11px}
 }
+
+/* Small-radius vector FAB; numeric unread badge remains round for legibility. */
+.ts-support-fab .ts-support-icon{display:block;width:23px;height:23px;flex-shrink:0}
+.master-page .ts-support-fab{border-radius:7px!important;width:52px;height:52px;background:#188879}
+.master-page .ts-support-panel.ts-master-popup{border-radius:6px}
+.master-page .ts-support-panel .ts-thread,.master-page .ts-support-panel .ts-search,
+.master-page .ts-support-panel .ts-text,.master-page .ts-support-panel .ts-bubble,
+.master-page .ts-support-panel .ts-send,.master-page .ts-support-panel .ts-icon-button{border-radius:5px!important}
+@media(max-width:720px){.master-page .ts-support-fab{width:49px;height:49px;right:12px;bottom:12px;border-radius:6px!important}}

@@ -49,7 +49,7 @@ window.TaskEscMasterOperations=(()=>{
    card(stats,'TOKENS',num(d.total_tokens),'Informados pelos modelos');
    card(stats,'FALHAS',num(Number(d.http_errors||0)+Number(d.transport_errors||0)),'HTTP e conexão');
    card(stats,'LATÊNCIA MÉDIA',d.avg_latency_ms!==null?(Number(d.avg_latency_ms)/1000).toFixed(2)+' s':'—',num(d.latency_samples)+' amostras');
-   content.append(stats);
+   const overview=panel(content,'Visão geral','Indicadores agregados do consumo de inteligência artificial.');overview.append(stats);
    const grid=el('div','master-dashboard-grid');
    const daily=panel(grid,'Solicitações por dia','Volume de chamadas e falhas HTTP por dia.');
    const values=d.daily||[],max=Math.max(1,...values.map(x=>Number(x.requests)||0));
@@ -71,7 +71,12 @@ window.TaskEscMasterOperations=(()=>{
    const providers=panel(content,'Uso por provedor','Contagem agregada, sem conteúdo de conversas.');
    table(providers,['Provedor','Chamadas','Sucessos','Falhas','Tokens'],
     Object.entries(d.providers||{}).map(([name,r])=>[name,num(r.requests),num(r.http_ok),num(r.errors),num(r.tokens)]));
-   content.append(el('p','master-description',d.coverage||''));
+   overview.append(el('p','master-description',d.coverage||''));
+   window.TaskEscMasterTabs.mount(content,[
+    {key:'resumo',label:'Resumo',node:overview},
+    {key:'desempenho',label:'Desempenho',node:grid},
+    {key:'provedores',label:'Por provedor',node:providers}
+   ],'ia');
   };
   period.onchange=()=>load().catch(e=>{content.replaceChildren(el('p','master-description',e.message))});
   provider.onchange=period.onchange;refresh.onclick=period.onchange;
@@ -92,7 +97,7 @@ window.TaskEscMasterOperations=(()=>{
    card(summary,'SERVIÇOS',num(items.length),'Itens monitorados');
    card(summary,'ATENÇÃO',num(items.filter(x=>x.status==='warn').length),'Avisos');
    card(summary,'FALHAS',num(items.filter(x=>x.status==='error').length),'Serviços com erro');
-   content.append(summary);
+   const overview=panel(content,'Visão geral','Estado de funcionamento dos serviços monitorados.');overview.append(summary);
    const diagnostics=panel(content,'Diagnóstico da plataforma','Situação atual dos serviços monitorados.');
    const rows=el('div','master-ops-rows');
    for(const item of items){
@@ -123,13 +128,14 @@ window.TaskEscMasterOperations=(()=>{
      }
     };tabs.append(b);
    }
-   content.append(tabs,results);tabs.querySelector('button')?.click();
+   const registry=panel(content,'Registros do sistema','Eventos, falhas e históricos internos da plataforma.');
+   registry.append(tabs,results);tabs.querySelector('button')?.click();
    const issues=(h.items||[]).filter(x=>x.status==='error'||x.status==='warn');
    if(issues.length){
     const warning=el('div','mc-note');
     warning.append(el('b','','Por que o estado geral indica atenção ou erro?'),
       el('span','',issues.map(x=>x.label+': '+x.detail).join(' · ')));
-    content.prepend(warning);
+    overview.prepend(warning);
    }
    const audits=panel(content,'Auditoria por cliente e ação','Registros de administração e operações de todos os workspaces, sem expor conteúdo de tarefas ou mensagens.');
    const controls=el('div','master-ops-toolbar'),ws=el('select','select'),actionInput=el('input','input');
@@ -156,6 +162,12 @@ window.TaskEscMasterOperations=(()=>{
    };
    run.onclick=populate;actionInput.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();populate()}};
    await populate();
+   window.TaskEscMasterTabs.mount(content,[
+    {key:'resumo',label:'Resumo',node:overview},
+    {key:'servicos',label:'Serviços',node:diagnostics},
+    {key:'registros',label:'Registros',node:registry},
+    {key:'auditoria',label:'Auditoria por cliente',node:audits}
+   ],'saude');
    state.textContent='Atualizado em '+date(h.checked_at);
   };
   reload.onclick=()=>load().catch(e=>state.textContent=e.message);

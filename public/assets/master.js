@@ -31,13 +31,13 @@
   if(!auth.user?.is_master||!(auth.user.role==='master'||!!auth.user.is_support)){show('#master-auth-surface',true);show('#master-login',true);return}
   const data=await request('master.workspaces');
   show('#master-shell',true);show('#master-panel',true);
-  const workspaces=$('#master-workspaces'),admins=$('#master-administrators'),planPanel=$('#master-plans'),dashboard=$('#master-dashboard'),shell=$('#master-shell');
+  const workspaces=$('#master-workspaces'),admins=$('#master-administrators'),planPanel=$('#master-plans'),dashboard=$('#master-dashboard'),settings=$('#master-settings'),support=$('#master-support'),shell=$('#master-shell');
   const tabs=[...document.querySelectorAll('[data-master-tab]')];
-  const tabRoutes={overview:'master',clients:'master/clientes',plans:'master/planos',workspaces:'master/workspaces',support:'master/suporte'};
+  const tabRoutes={overview:'master',clients:'master/clientes',plans:'master/planos',workspaces:'master/workspaces',support:'master/suporte',settings:'master/configuracoes'};
   const currentTab=()=>Object.entries(tabRoutes).find(([,p])=>location.pathname.replace(/\/+$/,'').endsWith('/'+p))?.[0]||'overview';
 
   if(location.pathname.endsWith('/master.php'))history.replaceState(null,'',base+'/master'+location.search+location.hash);
-  const clear=()=>{dashboard.replaceChildren();workspaces.replaceChildren();admins.replaceChildren();planPanel.replaceChildren();message('#master-panel-message','')};
+  const clear=()=>{dashboard.replaceChildren();workspaces.replaceChildren();admins.replaceChildren();planPanel.replaceChildren();settings.replaceChildren();message('#master-panel-message','')};
   function supportCard(w){
    const wrap=el('article','','master-mini');
    wrap.append(el('h3',w.name),el('p',w.slug+' · '+w.status));
@@ -141,10 +141,12 @@
    if(tabRoutes[tab]&&!location.pathname.replace(/\/+$/,'').endsWith('/'+tabRoutes[tab]))
     history.replaceState(null,'',base+'/'+tabRoutes[tab]);
    clear();tabs.forEach(b=>{const active=b.dataset.masterTab===tab;b.classList.toggle('active',active);if(b.classList.contains('nav-btn')){b.setAttribute('aria-current',active?'page':'false')}});shell.classList.remove('menu-open');
-   show('#master-dashboard',tab==='overview');show('#master-workspaces',tab==='workspaces');show('#master-administrators',tab==='clients');show('#master-plans',tab==='plans');
-   $('#master-panel-title').textContent=({overview:'Dashboard',clients:'Clientes (ADMs)',workspaces:'Workspaces',plans:'Planos de acesso',support:'Atendimentos'})[tab];
-   $('#master-page-kicker').textContent=({overview:'VISÃO GERAL · PLATAFORMA',clients:'GESTÃO DE CONTAS',workspaces:'EMPRESAS E ACESSOS',plans:'ASSINATURAS · PLANOS',support:'SUPORTE · ATENDIMENTO'})[tab];
+   show('#master-dashboard',tab==='overview');show('#master-workspaces',tab==='workspaces');show('#master-administrators',tab==='clients');show('#master-plans',tab==='plans');show('#master-settings',tab==='settings');show('#master-support',tab==='support');
+   if(tab!=='support')window.dispatchEvent(new Event('taskesc:leave-support'));
+   $('#master-panel-title').textContent=({overview:'Dashboard',clients:'Clientes (ADMs)',workspaces:'Workspaces',plans:'Planos de acesso',support:'Atendimentos',settings:'Configurações'})[tab];
+   $('#master-page-kicker').textContent=({overview:'VISÃO GERAL · PLATAFORMA',clients:'GESTÃO DE CONTAS',workspaces:'EMPRESAS E ACESSOS',plans:'ASSINATURAS · PLANOS',support:'SUPORTE · ATENDIMENTO',settings:'ADMINISTRAÇÃO · SISTEMA'})[tab];
    if(tab==='support'){window.dispatchEvent(new Event('taskesc:open-support'));return;}
+   if(tab==='settings'){await window.TaskEscMasterSettings.render(settings,csrf,base);return;}
    if(tab==='overview'){await renderMasterDashboard();return;}
    if(tab==='plans'){
     const list=await request('master.plans');

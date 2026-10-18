@@ -20,7 +20,7 @@ final class WorkspaceTenantMode {
  public static function requireTableScope(string $table): int {
   if(!self::enabled())return 0;
   $table=strtolower($table);
-  $scoped=in_array($table,['calendars','events'],true)||
+  $scoped=
      (class_exists('WorkspaceFoundation')&&isset(WorkspaceFoundation::DATA_TABLES[$table]));
   if(!$scoped)return 0;
   $ws=(int)(Auth::$workspace['id']??0);

@@ -75,16 +75,15 @@ final class Auth {
  public static function abilities(): array {
   self::load();$role=(string)self::$user['role'];
   $map=[
-   'admin'=>['chat.use','dashboard.view','tasks.read','tasks.create','tasks.edit','tasks.move','tasks.delete','tasks.comment','tasks.files','agenda.read','agenda.write','clients.manage','services.manage','finance.read','finance.manage','reports.read','settings.manage','logs.read','users.manage'],
-   'staff'=>['dashboard.view','tasks.read','tasks.edit','tasks.move','tasks.delete','tasks.comment','tasks.files','agenda.read','agenda.write','reports.read'],
-   'client'=>['dashboard.view','tasks.read','tasks.create','tasks.edit','tasks.move','tasks.comment','tasks.files','agenda.read']
+   'admin'=>['chat.use','dashboard.view','tasks.read','tasks.create','tasks.edit','tasks.move','tasks.delete','tasks.comment','tasks.files','clients.manage','services.manage','finance.read','finance.manage','reports.read','settings.manage','logs.read','users.manage'],
+   'staff'=>['dashboard.view','tasks.read','tasks.edit','tasks.move','tasks.delete','tasks.comment','tasks.files','reports.read'],
+   'client'=>['dashboard.view','tasks.read','tasks.create','tasks.edit','tasks.move','tasks.comment','tasks.files']
   ];
   $abilities=$map[$role]??[];
   if($role==='staff'&&!WorkspaceContext::legacyCiFixture()&&(int)(self::$workspace['id']??0)>0){
    $custom=WorkspaceRoles::effectiveStaffCapabilities((int)self::$workspace['id'],(int)self::$user['id']);
    if($custom!==null)$abilities=$custom;
   }
-  if(!MasterSupport::isSupport()&&!(WorkspaceTenantMode::enabled()&&WorkspaceCalendarScope::ready()))$abilities=array_values(array_diff($abilities,['agenda.read','agenda.write']));
   return $abilities;
  }
  public static function can(string $ability): bool {return in_array($ability,self::abilities(),true);}

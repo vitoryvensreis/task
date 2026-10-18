@@ -19,7 +19,7 @@ final class WorkspaceFoundation {
  public const STATUS='staged';
 
  // Legacy business rows get exactly one workspace. Global auth/session,
- // calendars/events, process cursors, rate limits and platform errors stay global.
+ // Process cursors, rate limits and platform errors stay global.
  // The array values are the verified legacy index column (not caller input).
  public const DATA_TABLES=[
   'event_outbox'=>'id',
@@ -32,7 +32,7 @@ final class WorkspaceFoundation {
   'google_accounts'=>'id','audit_log'=>'id','notifications'=>'id',
   'chat_threads'=>'id','chat_messages'=>'id','chat_message_tasks'=>'message_id',
   'automations'=>'id','automation_runs'=>'id','automation_run_steps'=>'id',
-  'whatsapp_messages'=>'id','ai_whatsapp_inbox'=>'id','mail_queue'=>'id',
+  'whatsapp_messages'=>'id','mail_queue'=>'id',
   'push_subscriptions'=>'id','push_delivery_log'=>'id',
   'expense_categories'=>'id','expense_rules'=>'id','expenses'=>'id',
   'whatsapp_contacts'=>'id','api_tokens'=>'id','oauth_codes'=>'user_id',
@@ -256,12 +256,12 @@ final class WorkspaceFoundation {
    $masterStatus=DB::one('SELECT status FROM platform_master_identities WHERE email=?',[self::MASTER_EMAIL]);
    if(!$masterStatus||$masterStatus['status']!=='pending_verification')
     throw new RuntimeException('Platform master must remain unverified in staging.');
-   foreach(['workspace.activation_enabled'=>'0','workspace.calendar_enabled'=>'0',
+   foreach(['workspace.activation_enabled'=>'0',
      'workspace.mode'=>'staged'] as $key=>$value)
     DB::run('INSERT IGNORE INTO workspace_settings (workspace_id,`key`,value,updated_at)
       VALUES (?,?,?,?)',[$workspaceId,$key,$value,now()]);
    // Replicate safe legacy workspace preferences; leave platform security,
-   // OAuth tokens, cron state and calendar/Google-sync configuration global.
+   // OAuth tokens and cron state global; Google Drive preferences are tenant-specific.
    DB::run("INSERT IGNORE INTO workspace_settings (workspace_id,`key`,value,updated_at)
      SELECT ?,s.`key`,s.value,? FROM settings s WHERE s.`key` IN
        ('brand_name','brand_color','logo_url','timezone','upload_mb',
@@ -294,7 +294,7 @@ final class WorkspaceFoundation {
    if($issues=self::issues(true))throw new RuntimeException('Workspace verification failed: '.implode(',',$issues));
    return ['version'=>self::VERSION,'workspace_id'=>$workspaceId,
      'owner_user_id'=>(int)$owner['id'],'tables_scoped'=>count(self::DATA_TABLES),
-     'master_identity'=>'pending_verification','calendar'=>'platform_only_pending_code',
+     'master_identity'=>'pending_verification',
      'external_tenants_enabled'=>false,'backend_isolation_enabled'=>false];
   }finally{DB::run('SELECT RELEASE_LOCK(?)',[$lock]);}
  }

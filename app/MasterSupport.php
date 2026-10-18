@@ -53,15 +53,6 @@ final class MasterSupport {
  public static function isSupport(): bool {
   return self::isActor()&&(bool)(Auth::$workspace['support_session_id']??0);
  }
- public static function requireCalendar(): void {
-  if(PHP_SAPI==='cli'&&getenv('GITHUB_ACTIONS')==='true'&&((WorkspaceContext::legacyCiFixture()&&defined('TASKESC_REALTIME_DOMAIN_FIXTURE'))||defined('TASKESC_LEGACY_AI_CALENDAR_FIXTURE')))return;
-  Auth::load();
-  if(self::isSupport())return;
-  if(WorkspaceTenantMode::enabled()&&WorkspaceCalendarScope::ready()&&
-     Auth::$origin==='web'&&!Auth::isPreview()&&
-     in_array((string)(Auth::$user['role']??''),['admin','staff'],true))return;
-  fail('A agenda exige acesso de equipe a um workspace isolado.',403);
- }
  /** Platform-wide SMTP, branding, keys and WhatsApp are not tenant settings. */
  public static function requirePlatformSettings(): void {
   Auth::load();

@@ -439,6 +439,7 @@ jobs:
           ssh -o BatchMode=yes -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "$REMOTE" <<'REMOTE_SCRIPT'
             set -euo pipefail
             cd "$DEPLOY_PATH"
+            php bin/retire-legacy-modules.php --apply "--backup-manifest=$BACKUP_MANIFEST"
             php bin/migrate-workspace-foundation.php --apply "--backup-manifest=$BACKUP_MANIFEST"
             php bin/migrate-platform-access.php --apply "--backup-manifest=$BACKUP_MANIFEST"
             php bin/migrate-support-desk.php --apply "--backup-manifest=$BACKUP_MANIFEST"

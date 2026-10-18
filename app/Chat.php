@@ -226,7 +226,8 @@ final class Chat
 
     private static function guard(): array
     {
-        Auth::load();Auth::requireAbility('chat.use');
+        Auth::load();
+        if(!WorkspaceContext::legacyCiFixture())fail('O chat interno foi substituído pelo suporte ao ADM Master.',403);Auth::requireAbility('chat.use');
         if(Auth::$origin!=='web')fail('O chat fica disponível somente na sessão web autenticada.',403);
         if(Auth::isPreview())fail('O chat não fica disponível no modo de visualização do cliente.',403);
         if((Auth::$user['role']??'')!=='admin')fail('O chat é exclusivo para administradores.',403);

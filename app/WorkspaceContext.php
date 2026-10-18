@@ -30,15 +30,19 @@ final class WorkspaceContext {
   // session grants a temporary view as the selected owner.
   if(MasterSupport::isVerified($user))
    return MasterSupport::contextFor($user);
-  if((int)(DB::one('SELECT COUNT(*) n FROM workspaces')['n']??0)!==1)
+  $multi=WorkspaceTenantMode::enabled();
+  if(!$multi&&(int)(DB::one('SELECT COUNT(*) n FROM workspaces')['n']??0)!==1)
    fail('Workspaces adicionais ainda não estão habilitados.',503);
-  $row=DB::one('SELECT w.id,w.slug,w.name,w.status,wm.role AS member_role,
+  $links=DB::all('SELECT w.id,w.slug,w.name,w.status,w.owner_user_id,wm.role AS member_role,
      wm.status AS member_status
      FROM workspace_members wm JOIN workspaces w ON w.id=wm.workspace_id
      WHERE wm.user_id=? LIMIT 2',[$id]);
-  if(!$row||$row['slug']!==WorkspaceFoundation::SLUG||
-     $row['status']!==WorkspaceFoundation::STATUS||
-     $row['member_status']!=='active')
+  if(count($links)!==1)fail('Usuário deve possuir um único vínculo empresarial.',403);
+  $row=$links[0];
+  if((!$multi&&$row['slug']!==WorkspaceFoundation::SLUG)||
+     !in_array((string)$row['status'],[WorkspaceFoundation::STATUS,...($multi?['active']:[])],true)||
+     $row['member_status']!=='active'||
+     ($row['member_role']==='owner'&&(int)$row['owner_user_id']!==$id))
    fail('Usuário sem vínculo ativo com o workspace.',403);
   $memberRole=(string)$row['member_role'];
   $expected=(string)$user['role'];
@@ -62,13 +66,14 @@ final class WorkspaceContext {
   if($userId<1||$workspaceId<1||!in_array($role,['admin','staff','client'],true))
    throw new InvalidArgumentException('Invalid workspace member.');
   $workspace=DB::one('SELECT id,slug,status FROM workspaces WHERE id=? FOR UPDATE',[$workspaceId]);
-  if(!$workspace||$workspace['slug']!==WorkspaceFoundation::SLUG||
-     $workspace['status']!==WorkspaceFoundation::STATUS||
-     (int)(DB::one('SELECT COUNT(*) n FROM workspaces')['n']??0)!==1)
+  $multi=WorkspaceTenantMode::enabled();
+  if(!$workspace||(!$multi&&$workspace['slug']!==WorkspaceFoundation::SLUG)||
+     !in_array((string)$workspace['status'],[WorkspaceFoundation::STATUS,...($multi?['active']:[])],true)||
+     (!$multi&&(int)(DB::one('SELECT COUNT(*) n FROM workspaces')['n']??0)!==1))
    throw new RuntimeException('Workspace registration is not enabled.');
   if(DB::one('SELECT 1 FROM workspace_members WHERE user_id=? AND workspace_id<>? LIMIT 1',
     [$userId,$workspaceId]))
-   throw new RuntimeException('Cross-workspace member is not allowed in B1.');
+   throw new RuntimeException('A user cannot be a member of two workspaces.');
   $current=DB::one('SELECT role,status FROM workspace_members WHERE workspace_id=? AND user_id=? FOR UPDATE',
     [$workspaceId,$userId]);
   $memberRole=$current&&$current['role']==='owner'?'owner':$role;

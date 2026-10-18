@@ -98,10 +98,18 @@ final class DemandRealtime
 
         // Drafts are intentionally restricted to the admin-only global channel.
         // Once published, demand/project channels inherit the existing HTTP ACL.
-        $channels = ['kanban/global'];
+        $multi=WorkspaceTenantMode::enabled();
+        $ws=0;
+        if($multi){
+            $ws=(int)($demand['workspace_id']??0);
+            $bound=(int)(Auth::$workspace['id']??WorkspaceJobScope::currentId());
+            if($ws<1||$bound<1||$ws!==$bound)
+                throw new LogicException('Workspace context does not match realtime demand.');
+        }
+        $channels = [$multi?'kanban/ws:'.$ws:'kanban/global'];
         if (empty($demand['draft'])) {
             if ($audience === 'staff') {
-                $channels[] = 'staff/global';
+                $channels[] = $multi?'staff/ws:'.$ws:'staff/global';
             } else {
                 $channels[] = 'client:'.$clientId;
                 $channels[] = 'demand:'.$id;

@@ -10,6 +10,9 @@ final class AutomationWorker
 
     private static function workspaceId(): int {
         if(WorkspaceContext::legacyCiFixture())return 0;
+        $explicit=WorkspaceJobScope::currentId();
+        if($explicit>0)return $explicit;
+        if(WorkspaceTenantMode::enabled())throw new RuntimeException('Explicit workspace required for automation worker.');
         $ws=DB::one('SELECT id FROM workspaces WHERE slug=? AND status=?',
             [WorkspaceFoundation::SLUG,WorkspaceFoundation::STATUS]);
         if(!$ws||(int)(DB::one('SELECT COUNT(*) n FROM workspaces')['n']??0)!==1)

@@ -1,7 +1,13 @@
 <?php
 final class Notify {
  public static function team(string $title,string $body,?int $demand=null): void {
-  foreach(DB::all("SELECT id FROM users WHERE active=1 AND role IN ('admin','staff')") as $u){
+  $ws=(int)(Auth::$workspace['id']??WorkspaceJobScope::currentId());
+  $query="SELECT u.id FROM users u";
+  $args=[];
+  if($ws>0){$query.=" JOIN workspace_members wm ON wm.user_id=u.id AND wm.workspace_id=? AND wm.status='active'";$args[]=$ws;}
+  elseif(WorkspaceTenantMode::enabled())throw new LogicException('Workspace required for team notifications.');
+  $query.=" WHERE u.active=1 AND u.role IN ('admin','staff')";
+  foreach(DB::all($query,$args) as $u){
    if((int)$u['id']!==(int)(Auth::$user['id']??0))self::user((int)$u['id'],$title,$body,$demand,null,false);
   }
  }
@@ -13,7 +19,12 @@ final class Notify {
  public static function user(int $id,string $title,string $body,?int $demand=null,?string $key=null,bool $push=false): ?string {
   $u=DB::one('SELECT * FROM users WHERE id=? AND active=1',[$id]);
   if(!$u)return null;
-  if($key&&DB::one('SELECT id FROM notifications WHERE dedupe_key=?',[$key]))return null;
+  if(WorkspaceTenantMode::enabled()){
+   $ws=(int)(Auth::$workspace['id']??WorkspaceJobScope::currentId());
+   if($ws<1||!DB::one("SELECT 1 FROM workspace_members WHERE user_id=? AND workspace_id=? AND status='active'",[$id,$ws]))
+    throw new LogicException('Cross-workspace notification rejected.');
+  }
+  if($key&&DB::one('SELECT id FROM notifications WHERE dedupe_key=?'.(WorkspaceTenantMode::enabled()?' AND workspace_id=?':''),WorkspaceTenantMode::enabled()?[$key,(int)(Auth::$workspace['id']??WorkspaceJobScope::currentId())]:[$key]))return null;
   $notificationId=DB::insert('notifications',['user_id'=>$id,'title'=>mb_substr($title,0,190),'body'=>$body,'demand_id'=>$demand,'dedupe_key'=>$key,'created_at'=>now()]);
   if($push){
    $unread=(int)(DB::one('SELECT COUNT(*) AS n FROM notifications WHERE user_id=? AND seen=0',[$id])['n']??0);
@@ -37,7 +48,11 @@ final class Notify {
  public static function demand(array $d,string $title,string $body,bool $internal=false): void {
   $assigned=(int)($d['assigned_to']??0);
   $args=$internal?[$assigned]:[$assigned,$d['client_id']];
-  $rows=DB::all("SELECT DISTINCT u.id FROM users u LEFT JOIN user_clients uc ON uc.user_id=u.id WHERE u.active=1 AND (u.role='admin' OR u.id=?".($internal?'':" OR (u.role='client' AND uc.client_id=?)").')',$args);
+  $ci=WorkspaceContext::legacyCiFixture();
+  $ws=$ci?0:Auth::workspaceId();
+  $tenantJoin=$ci?'':" JOIN workspace_members wm ON wm.user_id=u.id AND wm.workspace_id=".(int)$ws." AND wm.status='active' ";
+  $clientClause=$ci?'':" AND uc.workspace_id=".(int)$ws;
+  $rows=DB::all("SELECT DISTINCT u.id FROM users u ".$tenantJoin." LEFT JOIN user_clients uc ON uc.user_id=u.id".$clientClause." WHERE u.active=1 AND (u.role='admin' OR u.id=?".($internal?'':" OR (u.role='client' AND uc.client_id=?)").')',$args);
   $emailed=[];$actor=(int)(Auth::$user['id']??0);
   foreach($rows as $u){
    $uid=(int)$u['id'];$isResponsible=$assigned>0&&$uid===$assigned;
@@ -46,7 +61,7 @@ final class Notify {
    if($email)$emailed[$email]=true;
   }
   if($internal)return;
-  $client=DB::one('SELECT name,email FROM clients WHERE id=?',[(int)$d['client_id']]);
+  $client=DB::one('SELECT name,email FROM clients WHERE id=?'.($ci?'':' AND workspace_id=?'),$ci?[(int)$d['client_id']]:[(int)$d['client_id'],$ws]);
   $clientEmail=strtolower(trim((string)($client['email']??'')));
   if(filter_var($clientEmail,FILTER_VALIDATE_EMAIL)&&!isset($emailed[$clientEmail])){
    $taskTitle=trim((string)($d['title']??''));
@@ -63,7 +78,8 @@ final class Notify {
 
  public static function log(int $limit=100): array {
   Auth::admin();$limit=max(1,min(300,$limit));
-  return DB::all('SELECT id,recipient,subject,status,attempts,error,next_attempt,last_attempt_at,sent_at,created_at FROM mail_queue ORDER BY id DESC LIMIT '.$limit);
+  $ci=WorkspaceContext::legacyCiFixture();
+  return DB::all('SELECT id,recipient,subject,status,attempts,error,next_attempt,last_attempt_at,sent_at,created_at FROM mail_queue'.($ci?'':' WHERE workspace_id=?').' ORDER BY id DESC LIMIT '.$limit,$ci?[]:[Auth::workspaceId()]);
  }
 
  public static function flush(): array {

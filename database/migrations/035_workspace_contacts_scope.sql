@@ -1,0 +1,8 @@
+-- TaskEsc multiworkspace stage2: WhatsApp contacts per company.
+-- Reversible logic is managed by WorkspaceContactsIndex::apply() after foundation.
+-- Original schema30 continues to seed the legacy global unique(phone) index.
+-- ALTER TABLE whatsapp_contacts
+--  ADD UNIQUE KEY uq_ws_contact_phone(workspace_id,phone);
+-- ALTER TABLE whatsapp_contacts
+--  DROP INDEX uq_whatsapp_contacts_phone;
+-- This allows the same phone in separate workspaces without moving any row.

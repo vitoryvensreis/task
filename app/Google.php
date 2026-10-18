@@ -139,6 +139,31 @@ final class Google {
   return $rows;
  }
 
+ /** Expose/select only the acting company's own connected Google Drive. */
+ public static function companyDefaultDrive(?array $input=null): array {
+  Auth::load();Auth::admin();
+  if((Auth::$user['role']??'')!=='admin')fail('Disponível somente ao administrador.',403);
+  $id=(int)WorkspacePreferences::get('drive_account_id','0');
+  if($input===null){
+   $owned=$id>0&&DB::one('SELECT id FROM google_accounts WHERE id=? AND user_id=? AND status=?'
+       .(WorkspaceContext::legacyCiFixture()?'':' AND workspace_id=?'),
+       WorkspaceContext::legacyCiFixture()?[$id,(int)Auth::$user['id'],'connected']:[$id,(int)Auth::$user['id'],'connected',Auth::workspaceId()]);
+   return ['account_id'=>$owned?$id:0,'requires_google_drive'=>true];
+  }
+  $target=integer($input['account_id']??0,0);
+  if($target>0){
+   WorkspaceCatalog::validateDrive($target);
+   $row=DB::one("SELECT id FROM google_accounts WHERE id=? AND user_id=? AND status='connected' AND drive_enabled=1 AND scopes LIKE ?".
+     (WorkspaceContext::legacyCiFixture()?'':' AND workspace_id=?'),
+     WorkspaceContext::legacyCiFixture()?[$target,(int)Auth::$user['id'],'%'.self::DRIVE_SCOPE.'%']:[$target,(int)Auth::$user['id'],'%'.self::DRIVE_SCOPE.'%',Auth::workspaceId()]);
+   if(!$row)fail('Conecte uma conta Google Drive própria antes de selecioná-la.',409);
+  }
+  WorkspacePreferences::save('drive_account_id',(string)$target);
+  if($id!==$target)WorkspacePreferences::save('drive_root_folder_id','');
+  audit('google_account',$target,'company.default_drive',null,['account_id'=>$target]);
+  return ['saved'=>true,'account_id'=>$target];
+ }
+
  public static function disconnect(array $p): array {
   Auth::admin();$a=DB::one('SELECT * FROM google_accounts WHERE id=? AND user_id=?'.(WorkspaceContext::legacyCiFixture()?'':' AND workspace_id=?'),WorkspaceContext::legacyCiFixture()?[integer($p['id'],1),Auth::$user['id']]:[integer($p['id'],1),Auth::$user['id'],Auth::workspaceId()]);if(!$a)fail('Conta não encontrada.');
   DB::update('google_accounts',$a['id'],['status'=>'disconnected','access_token'=>'','refresh_token'=>'']);DB::run('UPDATE calendars SET selected=0,write_enabled=0 WHERE account_id=?',[$a['id']]);

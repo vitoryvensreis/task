@@ -137,7 +137,7 @@ final class MasterSupport {
   unset($_SESSION['preview_client_id']);$_SESSION['workspace_support_id']=$id;
   $_SESSION['csrf']=bin2hex(random_bytes(24));
   Auth::$user=null;Auth::$workspace=null;Auth::$previewClientId=null;
-  return ['started'=>true,'workspace_id'=>$workspaceId,'expires_at'=>$expires,'url'=>base('index.php')];
+  return ['started'=>true,'workspace_id'=>$workspaceId,'expires_at'=>$expires,'url'=>base('dashboard')];
  }
  public static function stop(): array {
   Auth::load();if(!self::isActor())fail('Área exclusiva do ADM Master.',403);
@@ -156,7 +156,7 @@ final class MasterSupport {
   unset($_SESSION['workspace_support_id'],$_SESSION['preview_client_id']);
   session_regenerate_id(true);$_SESSION['csrf']=bin2hex(random_bytes(24));
   Auth::$user=null;Auth::$workspace=null;Auth::$previewClientId=null;
-  return ['stopped'=>true,'url'=>base('master.php')];
+  return ['stopped'=>true,'url'=>base('master')];
  }
  public static function invite(): array {
   Auth::load();Auth::admin();

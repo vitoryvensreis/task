@@ -151,9 +151,9 @@ final class Demands {
  public static function stage(array $p): array {
   return DB::tx(function() use($p): array {
    Auth::staff();$d=Auth::demand(integer($p['id']??0,1),true);if((int)$d['version']!==integer($p['version']??0,1))fail('O cartão mudou. Atualize e tente novamente.',409);
-   $s=DB::one('SELECT * FROM stages WHERE id=? AND active=1',[integer($p['stage_id']??0,1)]);if(!$s)fail('Etapa inválida.');if($d['draft'])fail('Publique a task antes de mudar a etapa.');
+   $s=DB::one('SELECT * FROM stages WHERE id=? AND active=1'.self::wsWhere(),self::wsArgs([integer($p['stage_id']??0,1)]));if(!$s)fail('Etapa inválida.');if($d['draft'])fail('Publique a task antes de mudar a etapa.');
    $row=['stage_id'=>$s['id'],'version'=>(int)$d['version']+1,'updated_at'=>now(),'completed_at'=>$s['kind']==='completed'?($d['completed_at']??now()):null];if($s['kind']==='completed')$row['first_completed_at']=$d['first_completed_at']??now();if(in_array($s['kind'],['planned','production','approval','completed']))$row['accepted_at']=$d['accepted_at']??now();if(isset($p['sort_order']))$row['sort_order']=integer($p['sort_order'],0,100000);
-   DB::update('demands',$d['id'],$row);DB::insert('transitions',['demand_id'=>$d['id'],'from_stage'=>$d['stage_id'],'to_stage'=>$s['id'],'actor_id'=>Auth::$user['id'],'happened_at'=>now()]);audit('demand',$d['id'],'stage',['stage_id'=>$d['stage_id']],$row);Notify::demand($d,'Etapa atualizada',$d['title'].' • '.$s['name']);
+   DB::update('demands',$d['id'],$row);DB::insert('transitions',self::wsData(['demand_id'=>$d['id'],'from_stage'=>$d['stage_id'],'to_stage'=>$s['id'],'actor_id'=>Auth::$user['id'],'happened_at'=>now()]));audit('demand',$d['id'],'stage',['stage_id'=>$d['stage_id']],$row);Notify::demand($d,'Etapa atualizada',$d['title'].' • '.$s['name']);
    $fresh=array_merge($d,$row);DemandRealtime::emit('demand.stage_changed',$fresh,['change'=>'stage','previous_stage_id'=>(int)$d['stage_id'],'sort_order'=>(int)($fresh['sort_order']??0)],(int)Auth::$user['id']);
    return ['id'=>$d['id'],'version'=>$row['version']];
   });
@@ -163,9 +163,9 @@ final class Demands {
   Auth::load();
   return DB::tx(function() use($p): array {
    $d=Auth::demand(integer($p['id']??0,1),true);if((int)$d['version']!==integer($p['version']??0,1))fail('O cartão mudou. Atualize e tente novamente.',409);
-   $stage=DB::one('SELECT * FROM stages WHERE id=? AND active=1',[integer($p['stage_id']??0,1)]);if(!$stage)fail('Etapa inválida.');if($d['draft'])fail('Publique a task antes de reorganizar o Kanban.');
+   $stage=DB::one('SELECT * FROM stages WHERE id=? AND active=1'.self::wsWhere(),self::wsArgs([integer($p['stage_id']??0,1)]));if(!$stage)fail('Etapa inválida.');if($d['draft'])fail('Publique a task antes de reorganizar o Kanban.');
    $beforeId=(int)($p['before_id']??0);if($beforeId===(int)$d['id'])$beforeId=0;
-   $cards=DB::all('SELECT id FROM demands WHERE stage_id=? AND deleted_at IS NULL AND id<>? ORDER BY sort_order,updated_at DESC,id FOR UPDATE',[(int)$stage['id'],(int)$d['id']]);
+   $cards=DB::all('SELECT id FROM demands WHERE stage_id=? AND deleted_at IS NULL AND id<>?'.self::wsWhere().' ORDER BY sort_order,updated_at DESC,id FOR UPDATE',self::wsArgs([(int)$stage['id'],(int)$d['id']]));
    $ids=array_map(fn($r)=>(int)$r['id'],$cards);$insertAt=count($ids);
    if($beforeId){$idx=array_search($beforeId,$ids,true);if($idx===false)fail('A posição escolhida não está mais disponível. Atualize o Kanban.',409);$insertAt=$idx;}
    array_splice($ids,$insertAt,0,[(int)$d['id']]);
@@ -174,7 +174,7 @@ final class Demands {
    if($moved){
     $row=['stage_id'=>(int)$stage['id'],'sort_order'=>$newSort,'version'=>(int)$d['version']+1,'updated_at'=>now(),'completed_at'=>$stage['kind']==='completed'?($d['completed_at']??now()):null];
     if($stage['kind']==='completed')$row['first_completed_at']=$d['first_completed_at']??now();if(in_array($stage['kind'],['planned','production','approval','completed'],true))$row['accepted_at']=$d['accepted_at']??now();
-    DB::update('demands',$d['id'],$row);DB::insert('transitions',['demand_id'=>$d['id'],'from_stage'=>$d['stage_id'],'to_stage'=>$stage['id'],'actor_id'=>Auth::$user['id'],'happened_at'=>now()]);audit('demand',$d['id'],'stage',['stage_id'=>$d['stage_id'],'sort_order'=>$d['sort_order']],$row);Notify::demand($d,'Etapa atualizada',$d['title'].' • '.$stage['name']);
+    DB::update('demands',$d['id'],$row);DB::insert('transitions',self::wsData(['demand_id'=>$d['id'],'from_stage'=>$d['stage_id'],'to_stage'=>$stage['id'],'actor_id'=>Auth::$user['id'],'happened_at'=>now()]));audit('demand',$d['id'],'stage',['stage_id'=>$d['stage_id'],'sort_order'=>$d['sort_order']],$row);Notify::demand($d,'Etapa atualizada',$d['title'].' • '.$stage['name']);
     $fresh=array_merge($d,$row);DemandRealtime::emit('demand.reordered',$fresh,['change'=>'reorder.stage','previous_stage_id'=>(int)$d['stage_id'],'sort_order'=>$newSort],(int)Auth::$user['id']);
     return ['id'=>(int)$d['id'],'version'=>(int)$row['version'],'stage_id'=>(int)$stage['id'],'sort_order'=>$newSort];
    }
@@ -192,8 +192,8 @@ final class Demands {
     $d=Auth::demand($id,true);$row=['updated_at'=>now(),'version'=>(int)$d['version']+1];$previousStage=(int)$d['stage_id'];
     if($action==='priority')$row['priority']=enumv((string)($p['priority']??''),['low','normal','high','urgent'],'prioridade');
     elseif($action==='assigned'){$assigned=integer($p['assigned_to']??0,1);$row['assigned_to']=self::responsible($assigned,(int)$d['client_id']);}
-    else{$stage=DB::one('SELECT * FROM stages WHERE id=? AND active=1',[integer($p['stage_id']??0,1)]);if(!$stage)fail('Etapa inválida.');$row['stage_id']=$stage['id'];$row['completed_at']=$stage['kind']==='completed'?($d['completed_at']??now()):null;if($stage['kind']==='completed')$row['first_completed_at']=$d['first_completed_at']??now();DB::insert('transitions',['demand_id'=>$id,'from_stage'=>$d['stage_id'],'to_stage'=>$stage['id'],'actor_id'=>Auth::$user['id'],'happened_at'=>now()]);}
-    DB::update('demands',$id,$row);audit('demand',$id,'bulk.'.$action,$d,$row);$fresh=DB::one('SELECT * FROM demands WHERE id=?',[$id])?:array_merge($d,$row);
+    else{$stage=DB::one('SELECT * FROM stages WHERE id=? AND active=1'.self::wsWhere(),self::wsArgs([integer($p['stage_id']??0,1)]));if(!$stage)fail('Etapa inválida.');$row['stage_id']=$stage['id'];$row['completed_at']=$stage['kind']==='completed'?($d['completed_at']??now()):null;if($stage['kind']==='completed')$row['first_completed_at']=$d['first_completed_at']??now();DB::insert('transitions',self::wsData(['demand_id'=>$id,'from_stage'=>$d['stage_id'],'to_stage'=>$stage['id'],'actor_id'=>Auth::$user['id'],'happened_at'=>now()]));}
+    DB::update('demands',$id,$row);audit('demand',$id,'bulk.'.$action,$d,$row);$fresh=DB::one('SELECT * FROM demands WHERE id=?'.self::wsWhere(),self::wsArgs([$id]))?:array_merge($d,$row);
     if(empty($fresh['draft'])){if($action==='assigned')Notify::demand($fresh,'Responsável atualizado',$fresh['title'],true);elseif($action==='stage')Notify::demand($fresh,'Etapa atualizada',$fresh['title'],true);elseif($action==='priority')Notify::demand($fresh,'Prioridade atualizada',$fresh['title'],true);}
     $extra=['change'=>'bulk.'.$action];if($action==='stage')$extra['previous_stage_id']=$previousStage;if($action==='priority')$extra['priority']=$fresh['priority']??null;if($action==='assigned')$extra['assigned_to']=isset($fresh['assigned_to'])?(int)$fresh['assigned_to']:null;
     DemandRealtime::emit($action==='stage'?'demand.stage_changed':'demand.updated',$fresh,$extra,(int)Auth::$user['id']);

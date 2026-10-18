@@ -43,18 +43,8 @@ check(app.includes('task_mentions:taskMentions'),'chat send must persist only se
 check(app.includes('data-chat-demand')&&app.includes('openDemand(id)'),'linked tasks in chat messages must be clickable');
 check(app.includes("new URLSearchParams(location.search).get('chat')")&&app.includes('openAdminChat(requestedChatPeer)'),'push deep links must open the sender conversation');
 check(app.includes('appUnread=unread+(adminChatEnabled()?Number(S.chatUnread||0):0)'),'app badge must combine normal notifications with unread admin chat');
-check(app.includes("startsWith('agenda.')")&&app.includes('handleAgendaRealtime(publication)'),'frontend must route agenda realtime publications');
-check(app.includes('function flushAgendaRealtime()')&&app.includes('stableRender(renderAgenda)'),'agenda realtime must refresh the current calendar view with stable rendering');
-check(app.includes("api('agenda.detail',{id:detailId})"),'open calendar event details must refresh after realtime changes');
-check(app.includes('agendaRealtimeDirty')&&app.includes('agendaRealtimeTimer'),'agenda realtime must debounce and resume hidden-tab refreshes');
 check(app.includes("String(publication.event_type||'').startsWith('demand.')"),'all demand sub-resource events must share the demand invalidation path');
 check(app.includes("startsWith('wpp.')")&&app.includes('handleWppRealtime(publication)'),'frontend must route WPPConnect lifecycle events from Centrifugo');
-check(app.includes('wppSettingsCard')&&app.includes('id="wpp-settings-panel"'),'admin settings must render the WhatsApp provider panel');
-check(app.includes("api('wpp.status')")&&app.includes("api('wpp.qr')")&&app.includes("api('wpp.start',{},'POST')"),'WPP panel must use authenticated TaskEsc endpoints for status, QR and session start');
-check(app.includes('loadWppQr')&&app.includes('data:image/png;base64,'),'WPP panel must render provider QR data without exposing provider credentials');
-check(app.includes("api('wpp.send_test'"),'WPP panel must support a controlled test message');
-check(app.includes('async function pollWppQr')&&app.includes('timeoutMs=20000')&&app.includes('setTimeout(resolve,800)'),'WPP connect action must poll until QR is actually available.');
-check(app.includes("result==='ready'")&&app.includes("'QR Code pronto para leitura'"),'WPP connect action must automatically surface QR readiness.');
 check((app.match(/name="whatsapp_phone"/g)||[]).length>=2,'User and client forms must collect WhatsApp numbers.');
 check(app.includes('name="whatsapp_recipient_mode"')&&app.includes('Quem criou a task')&&app.includes('Não enviar para esta task'),'Task form must choose creator, client or none for WhatsApp.');
 

@@ -58,9 +58,13 @@ function audit(string $entity,int $id,string $action,mixed $before=null,mixed $a
    'before_json'=>$before===null?null:json($before),
    'after_json'=>$after===null?null:json($after),
    'origin'=>$support?'support':Auth::$origin,'created_at'=>now()];
- if(!WorkspaceContext::legacyCiFixture()&&(int)(Auth::$workspace['id']??0)>0)
-  $row['workspace_id']=(int)Auth::$workspace['id'];
- DB::insert('audit_log',$row);
+ $workspace=(int)(Auth::$workspace['id']??WorkspaceJobScope::currentId());
+ if(!WorkspaceContext::legacyCiFixture()&&$workspace>0)
+  $row['workspace_id']=$workspace;
+ if(WorkspaceTenantMode::enabled()&&$workspace===0){
+  if(!MasterSupport::isActor())throw new LogicException('Platform audit requires verified Master identity.');
+  DB::insert('platform_audit_log',$row);
+ }else DB::insert('audit_log',$row);
 }
 function setting(string $key,string $default=''): string {return (string)(DB::one('SELECT value FROM settings WHERE `key`=?',[$key])['value']??$default);}
 function installed(): void {if(!config()||!is_file(ROOT.'/storage/installed.lock'))fail('Instale o sistema em install.php.',503);Migrations::run();}

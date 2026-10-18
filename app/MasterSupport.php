@@ -113,11 +113,24 @@ final class MasterSupport {
   $where=' WHERE 1=1';$params=[];
   if($id>0){$where.=' AND a.workspace_id=?';$params[]=$id;}
   if($action!==''){$where.=' AND a.action LIKE ?';$params[]='%'.$action.'%';}
-  return ['entries'=>DB::all("SELECT a.id,a.workspace_id,w.name AS workspace_name,
+  $tenant=DB::all("SELECT a.id,a.workspace_id,w.name AS workspace_name,
     a.user_id,u.name AS user_name,a.entity,a.entity_id,a.action,a.origin,a.created_at
     FROM audit_log a LEFT JOIN workspaces w ON w.id=a.workspace_id
-    LEFT JOIN users u ON u.id=a.user_id ".$where." ORDER BY a.id DESC LIMIT 150",$params),
-    'workspaces'=>DB::all('SELECT id,name FROM workspaces ORDER BY name')];
+    LEFT JOIN users u ON u.id=a.user_id ".$where." ORDER BY a.id DESC LIMIT 150",$params);
+  if($id===0&&WorkspaceTenantMode::enabled()){
+   $extra=DB::all("SELECT a.id,0 AS workspace_id,NULL AS workspace_name,
+      a.user_id,u.name AS user_name,a.entity,a.entity_id,a.action,a.origin,a.created_at
+      FROM platform_audit_log a LEFT JOIN users u ON u.id=a.user_id".
+      ($action!==''?' WHERE a.action LIKE ?':'').
+      " ORDER BY a.id DESC LIMIT 150",$action!==''?['%'.$action.'%']:[]);
+   $tenant=array_merge($tenant,$extra);
+   usort($tenant,static function(array $a,array $b):int {
+    $date=strcmp((string)$b['created_at'],(string)$a['created_at']);
+    return $date!==0?$date:((int)$b['id']<=>(int)$a['id']);
+   });
+   $tenant=array_slice($tenant,0,150);
+  }
+  return ['entries'=>$tenant,'workspaces'=>DB::all('SELECT id,name FROM workspaces ORDER BY name')];
  }
  public static function resetAdminTwoFactor(array $p): array {
   Auth::load();if(!self::isActor())fail('Ação exclusiva do ADM Master.',403);

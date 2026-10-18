@@ -15,6 +15,7 @@ require ROOT.'/app/DB.php';
 require ROOT.'/app/WorkspaceFoundation.php';
 require ROOT.'/app/WorkspaceFoundationGuard.php';
 require ROOT.'/app/WorkspaceContext.php';
+require ROOT.'/app/PlatformTenantProvisioning.php';
 require ROOT.'/app/MasterSupport.php';
 require ROOT.'/app/Notify.php';
 require ROOT.'/app/Auth.php';
@@ -244,6 +245,15 @@ try{
  testws($staffCaps===['dashboard.view','tasks.read','tasks.comment'],
   'Custom role capabilities mismatch.');
  testws(!in_array('tasks.delete',$staffCaps,true),'Staff role granted forbidden delete permission.');
+ // Reject the pending owner of a future company from opening the original company.
+ $pendingOwner=DB::insert('users',['name'=>'Future workspace owner CI',
+  'email'=>PlatformTenantProvisioning::OWNER_EMAIL,
+  'password_hash'=>'test','role'=>'admin','active'=>1,'created_at'=>now()]);
+ DB::insert('workspace_members',['workspace_id'=>$ws,'user_id'=>$pendingOwner,
+  'role'=>'admin','status'=>'active','joined_at'=>now()]);
+ refuses(fn()=>WorkspaceContext::forUser(DB::one(
+   'SELECT id,name,email,role,active FROM users WHERE id=?',[$pendingOwner])),
+   'Pending workspace owner must not inherit the original company.');
  echo "Workspace schema30 CI OK: owner, memberships, ".count(WorkspaceFoundation::DATA_TABLES).
   " mapped tables, preserved client/task/invoice/file, pending Master, calendar excluded, idempotence, second tenant blocked.\n";
 }catch(Throwable $e){fwrite(STDERR,'Workspace CI failed: '.$e->getMessage()."\n");exit(1);}

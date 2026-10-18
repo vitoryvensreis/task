@@ -91,7 +91,11 @@ final class MasterSupport {
     WHERE wm.workspace_id=w.id AND wm.status='active' AND member.active=1 AND wm.role IN ('admin','staff')
     AND wm.user_id<>w.owner_user_id) AS team_users,
    (SELECT COUNT(*) FROM workspace_members wm WHERE wm.workspace_id=w.id AND wm.role='admin' AND wm.status='active') AS admins,
-   (SELECT COUNT(*) FROM workspace_support_sessions ss WHERE ss.workspace_id=w.id) AS support_sessions
+   (SELECT COUNT(*) FROM workspace_support_sessions ss WHERE ss.workspace_id=w.id) AS support_sessions,
+   (SELECT COUNT(*) FROM clients c WHERE c.workspace_id=w.id) AS clients_count,
+   (SELECT COUNT(*) FROM projects pr WHERE pr.workspace_id=w.id) AS projects_count,
+   (SELECT COUNT(*) FROM demands d WHERE d.workspace_id=w.id) AS demands_count,
+   (SELECT COUNT(*) FROM automations au WHERE au.workspace_id=w.id) AS automations_count
    FROM workspaces w JOIN users u ON u.id=w.owner_user_id
    LEFT JOIN workspace_access_plans a ON a.workspace_id=w.id
    LEFT JOIN platform_access_plans p ON p.id=a.plan_id WHERE 1=1".$filter." ORDER BY w.created_at DESC,w.id DESC LIMIT 100",$args);

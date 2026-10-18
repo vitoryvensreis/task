@@ -49,8 +49,6 @@ final class RealtimeAuth
         $channels = ['user:'.(int)$user['id']];
         if (in_array(($user['role'] ?? ''), ['admin','staff'], true)) {
             $channels[] = $multi?'staff/ws:'.$ws:'staff/global';
-            if(MasterSupport::isSupport()&&!$multi)$channels[] = 'agenda/global';
-            if($multi&&WorkspaceCalendarScope::ready())$channels[]='agenda/ws:'.$ws;
         }
         if (($user['role'] ?? '') === 'admin') {
             $channels[] = $multi?'kanban/ws:'.$ws:'kanban/global';
@@ -81,15 +79,6 @@ final class RealtimeAuth
             return;
         }
 
-        if($multi&&preg_match('/^agenda\/ws:([1-9][0-9]*)$/D',$channel,$m)){
-            MasterSupport::requireCalendar();
-            if((int)$m[1]!==Auth::workspaceId()||Auth::isPreview())fail('Agenda de outro workspace não permitida.',403);
-            return;
-        }
-        if($channel==='agenda/global'){
-            if($multi)fail('Canal global desabilitado.',403);
-            MasterSupport::requireCalendar();return;
-        }
         if ($channel === 'staff/global') {
             if ($multi||!in_array(($user['role'] ?? ''), ['admin','staff'], true) || Auth::isPreview()) fail('Sem permissão para este canal realtime.', 403);
             return;

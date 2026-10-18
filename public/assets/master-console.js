@@ -246,9 +246,7 @@ window.MasterConsole=(()=>{
     const integrationStats=el('div','mc-profile-stats');
     for(const [label,value] of [
      ['Google Drive',integrations.drive_ready?'Conectado':'Pendente'],
-     ['Google Agenda',integrations.calendar_accounts>0?'Conta conectada':'Sem conta'],
-     ['Agendas selecionadas',fmt(integrations.selected_calendars||0)],
-     ['Arquivos vinculados',fmt(integrations.file_count||0)],
+               ['Arquivos vinculados',fmt(integrations.file_count||0)],
      ['Automações',fmt(integrations.automation_count||0)],
      ['Notificações',fmt(integrations.notification_count||0)]
     ]){

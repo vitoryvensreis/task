@@ -1,10 +1,8 @@
 <?php
 final class Google {
- private const API='https://www.googleapis.com/calendar/v3/';
  private const DRIVE='https://www.googleapis.com/drive/v3/';
  private const DRIVE_UPLOAD='https://www.googleapis.com/upload/drive/v3/';
  private const DRIVE_SCOPE='https://www.googleapis.com/auth/drive.file';
- private const CALENDAR_SCOPE='https://www.googleapis.com/auth/calendar.events';
 
  public static function http(string $url,string $method='GET',?array $data=null,?string $token=null,array $headers=[],bool $form=false): array {
   $ch=curl_init($url);$h=['Accept: application/json',...$headers];
@@ -41,12 +39,11 @@ final class Google {
  public static function connect(array $p=[]): array {
   Auth::admin();
   if(!config('google_client_id')||!config('google_client_secret'))fail('Configure Client ID e Client Secret nas integrações.');
-  $purpose=enumv($p['purpose']??'calendar',['calendar','drive'],'tipo de conexão');if($purpose==='calendar')MasterSupport::requireCalendar();$returnTo=enumv($p['return_to']??($purpose==='drive'?'settings':'agenda'),['agenda','clients','settings'],'retorno');
+  $purpose='drive';$returnTo=enumv($p['return_to']??'settings',['clients','settings'],'retorno');
   $state=bin2hex(random_bytes(24));$verifier=bin2hex(random_bytes(32));
   $_SESSION['google_state']=['state'=>$state,'verifier'=>$verifier,'expires'=>time()+600,'user_id'=>Auth::$user['id'],'workspace_id'=>Auth::workspaceId(),'purpose'=>$purpose,'return_to'=>$returnTo];
   $scopes=['openid','email'];
-  if($purpose==='drive')$scopes[]=self::DRIVE_SCOPE;
-  else array_push($scopes,'https://www.googleapis.com/auth/calendar.calendarlist.readonly',self::CALENDAR_SCOPE,'https://www.googleapis.com/auth/calendar.freebusy');
+  $scopes[]=self::DRIVE_SCOPE;
   $params=['client_id'=>config('google_client_id'),'redirect_uri'=>base('google-callback.php'),'response_type'=>'code','scope'=>implode(' ',$scopes),'access_type'=>'offline','prompt'=>'consent select_account','include_granted_scopes'=>'true','state'=>$state,'code_challenge'=>rtrim(strtr(base64_encode(hash('sha256',$verifier,true)),'+/','-_'),'='),'code_challenge_method'=>'S256'];
   return ['url'=>'https://accounts.google.com/o/oauth2/v2/auth?'.http_build_query($params),'purpose'=>$purpose];
  }
@@ -55,17 +52,16 @@ final class Google {
   Auth::admin();$s=$_SESSION['google_state']??null;unset($_SESSION['google_state']);
   if(!$s||$s['expires']<time()||$s['user_id']!=Auth::$user['id']||!hash_equals($s['state'],$q['state']??'')||(int)($s['workspace_id']??0)!==Auth::workspaceId())fail('Autorização expirada, inválida ou pertencente a outra empresa.',400);
   if(isset($q['error']))fail('A autorização do Google foi cancelada.');
-  $purpose=$s['purpose']??'calendar';if($purpose==='calendar')MasterSupport::requireCalendar();$returnTo=$s['return_to']??($purpose==='drive'?'settings':'agenda');
+  $purpose=$s['purpose']??'';if($purpose!=='drive')fail('Conexão Google legada não permitida.',403);$returnTo=$s['return_to']??'settings';
   $tokens=self::http('https://oauth2.googleapis.com/token','POST',['code'=>required($q,'code'),'client_id'=>config('google_client_id'),'client_secret'=>config('google_client_secret'),'redirect_uri'=>base('google-callback.php'),'grant_type'=>'authorization_code','code_verifier'=>$s['verifier']],null,[],true);
   $info=self::http('https://www.googleapis.com/oauth2/v3/userinfo','GET',null,$tokens['access_token']);
   $old=DB::one('SELECT * FROM google_accounts WHERE user_id=? AND google_sub=?'.(WorkspaceContext::legacyCiFixture()?'':' AND workspace_id=?'),WorkspaceContext::legacyCiFixture()?[Auth::$user['id'],$info['sub']]:[Auth::$user['id'],$info['sub'],Auth::workspaceId()]);
   $refresh=$tokens['refresh_token']??($old&&!empty($old['refresh_token'])?secretDecrypt($old['refresh_token']):'');
   if(!$refresh)fail('O Google não forneceu acesso offline. Revogue a conexão anterior e conecte novamente.');
   $scopes=self::liveScopes((string)$tokens['access_token'],(string)($tokens['scope']??''));
-  $row=['user_id'=>Auth::$user['id'],'google_sub'=>$info['sub'],'email'=>$info['email'],'access_token'=>secretEncrypt($tokens['access_token']),'refresh_token'=>secretEncrypt($refresh),'scopes'=>$scopes,'expires_at'=>gmdate('Y-m-d H:i:s',time()+(int)$tokens['expires_in']),'status'=>'connected','calendar_enabled'=>(int)str_contains($scopes,self::CALENDAR_SCOPE),'drive_enabled'=>(int)str_contains($scopes,self::DRIVE_SCOPE),'last_error'=>null];
+  $row=['user_id'=>Auth::$user['id'],'google_sub'=>$info['sub'],'email'=>$info['email'],'access_token'=>secretEncrypt($tokens['access_token']),'refresh_token'=>secretEncrypt($refresh),'scopes'=>$scopes,'expires_at'=>gmdate('Y-m-d H:i:s',time()+(int)$tokens['expires_in']),'status'=>'connected','calendar_enabled'=>0,'drive_enabled'=>(int)str_contains($scopes,self::DRIVE_SCOPE),'last_error'=>null];
   if($old){$id=(int)$old['id'];DB::update('google_accounts',$id,$row);}else $id=DB::insert('google_accounts',$row+(WorkspaceContext::legacyCiFixture()?[]:['workspace_id'=>Auth::workspaceId()]));
   if($purpose==='drive'&&$returnTo==='settings'&&(int)WorkspacePreferences::get('drive_account_id','0')===0)WorkspacePreferences::save('drive_account_id',(string)$id);
-  if($purpose==='calendar')self::discover($id);
   return ['account_id'=>$id,'email'=>$info['email'],'purpose'=>$purpose,'return_to'=>$returnTo];
  }
 
@@ -120,7 +116,7 @@ final class Google {
     'access_token'=>secretEncrypt($r['access_token']),
     'expires_at'=>gmdate('Y-m-d H:i:s',time()+(int)$r['expires_in']),
     'status'=>'connected','last_error'=>null,'scopes'=>$liveScopes,
-    'calendar_enabled'=>(int)str_contains($liveScopes,self::CALENDAR_SCOPE),
+    'calendar_enabled'=>0,
     'drive_enabled'=>(int)str_contains($liveScopes,self::DRIVE_SCOPE)
    ]);
    return $r['access_token'];
@@ -140,17 +136,11 @@ final class Google {
    return self::http($url.$path,$method,$data,self::token($account,true),$headers);
   }
  }
- private static function api(int $account,string $path,string $method='GET',?array $data=null,array $headers=[]): array {return self::authenticatedApi($account,self::API,$path,$method,$data,$headers);}
  private static function driveApi(int $account,string $path,string $method='GET',?array $data=null,array $headers=[]): array {return self::authenticatedApi($account,self::DRIVE,$path,$method,$data,$headers);}
-
- public static function discover(int $account): void {
-  if(WorkspaceTenantMode::enabled())WorkspaceCalendarScope::assertGoogleAccount($account);
-  $next='';do{$data=self::api($account,'users/me/calendarList?maxResults=250'.($next?'&pageToken='.rawurlencode($next):''));foreach($data['items']??[] as $c){$old=DB::one('SELECT * FROM calendars WHERE account_id=? AND google_id=?',[$account,$c['id']]);$role=$c['accessRole']??'reader';$writable=in_array($role,['owner','writer','writerWithoutPrivateAccess'],true);$row=['name'=>$c['summaryOverride']??$c['summary']??$c['id'],'color'=>$c['backgroundColor']??'#8a8a8a','access_role'=>$role];if($old){if(!$writable)$row['write_enabled']=0;DB::update('calendars',$old['id'],$row);}else DB::insert('calendars',$row+['account_id'=>$account,'google_id'=>$c['id'],'selected'=>1,'write_enabled'=>(int)$writable]);}$next=$data['nextPageToken']??'';}while($next);
- }
 
  public static function accounts(): array {
   Auth::admin();$rows=DB::all('SELECT id,email,status,last_error,expires_at,scopes,calendar_enabled,drive_enabled FROM google_accounts WHERE user_id=?'.(WorkspaceContext::legacyCiFixture()?'':' AND workspace_id=?').' ORDER BY id',WorkspaceContext::legacyCiFixture()?[Auth::$user['id']]:[Auth::$user['id'],Auth::workspaceId()]);
-  foreach($rows as &$r){$r['drive_ready']=$r['status']==='connected'&&(bool)$r['drive_enabled']&&str_contains((string)($r['scopes']??''),self::DRIVE_SCOPE);$r['calendar_ready']=$r['status']==='connected'&&(bool)$r['calendar_enabled']&&str_contains((string)($r['scopes']??''),self::CALENDAR_SCOPE);}
+  foreach($rows as &$r){$r['drive_ready']=$r['status']==='connected'&&(bool)$r['drive_enabled']&&str_contains((string)($r['scopes']??''),self::DRIVE_SCOPE);$r['calendar_ready']=false;}
   return $rows;
  }
 
@@ -181,7 +171,7 @@ final class Google {
 
  public static function disconnect(array $p): array {
   Auth::admin();$a=DB::one('SELECT * FROM google_accounts WHERE id=? AND user_id=?'.(WorkspaceContext::legacyCiFixture()?'':' AND workspace_id=?'),WorkspaceContext::legacyCiFixture()?[integer($p['id'],1),Auth::$user['id']]:[integer($p['id'],1),Auth::$user['id'],Auth::workspaceId()]);if(!$a)fail('Conta não encontrada.');
-  DB::update('google_accounts',$a['id'],['status'=>'disconnected','access_token'=>'','refresh_token'=>'']);DB::run('UPDATE calendars SET selected=0,write_enabled=0 WHERE account_id=?',[$a['id']]);
+  DB::update('google_accounts',$a['id'],['status'=>'disconnected','access_token'=>'','refresh_token'=>'']);
   if((int)WorkspacePreferences::get('drive_account_id','0')===(int)$a['id']){WorkspacePreferences::save('drive_account_id','');WorkspacePreferences::save('drive_root_folder_id','');}
   audit('google_account',$a['id'],'disconnected');return ['saved'=>true];
  }
@@ -348,86 +338,5 @@ final class Google {
   $ok=curl_exec($ch);$code=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);$err=curl_error($ch);curl_close($ch);if($ok===false||$code>=400){error_log('Drive stream: '.$err.' HTTP '.$code);if(!headers_sent())http_response_code(502);}exit;
  }
 
- public static function eventFields(array $e): array {
-  $all=!empty($e['start']['date']);$zone=$e['start']['timeZone']??config('timezone');$start=$all?(new DateTimeImmutable($e['start']['date'],new DateTimeZone($zone)))->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s'):timestamp($e['start']['dateTime']??null);$end=$all?(new DateTimeImmutable($e['end']['date'],new DateTimeZone($zone)))->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s'):timestamp($e['end']['dateTime']??null);if(!$start||!$end)throw new RuntimeException('Evento Google sem horário.');
-  $organizer=is_array($e['organizer']??null)?$e['organizer']:[];
-  $attendees=[];foreach(array_slice(is_array($e['attendees']??null)?$e['attendees']:[],0,500) as $a){if(!is_array($a))continue;$attendees[]=['name'=>mb_substr((string)($a['displayName']??''),0,190),'email'=>mb_substr((string)($a['email']??''),0,190),'status'=>(string)($a['responseStatus']??'needsAction'),'organizer'=>(int)(bool)($a['organizer']??false),'self'=>(int)(bool)($a['self']??false),'optional'=>(int)(bool)($a['optional']??false),'additional_guests'=>(int)($a['additionalGuests']??0),'comment'=>mb_substr((string)($a['comment']??''),0,500)];}
-  $entryPoints=[];foreach(is_array($e['conferenceData']['entryPoints']??null)?$e['conferenceData']['entryPoints']:[] as $p){if(!is_array($p))continue;$entryPoints[]=['type'=>(string)($p['entryPointType']??''),'uri'=>(string)($p['uri']??''),'label'=>mb_substr((string)($p['label']??''),0,190),'pin'=>mb_substr((string)($p['pin']??''),0,80),'access_code'=>mb_substr((string)($p['accessCode']??''),0,80),'meeting_code'=>mb_substr((string)($p['meetingCode']??''),0,80),'password'=>mb_substr((string)($p['password']??''),0,80)];}
-  $meetUrl=trim((string)($e['hangoutLink']??''));if($meetUrl==='')foreach($entryPoints as $p)if($p['type']==='video'&&$p['uri']!==''){$meetUrl=$p['uri'];break;}
-  $attachments=[];foreach(array_slice(is_array($e['attachments']??null)?$e['attachments']:[],0,50) as $a){if(!is_array($a))continue;$attachments[]=['title'=>mb_substr((string)($a['title']??''),0,255),'url'=>(string)($a['fileUrl']??''),'mime'=>(string)($a['mimeType']??''),'file_id'=>(string)($a['fileId']??'')];}
-  return ['title'=>mb_substr($e['summary']??'Ocupado',0,255),'starts_at'=>$start,'ends_at'=>$end,'all_day'=>(int)$all,'location'=>$e['location']??'','description'=>$e['description']??'','organizer_name'=>mb_substr((string)($organizer['displayName']??''),0,190)?:null,'organizer_email'=>mb_substr((string)($organizer['email']??''),0,190)?:null,'attendees_json'=>$attendees?json($attendees):null,'meet_url'=>$meetUrl?:null,'conference_json'=>$entryPoints?json($entryPoints):null,'event_url'=>trim((string)($e['htmlLink']??''))?:null,'attachments_json'=>$attachments?json($attachments):null,'private'=>(int)(($e['visibility']??'')==='private'),'status'=>($e['status']??'')==='cancelled'?'cancelled':'confirmed','google_etag'=>$e['etag']??null,'recurring_id'=>$e['recurringEventId']??null];
- }
 
- public static function refreshEvent(int $eventId): void {
-  WorkspaceCalendarScope::assertEvent($eventId);
-  $e=DB::one("SELECT e.id,e.calendar_id,e.demand_id,e.google_id,e.google_etag,e.version,e.status,e.updated_at,e.sync_status,c.account_id,c.google_id AS calendar_google_id,c.access_role FROM events e JOIN calendars c ON c.id=e.calendar_id WHERE e.id=?",[$eventId]);
-  if(!$e||!$e['account_id']||!$e['google_id']||$e['access_role']==='freeBusyReader'||in_array($e['sync_status'],['pending','error','conflict'],true))return;
-  $remote=self::api((int)$e['account_id'],'calendars/'.rawurlencode((string)$e['calendar_google_id']).'/events/'.rawurlencode((string)$e['google_id']));
-  if(($remote['status']??'')==='cancelled'){
-   if(($e['status']??'')==='cancelled')return;
-   DB::tx(function() use($eventId,$e): void {$row=['status'=>'cancelled','version'=>(int)$e['version']+1,'updated_at'=>now()];DB::update('events',$eventId,$row);AgendaRealtime::event('agenda.google_changed',array_merge($e,$row),'google.refresh.cancelled',null);});
-   return;
-  }
-  $fields=self::eventFields($remote);$changed=(($e['google_etag']??'')!==($remote['etag']??''));
-  if(!$changed)return;
-  DB::tx(function() use($eventId,$e,$fields): void {$row=$fields+['sync_status'=>'synced','remote_json'=>null,'version'=>(int)$e['version']+1,'updated_at'=>now()];DB::update('events',$eventId,$row);AgendaRealtime::event('agenda.google_changed',array_merge($e,$row),'google.refresh.updated',null);});
- }
-
- public static function syncCalendarNow(int $calendarId): array {
-  $workspaceId=self::integrationScope();
-  $c=DB::one("SELECT c.* FROM calendars c JOIN google_accounts a ON a.id=c.account_id WHERE c.id=? AND a.status<>'disconnected' AND a.calendar_enabled=1".($workspaceId?' AND a.workspace_id=? AND c.workspace_id=?':''),$workspaceId?[$calendarId,$workspaceId,$workspaceId]:[$calendarId]);if(!$c)return ['synced'=>false,'message'=>'Agenda local ou conta Google indisponível.'];try{self::push($c);DB::update('calendars',$c['id'],['synced_at'=>now(),'last_error'=>null,'dirty'=>0]);return ['synced'=>true];}catch(Throwable $e){$message=mb_substr($e->getMessage(),0,1000);DB::update('calendars',$c['id'],['last_error'=>$message]);return ['synced'=>false,'message'=>$message];}
- }
-
- public static function sync(?int $only=null): array {
-  $workspaceId=self::integrationScope();
-  $params=$only?[$only]:[];if($workspaceId)array_push($params,$workspaceId,$workspaceId);
-  $ok=0;$errors=[];$rows=DB::all("SELECT c.* FROM calendars c JOIN google_accounts a ON a.id=c.account_id WHERE c.selected=1 AND a.status<>'disconnected' AND a.calendar_enabled=1".($only?' AND c.id=?':'').($workspaceId?' AND a.workspace_id=? AND c.workspace_id=?':''),$params);foreach($rows as $c){try{self::push($c);self::pull($c);self::watch($c);DB::update('calendars',$c['id'],['synced_at'=>now(),'last_error'=>null,'dirty'=>0]);DB::run("UPDATE google_accounts SET status='connected',last_error=NULL WHERE id=? AND status<>'disconnected' AND last_error IS NOT NULL",[(int)$c['account_id']]);$ok++;}catch(Throwable $e){$message=mb_substr($e->getMessage(),0,1000);DB::update('calendars',$c['id'],['last_error'=>$message]);$errors[]=['calendar_id'=>$c['id'],'message'=>$message];}}return ['synced'=>$ok,'errors'=>$errors,'updated_at'=>now()];
- }
-
- private static function push(array $c): void {
-  if(!$c['write_enabled'])return;$prefix='calendars/'.rawurlencode($c['google_id']).'/events';
-  foreach(DB::all("SELECT * FROM events WHERE calendar_id=? AND sync_status IN ('pending','error') ORDER BY id LIMIT 30",[$c['id']]) as $e){try{$path=$prefix.'/'.rawurlencode($e['google_id']);if($e['status']==='cancelled'){try{self::api($c['account_id'],$path,'DELETE',null,$e['google_etag']?['If-Match: '.$e['google_etag']]:[]);}catch(AppError $x){if(!in_array($x->details['google_status']??0,[404,410]))throw $x;}$r=[];}else{$start=$e['all_day']?['date'=>(new DateTimeImmutable($e['starts_at'],new DateTimeZone('UTC')))->setTimezone(new DateTimeZone(config('timezone')))->format('Y-m-d')]:['dateTime'=>str_replace(' ','T',$e['starts_at']).'Z','timeZone'=>config('timezone')];$end=$e['all_day']?['date'=>(new DateTimeImmutable($e['ends_at'],new DateTimeZone('UTC')))->setTimezone(new DateTimeZone(config('timezone')))->format('Y-m-d')]:['dateTime'=>str_replace(' ','T',$e['ends_at']).'Z','timeZone'=>config('timezone')];$body=['summary'=>$e['title'],'start'=>$start,'end'=>$end,'location'=>$e['location'],'description'=>$e['description'],'visibility'=>$e['private']?'private':'default'];if($e['google_etag'])$r=self::api($c['account_id'],$path,'PATCH',$body,['If-Match: '.$e['google_etag']]);else{try{$r=self::api($c['account_id'],$prefix,'POST',$body);}catch(AppError $x){if(($x->details['google_status']??0)!==409)throw $x;$r=self::api($c['account_id'],$path);}}}if(!empty($r['id'])){$remote=self::eventFields($r);DB::update('events',$e['id'],$remote+['google_id'=>$r['id'],'sync_status'=>'synced','sync_error'=>null,'remote_json'=>null,'version'=>$e['version'],'updated_at'=>now()]);}else DB::run("UPDATE events SET sync_status='synced',sync_error=NULL,updated_at=? WHERE id=? AND version=?",[now(),$e['id'],$e['version']]);}
-   catch(Throwable $x){$code=$x instanceof AppError?($x->details['google_status']??0):0;$conflict=in_array($code,[404,410,412]);$remote=[];if($conflict){try{$remote=self::api($c['account_id'],$prefix.'/'.rawurlencode($e['google_id']));}catch(Throwable){$remote=['status'=>'cancelled'];}}DB::update('events',$e['id'],['sync_status'=>$conflict?'conflict':'error','sync_error'=>mb_substr($x->getMessage(),0,1000),'remote_json'=>json($remote)]);}}
- }
-
- private static function pages(int $account,string $path,array $params): array {$items=[];$next='';$sync=null;$count=0;do{$q=$params;if($next)$q['pageToken']=$next;$r=self::api($account,$path.'?'.http_build_query($q));array_push($items,...($r['items']??[]));$next=$r['nextPageToken']??'';$sync=$r['nextSyncToken']??$sync;if(++$count>200)throw new RuntimeException('Agenda muito extensa; reduza o histórico sincronizado.');}while($next);return [$items,$sync];}
-
- private static function pull(array $c): void {
-  $account=(int)$c['account_id'];$path='calendars/'.rawurlencode($c['google_id']).'/events';$from=gmdate('Y-m-d\T00:00:00\Z',strtotime('-60 days'));$to=gmdate('Y-m-d\T00:00:00\Z',strtotime('+400 days'));
-  if($c['access_role']==='freeBusyReader'){
-   $r=self::api($account,'freeBusy','POST',['timeMin'=>$from,'timeMax'=>$to,'items'=>[['id'=>$c['google_id']]]]);$busy=$r['calendars'][$c['google_id']]??[];if(!empty($busy['errors']))throw new RuntimeException('Sem acesso à disponibilidade dessa agenda.');
-   DB::tx(function() use($c,$busy): void {
-    $before=(int)(DB::one("SELECT COUNT(*) AS n FROM events WHERE calendar_id=? AND origin='google'",[$c['id']])['n']??0);DB::run("DELETE FROM events WHERE calendar_id=? AND origin='google'",[$c['id']]);$created=0;
-    foreach($busy['busy']??[] as $b){DB::insert('events',['calendar_id'=>$c['id'],'title'=>'Ocupado','starts_at'=>timestamp($b['start']),'ends_at'=>timestamp($b['end']),'private'=>1,'origin'=>'google','sync_status'=>'synced','created_at'=>now(),'updated_at'=>now()]);$created++;}
-    if($before||$created)AgendaRealtime::calendar('agenda.calendar_refreshed',(int)$c['id'],'google.freebusy',null,$before+$created);
-   });
-   return;
-  }
-  $params=['maxResults'=>2500,'showDeleted'=>'true','singleEvents'=>'false'];if($c['sync_token'])$params['syncToken']=$c['sync_token'];try{[$changes,$token]=self::pages($account,$path,$params);}catch(AppError $x){if(($x->details['google_status']??0)!==410)throw $x;unset($params['syncToken']);[$changes,$token]=self::pages($account,$path,$params);}
-  [$events]=self::pages($account,$path,['maxResults'=>2500,'singleEvents'=>'true','timeMin'=>$from,'timeMax'=>$to]);
-  DB::tx(function() use($c,$changes,$token,$events,$from,$to): void {
-   $changedCount=0;
-   foreach($changes as $g){
-    if(($g['status']??'')!=='cancelled')continue;
-    $rows=DB::all("SELECT id,version,status FROM events WHERE calendar_id=? AND (google_id=? OR recurring_id=?) AND sync_status='synced'",[$c['id'],$g['id'],$g['id']]);
-    foreach($rows as $row)if(($row['status']??'')!=='cancelled'){DB::update('events',(int)$row['id'],['status'=>'cancelled','version'=>(int)$row['version']+1,'updated_at'=>now()]);$changedCount++;}
-   }
-   $seen=[];
-   foreach($events as $g){
-    if(($g['status']??'')==='cancelled')continue;$seen[]=$g['id'];$old=DB::one('SELECT * FROM events WHERE calendar_id=? AND google_id=?',[$c['id'],$g['id']]);$fields=self::eventFields($g);
-    if($old){
-     if(in_array($old['sync_status'],['pending','error','conflict'],true))continue;$changed=(($old['google_etag']??'')!==($g['etag']??''));if(!$changed)continue;DB::update('events',$old['id'],$fields+['sync_status'=>'synced','remote_json'=>null,'version'=>$old['version']+1,'updated_at'=>now()]);$changedCount++;
-    }else{DB::insert('events',$fields+['calendar_id'=>$c['id'],'google_id'=>$g['id'],'origin'=>'google','sync_status'=>'synced','created_at'=>now(),'updated_at'=>now()]);$changedCount++;}
-   }
-   $existing=DB::all("SELECT id,google_id,version,status FROM events WHERE calendar_id=? AND origin='google' AND sync_status='synced' AND starts_at>=? AND starts_at<?",[$c['id'],timestamp($from),timestamp($to)]);$lookup=array_flip($seen);
-   foreach($existing as $e)if(!isset($lookup[$e['google_id']])&&($e['status']??'')!=='cancelled'){DB::update('events',$e['id'],['status'=>'cancelled','version'=>(int)$e['version']+1,'updated_at'=>now()]);$changedCount++;}
-   DB::update('calendars',$c['id'],['sync_token'=>$token]);
-   if($changedCount>0)AgendaRealtime::calendar('agenda.calendar_refreshed',(int)$c['id'],'google.pull',null,$changedCount);
-  });
- }
-
- private static function watch(array $c): void {
-  if(!str_starts_with(base(),'https://')||$c['access_role']==='freeBusyReader')return;if($c['channel_expires']&&strtotime($c['channel_expires'].' UTC')>time()+3600)return;$id=bin2hex(random_bytes(16));$token=bin2hex(random_bytes(24));
-  try{$r=self::api($c['account_id'],'calendars/'.rawurlencode($c['google_id']).'/events/watch','POST',['id'=>$id,'type'=>'web_hook','address'=>base('webhook.php'),'token'=>$token,'params'=>['ttl'=>'604800']]);DB::update('calendars',$c['id'],['channel_id'=>$id,'channel_token'=>$token,'channel_resource'=>$r['resourceId'],'channel_expires'=>gmdate('Y-m-d H:i:s',(int)($r['expiration']/1000))]);}catch(Throwable $e){error_log('Calendar watch: '.$e->getMessage());}
- }
 }

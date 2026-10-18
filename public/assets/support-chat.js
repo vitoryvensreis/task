@@ -24,7 +24,7 @@
   if(node){node.textContent=msg;node.style.color=bad?'#ffb6b6':'#b5e7c5'}
  }
  function displayMessage(m){
-  const mine=Number(m.sender_user_id)===Number(user.id);
+  const mine=Number(m.sender_user_id)===Number(user.support_master_id||user.id);
   const bubble=el('div','ts-support-bubble'+(mine?' mine':''));
   bubble.append(el('div','who',m.sender_role==='master'?'ADM Master':m.sender_name||'Administrador'));
   const text=el('div','body',m.body||'');bubble.append(text);

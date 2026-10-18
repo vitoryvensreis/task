@@ -19,7 +19,7 @@
    e.preventDefault();const b=e.submitter;b.disabled=true;
    try{const data=Object.fromEntries(new FormData(e.target));data.token=activation;
     await request('master.activate',data);message('#master-activate-message','Conta ativada! Entre pelo login do TaskEsc.');
-    e.target.reset();history.replaceState(null,'',base+'/master.php');show('#master-login',true);
+    e.target.reset();history.replaceState(null,'',base+'/master');show('#master-login',true);
    }catch(err){message('#master-activate-message',err.message,true);}finally{b.disabled=false}
   });
   return;
@@ -30,8 +30,9 @@
   if(!auth.user?.is_master||!(auth.user.role==='master'||!!auth.user.is_support)){show('#master-login',true);return}
   const data=await request('master.workspaces');
   show('#master-panel',true);
-  const workspaces=$('#master-workspaces'),admins=$('#master-administrators');,planPanel=$('#master-plans');
+  const workspaces=$('#master-workspaces'),admins=$('#master-administrators'),planPanel=$('#master-plans');
   const tabs=[...document.querySelectorAll('[data-master-tab]')];
+  if(location.pathname.endsWith('/master.php'))history.replaceState(null,'',base+'/master'+location.search+location.hash);
   const clear=()=>{workspaces.replaceChildren();admins.replaceChildren();planPanel.replaceChildren();message('#master-panel-message','')};
   function supportCard(w){
    const wrap=el('article','','master-mini');
@@ -43,7 +44,7 @@
    const b=el('button','Entrar em modo suporte');b.type='submit';form.append(b);
    form.addEventListener('submit',async e=>{
     e.preventDefault();b.disabled=true;
-    try{const resp=await request('master.start',{workspace_id:w.id,reason:input.value.trim()},csrf);location.href=resp.url||base+'/index.php'}
+    try{const resp=await request('master.start',{workspace_id:w.id,reason:input.value.trim()},csrf);location.href=resp.url||base+'/dashboard'}
     catch(err){message('#master-panel-message',err.message,true);b.disabled=false}
    });wrap.append(form);return wrap;
   }
@@ -138,14 +139,14 @@
     const isolation=el('div','','master-mini');isolation.append(el('h3','Protegido'),el('p','Multiempresa ainda bloqueada até homologação'));
     grid.append(status,isolation);workspaces.append(grid);
     workspaces.append(el('p','O ADM Master não tem acesso automático aos dados de outras empresas. Use uma sessão de suporte com motivo registrado.','master-note'));
-    if(data.support_active){const link=el('a','Retornar ao suporte ativo');link.href=base+'/index.php';workspaces.append(link)}
+    if(data.support_active){const link=el('a','Retornar ao suporte ativo');link.href=base+'/dashboard';workspaces.append(link)}
     return;
    }
    const grid=el('div','','master-grid');for(const w of data.workspaces)grid.append(supportCard(w));workspaces.append(grid);
-   if(data.support_active){const link=el('a','Abrir sessão de suporte ativa');link.href=base+'/index.php';workspaces.append(link)}
+   if(data.support_active){const link=el('a','Abrir sessão de suporte ativa');link.href=base+'/dashboard';workspaces.append(link)}
   }
   for(const t of tabs)t.addEventListener('click',()=>draw(t.dataset.masterTab).catch(e=>message('#master-panel-message',e.message,true)));
   await draw('overview');
-  $('#master-logout').addEventListener('click',async()=>{try{await request('auth.logout',{})}finally{location.href=base+'/index.php'}});
+  $('#master-logout').addEventListener('click',async()=>{try{await request('auth.logout',{})}finally{location.href=base+'/dashboard'}});
  }catch(err){show('#master-login',true);message('#master-panel-message',err.message,true)}
 })();

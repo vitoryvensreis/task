@@ -21,9 +21,12 @@ final class MasterSupport {
   if(($user['role']??'')!=='admin'||(int)($user['active']??0)!==1)return false;
   $email=strtolower((string)($user['email']??''));
   if($email===''||!filter_var($email,FILTER_VALIDATE_EMAIL))return false;
-  return (bool)DB::one("SELECT 1 FROM platform_master_identities
+  // Fail closed while an isolated test or un-migrated installation has no Master schema.
+  try{
+   return (bool)DB::one("SELECT 1 FROM platform_master_identities
     WHERE email=? AND user_id=? AND status='verified' LIMIT 1",
     [$email,(int)$user['id']]);
+  }catch(PDOException){return false;}
  }
  public static function contextFor(array $user): array {
   if(!self::isVerified($user))fail('Identidade do ADM Master ainda não verificada.',403);

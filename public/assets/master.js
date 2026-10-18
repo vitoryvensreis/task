@@ -32,6 +32,9 @@
   show('#master-panel',true);
   const workspaces=$('#master-workspaces'),admins=$('#master-administrators'),planPanel=$('#master-plans');
   const tabs=[...document.querySelectorAll('[data-master-tab]')];
+  const tabRoutes={overview:'master',clients:'master/clientes',plans:'master/planos',workspaces:'master/workspaces',support:'master/suporte'};
+  const currentTab=()=>Object.entries(tabRoutes).find(([,p])=>location.pathname.replace(/\/+$/,'').endsWith('/'+p))?.[0]||'overview';
+
   if(location.pathname.endsWith('/master.php'))history.replaceState(null,'',base+'/master'+location.search+location.hash);
   const clear=()=>{workspaces.replaceChildren();admins.replaceChildren();planPanel.replaceChildren();message('#master-panel-message','')};
   function supportCard(w){
@@ -49,6 +52,8 @@
    });wrap.append(form);return wrap;
   }
   async function draw(tab){
+   if(tabRoutes[tab]&&!location.pathname.replace(/\/+$/,'').endsWith('/'+tabRoutes[tab]))
+    history.replaceState(null,'',base+'/'+tabRoutes[tab]);
    clear();tabs.forEach(b=>b.classList.toggle('active',b.dataset.masterTab===tab));
    show('#master-workspaces',tab==='overview'||tab==='workspaces');show('#master-administrators',tab==='clients');show('#master-plans',tab==='plans');
    $('#master-panel-title').textContent=({overview:'Visão geral da plataforma',clients:'Clientes e administradores',workspaces:'Gerenciamento de workspaces',plans:'Planos de assinatura e acesso',support:'Atendimentos'})[tab];
@@ -147,8 +152,9 @@
    if(data.support_active){const link=el('a','Abrir sessão de suporte ativa');link.href=base+'/dashboard';workspaces.append(link)}
   }
   for(const t of tabs)t.addEventListener('click',()=>draw(t.dataset.masterTab).catch(e=>message('#master-panel-message',e.message,true)));
-  await draw('overview');
-  if(location.pathname.match(/\/master\/suporte\/?$/))window.dispatchEvent(new Event('taskesc:open-support'));
+  await draw(currentTab());
+  window.addEventListener('popstate',()=>draw(currentTab()).catch(e=>message('#master-panel-message',e.message,true)));
+  if(currentTab()==='support')window.dispatchEvent(new Event('taskesc:open-support'));
   $('#master-logout').addEventListener('click',async()=>{try{await request('auth.logout',{})}finally{location.href=base+'/dashboard'}});
  }catch(err){show('#master-login',true);message('#master-panel-message',err.message,true)}
 })();

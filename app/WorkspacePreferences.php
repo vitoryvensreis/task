@@ -20,7 +20,8 @@ final class WorkspacePreferences {
   if(WorkspaceContext::legacyCiFixture())return (string)setting($key,$fallback);
   $ws=Auth::workspaceId();
   $row=DB::one('SELECT value FROM workspace_settings WHERE workspace_id=? AND `key`=?',[$ws,$key]);
-  return $row?(string)$row['value']:(string)setting($key,$fallback);
+  // Multiempresa não herda configurações privadas do workspace legado.
+  return $row?(string)$row['value']:(WorkspaceTenantMode::enabled()?$fallback:(string)setting($key,$fallback));
  }
  public static function all(): array {
   if(WorkspaceContext::legacyCiFixture())return [];
@@ -38,7 +39,8 @@ final class WorkspacePreferences {
     ON DUPLICATE KEY UPDATE value=VALUES(value),updated_at=VALUES(updated_at)',
     [$ws,$key,$value,now()]);
   }
-  // Legacy code still reads the original key throughout the single workspace.
+  // A escrita em settings global é apenas compatibilidade com workspace único.
+  if(WorkspaceTenantMode::enabled())return;
   DB::run('INSERT INTO settings (`key`,value) VALUES (?,?)
    ON DUPLICATE KEY UPDATE value=VALUES(value)',[$key,$value]);
  }

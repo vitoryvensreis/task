@@ -102,6 +102,7 @@ try{
   'Client from another workspace must not be readable.');
  testws(count(Catalog::clients(['q'=>'Different owner fixture']))===0,
   'Client list exposed another workspace record.');
+ DB::run('DELETE FROM clients WHERE id=?',[$ciClient]);
  WorkspacePreferences::save('brand_name','TaskEsc Workspace CI');
  testws(WorkspacePreferences::get('brand_name')==='TaskEsc Workspace CI',
   'Workspace preference not persisted.');

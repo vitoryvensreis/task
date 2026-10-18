@@ -15,10 +15,12 @@ try {
  if($action==='auth.2fa'){installed();out(Auth::twoFactorVerify($p));}
  if($action==='auth.logout'){session_start();$_SESSION=[];if(ini_get('session.use_cookies')){$params=session_get_cookie_params();setcookie(session_name(),'',['expires'=>time()-42000,'path'=>$params['path'],'domain'=>$params['domain'],'secure'=>$params['secure'],'httponly'=>$params['httponly'],'samesite'=>$params['samesite']??'Lax']);}session_destroy();out(['logged_out'=>true]);}
  installed();
- if(in_array($action,['master.workspaces','master.start','master.stop','master.invite'],true)){
+ if(in_array($action,['master.workspaces','master.administrators','master.reset_2fa','master.start','master.stop','master.invite'],true)){
   if(($_SERVER['REQUEST_METHOD']??'GET')!=='GET')checkCsrf();
   Auth::load();
   if($action==='master.workspaces'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET')out(MasterSupport::workspaceList());
+  if($action==='master.administrators'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET')out(MasterSupport::administrators());
+  if($action==='master.reset_2fa'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST')out(MasterSupport::resetAdminTwoFactor($p));
   if($action==='master.start'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST')out(MasterSupport::start($p));
   if($action==='master.stop'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST')out(MasterSupport::stop());
   if($action==='master.invite'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST')out(MasterSupport::invite());

@@ -144,6 +144,7 @@ final class Google {
  private static function driveApi(int $account,string $path,string $method='GET',?array $data=null,array $headers=[]): array {return self::authenticatedApi($account,self::DRIVE,$path,$method,$data,$headers);}
 
  public static function discover(int $account): void {
+  if(WorkspaceTenantMode::enabled())WorkspaceCalendarScope::assertGoogleAccount($account);
   $next='';do{$data=self::api($account,'users/me/calendarList?maxResults=250'.($next?'&pageToken='.rawurlencode($next):''));foreach($data['items']??[] as $c){$old=DB::one('SELECT * FROM calendars WHERE account_id=? AND google_id=?',[$account,$c['id']]);$role=$c['accessRole']??'reader';$writable=in_array($role,['owner','writer','writerWithoutPrivateAccess'],true);$row=['name'=>$c['summaryOverride']??$c['summary']??$c['id'],'color'=>$c['backgroundColor']??'#8a8a8a','access_role'=>$role];if($old){if(!$writable)$row['write_enabled']=0;DB::update('calendars',$old['id'],$row);}else DB::insert('calendars',$row+['account_id'=>$account,'google_id'=>$c['id'],'selected'=>1,'write_enabled'=>(int)$writable]);}$next=$data['nextPageToken']??'';}while($next);
  }
 
@@ -358,6 +359,7 @@ final class Google {
  }
 
  public static function refreshEvent(int $eventId): void {
+  WorkspaceCalendarScope::assertEvent($eventId);
   $e=DB::one("SELECT e.id,e.calendar_id,e.demand_id,e.google_id,e.google_etag,e.version,e.status,e.updated_at,e.sync_status,c.account_id,c.google_id AS calendar_google_id,c.access_role FROM events e JOIN calendars c ON c.id=e.calendar_id WHERE e.id=?",[$eventId]);
   if(!$e||!$e['account_id']||!$e['google_id']||$e['access_role']==='freeBusyReader'||in_array($e['sync_status'],['pending','error','conflict'],true))return;
   $remote=self::api((int)$e['account_id'],'calendars/'.rawurlencode((string)$e['calendar_google_id']).'/events/'.rawurlencode((string)$e['google_id']));
@@ -373,13 +375,13 @@ final class Google {
 
  public static function syncCalendarNow(int $calendarId): array {
   $workspaceId=self::integrationScope();
-  $c=DB::one("SELECT c.* FROM calendars c JOIN google_accounts a ON a.id=c.account_id WHERE c.id=? AND a.status<>'disconnected' AND a.calendar_enabled=1".($workspaceId?' AND a.workspace_id=?':''),$workspaceId?[$calendarId,$workspaceId]:[$calendarId]);if(!$c)return ['synced'=>false,'message'=>'Agenda local ou conta Google indisponível.'];try{self::push($c);DB::update('calendars',$c['id'],['synced_at'=>now(),'last_error'=>null,'dirty'=>0]);return ['synced'=>true];}catch(Throwable $e){$message=mb_substr($e->getMessage(),0,1000);DB::update('calendars',$c['id'],['last_error'=>$message]);return ['synced'=>false,'message'=>$message];}
+  $c=DB::one("SELECT c.* FROM calendars c JOIN google_accounts a ON a.id=c.account_id WHERE c.id=? AND a.status<>'disconnected' AND a.calendar_enabled=1".($workspaceId?' AND a.workspace_id=? AND c.workspace_id=?':''),$workspaceId?[$calendarId,$workspaceId,$workspaceId]:[$calendarId]);if(!$c)return ['synced'=>false,'message'=>'Agenda local ou conta Google indisponível.'];try{self::push($c);DB::update('calendars',$c['id'],['synced_at'=>now(),'last_error'=>null,'dirty'=>0]);return ['synced'=>true];}catch(Throwable $e){$message=mb_substr($e->getMessage(),0,1000);DB::update('calendars',$c['id'],['last_error'=>$message]);return ['synced'=>false,'message'=>$message];}
  }
 
  public static function sync(?int $only=null): array {
   $workspaceId=self::integrationScope();
-  $params=$only?[$only]:[];if($workspaceId)$params[]=$workspaceId;
-  $ok=0;$errors=[];$rows=DB::all("SELECT c.* FROM calendars c JOIN google_accounts a ON a.id=c.account_id WHERE c.selected=1 AND a.status<>'disconnected' AND a.calendar_enabled=1".($only?' AND c.id=?':'').($workspaceId?' AND a.workspace_id=?':''),$params);foreach($rows as $c){try{self::push($c);self::pull($c);self::watch($c);DB::update('calendars',$c['id'],['synced_at'=>now(),'last_error'=>null,'dirty'=>0]);DB::run("UPDATE google_accounts SET status='connected',last_error=NULL WHERE id=? AND status<>'disconnected' AND last_error IS NOT NULL",[(int)$c['account_id']]);$ok++;}catch(Throwable $e){$message=mb_substr($e->getMessage(),0,1000);DB::update('calendars',$c['id'],['last_error'=>$message]);$errors[]=['calendar_id'=>$c['id'],'message'=>$message];}}return ['synced'=>$ok,'errors'=>$errors,'updated_at'=>now()];
+  $params=$only?[$only]:[];if($workspaceId)array_push($params,$workspaceId,$workspaceId);
+  $ok=0;$errors=[];$rows=DB::all("SELECT c.* FROM calendars c JOIN google_accounts a ON a.id=c.account_id WHERE c.selected=1 AND a.status<>'disconnected' AND a.calendar_enabled=1".($only?' AND c.id=?':'').($workspaceId?' AND a.workspace_id=? AND c.workspace_id=?':''),$params);foreach($rows as $c){try{self::push($c);self::pull($c);self::watch($c);DB::update('calendars',$c['id'],['synced_at'=>now(),'last_error'=>null,'dirty'=>0]);DB::run("UPDATE google_accounts SET status='connected',last_error=NULL WHERE id=? AND status<>'disconnected' AND last_error IS NOT NULL",[(int)$c['account_id']]);$ok++;}catch(Throwable $e){$message=mb_substr($e->getMessage(),0,1000);DB::update('calendars',$c['id'],['last_error'=>$message]);$errors[]=['calendar_id'=>$c['id'],'message'=>$message];}}return ['synced'=>$ok,'errors'=>$errors,'updated_at'=>now()];
  }
 
  private static function push(array $c): void {

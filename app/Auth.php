@@ -84,7 +84,7 @@ final class Auth {
    $custom=WorkspaceRoles::effectiveStaffCapabilities((int)self::$workspace['id'],(int)self::$user['id']);
    if($custom!==null)$abilities=$custom;
   }
-  if(!MasterSupport::isSupport())$abilities=array_values(array_diff($abilities,['agenda.read','agenda.write']));
+  if(!MasterSupport::isSupport()&&!(WorkspaceTenantMode::enabled()&&WorkspaceCalendarScope::ready()))$abilities=array_values(array_diff($abilities,['agenda.read','agenda.write']));
   return $abilities;
  }
  public static function can(string $ability): bool {return in_array($ability,self::abilities(),true);}

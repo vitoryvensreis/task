@@ -23,18 +23,24 @@ final class AgendaRealtime
         'agenda.calendar_refreshed',
     ];
 
+    private static function channel(): string {
+        if(!WorkspaceTenantMode::enabled())return 'agenda/global';
+        return 'agenda/ws:'.WorkspaceCalendarScope::id();
+    }
+
     public static function event(string $eventType,array $event,string $change,?int $actorId=null): int
     {
         if(!in_array($eventType,self::EVENT_TYPES,true))throw new InvalidArgumentException('Unsupported agenda realtime event.');
         $id=(int)($event['id']??0);$calendarId=(int)($event['calendar_id']??0);
         if($id<1||$calendarId<1||($actorId!==null&&$actorId<1))throw new InvalidArgumentException('Invalid agenda realtime identity.');
         $operationId=bin2hex(random_bytes(16));
+        $channel=self::channel();
         return EventOutbox::enqueue(
-            'agenda:event:'.$id.':'.$operationId.':agenda/global',
+            'agenda:event:'.$id.':'.$operationId.':'.$channel,
             $eventType,
             'calendar_event',
             $id,
-            'agenda/global',
+            $channel,
             [
                 'operation_id'=>$operationId,
                 'event_id'=>$id,
@@ -54,12 +60,13 @@ final class AgendaRealtime
         if(!in_array($eventType,self::CALENDAR_TYPES,true))throw new InvalidArgumentException('Unsupported calendar realtime event.');
         if($calendarId<1||($actorId!==null&&$actorId<1))throw new InvalidArgumentException('Invalid calendar realtime identity.');
         $operationId=bin2hex(random_bytes(16));
+        $channel=self::channel();
         return EventOutbox::enqueue(
-            'agenda:calendar:'.$calendarId.':'.$operationId.':agenda/global',
+            'agenda:calendar:'.$calendarId.':'.$operationId.':'.$channel,
             $eventType,
             'calendar',
             $calendarId,
-            'agenda/global',
+            $channel,
             [
                 'operation_id'=>$operationId,
                 'calendar_id'=>$calendarId,

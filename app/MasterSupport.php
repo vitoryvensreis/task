@@ -13,7 +13,7 @@ final class MasterSupport {
     FROM workspaces w JOIN users u ON u.id=w.owner_user_id WHERE w.slug=?',
     [WorkspaceFoundation::SLUG]);
   if($count!==1||!$w||$w['status']!==WorkspaceFoundation::STATUS||
-     (int)$w['owner_active']!==1||$w['owner_role']!=='admin')
+     (int)$w['owner_active']!==1||$w['owner_role']!=='admin'||strtolower((string)$w['owner_email'])!==WorkspaceFoundation::OWNER_EMAIL)
    fail('Modo suporte indisponível: workspace único não verificado.',503);
   return $w;
  }

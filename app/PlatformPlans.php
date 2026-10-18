@@ -131,6 +131,13 @@ final class PlatformPlans {
       WHERE a.workspace_id=? AND p.active=1 LIMIT 1',[$workspaceId]);
   if(!$plan)fail('O ADM Master precisa atribuir um plano ativo a este workspace.',403);
   $plan['features']=decode((string)$plan['features_json'],[]);
+  $plan['plan_team_limit']=$plan['team_limit'];
+  $row=DB::one("SELECT value FROM workspace_settings
+    WHERE workspace_id=? AND `key`='master.team_limit_override'",[$workspaceId]);
+  $override=trim((string)($row['value']??''));
+  $plan['team_limit_override']=($override!==''&&ctype_digit($override)&&
+    (int)$override>=1&&(int)$override<=100000)?(int)$override:null;
+  if($plan['team_limit_override']!==null)$plan['team_limit']=$plan['team_limit_override'];
   unset($plan['features_json']);return $plan;
  }
 

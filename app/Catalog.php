@@ -98,6 +98,9 @@ public static function clientSave(array $p): array {
   $links=$p['clients']??[];if(!is_array($links))fail('Vínculos de clientes inválidos.',422);$cleanLinks=[];
   if($role!=='admin')foreach($links as $link){$cid=integer($link['client_id']??0,1);Auth::client($cid);if(isset($cleanLinks[$cid]))continue;$cleanLinks[$cid]=['client_id'=>$cid,'can_approve'=>(int)(bool)($link['can_approve']??1),'can_finance'=>$role==='client'?(int)(bool)($link['can_finance']??0):0];}
   $workspaceId=Auth::workspaceId();
+  if($id&&$row['active']===1&&!WorkspaceContext::legacyCiFixture()&&
+    DB::one("SELECT 1 FROM team_invitations WHERE workspace_id=? AND user_id=? AND status='pending'",[$workspaceId,$id]))
+    fail('Este membro precisa aceitar o convite antes de ativar a conta.',409);
   $oldMemberRoleId=(!WorkspaceContext::legacyCiFixture()&&$id>0)
     ?(int)(DB::one('SELECT custom_role_id FROM workspace_members WHERE workspace_id=? AND user_id=?',[$workspaceId,$id])['custom_role_id']??0):0;
   $customRoleId=array_key_exists('custom_role_id',$p)?integer($p['custom_role_id']??0,0):$oldMemberRoleId;

@@ -61,6 +61,7 @@ jobs:
           set -e
           node --check public/assets/app.js
           node --check public/assets/master.js
+          node tests/master-dashboard-render.mjs
           node --check public/assets/support-chat.js
           node --check public/assets/ux-v3.js
           node --check public/assets/taskesc-icons.js

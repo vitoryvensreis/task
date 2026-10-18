@@ -40,6 +40,9 @@ final class WorkspaceTenantMode {
 
  /** Raw SQL writes must never fall through to the old default when enabled. */
  public static function assertSql(string $sql): void {
+  // Never consult the tenant-mode marker while processing SELECT statements:
+  // enabled() reads settings through DB::one(), which also calls this guard.
+  if(!preg_match('/\A\s*(?:INSERT|UPDATE|DELETE|REPLACE)\b/i',$sql))return;
   if(!self::enabled())return;
   if(preg_match('/\A\s*INSERT\s+(?:IGNORE\s+)?INTO\s+`?([a-z_]+)`?\s*\(([^)]*)\)/i',$sql,$m)){
    if(self::requireTableScope((string)$m[1])>0 &&

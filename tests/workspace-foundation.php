@@ -115,6 +115,9 @@ try{
  testws(str_contains($clause,'workspace_id')&&$arguments===[$ws],'Admin client filter must be workspace scoped.');
  [$clause,$arguments]=Auth::demandFilter('d');
  testws(str_contains($clause,'workspace_id')&&$arguments===[$ws],'Admin task filter must be workspace scoped.');
+ testws(count(Demands::list(['include_closed'=>1]))===1,
+  'Original task must remain visible in the original workspace.');
+
  refuses(fn()=>WorkspaceContext::syncUser($staff,$ws,'staff',true),'Out-of-transaction membership must fail.');
  $fresh=DB::tx(function()use($ws):int {
   $id=DB::insert('users',['name'=>'New staff','email'=>'new-staff@ci.invalid',

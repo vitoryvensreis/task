@@ -18,7 +18,7 @@ try{
  $saasTables=DB::all("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('workspaces','workspace_members','workspace_settings')");
  $saasColumns=DB::all("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND COLUMN_NAME='workspace_id'");
  $saasFlags=DB::all("SELECT `key` FROM settings WHERE `key` IN ('saas_enabled','workspace_context_enabled','workspace_permissions_enabled','workspace_settings_enabled','signup_enabled','billing_enabled')");
- if($saasTables||$saasColumns||$saasFlags)throw new RuntimeException('removed_saas_detected');
+ if($saasFlags||(($saasTables||$saasColumns)&&!WorkspaceFoundationGuard::valid()))throw new RuntimeException('removed_saas_detected');
  $before=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);
  if(!in_array($before,[28,29,30],true))throw new RuntimeException('ai_tools_schema_source_invalid');
  $migration=Migrations::assistantTools();

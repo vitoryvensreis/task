@@ -70,7 +70,8 @@ final class WorkspaceFoundation {
   $ws=DB::one('SELECT id,owner_user_id,status FROM workspaces WHERE slug=?',[self::SLUG]);
   if(!$ws||(int)($ws['owner_user_id']??0)!==(int)($owner['id']??0)||$ws['status']!==self::STATUS)
    $issues[]='workspace_owner_mismatch';
-  if((int)(DB::one('SELECT COUNT(*) n FROM workspaces')['n']??0)!==1)$issues[]='unexpected_extra_workspace';
+  $multi=WorkspaceTenantMode::enabled();
+  if(!$multi&&(int)(DB::one('SELECT COUNT(*) n FROM workspaces')['n']??0)!==1)$issues[]='unexpected_extra_workspace';
   $member=$ws&&$owner?DB::one('SELECT role,status FROM workspace_members WHERE workspace_id=? AND user_id=?',
    [(int)$ws['id'],(int)$owner['id']]):null;
   if(!$member||$member['role']!=='owner'||$member['status']!=='active')$issues[]='owner_membership_missing';
@@ -88,14 +89,24 @@ final class WorkspaceFoundation {
     $issues[]='invalid_workspace_column_'.$table;continue;
    }
    if(!self::expectedIndex($table,$key))$issues[]='invalid_workspace_index_'.$table;
-   if($ws&&(int)$column['COLUMN_DEFAULT']!==(int)$ws['id'])$issues[]='incorrect_workspace_default_'.$table;
-   if($checkRows&&$ws&&
-      (int)(DB::one('SELECT COUNT(*) n FROM `'.$table.'` WHERE workspace_id<>?',
-       [(int)$ws['id']])['n']??0)!==0)
-    $issues[]='foreign_workspace_rows_'.$table;
+   if(!$multi&&$ws&&(int)$column['COLUMN_DEFAULT']!==(int)$ws['id'])$issues[]='incorrect_workspace_default_'.$table;
+   if($multi&&$column['COLUMN_DEFAULT']!==null)$issues[]='legacy_workspace_default_'.$table;
+   if($checkRows&&$ws){
+    if($multi){
+     if((int)(DB::one('SELECT COUNT(*) n FROM `'.$table.'` d LEFT JOIN workspaces w ON w.id=d.workspace_id WHERE w.id IS NULL')['n']??0)>0)
+      $issues[]='orphan_workspace_rows_'.$table;
+    }elseif((int)(DB::one('SELECT COUNT(*) n FROM `'.$table.'` WHERE workspace_id=?',[(int)$ws['id']])['n']??0)!==
+       (int)(DB::one('SELECT COUNT(*) n FROM `'.$table.'`')['n']??0)){
+     $issues[]='foreign_workspace_rows_'.$table;
+    }
+   }
   }
   if($checkRows&&$ws){
-   $unlinked=(int)(DB::one('SELECT COUNT(*) n FROM users u
+   $unlinked=$multi?(int)(DB::one("SELECT COUNT(*) n FROM users u
+     LEFT JOIN workspace_members wm ON wm.user_id=u.id
+     LEFT JOIN platform_master_identities mi ON mi.user_id=u.id AND mi.status='verified'
+     WHERE wm.user_id IS NULL AND mi.user_id IS NULL")['n']??0):
+    (int)(DB::one('SELECT COUNT(*) n FROM users u
      LEFT JOIN workspace_members wm ON wm.user_id=u.id AND wm.workspace_id=?
      WHERE u.email<>? AND wm.user_id IS NULL',
      [(int)$ws['id'],self::MASTER_EMAIL])['n']??0);

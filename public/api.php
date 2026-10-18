@@ -145,7 +145,7 @@ try {
   'google.accounts'=>Google::accounts(),
   'google.connect'=>Google::connect($p),
   'google.disconnect'=>Google::disconnect($p),
-  'google.sync'=>Auth::admin()?:Google::sync(!empty($p['calendar_id'])?(int)$p['calendar_id']:null),
+  'google.sync'=>MasterSupport::requireCalendar()?:Google::sync(!empty($p['calendar_id'])?(int)$p['calendar_id']:null),
   'notifications'=>Auth::isPreview()?[]:DB::all('SELECT * FROM notifications WHERE user_id=? ORDER BY id DESC LIMIT 50',[Auth::$user['id']]),
   'notifications.seen'=>DB::run('UPDATE notifications SET seen=1 WHERE user_id=?',[Auth::$user['id']])&&['saved'=>true],
   default=>fail('Ação não encontrada.',404),

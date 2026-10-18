@@ -33,8 +33,8 @@
   show('#master-shell',true);show('#master-panel',true);
   const workspaces=$('#master-workspaces'),admins=$('#master-administrators'),planPanel=$('#master-plans'),dashboard=$('#master-dashboard'),settings=$('#master-settings'),support=$('#master-support'),shell=$('#master-shell');
   const tabs=[...document.querySelectorAll('[data-master-tab]')];
-  const tabRoutes={overview:'master',clients:'master/clientes',plans:'master/planos',workspaces:'master/workspaces',support:'master/suporte',settings:'master/configuracoes',ai:'master/monitoramento-ia',health:'master/saude-logs'};
-  const currentTab=()=>Object.entries(tabRoutes).find(([,p])=>location.pathname.replace(/\/+$/,'').endsWith('/'+p))?.[0]||'overview';
+  const tabRoutes={overview:'master',clients:'master/clientes',plans:'master/planos',ai:'master/monitoramento-ia',health:'master/saude-logs',settings:'master/configuracoes',integrations:'master/integracoes',personalization:'master/personalizacao',banner:'master/banner-hero'};
+  const currentTab=()=>{const path=location.pathname.replace(/\/+$/,'');if(path.endsWith('/master/workspaces'))return 'clients';if(path.endsWith('/master/suporte'))return 'overview';return Object.entries(tabRoutes).find(([,p])=>path.endsWith('/'+p))?.[0]||document.body.dataset.initialTab||'overview'};
 
   if(location.pathname.endsWith('/master.php'))history.replaceState(null,'',base+'/master'+location.search+location.hash);
   const clear=()=>{dashboard.replaceChildren();workspaces.replaceChildren();admins.replaceChildren();planPanel.replaceChildren();settings.replaceChildren();$('#master-ai').replaceChildren();$('#master-health').replaceChildren();message('#master-panel-message','')};
@@ -119,7 +119,7 @@
    distribution.append(list);analytics.append(distribution);
    dashboard.append(analytics);
    const lower=mk('div','master-dashboard-grid master-lower');
-   const work=mk('section','panel');work.append(sectionHead('Workspaces cadastrados','Plano atribuído e quantidade de contas ativas',{label:'Gerenciar',tab:'workspaces'}));
+   const work=mk('section','panel');work.append(sectionHead('Workspaces cadastrados','Plano atribuído e quantidade de contas ativas',{label:'Gerenciar clientes',tab:'clients'}));
    const wr=stats.recent_workspaces||[];
    if(wr.length){
     const wrap=mk('div','master-table-wrap'),table=mk('table','master-table'),head=mk('thead'),theadrow=mk('tr');
@@ -137,19 +137,23 @@
    plans.append(dist);lower.append(plans);dashboard.append(lower);
    dashboard.append(mk('p','master-description','Atualizado em '+new Date((stats.as_of||'').replace(' ','T')+'Z').toLocaleString('pt-BR')+' · Somente dados cadastrais agregados.'));
   }
-  async function draw(tab){
-   if(tabRoutes[tab]&&!location.pathname.replace(/\/+$/,'').endsWith('/'+tabRoutes[tab]))
-    history.replaceState(null,'',base+'/'+tabRoutes[tab]);
+  async function draw(tab,navigate=false){
+   if(navigate&&tabRoutes[tab]&&!location.pathname.replace(/\/+$/,'').endsWith('/'+tabRoutes[tab]))
+    history.pushState({masterTab:tab},'',base+'/'+tabRoutes[tab]);
    clear();tabs.forEach(b=>{const active=b.dataset.masterTab===tab;b.classList.toggle('active',active);if(b.classList.contains('nav-btn')){b.setAttribute('aria-current',active?'page':'false')}});shell.classList.remove('menu-open');
-   show('#master-dashboard',tab==='overview'||tab==='support');show('#master-ai',tab==='ai');show('#master-health',tab==='health');show('#master-workspaces',tab==='workspaces');show('#master-administrators',tab==='clients');show('#master-plans',tab==='plans');show('#master-settings',tab==='settings');show('#master-support',tab==='support');
-   if(tab!=='support')window.dispatchEvent(new Event('taskesc:leave-support'));
-   $('#master-panel-title').textContent=({overview:'Dashboard',clients:'Clientes (ADMs)',workspaces:'Workspaces',plans:'Planos de acesso',support:'Atendimentos',settings:'Configurações',ai:'Monitoramento IA',health:'Saúde & Logs'})[tab];
-   $('#master-page-kicker').textContent=({overview:'VISÃO GERAL · PLATAFORMA',clients:'GESTÃO DE CONTAS',workspaces:'EMPRESAS E ACESSOS',plans:'ASSINATURAS · PLANOS',support:'SUPORTE · ATENDIMENTO',settings:'ADMINISTRAÇÃO · SISTEMA',ai:'PLATAFORMA · INTELIGÊNCIA',health:'PLATAFORMA · DIAGNÓSTICO'})[tab];
-   if(tab==='support'){window.dispatchEvent(new Event('taskesc:open-support'));return;}
-   if(tab==='settings'){await window.TaskEscMasterSettings.render(settings,csrf,base);return;}
+   show('#master-dashboard',tab==='overview');show('#master-integrations',tab==='integrations');show('#master-personalization',tab==='personalization');show('#master-banner',tab==='banner');show('#master-ai',tab==='ai');show('#master-health',tab==='health');show('#master-workspaces',tab==='workspaces');show('#master-administrators',tab==='clients');show('#master-plans',tab==='plans');show('#master-settings',tab==='settings');show('#master-support',tab==='support');
+
+   $('#master-panel-title').textContent=({overview:'Dashboard',clients:'Clientes',plans:'Planos de acesso',settings:'Configurações da conta',integrations:'Integrações',personalization:'Personalização',banner:'Banner Hero',ai:'Monitoramento IA',health:'Saúde & Logs'})[tab];
+   $('#master-page-kicker').textContent=({overview:'VISÃO GERAL · PLATAFORMA',clients:'GESTÃO DE CLIENTES',plans:'ASSINATURAS · PLANOS',settings:'SEGURANÇA · PERFIL MASTER',integrations:'PLATAFORMA · SERVIÇOS',personalization:'APARÊNCIA · IDENTIDADE VISUAL',banner:'PERSONALIZAÇÃO · EM BREVE',ai:'PLATAFORMA · INTELIGÊNCIA',health:'PLATAFORMA · DIAGNÓSTICO'})[tab];
+   if(tab==='settings'){await window.MasterConsole.account(settings,csrf,base);return;}
+   if(tab==='integrations'){await window.TaskEscMasterSettings.render($('#master-integrations'),csrf,base,'integrations');return;}
+   if(tab==='personalization'){await window.TaskEscMasterSettings.render($('#master-personalization'),csrf,base,'personalization');return;}
+   if(tab==='banner'){window.MasterConsole.banner($('#master-banner'));return;}
    if(tab==='ai'){await window.TaskEscMasterOperations.ai($('#master-ai'),csrf,base);return;}
    if(tab==='health'){await window.TaskEscMasterOperations.health($('#master-health'),csrf,base);return;}
    if(tab==='overview'){await renderMasterDashboard();return;}
+   if(tab==='plans'){await window.MasterConsole.plans(planPanel,csrf,base);return;}
+   if(tab==='clients'){await window.MasterConsole.customers(admins,csrf,base);return;}
    if(tab==='plans'){
     const list=await request('master.plans');
     planPanel.append(el('p','Crie planos com módulos e limites de equipe. A disponibilidade pública apenas mostra o catálogo; nenhuma cobrança ou novo workspace será ativado automaticamente.','master-note'));
@@ -234,14 +238,14 @@
    const grid=el('div','','master-grid');for(const w of data.workspaces)grid.append(supportCard(w));workspaces.append(grid);
    if(data.support_active){const link=el('a','Abrir sessão de suporte ativa');link.href=base+'/dashboard';workspaces.append(link)}
   }
-  for(const t of tabs)t.addEventListener('click',()=>draw(t.dataset.masterTab).catch(e=>message('#master-panel-message',e.message,true)));
+  for(const t of tabs)t.addEventListener('click',()=>draw(t.dataset.masterTab,true).catch(e=>message('#master-panel-message',e.message,true)));
   $('#master-refresh').onclick=()=>draw(currentTab()).catch(e=>message('#master-panel-message',e.message,true));
   $('#master-menu').onclick=()=>shell.classList.toggle('menu-open');
   $('#master-nav-backdrop').onclick=()=>shell.classList.remove('menu-open');
   await draw(currentTab());
   window.addEventListener('popstate',()=>draw(currentTab()).catch(e=>message('#master-panel-message',e.message,true)));
-  window.addEventListener('taskesc:close-support',()=>{if(currentTab()==='support')draw('overview').catch(e=>message('#master-panel-message',e.message,true))});
-  if(currentTab()==='support')window.dispatchEvent(new Event('taskesc:open-support'));
+  // Support popup does not change the dashboard route.
+
   $('#master-logout').addEventListener('click',async()=>{try{await request('auth.logout',{})}finally{location.href=base+'/dashboard'}});
  }catch(err){show('#master-auth-surface',true);show('#master-login',true);message('#master-panel-message',err.message,true)}
 })();

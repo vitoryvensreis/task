@@ -238,6 +238,7 @@
   $('#master-nav-backdrop').onclick=()=>shell.classList.remove('menu-open');
   await draw(currentTab());
   window.addEventListener('popstate',()=>draw(currentTab()).catch(e=>message('#master-panel-message',e.message,true)));
+  window.addEventListener('taskesc:close-support',()=>{if(currentTab()==='support')draw('overview').catch(e=>message('#master-panel-message',e.message,true))});
   if(currentTab()==='support')window.dispatchEvent(new Event('taskesc:open-support'));
   $('#master-logout').addEventListener('click',async()=>{try{await request('auth.logout',{})}finally{location.href=base+'/dashboard'}});
  }catch(err){show('#master-auth-surface',true);show('#master-login',true);message('#master-panel-message',err.message,true)}

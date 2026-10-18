@@ -5,16 +5,13 @@ final class WppWebhook
 {
     public static function handle(array $payload): array
     {
-        // A platform-wide number has no tenant identity on its own.
-        // Fail closed until sender-to-workspace mapping for AI operations is audited.
-        if(WorkspaceTenantMode::enabled())return ['accepted'=>false,'reason'=>'workspace_inbox_routing_pending'];
         $source=$payload;
         if(empty($source['event'])&&isset($source['body'])&&is_array($source['body']))$source=$source['body'];
 
         $event=strtolower(trim((string)($source['event']??$source['type']??'')));
         // Step 1: authenticated inbound events go to a passive, deduplicated inbox.
         // No AI, task changes, outbound messages or realtime publication here.
-        if(in_array($event,['onmessage','on-message','message','message.received'],true))return AiWhatsAppInbox::receive($source);
+        if(in_array($event,['onmessage','on-message','message','message.received'],true))return ['accepted'=>false,'reason'=>'assistant_removed'];
         $status=trim((string)($source['status']??$source['state']??$source['sessionStatus']??''));
         $needle=strtolower($event.' '.$status);
 

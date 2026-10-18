@@ -26,7 +26,7 @@ $assetVersion=static function(string $file):string {
 <?php
 $requestPath=(string)(parse_url($_SERVER['REQUEST_URI']??'',PHP_URL_PATH)??'');
 $routes=['clientes'=>'clients','planos'=>'plans','integracoes'=>'integrations','personalizacao'=>'personalization','configuracoes'=>'settings',
-'whatsapp'=>'whatsapp','monitoramento-ia'=>'ai','saude-logs'=>'health','banner-hero'=>'banner','suporte'=>'overview','workspaces'=>'clients'];
+'whatsapp'=>'whatsapp','saude-logs'=>'health','banner-hero'=>'banner','suporte'=>'overview','workspaces'=>'clients'];
 $routeKey=trim((string)basename(rtrim($requestPath,'/')));
 $initialTab=$routes[$routeKey]??'overview';
 ?>
@@ -61,7 +61,6 @@ $initialTab=$routes[$routeKey]??'overview';
    <button class="nav-btn" data-master-tab="clients" type="button"><span class="nav-icon">♙</span>Clientes (ADMs)</button>
    <button class="nav-btn" data-master-tab="plans" type="button"><span class="nav-icon">▤</span>Planos de acesso</button>
    <button class="nav-btn" data-master-tab="whatsapp" type="button"><span class="nav-icon">◉</span>WhatsApp</button>
-   <button class="nav-btn" data-master-tab="ai" type="button"><span class="nav-icon">◈</span>Monitoramento IA</button>
    <button class="nav-btn" data-master-tab="health" type="button"><span class="nav-icon">◉</span>Saúde & Logs</button>
    <button class="nav-btn" data-master-tab="integrations" type="button"><span class="nav-icon">◈</span>Integrações</button>
    <button class="nav-btn" data-master-tab="personalization" type="button"><span class="nav-icon">◉</span>Personalização</button>
@@ -97,7 +96,6 @@ $initialTab=$routes[$routeKey]??'overview';
    <section id="master-whatsapp" class="master-view hidden" aria-label="WhatsApp da plataforma"></section>
    <section id="master-personalization" class="master-view hidden" aria-label="Personalização"></section>
    <section id="master-banner" class="master-view hidden" aria-label="Banner Hero"></section>
-   <section id="master-ai" class="master-view hidden" aria-label="Monitoramento de IA"></section>
    <section id="master-health" class="master-view hidden" aria-label="Saúde e logs da plataforma"></section>
   </div>
  </main>

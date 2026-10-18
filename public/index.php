@@ -32,7 +32,7 @@ $realtimeJsVersion=is_file(ROOT.'/public/assets/realtime-client.js')?filemtime(R
 <body data-base-path="<?=e($basePath)?>">
   <div id="toast" class="toast"></div><div id="page-loader" class="page-loader hidden" aria-live="polite"><div class="page-loader-card"><span class="loader-ring"></span><b>Carregando</b></div></div>
   <section id="login" class="login-screen hidden">
-    <div class="login-card"><img class="brand-logo brand-logo-login" id="login-logo" src="<?=e($brandLogo)?>" alt="Logo do sistema"><h1 id="login-brand-name"><?=e($brandName)?></h1><p>Jobs, tarefas, arquivos e agendas em um só fluxo.</p>
+    <div class="login-card"><img class="brand-logo brand-logo-login" id="login-logo" src="<?=e($brandLogo)?>" alt="Logo do sistema"><h1 id="login-brand-name"><?=e($brandName)?></h1><p>Jobs, tarefas, arquivos e automações em um só fluxo.</p>
       <form id="login-form"><label>E-mail<input class="input login-input" type="email" name="email" autocomplete="username" required></label><label>Senha<input class="input login-input" type="password" name="password" autocomplete="current-password" required></label><button class="primary full">Entrar</button><div id="login-error" class="form-error"></div></form>
       <form id="twofa-form" class="hidden"><div class="login-twofa-copy"><b>Verificação em duas etapas</b><span>Digite o código de 6 dígitos do seu autenticador ou um código de recuperação.</span></div><label>Código<input class="input login-input" name="code" inputmode="numeric" autocomplete="one-time-code" required></label><button class="primary full">Verificar</button><button type="button" class="ghost full" id="twofa-back">Voltar</button><div id="twofa-error" class="form-error"></div></form>
     </div>

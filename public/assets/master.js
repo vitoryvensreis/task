@@ -33,11 +33,11 @@
   show('#master-shell',true);show('#master-panel',true);
   const workspaces=$('#master-workspaces'),admins=$('#master-administrators'),planPanel=$('#master-plans'),dashboard=$('#master-dashboard'),settings=$('#master-settings'),support=$('#master-support'),shell=$('#master-shell');
   const tabs=[...document.querySelectorAll('[data-master-tab]')];
-  const tabRoutes={overview:'master',clients:'master/clientes',plans:'master/planos',ai:'master/monitoramento-ia',health:'master/saude-logs',settings:'master/configuracoes',integrations:'master/integracoes',whatsapp:'master/whatsapp',personalization:'master/personalizacao',banner:'master/banner-hero'};
+  const tabRoutes={overview:'master',clients:'master/clientes',plans:'master/planos',health:'master/saude-logs',settings:'master/configuracoes',integrations:'master/integracoes',whatsapp:'master/whatsapp',personalization:'master/personalizacao',banner:'master/banner-hero'};
   const currentTab=()=>{const path=location.pathname.replace(/\/+$/,'');if(path.endsWith('/master/workspaces'))return 'clients';if(path.endsWith('/master/suporte'))return 'overview';return Object.entries(tabRoutes).find(([,p])=>path.endsWith('/'+p))?.[0]||document.body.dataset.initialTab||'overview'};
 
   if(location.pathname.endsWith('/master.php'))history.replaceState(null,'',base+'/master'+location.search+location.hash);
-  const clear=()=>{dashboard.replaceChildren();workspaces.replaceChildren();admins.replaceChildren();planPanel.replaceChildren();settings.replaceChildren();$('#master-ai').replaceChildren();$('#master-health').replaceChildren();message('#master-panel-message','')};
+  const clear=()=>{dashboard.replaceChildren();workspaces.replaceChildren();admins.replaceChildren();planPanel.replaceChildren();settings.replaceChildren();$('#master-health').replaceChildren();message('#master-panel-message','')};
   function supportCard(w){
    const wrap=el('article','','master-mini');
    wrap.append(el('h3',w.name),el('p',w.slug+' · '+w.status));
@@ -141,16 +141,16 @@
    if(navigate&&tabRoutes[tab]&&!location.pathname.replace(/\/+$/,'').endsWith('/'+tabRoutes[tab]))
     history.pushState({masterTab:tab},'',base+'/'+tabRoutes[tab]);
    clear();tabs.forEach(b=>{const active=b.dataset.masterTab===tab;b.classList.toggle('active',active);if(b.classList.contains('nav-btn')){b.setAttribute('aria-current',active?'page':'false')}});shell.classList.remove('menu-open');
-   show('#master-dashboard',tab==='overview');show('#master-integrations',tab==='integrations');show('#master-whatsapp',tab==='whatsapp');show('#master-personalization',tab==='personalization');show('#master-banner',tab==='banner');show('#master-ai',tab==='ai');show('#master-health',tab==='health');show('#master-workspaces',tab==='workspaces');show('#master-administrators',tab==='clients');show('#master-plans',tab==='plans');show('#master-settings',tab==='settings');show('#master-support',tab==='support');
+   show('#master-dashboard',tab==='overview');show('#master-integrations',tab==='integrations');show('#master-whatsapp',tab==='whatsapp');show('#master-personalization',tab==='personalization');show('#master-banner',tab==='banner');show('#master-health',tab==='health');show('#master-workspaces',tab==='workspaces');show('#master-administrators',tab==='clients');show('#master-plans',tab==='plans');show('#master-settings',tab==='settings');show('#master-support',tab==='support');
 
-   $('#master-panel-title').textContent=({overview:'Dashboard',clients:'Clientes',plans:'Planos de acesso',settings:'Configurações da conta',integrations:'Integrações',whatsapp:'WhatsApp',personalization:'Personalização',banner:'Banner Hero',ai:'Monitoramento IA',health:'Saúde & Logs'})[tab];
-   $('#master-page-kicker').textContent=({overview:'VISÃO GERAL · PLATAFORMA',clients:'GESTÃO DE CLIENTES',plans:'ASSINATURAS · PLANOS',settings:'SEGURANÇA · PERFIL MASTER',integrations:'PLATAFORMA · SERVIÇOS',whatsapp:'SESSÃO ÚNICA · ADM MASTER',personalization:'APARÊNCIA · IDENTIDADE VISUAL',banner:'PERSONALIZAÇÃO · EM BREVE',ai:'PLATAFORMA · INTELIGÊNCIA',health:'PLATAFORMA · DIAGNÓSTICO'})[tab];
+   $('#master-panel-title').textContent=({overview:'Dashboard',clients:'Clientes',plans:'Planos de acesso',settings:'Configurações da conta',integrations:'Integrações',whatsapp:'WhatsApp',personalization:'Personalização',banner:'Banner Hero',health:'Saúde & Logs'})[tab];
+   $('#master-page-kicker').textContent=({overview:'VISÃO GERAL · PLATAFORMA',clients:'GESTÃO DE CLIENTES',plans:'ASSINATURAS · PLANOS',settings:'SEGURANÇA · PERFIL MASTER',integrations:'PLATAFORMA · SERVIÇOS',whatsapp:'SESSÃO ÚNICA · ADM MASTER',personalization:'APARÊNCIA · IDENTIDADE VISUAL',banner:'PERSONALIZAÇÃO · EM BREVE',health:'PLATAFORMA · DIAGNÓSTICO'})[tab];
    if(tab==='settings'){await window.MasterConsole.account(settings,csrf,base);return;}
    if(tab==='integrations'){await window.TaskEscMasterSettings.render($('#master-integrations'),csrf,base,'integrations');return;}
    if(tab==='whatsapp'){await window.TaskEscMasterSettings.render($('#master-whatsapp'),csrf,base,'whatsapp');return;}
    if(tab==='personalization'){await window.TaskEscMasterSettings.render($('#master-personalization'),csrf,base,'personalization');return;}
    if(tab==='banner'){window.MasterConsole.banner($('#master-banner'));return;}
-   if(tab==='ai'){await window.TaskEscMasterOperations.ai($('#master-ai'),csrf,base);return;}
+
    if(tab==='health'){await window.TaskEscMasterOperations.health($('#master-health'),csrf,base);return;}
    if(tab==='overview'){await renderMasterDashboard();return;}
    if(tab==='plans'){await window.MasterConsole.plans(planPanel,csrf,base);return;}

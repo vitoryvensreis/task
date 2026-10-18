@@ -16,7 +16,7 @@ try {
  if($action==='auth.2fa'){installed();out(Auth::twoFactorVerify($p));}
  if($action==='auth.logout'){session_start();$_SESSION=[];if(ini_get('session.use_cookies')){$params=session_get_cookie_params();setcookie(session_name(),'',['expires'=>time()-42000,'path'=>$params['path'],'domain'=>$params['domain'],'secure'=>$params['secure'],'httponly'=>$params['httponly'],'samesite'=>$params['samesite']??'Lax']);}session_destroy();out(['logged_out'=>true]);}
  installed();
- if(in_array($action,['master.support_unread','master.support_seen','master.wpp_status','master.wpp_start','master.wpp_qr','master.wpp_test','master.wpp_close','master.wpp_disconnect','master.customers','master.workspace_members','master.workspace_profile_save','master.workspace_limit_save','master.admin_access','master.audit','master.account','master.profile_save','master.password_save','master.twofa_setup','master.twofa_enable','master.twofa_disable','master.invite_additional','master.asaas','master.asaas_save','master.ai_usage','master.ai_policy','master.ai_policy_save','master.health','master.logs','master.error_resolve','master.settings','master.settings_save','master.brand_upload','master.workspaces','master.dashboard','master.administrators','master.reset_2fa','master.plans','master.plan_save','master.plan_assign','master.start','master.stop','master.invite'],true)){
+ if(in_array($action,['master.support_unread','master.support_seen','master.wpp_status','master.wpp_start','master.wpp_qr','master.wpp_test','master.wpp_close','master.wpp_disconnect','master.customers','master.workspace_members','master.workspace_profile_save','master.workspace_limit_save','master.admin_access','master.audit','master.account','master.profile_save','master.password_save','master.twofa_setup','master.twofa_enable','master.twofa_disable','master.invite_additional','master.asaas','master.asaas_save','master.health','master.logs','master.error_resolve','master.settings','master.settings_save','master.brand_upload','master.workspaces','master.dashboard','master.administrators','master.reset_2fa','master.plans','master.plan_save','master.plan_assign','master.start','master.stop','master.invite'],true)){
   if(($_SERVER['REQUEST_METHOD']??'GET')!=='GET')checkCsrf();
   Auth::load();
   if(in_array($action,['master.wpp_status','master.wpp_start','master.wpp_qr','master.wpp_test','master.wpp_close','master.wpp_disconnect'],true)){
@@ -59,24 +59,8 @@ try {
   if($action==='master.invite_additional'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST')out(MasterAccount::invite($p));
   if($action==='master.asaas'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET')out(PlatformAsaasCredentials::get());
   if($action==='master.asaas_save'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST')out(PlatformAsaasCredentials::save($p));
-  if(in_array($action,['master.ai_usage','master.ai_policy','master.ai_policy_save','master.health','master.logs','master.error_resolve'],true)){
-   if(!MasterSupport::isActor()||Auth::$origin!=='web')fail('Somente o ADM Master pode acessar o monitoramento.',403);
-   if($action==='master.ai_usage'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET'){
-    $days=integer($p['days']??7,1,30);if(!in_array($days,[1,7,14,30],true))fail('Período inválido.',422);
-    $provider=enumv($p['provider']??'all',['all','gemini','groq'],'provedor');
-    out(AiWhatsAppUsageDashboard::aggregate($days,$provider));
-   }
-   if($action==='master.ai_policy'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET'){
-    $policy=AiWhatsAppUsagePolicy::current();$counts=AiWhatsAppUsagePolicy::reservedToday();
-    out(['policy'=>$policy,'today_utc'=>gmdate('Y-m-d'),'usage_today'=>$counts,
-      'alerts'=>AiWhatsAppUsagePolicy::alertFlags($policy,$counts)]);
-   }
-   if($action==='master.ai_policy_save'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST'){
-    try{$policy=AiWhatsAppUsagePolicy::validate($p);}catch(InvalidArgumentException){fail('Política de IA inválida.',422);}
-    DB::run('INSERT INTO settings (`key`,value) VALUES (?,?) ON DUPLICATE KEY UPDATE value=VALUES(value)',['ai_usage_policy_v1',json($policy)]);
-    audit('platform',0,'master.ai_usage_policy.save',null,['fields'=>array_keys($policy)]);
-    out(['saved'=>true,'policy'=>$policy]);
-   }
+  if(in_array($action,['master.health','master.logs','master.error_resolve'],true)){
+   if(!MasterSupport::isActor()||Auth::$origin!=='web')fail('ADM Master obrigatório.',403);
    if($action==='master.health'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET')out(SystemHealth::health());
    if($action==='master.logs'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET')out(SystemHealth::logs($p));
    if($action==='master.error_resolve'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST')out(SystemHealth::resolve($p));
@@ -140,7 +124,7 @@ try {
  if($action==='preview.stop'){checkCsrf();out(Auth::previewStop());}
  if(($_SERVER['REQUEST_METHOD']??'GET')!=='GET'&&Auth::$origin!=='api'){checkCsrf();Auth::guardPreviewWrite();}
  WorkspaceRoles::requireForAction($action,$p);
- if(in_array($action,['ai.usage_dashboard','ai.usage_policy','ai.usage_policy_save','system.health','system.logs','system.error_resolve'],true))fail('Disponível somente no ADM Master.',403);
+ if(in_array($action,['system.health','system.logs','system.error_resolve'],true))fail('Disponível somente no ADM Master.',403);
  if(str_starts_with($action,'wpp.')||str_starts_with($action,'tokens.'))MasterSupport::requirePlatformSettings();
  if(str_starts_with($action,'demands.')||str_starts_with($action,'services.')||str_starts_with($action,'templates.'))PlatformPlans::requireModule('tasks');
  if(str_starts_with($action,'automation.'))PlatformPlans::requireModule('automations');
@@ -157,20 +141,12 @@ try {
   'push.subscribe'=>Push::subscribe($p),
   'push.unsubscribe'=>Push::unsubscribe($p),
   'push.test'=>Push::test(),
-  'wpp.status'=>WppConnect::status(),
-  'wpp.groups'=>WppConnect::groups(),
-  'wpp.start'=>WppConnect::start(),
-  'wpp.qr'=>WppConnect::qr(),
-  'wpp.send_test'=>WppConnect::sendTest($p),
   'automation.catalog'=>Automation::catalog(),
   'automation.list'=>Automation::list($p),
   'automation.get'=>Automation::get($p),
   'automation.save'=>Automation::save($p),
   'automation.toggle'=>Automation::toggle($p),
   'automation.runs'=>Automation::runs($p),
-  'ai.usage_dashboard'=>AiWhatsAppUsageDashboard::read($p),
-  'ai.usage_policy'=>AiWhatsAppUsagePolicy::read(),
-  'ai.usage_policy_save'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?AiWhatsAppUsagePolicy::save($p):fail('Método não permitido.',405),
   'system.health'=>SystemHealth::health(),
   'system.logs'=>SystemHealth::logs($p),
   'system.error_resolve'=>SystemHealth::resolve($p),
@@ -254,18 +230,10 @@ try {
   'files.upload_status'=>Files::uploadStatus($p),
   'files.delete'=>Files::delete($p),
   'files.review'=>Files::review($p),
-  'agenda.list'=>Agenda::list($p),
-  'agenda.detail'=>Agenda::detail($p),
-  'agenda.calendars'=>Agenda::calendars(),
-  'agenda.save'=>Agenda::save($p),
-  'agenda.cancel'=>Agenda::cancel($p),
-  'agenda.resolve'=>Agenda::resolve($p),
-  'agenda.calendar_select'=>Agenda::calendarSelect($p),
   'company.drive_default'=>Google::companyDefaultDrive(($_SERVER['REQUEST_METHOD']??'GET')==='GET'?null:$p),
   'google.accounts'=>Google::accounts(),
   'google.connect'=>Google::connect($p),
   'google.disconnect'=>Google::disconnect($p),
-  'google.sync'=>MasterSupport::requireCalendar()?:Google::sync(!empty($p['calendar_id'])?(int)$p['calendar_id']:null),
   'notifications'=>Auth::isPreview()?[]:DB::all('SELECT * FROM notifications WHERE user_id=? ORDER BY id DESC LIMIT 50',[Auth::$user['id']]),
   'notifications.seen'=>DB::run('UPDATE notifications SET seen=1 WHERE user_id=?',[Auth::$user['id']])&&['saved'=>true],
   default=>fail('Ação não encontrada.',404),

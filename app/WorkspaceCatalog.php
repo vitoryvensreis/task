@@ -34,6 +34,11 @@ final class WorkspaceCatalog {
  public static function validateDrive(int $id): void {
   if($id<=0)return;
   if(WorkspaceContext::legacyCiFixture())return;
-  self::requireRecord('google_accounts',$id);
+  $account=self::requireRecord('google_accounts',$id);
+  // Company administrators may only select accounts connected by
+  // themselves; support Master uses the effective workspace owner.
+  if((Auth::$user['role']??'')==='admin' &&
+     (int)$account['user_id']!==(int)(Auth::$user['id']??0))
+   fail('Somente contas Google conectadas por você podem ser usadas.',403);
  }
 }

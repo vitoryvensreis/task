@@ -16,9 +16,16 @@ try {
  if($action==='auth.2fa'){installed();out(Auth::twoFactorVerify($p));}
  if($action==='auth.logout'){session_start();$_SESSION=[];if(ini_get('session.use_cookies')){$params=session_get_cookie_params();setcookie(session_name(),'',['expires'=>time()-42000,'path'=>$params['path'],'domain'=>$params['domain'],'secure'=>$params['secure'],'httponly'=>$params['httponly'],'samesite'=>$params['samesite']??'Lax']);}session_destroy();out(['logged_out'=>true]);}
  installed();
- if(in_array($action,['master.workspaces','master.dashboard','master.administrators','master.reset_2fa','master.plans','master.plan_save','master.plan_assign','master.start','master.stop','master.invite'],true)){
+ if(in_array($action,['master.settings','master.settings_save','master.brand_upload','master.workspaces','master.dashboard','master.administrators','master.reset_2fa','master.plans','master.plan_save','master.plan_assign','master.start','master.stop','master.invite'],true)){
   if(($_SERVER['REQUEST_METHOD']??'GET')!=='GET')checkCsrf();
   Auth::load();
+  if($action==='master.settings'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET')out(PlatformSettings::get());
+  if($action==='master.settings_save'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST'){
+   $section=(string)($p['section']??'');
+   out($section==='branding'?PlatformSettings::saveBrand($p):PlatformSettings::saveIntegration($p));
+  }
+  if($action==='master.brand_upload'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST')
+   out(PlatformSettings::uploadBranding($_FILES['logo']??null,$_FILES));
   if($action==='master.workspaces'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET')out(MasterSupport::workspaceList());
   if($action==='master.dashboard'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET')out(MasterSupport::dashboard());
   if($action==='master.administrators'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET')out(MasterSupport::administrators());

@@ -55,7 +55,7 @@
    info.append(el('span','ts-thread-preview',t.last_body||'Clique para iniciar uma conversa'));
    if(isMaster())info.append(el('small','ts-workspace-label',t.workspace_name));
    item.append(icon,info);
-   item.onclick=()=>{selected=t;lastSeenMessage=0;paintThreads();paintHeading();loadMessages().catch(e=>feedback(e.message,true));};
+   item.onclick=()=>{selected=t;lastSeenMessage=0;root.classList.add('ts-conversation-active');paintThreads();paintHeading();loadMessages().catch(e=>feedback(e.message,true));};
    list.append(item);
   }
  }
@@ -122,6 +122,7 @@
  function openPanel(){
   if(!root||!user){requestedOpen=true;return}
   requestedOpen=false;opened=true;root.hidden=false;
+  root.classList.remove('ts-conversation-active');
   fab.hidden=true;
   $('.ts-search',root).value='';
   updateConnection();startPolling();
@@ -131,7 +132,8 @@
   }
  }
  function closePanel(){
-  opened=false;if(root)root.hidden=true;if(fab&&user)fab.hidden=false;
+  opened=false;if(root){root.hidden=true;root.classList.remove('ts-conversation-active')}if(fab&&user&&!isMaster())fab.hidden=false;
+  if(isMaster())window.dispatchEvent(new Event('taskesc:close-support'));
   if(polling)clearInterval(polling);polling=null;
   if(document.body.dataset.masterPage==='1'&&/\/master\/suporte\/?$/.test(location.pathname)){
    history.replaceState(null,'',base+'/master');
@@ -187,6 +189,7 @@
   const search=el('input','ts-search');search.type='search';search.placeholder='Buscar por nome ou e-mail';search.setAttribute('aria-label','Buscar administrador');
   search.oninput=paintThreads;left.append(search,el('div','ts-threads'));
   const peer=el('header','ts-peer-head'),avatar=el('div','ts-peer-avatar','?'),peerNames=el('div','ts-peer-names');
+  const back=el('button','ts-mobile-back','←');back.type='button';back.setAttribute('aria-label','Voltar às conversas');back.onclick=()=>{root.classList.remove('ts-conversation-active');$('.ts-search',root)?.focus()};peer.append(back);
   peerNames.append(el('strong','ts-peer','Selecione um atendimento'),el('small','ts-peer-sub'));peer.append(avatar,peerNames);right.append(peer);
   const messages=el('div','ts-messages');messages.setAttribute('role','log');messages.setAttribute('aria-live','polite');right.append(messages);
   const composer=el('form','ts-composer');composer.hidden=true;
@@ -231,7 +234,9 @@
    finally{sending=false;send.disabled=false}
   };
   fab.onclick=openPanel;
-  document.body.append(fab,root);
+  if(isMaster()&&$('#master-support')){
+   root.classList.add('ts-inline');$('#master-support').append(root);document.body.append(fab);fab.hidden=true;
+  }else document.body.append(fab,root);
  }
  function handleRealtime(event){
   const p=event?.detail;
@@ -276,13 +281,18 @@
    }
    user=auth.user;csrf=auth.csrf;
    if(!root)createWidget();
-   fab.hidden=opened;
+   fab.hidden=isMaster()||opened;
    if(user.role==='master')masterSocket().catch(()=>{});
    if(requestedOpen||location.search.includes('suporte=1')||/\/master\/suporte\/?$/.test(location.pathname))openPanel();
   }catch{user=null;closePanel();if(fab)fab.hidden=true}
  }
  window.addEventListener('taskesc:realtime-publication',handleRealtime);
  window.addEventListener('taskesc:open-support',()=>{requestedOpen=true;openPanel()});
+ window.addEventListener('taskesc:leave-support',()=>{
+  if(!isMaster()||!root)return;
+  opened=false;root.hidden=true;root.classList.remove('ts-conversation-active');
+  if(polling)clearInterval(polling);polling=null;
+ });
  window.addEventListener('online',()=>{if(opened)sync().catch(()=>{})});
  document.addEventListener('visibilitychange',()=>{if(opened&&!document.hidden)sync().catch(()=>{})});
  document.addEventListener('taskesc:login',initialize);

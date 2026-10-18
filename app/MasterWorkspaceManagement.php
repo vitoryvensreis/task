@@ -117,9 +117,16 @@ final class MasterWorkspaceManagement {
      WHERE wm.workspace_id=? AND wm.user_id=? FOR UPDATE",[$workspaceId,$userId]);
    if(!$member||$member['role']!=='admin'||$member['user_role']!=='admin')
     fail('Este usuário não é administrador adicional deste workspace.',404);
-   if($active&&WorkspaceTenantMode::enabled()&&
-     !DB::one('SELECT 1 FROM workspace_members WHERE workspace_id=? AND user_id=?',
-       [$workspaceId,$userId]))fail('Vínculo não encontrado.',404);
+   // A reserved future owner cannot be disabled while provisioning is pending.
+   if(DB::one("SELECT 1 FROM INFORMATION_SCHEMA.TABLES
+      WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='platform_tenant_provisioning'")&&
+      DB::one("SELECT 1 FROM platform_tenant_provisioning
+      WHERE prospective_owner_id=? AND status='pending'",[$userId]))
+    fail('Administrador reservado para um novo workspace em preparação.',409);
+   if(DB::one("SELECT 1 FROM platform_master_identities
+      WHERE user_id=? AND status='verified'",[$userId]))
+    fail('Identidade Master não pode ser modificada como administrador da empresa.',403);
+   if($active)PlatformPlans::enforceTeamLimit($workspaceId,$userId,'admin',true);
    DB::run('UPDATE users SET active=? WHERE id=?',[$active?1:0,$userId]);
    DB::run('UPDATE workspace_members SET status=? WHERE user_id=? AND workspace_id=?',
      [$active?'active':'inactive',$userId,$workspaceId]);

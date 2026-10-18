@@ -20,6 +20,27 @@ final class WorkspaceRoles {
 
  public static function catalog(): array {return self::ALLOWED;}
 
+ /** Defense-in-depth for legacy endpoints that check staff role but not every ability. */
+ public static function requireForAction(string $action): void {
+  Auth::load();
+  if((Auth::$user['role']??'')!=='staff')return;
+  $map=[
+   'dashboard'=>'dashboard.view',
+   'demands.list'=>'tasks.read','demands.get'=>'tasks.read',
+   'demands.save'=>'tasks.edit','demands.stage'=>'tasks.move',
+   'demands.reorder'=>'tasks.move','demands.bulk'=>'tasks.edit',
+   'demands.delete'=>'tasks.delete','demands.comment'=>'tasks.comment',
+   'demands.checklist'=>'tasks.edit','demands.time'=>'tasks.edit',
+   'demands.change'=>'tasks.edit','demands.quote'=>'tasks.edit',
+   'files.add'=>'tasks.files','files.upload_start'=>'tasks.files',
+   'files.upload_status'=>'tasks.files','files.delete'=>'tasks.files',
+   'files.review'=>'tasks.files',
+   'report'=>'reports.read','report.csv'=>'reports.read'
+  ];
+  if(isset($map[$action]))Auth::requireAbility($map[$action]);
+ }
+
+
  private static function checkAdmin(): void {
   Auth::load();Auth::admin();
   if(Auth::isPreview())fail('Funções não podem ser editadas durante visualização do cliente.',403);

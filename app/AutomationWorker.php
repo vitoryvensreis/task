@@ -8,8 +8,29 @@ final class AutomationWorker
     public const MAX_ATTEMPTS=4;
     private static int $lastScheduleScanAt=0;
 
+    private static function workspaceId(): int {
+        if(WorkspaceContext::legacyCiFixture())return 0;
+        $ws=DB::one('SELECT id FROM workspaces WHERE slug=? AND status=?',
+            [WorkspaceFoundation::SLUG,WorkspaceFoundation::STATUS]);
+        if(!$ws||(int)(DB::one('SELECT COUNT(*) n FROM workspaces')['n']??0)!==1)
+            throw new RuntimeException('Automation worker only supports the staged single workspace.');
+        return (int)$ws['id'];
+    }
+    private static function ws(string $alias=''): string {
+        if(WorkspaceContext::legacyCiFixture())return '';
+        return ' AND '.($alias!==''?$alias.'.':'').'workspace_id='.(int)self::workspaceId();
+    }
+    private static function entityWorkspace(string $type,int $id): void {
+        if(WorkspaceContext::legacyCiFixture())return;
+        $table=['demand'=>'demands','client'=>'clients','invoice'=>'invoices'][$type]??null;
+        if($table===null)throw new RuntimeException('Unsupported automation entity.');
+        if(!DB::one('SELECT id FROM `'.$table.'` WHERE id=?'.self::ws(),[$id]))
+            throw new RuntimeException('Cross-workspace automation entity blocked.');
+    }
+
     public static function tick(int $eventBatch=100,int $runBatch=20): array
     {
+        self::workspaceId();
         self::recoverStale();
         $ingested=self::ingestOutbox(max(1,min(500,$eventBatch)));
         $scheduled=self::scheduleDueTriggers();
@@ -28,7 +49,7 @@ final class AutomationWorker
                 return 0;
             }
             $last=(int)$state['last_outbox_id'];
-            $rows=DB::all('SELECT id,event_hash,event_type,entity_type,entity_id,payload_json,created_at FROM event_outbox WHERE id>? ORDER BY id LIMIT '.(int)$limit,[$last]);
+            $rows=DB::all('SELECT id,event_hash,event_type,entity_type,entity_id,payload_json,created_at FROM event_outbox WHERE id>?'.self::ws().' ORDER BY id LIMIT '.(int)$limit,[$last]);
             if(!$rows){DB::update('automation_worker_state',1,['heartbeat_at'=>now(),'updated_at'=>now()]);return 0;}
             $supported=array_flip(Automation::triggerEvents());$automations=[];$created=0;$maxId=$last;
             foreach($rows as $event){
@@ -42,7 +63,7 @@ final class AutomationWorker
                 if(!is_array($payload)||!empty($payload['automation_generated']))continue;
                 $operationId=strtolower((string)($payload['operation_id']??''));
                 if(!preg_match('/\A[a-f0-9]{32}\z/D',$operationId))$operationId=substr(hash('sha256',(string)$event['event_hash'].'|'.$type.'|'.$event['entity_id']),0,32);
-                if(!array_key_exists($type,$automations))$automations[$type]=DB::all('SELECT id FROM automations WHERE active=1 AND trigger_event=? ORDER BY id',[$type]);
+                if(!array_key_exists($type,$automations))$automations[$type]=DB::all('SELECT id FROM automations WHERE active=1 AND trigger_event=?'.self::ws().' ORDER BY id',[$type]);
                 if(!$automations[$type])continue;
                 $context=[
                     'event'=>[
@@ -75,7 +96,7 @@ final class AutomationWorker
         $scheduled=Automation::scheduledTriggerEvents();
         if(!$scheduled)return 0;
         $marks=implode(',',array_fill(0,count($scheduled),'?'));
-        $automations=DB::all("SELECT id,trigger_event,definition_json FROM automations WHERE active=1 AND trigger_event IN ($marks) ORDER BY id",$scheduled);
+        $automations=DB::all("SELECT id,trigger_event,definition_json FROM automations WHERE active=1 AND trigger_event IN ($marks)".self::ws()." ORDER BY id",$scheduled);
         if(!$automations)return 0;
         $created=0;$utcNow=now();$localTz=new DateTimeZone((string)config('timezone','America/Fortaleza'));
         $localToday=(new DateTimeImmutable('now',$localTz))->format('Y-m-d');
@@ -128,7 +149,7 @@ final class AutomationWorker
 
     public static function executeReady(int $limit=20): int
     {
-        $rows=DB::all("SELECT id FROM automation_runs WHERE status IN ('pending','retry') AND available_at<=? AND attempts<? ORDER BY available_at,id LIMIT ".(int)$limit,[now(),self::MAX_ATTEMPTS]);
+        $rows=DB::all("SELECT id FROM automation_runs WHERE status IN ('pending','retry') AND available_at<=? AND attempts<?".self::ws()." ORDER BY available_at,id LIMIT ".(int)$limit,[now(),self::MAX_ATTEMPTS]);
         $done=0;foreach($rows as $row){self::executeRun((int)$row['id']);$done++;}
         return $done;
     }
@@ -136,7 +157,7 @@ final class AutomationWorker
     public static function executeRun(int $runId): void
     {
         $claimed=DB::tx(function() use($runId): ?array {
-            $run=DB::one("SELECT r.*,a.active,a.definition_json,a.trigger_event automation_trigger,a.created_by automation_owner FROM automation_runs r JOIN automations a ON a.id=r.automation_id WHERE r.id=? FOR UPDATE",[$runId]);
+            $run=DB::one("SELECT r.*,a.active,a.definition_json,a.trigger_event automation_trigger,a.created_by automation_owner FROM automation_runs r JOIN automations a ON a.id=r.automation_id".(WorkspaceContext::legacyCiFixture()?'':' AND a.workspace_id=r.workspace_id')." WHERE r.id=?".self::ws('r')." FOR UPDATE",[$runId]);
             if(!$run||!in_array($run['status'],['pending','retry'],true))return null;
             if(!(int)$run['active']){
                 DB::update('automation_runs',$runId,['status'=>'skipped','finished_at'=>now(),'last_error'=>'automation_inactive']);
@@ -147,6 +168,7 @@ final class AutomationWorker
             $run['attempts']=$attempts;$run['status']='running';return $run;
         });
         if(!$claimed)return;
+        self::entityWorkspace((string)$claimed['entity_type'],(int)$claimed['entity_id']);
         try{
             $definition=json_decode((string)$claimed['definition_json'],true,64,JSON_THROW_ON_ERROR);
             $definition=Automation::validateDefinition(is_array($definition)?$definition:[],(string)$claimed['automation_trigger']);

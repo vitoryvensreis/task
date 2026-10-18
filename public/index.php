@@ -28,7 +28,7 @@ $realtimeJsVersion=is_file(ROOT.'/public/assets/realtime-client.js')?filemtime(R
   <link rel="stylesheet" href="<?=e($basePath)?>/assets/ui-fixes.css?v=3.25.0">
   <link rel="stylesheet" href="<?=e($basePath)?>/assets/ux-v3.css?v=3.18.0">
   <script src="<?=e($basePath)?>/assets/taskesc-icons.js?v=3.4.0" defer></script>
-</head>
+<link rel="stylesheet" href="<?=e($basePath)?>/assets/support-chat.css?v=1"></head>
 <body data-base-path="<?=e($basePath)?>">
   <div id="toast" class="toast"></div><div id="page-loader" class="page-loader hidden" aria-live="polite"><div class="page-loader-card"><span class="loader-ring"></span><b>Carregando</b></div></div>
   <section id="login" class="login-screen hidden">
@@ -53,5 +53,5 @@ $realtimeJsVersion=is_file(ROOT.'/public/assets/realtime-client.js')?filemtime(R
   <script src="<?=e($basePath)?>/assets/realtime-client.js?v=<?=e((string)$realtimeJsVersion)?>" defer></script>
   <script src="<?=e($basePath)?>/assets/app.js?v=<?=e((string)$appJsVersion)?>" defer></script>
   <script src="<?=e($basePath)?>/assets/ux-v3.js?v=3.18.0" defer></script>
-</body>
+<script src="<?=e($basePath)?>/assets/support-chat.js?v=1" defer></script></body>
 </html>

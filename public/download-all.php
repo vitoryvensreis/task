@@ -11,7 +11,7 @@ function zipEntryName(string $name,array &$used): string {
 try{
  installed();Auth::load();$demandId=integer($_GET['demand_id']??0,1);$d=Auth::demand($demandId);
  if(!class_exists('ZipArchive'))fail('O servidor precisa da extensão ZIP do PHP para baixar tudo de uma vez.',500);
- $params=[$demandId];$sql="SELECT * FROM files WHERE demand_id=? AND kind<>'final'";if(Auth::$user['role']==='client')$sql.=' AND shared=1';$sql.=' ORDER BY id';
+ $params=[$demandId];$sql="SELECT * FROM files WHERE demand_id=? AND kind<>'final'";if(!WorkspaceContext::legacyCiFixture()){$sql.=' AND workspace_id=?';$params[]=Auth::workspaceId();}if(Auth::$user['role']==='client')$sql.=' AND shared=1';$sql.=' ORDER BY id';
  $files=DB::all($sql,$params);if(!$files)fail('Não há arquivos do job para baixar.',404);
  $tmpBase=tempnam(sys_get_temp_dir(),'taskesc_zip_');if($tmpBase===false)fail('Não foi possível preparar o download.',500);@unlink($tmpBase);$zipPath=$tmpBase.'.zip';
  $zip=new ZipArchive();if($zip->open($zipPath,ZipArchive::CREATE|ZipArchive::OVERWRITE)!==true)fail('Não foi possível criar o arquivo ZIP.',500);

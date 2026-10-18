@@ -24,6 +24,11 @@ final class TaskEscFinanceReadApi
         return [$from,$to,$today->format('Y-m-d')];
     }
 
+    private static function ws(string $alias=''): string {
+        if(WorkspaceContext::legacyCiFixture())return '';
+        return ' AND '.($alias!==''?$alias.'.':'').'workspace_id='.(int)Auth::workspaceId();
+    }
+
     private static function total(string $sql,array $args=[]): int {
         return (int)(DB::one($sql,$args)['value_cents']??0);
     }
@@ -33,14 +38,14 @@ final class TaskEscFinanceReadApi
         self::authorize();
         foreach(array_keys($args) as $key)if(!in_array($key,['from','to'],true))fail('Filtro financeiro não permitido.',422);
         [$from,$to,$today]=self::period($args);
-        $billed=self::total("SELECT COALESCE(SUM(amount_cents),0) value_cents FROM invoices WHERE status<>'cancelled' AND deleted_at IS NULL AND due_on BETWEEN ? AND ?",[$from,$to]);
-        $received=self::total("SELECT COALESCE(SUM(p.amount_cents),0) value_cents FROM payments p JOIN invoices i ON i.id=p.invoice_id WHERE i.status<>'cancelled' AND i.deleted_at IS NULL AND p.paid_on BETWEEN ? AND ?",[$from,$to]);
-        $open=self::total("SELECT COALESCE(SUM(GREATEST(0,i.amount_cents-(SELECT COALESCE(SUM(p.amount_cents+COALESCE(p.discount_cents,0)),0) FROM payments p WHERE p.invoice_id=i.id))),0) value_cents FROM invoices i WHERE i.status<>'cancelled' AND i.deleted_at IS NULL");
-        $overdue=self::total("SELECT COALESCE(SUM(GREATEST(0,i.amount_cents-(SELECT COALESCE(SUM(p.amount_cents+COALESCE(p.discount_cents,0)),0) FROM payments p WHERE p.invoice_id=i.id))),0) value_cents FROM invoices i WHERE i.status<>'cancelled' AND i.deleted_at IS NULL AND i.due_on<?",[$today]);
-        $expense=self::total("SELECT COALESCE(SUM(amount_cents),0) value_cents FROM expenses WHERE deleted_at IS NULL AND spent_on BETWEEN ? AND ?",[$from,$to])
-            +self::total("SELECT COALESCE(SUM(amount_cents),0) value_cents FROM costs WHERE spent_on BETWEEN ? AND ?",[$from,$to]);
-        $paidCosts=self::total("SELECT COALESCE(SUM(amount_cents),0) value_cents FROM expenses WHERE deleted_at IS NULL AND payment_status='paid' AND paid_on BETWEEN ? AND ?",[$from,$to])
-            +self::total("SELECT COALESCE(SUM(amount_cents),0) value_cents FROM costs WHERE payment_status='paid' AND paid_on BETWEEN ? AND ?",[$from,$to]);
+        $billed=self::total("SELECT COALESCE(SUM(amount_cents),0) value_cents FROM invoices WHERE 1=1".self::ws()." AND status<>'cancelled' AND deleted_at IS NULL AND due_on BETWEEN ? AND ?",[$from,$to]);
+        $received=self::total("SELECT COALESCE(SUM(p.amount_cents),0) value_cents FROM payments p JOIN invoices i ON i.id=p.invoice_id WHERE 1=1".self::ws('i')." AND i.status<>'cancelled' AND i.deleted_at IS NULL AND p.paid_on BETWEEN ? AND ?",[$from,$to]);
+        $open=self::total("SELECT COALESCE(SUM(GREATEST(0,i.amount_cents-(SELECT COALESCE(SUM(p.amount_cents+COALESCE(p.discount_cents,0)),0) FROM payments p WHERE p.invoice_id=i.id))),0) value_cents FROM invoices i WHERE 1=1".self::ws('i')." AND i.status<>'cancelled' AND i.deleted_at IS NULL");
+        $overdue=self::total("SELECT COALESCE(SUM(GREATEST(0,i.amount_cents-(SELECT COALESCE(SUM(p.amount_cents+COALESCE(p.discount_cents,0)),0) FROM payments p WHERE p.invoice_id=i.id))),0) value_cents FROM invoices i WHERE 1=1".self::ws('i')." AND i.status<>'cancelled' AND i.deleted_at IS NULL AND i.due_on<?",[$today]);
+        $expense=self::total("SELECT COALESCE(SUM(amount_cents),0) value_cents FROM expenses WHERE 1=1".self::ws()." AND deleted_at IS NULL AND spent_on BETWEEN ? AND ?",[$from,$to])
+            +self::total("SELECT COALESCE(SUM(amount_cents),0) value_cents FROM costs WHERE 1=1".self::ws()." AND spent_on BETWEEN ? AND ?",[$from,$to]);
+        $paidCosts=self::total("SELECT COALESCE(SUM(amount_cents),0) value_cents FROM expenses WHERE 1=1".self::ws()." AND deleted_at IS NULL AND payment_status='paid' AND paid_on BETWEEN ? AND ?",[$from,$to])
+            +self::total("SELECT COALESCE(SUM(amount_cents),0) value_cents FROM costs WHERE 1=1".self::ws()." AND payment_status='paid' AND paid_on BETWEEN ? AND ?",[$from,$to]);
         return ['kind'=>'finance_summary','from'=>$from,'to'=>$to,'billed_cents'=>$billed,'received_cents'=>$received,
             'open_all_cents'=>$open,'overdue_all_cents'=>$overdue,'expense_cents'=>$expense,
             'paid_expense_cents'=>$paidCosts,'profit_cents'=>$received-$paidCosts,'registered_only'=>true];
@@ -52,7 +57,7 @@ final class TaskEscFinanceReadApi
         $scope=enumv($args['scope']??'month',['month','all'],'período');
         if($scope==='all'&&(array_key_exists('from',$args)||array_key_exists('to',$args)))fail('Use período mensal ou todas as cobranças, não ambos.',422);
         [$from,$to,$today]=self::period($args);
-        $where="i.status<>'cancelled' AND i.deleted_at IS NULL";$params=[];
+        $where="i.status<>'cancelled' AND i.deleted_at IS NULL".self::ws('i');$params=[];
         if($scope==='month'){$where.=" AND i.due_on BETWEEN ? AND ?";$params=[$from,$to];}
         if(array_key_exists('client_id',$args)){
             $clientId=integer($args['client_id'],1);
@@ -83,10 +88,10 @@ final class TaskEscFinanceReadApi
         // Totals must never be computed from the first 10 displayed items.
         $base="FROM (
             SELECT e.spent_on entry_date,e.description,e.category,e.amount_cents,e.payment_status
-              FROM expenses e WHERE e.deleted_at IS NULL AND e.spent_on BETWEEN ? AND ?
+              FROM expenses e WHERE 1=1".self::ws('e')." AND e.deleted_at IS NULL AND e.spent_on BETWEEN ? AND ?
             UNION ALL
             SELECT c.spent_on entry_date,c.description,'Custos de task' category,c.amount_cents,c.payment_status
-              FROM costs c WHERE c.spent_on BETWEEN ? AND ?
+              FROM costs c WHERE 1=1".self::ws('c')." AND c.spent_on BETWEEN ? AND ?
           ) x";
         $params=[$from,$to,$from,$to];
         $stats=DB::one("SELECT

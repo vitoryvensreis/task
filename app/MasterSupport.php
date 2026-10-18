@@ -18,11 +18,12 @@ final class MasterSupport {
   return $w;
  }
  public static function isVerified(array $user): bool {
-  if(strtolower((string)($user['email']??''))!==WorkspaceFoundation::MASTER_EMAIL||
-     ($user['role']??'')!=='admin'||(int)($user['active']??0)!==1)return false;
+  if(($user['role']??'')!=='admin'||(int)($user['active']??0)!==1)return false;
+  $email=strtolower((string)($user['email']??''));
+  if($email===''||!filter_var($email,FILTER_VALIDATE_EMAIL))return false;
   return (bool)DB::one("SELECT 1 FROM platform_master_identities
     WHERE email=? AND user_id=? AND status='verified' LIMIT 1",
-    [WorkspaceFoundation::MASTER_EMAIL,(int)$user['id']]);
+    [$email,(int)$user['id']]);
  }
  public static function contextFor(array $user): array {
   if(!self::isVerified($user))fail('Identidade do ADM Master ainda não verificada.',403);
@@ -318,18 +319,18 @@ final class MasterSupport {
      FROM reset_tokens t JOIN users u ON u.id=t.user_id WHERE t.token_hash=? FOR UPDATE',
      [hash('sha256',$raw)]);
    if(!$token||$token['expires_at']<=now()||
-      strtolower((string)$token['email'])!==WorkspaceFoundation::MASTER_EMAIL||
+      !filter_var((string)$token['email'],FILTER_VALIDATE_EMAIL)||
       $token['role']!=='admin'||(int)$token['active']!==0)
     fail('Convite inválido ou expirado.',403);
    $identity=DB::one('SELECT user_id,status FROM platform_master_identities WHERE email=? FOR UPDATE',
-     [WorkspaceFoundation::MASTER_EMAIL]);
+     [strtolower((string)$token['email'])]);
    if(!$identity||$identity['status']!=='pending_verification'||
        (int)$identity['user_id']!==(int)$token['user_id'])fail('Convite já utilizado.',403);
    if(DB::one('SELECT 1 FROM workspace_members WHERE user_id=?',[(int)$token['user_id']]))
     fail('ADM Master não pode ser membro de empresa.',409);
    DB::update('users',(int)$token['user_id'],['password_hash'=>$hash,'active'=>1]);
    DB::run("UPDATE platform_master_identities SET status='verified',verified_at=?,updated_at=? WHERE email=?",
-     [now(),now(),WorkspaceFoundation::MASTER_EMAIL]);
+     [now(),now(),strtolower((string)$token['email'])]);
    DB::run('DELETE FROM reset_tokens WHERE user_id=?',[(int)$token['user_id']]);
    return ['activated'=>true,'login_url'=>base('index.php')];
   });

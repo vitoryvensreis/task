@@ -135,6 +135,13 @@ final class MasterSupport {
   if(!$master||!password_verify($password,(string)$master['password_hash']))
    fail('Confirme a senha do ADM Master para redefinir o 2FA.',403);
   $w=self::singleWorkspace();
+  if(WorkspaceTenantMode::enabled()){
+   $member=DB::one("SELECT w.id,w.name,w.slug,w.owner_user_id,w.status
+     FROM workspace_members wm JOIN workspaces w ON w.id=wm.workspace_id
+     WHERE wm.user_id=? AND wm.role IN ('owner','admin') AND wm.status='active'",[$target]);
+   if(!$member)fail('Administrador não pertence a um workspace ativo.',404);
+   $w=$member;
+  }
   return DB::tx(static function() use($target,$reason,$w):array {
    $user=DB::one("SELECT u.id,u.name,u.twofa_enabled,u.role,u.active
      FROM users u JOIN workspace_members wm ON wm.user_id=u.id
@@ -162,12 +169,13 @@ final class MasterSupport {
   Auth::load();
   if(!self::isActor())fail('Área exclusiva do ADM Master.',403);
   self::singleWorkspace();
+  $multi=WorkspaceTenantMode::enabled();
   $member=DB::one("SELECT
      COUNT(DISTINCT CASE WHEN u.active=1 AND wm.status='active' THEN u.id END) AS active_users,
      COUNT(DISTINCT CASE WHEN u.active=1 AND wm.status='active' AND wm.role IN ('owner','admin') THEN u.id END) AS active_admins
      FROM workspace_members wm JOIN users u ON u.id=wm.user_id
-     JOIN workspaces w ON w.id=wm.workspace_id WHERE w.slug=?",
-     [WorkspaceFoundation::SLUG])??[];
+     JOIN workspaces w ON w.id=wm.workspace_id WHERE ".($multi?'1=1':'w.slug=?'),
+     $multi?[]:[WorkspaceFoundation::SLUG])??[];
   $workspaces=(int)(DB::one('SELECT COUNT(*) n FROM workspaces')['n']??0);
   $plans=DB::one("SELECT
     COUNT(*) AS total,
@@ -181,8 +189,8 @@ final class MasterSupport {
   $byRole=DB::all("SELECT wm.role,COUNT(DISTINCT wm.user_id) AS total
     FROM workspace_members wm JOIN users u ON u.id=wm.user_id
     JOIN workspaces w ON w.id=wm.workspace_id
-    WHERE w.slug=? AND wm.status='active' AND u.active=1
-    GROUP BY wm.role", [WorkspaceFoundation::SLUG]);
+    WHERE ".($multi?'1=1':'w.slug=?')." AND wm.status='active' AND u.active=1
+    GROUP BY wm.role", $multi?[]:[WorkspaceFoundation::SLUG]);
   $byPlan=DB::all("SELECT p.id,p.name,COUNT(a.workspace_id) AS total
     FROM platform_access_plans p LEFT JOIN workspace_access_plans a ON a.plan_id=p.id
     GROUP BY p.id,p.name ORDER BY total DESC,p.name LIMIT 12");
@@ -191,9 +199,9 @@ final class MasterSupport {
   $registered=DB::all("SELECT DATE_FORMAT(wm.joined_at,'%Y-%m') AS month_key,
       COUNT(DISTINCT wm.user_id) AS total
     FROM workspace_members wm JOIN workspaces w ON w.id=wm.workspace_id
-    WHERE w.slug=? AND wm.joined_at>=?
+    WHERE ".($multi?'1=1':'w.slug=?')." AND wm.joined_at>=?
     GROUP BY DATE_FORMAT(wm.joined_at,'%Y-%m')
-    ORDER BY month_key", [WorkspaceFoundation::SLUG,$since]);
+    ORDER BY month_key", $multi?[$since]:[WorkspaceFoundation::SLUG,$since]);
   $index=[];foreach($registered as $row)$index[(string)$row['month_key']]=(int)$row['total'];
   $series=[];
   $cursor=new DateTimeImmutable($since,new DateTimeZone('UTC'));
@@ -209,8 +217,8 @@ final class MasterSupport {
     FROM workspaces w
     LEFT JOIN workspace_access_plans a ON a.workspace_id=w.id
     LEFT JOIN platform_access_plans p ON p.id=a.plan_id
-    WHERE w.slug=?
-    ORDER BY w.id DESC LIMIT 10",[WorkspaceFoundation::SLUG]);
+    WHERE ".($multi?'1=1':'w.slug=?')."
+    ORDER BY w.id DESC LIMIT 10",$multi?[]:[WorkspaceFoundation::SLUG]);
   return [
    'metrics'=>[
     'sales_cents'=>null,'revenue_cents'=>null,'billing_enabled'=>false,

@@ -5,6 +5,9 @@ final class WppWebhook
 {
     public static function handle(array $payload): array
     {
+        // Until WPPConnect sessions are individually keyed and authenticated by
+        // workspace, reject global inbound delivery in multi-tenant mode.
+        if(WorkspaceTenantMode::enabled())return ['accepted'=>false,'reason'=>'workspace_session_not_configured'];
         $source=$payload;
         if(empty($source['event'])&&isset($source['body'])&&is_array($source['body']))$source=$source['body'];
 

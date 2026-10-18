@@ -10,3 +10,10 @@ Esta entrega inclui apenas um avanço seguro da Etapa 6, **não sua conclusão**
 - Asaas ainda não confirma assinaturas e nenhuma cobrança fictícia é gerada.
 
 **Próximos passos:** scope completo de calendário local, contas e uploads, worker de WhatsApp por workspace e auditoria de endpoints; homologação A/B em banco descartável; migração sem defaults implícitos com backup; somente então corte transacional e deploy multiempresa.
+
+## Agenda por workspace — avanço estrutural
+
+- Migração 038 acrescenta `workspace_id` a calendários e eventos após backup conferido; os registros antigos continuam na Escotilha.
+- Em modo multiempresa, calendário local, Google sync, edição, exclusão, conflitos, atualização remota e publicações realtime usam escopo autenticado. Inserts são verificados pela camada DB.
+- WhatsApp global **não é** liberado em modo multiempresa. Webhooks e envios ficam bloqueados até que a sessão do WPPConnect e o worker da IA sejam separados por empresa.
+- A ativação real da Gabriella segue bloqueada até aposentadoria dos defaults implícitos das demais tabelas e homologação de APIs/workers. Nenhuma troca automática para modo multi foi executada.

@@ -285,6 +285,9 @@ final class WppConnect
 
     public static function sendAutomationMessage(string $phone,string $message,bool $isGroup=false): array
     {
+        // One shared WPPConnect session must never send on behalf of multiple tenants.
+        if(WorkspaceTenantMode::enabled())
+            throw new RuntimeException('Individual workspace WhatsApp session required before sending.');
         $cfg=self::requireConfigured();
         if($isGroup){
             $phone=self::normalizeGroupId($phone);

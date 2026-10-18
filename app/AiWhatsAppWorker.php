@@ -17,6 +17,8 @@ final class AiWhatsAppWorker
    'queue'=>(int)(DB::one("SELECT COUNT(*) n FROM ai_whatsapp_inbox WHERE ai_state IN ('queued','retry')")['n']??0)];
  }
  public static function tick(int $limit=5,?callable $planner=null,?callable $verify=null,?callable $mentioned=null,?callable $send=null,bool $test=false): array {
+  if(!$test&&WorkspaceTenantMode::enabled())
+   return ['enabled'=>false,'processed'=>0,'reason'=>'workspace_whatsapp_isolation_pending'];
   if(!$test&&!AiWhatsAppProvider::enabled())return ['enabled'=>false,'processed'=>0];
   $done=0;
   for($i=0;$i<max(1,min($limit,20));$i++){

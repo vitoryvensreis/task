@@ -41,7 +41,7 @@ final class Google {
  public static function connect(array $p=[]): array {
   Auth::admin();
   if(!config('google_client_id')||!config('google_client_secret'))fail('Configure Client ID e Client Secret nas integrações.');
-  $purpose=enumv($p['purpose']??'calendar',['calendar','drive'],'tipo de conexão');$returnTo=enumv($p['return_to']??($purpose==='drive'?'settings':'agenda'),['agenda','clients','settings'],'retorno');
+  $purpose=enumv($p['purpose']??'calendar',['calendar','drive'],'tipo de conexão');if($purpose==='calendar')MasterSupport::requireCalendar();$returnTo=enumv($p['return_to']??($purpose==='drive'?'settings':'agenda'),['agenda','clients','settings'],'retorno');
   $state=bin2hex(random_bytes(24));$verifier=bin2hex(random_bytes(32));
   $_SESSION['google_state']=['state'=>$state,'verifier'=>$verifier,'expires'=>time()+600,'user_id'=>Auth::$user['id'],'purpose'=>$purpose,'return_to'=>$returnTo];
   $scopes=['openid','email'];

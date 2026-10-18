@@ -55,7 +55,7 @@ final class Google {
   Auth::admin();$s=$_SESSION['google_state']??null;unset($_SESSION['google_state']);
   if(!$s||$s['expires']<time()||$s['user_id']!=Auth::$user['id']||!hash_equals($s['state'],$q['state']??''))fail('Autorização expirada ou inválida.',400);
   if(isset($q['error']))fail('A autorização do Google foi cancelada.');
-  $purpose=$s['purpose']??'calendar';$returnTo=$s['return_to']??($purpose==='drive'?'settings':'agenda');
+  $purpose=$s['purpose']??'calendar';if($purpose==='calendar')MasterSupport::requireCalendar();$returnTo=$s['return_to']??($purpose==='drive'?'settings':'agenda');
   $tokens=self::http('https://oauth2.googleapis.com/token','POST',['code'=>required($q,'code'),'client_id'=>config('google_client_id'),'client_secret'=>config('google_client_secret'),'redirect_uri'=>base('google-callback.php'),'grant_type'=>'authorization_code','code_verifier'=>$s['verifier']],null,[],true);
   $info=self::http('https://www.googleapis.com/oauth2/v3/userinfo','GET',null,$tokens['access_token']);
   $old=DB::one('SELECT * FROM google_accounts WHERE user_id=? AND google_sub=?'.(WorkspaceContext::legacyCiFixture()?'':' AND workspace_id=?'),WorkspaceContext::legacyCiFixture()?[Auth::$user['id'],$info['sub']]:[Auth::$user['id'],$info['sub'],Auth::workspaceId()]);

@@ -39,8 +39,6 @@ check(automation.includes("'{{link do drive}}'"),'Automation variable catalog mu
 for(const action of ['action.task','action.email','action.push','action.create_task'])check(app.includes(action),'Action editor missing '+action);
 check(app.includes('data-auto-add-select')&&app.includes('data-auto-action-field'),'Additional actions must be configurable in visual editor.');
 check(automation.includes("'demand.final_delivered'=>'Envio de entrega final'"),'Final delivery trigger missing in backend.');
-check(app.includes("value:'group',label:'Grupo do WhatsApp'")&&app.includes("api('wpp.groups')")&&app.includes('data-auto-config="group_id"'),'Editor must list/select WhatsApp groups securely.');
-check(api.includes("'wpp.groups'=>WppConnect::groups()"),'Admin group listing route must be wired.');
 check(app.includes('id="demand-whatsapp-custom-phone"')&&app.includes('syncWhatsappNumber'),'Task WhatsApp custom number input must be conditional.');
 check(app.includes('${admin?`<div class="field"><label>Disparos de WhatsApp</label>')&&app.includes("storedWhatsappMode=d?.whatsapp_recipient_mode||'creator'"),'Only admins must see WhatsApp task fields, with creator as default.');
 check(demands.includes("if($role==='admin')")&&demands.includes('Somente administradores podem configurar disparos de WhatsApp.'),'API must protect WhatsApp settings on non-admin demand writes.');

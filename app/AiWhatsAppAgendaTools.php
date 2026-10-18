@@ -12,7 +12,7 @@ final class AiWhatsAppAgendaTools {
  public static function sensitive(string $name): bool {return in_array($name,['agenda_create','agenda_update','agenda_cancel'],true);}
  public static function supported(string $name): bool {return in_array($name,['agenda_list','agenda_calendars','agenda_detail','agenda_conflicts'],true);}
  public static function catalog(bool $private): array {
-  if((Auth::$user['role']??'')!=='admin'||(!MasterSupport::isSupport()&&!(WorkspaceContext::legacyCiFixture()&&defined('TASKESC_LEGACY_AI_CALENDAR_FIXTURE'))))return [];
+  if((Auth::$user['role']??'')!=='admin'||(!MasterSupport::isSupport()&&!(PHP_SAPI==='cli'&&getenv('GITHUB_ACTIONS')==='true'&&defined('TASKESC_LEGACY_AI_CALENDAR_FIXTURE'))))return [];
   $date=['type'=>'string','description'=>'Hora local YYYY-MM-DDTHH:mm, não inventar horário'];$id=['type'=>'integer'];
   $tools=[self::tool('agenda_list',$private?'Consultar compromissos, inclusive privados.':'Listar SOMENTE eventos NÃO PRIVADOS em grupos.',[
    'from'=>['type'=>'string','description'=>'YYYY-MM-DD opcional'],'to'=>['type'=>'string','description'=>'YYYY-MM-DD opcional'],'limit'=>$id])];
@@ -45,7 +45,7 @@ final class AiWhatsAppAgendaTools {
  }
  private static function label(string $iso): string {return (new DateTimeImmutable($iso))->setTimezone(new DateTimeZone((string)config('timezone','America/Fortaleza')))->format('d/m/Y H:i');}
  public static function context(bool $private): array {
-  if(!$private||(Auth::$user['role']??'')!=='admin'||(!MasterSupport::isSupport()&&!(WorkspaceContext::legacyCiFixture()&&defined('TASKESC_LEGACY_AI_CALENDAR_FIXTURE'))))return [];
+  if(!$private||(Auth::$user['role']??'')!=='admin'||(!MasterSupport::isSupport()&&!(PHP_SAPI==='cli'&&getenv('GITHUB_ACTIONS')==='true'&&defined('TASKESC_LEGACY_AI_CALENDAR_FIXTURE'))))return [];
   return ['calendars'=>array_map(static fn($c)=>['id'=>(int)$c['id'],'name'=>$c['name'],'write_enabled'=>(bool)$c['write_enabled']],array_slice(Agenda::calendars(),0,25))];
  }
  public static function run(string $name,array $args,bool $private): array {

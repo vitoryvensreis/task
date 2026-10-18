@@ -19,6 +19,7 @@ require ROOT.'/app/Auth.php';
 require ROOT.'/app/WorkspaceCatalog.php';
 require ROOT.'/app/WorkspacePreferences.php';
 require ROOT.'/app/Catalog.php';
+require ROOT.'/app/Demands.php';
 function fail(string $message,int $status=422,array $details=[]):never {throw new RuntimeException($message,$status);}
 
 function now():string {return gmdate('Y-m-d H:i:s');}

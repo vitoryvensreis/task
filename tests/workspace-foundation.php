@@ -208,7 +208,7 @@ try{
   ['{"tasks":true,"automations":true,"contacts":true}',now(),now()]);
  $planId=(int)DB::conn()->lastInsertId();
  DB::run('INSERT INTO workspace_access_plans(workspace_id,plan_id,assigned_at) VALUES(?,?,?)',[$ws,$planId,now()]);
- DB::run("INSERT INTO settings(\`key\`,value) VALUES('platform_access_v1','1')");
+ DB::run("INSERT INTO settings (`key`,value) VALUES('platform_access_v1','1')");
  testws(PlatformPlans::workspacePlan($ws)['team_limit']===null,'Legacy plan was not unlimited.');
  testws(PlatformPlans::publicList()===[],'Private legacy plan must not appear publicly.');
  echo "Workspace schema30 CI OK: owner, memberships, ".count(WorkspaceFoundation::DATA_TABLES).

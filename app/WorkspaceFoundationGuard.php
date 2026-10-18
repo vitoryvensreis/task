@@ -20,7 +20,7 @@ final class WorkspaceFoundationGuard {
    if(DB::one("SELECT `key` FROM settings WHERE `key` IN
      ('saas_enabled','workspace_context_enabled','workspace_permissions_enabled',
       'workspace_settings_enabled','signup_enabled','billing_enabled') LIMIT 1"))return false;
-   return WorkspaceFoundation::issues(true)===[];
+   // Structural guard stays valid for a legacy user created after migration.\n   // Full row/membership checks run during the backup-gated migration itself.\n   return WorkspaceFoundation::issues(false)===[];
   }catch(Throwable){return false;}
  }
 }

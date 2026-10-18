@@ -13,12 +13,12 @@ foreach($argv as $arg){
 
 try{
  if($health){
-  $data=AutomationWorker::health();
+  $data=WorkspaceAutomationWorker::health();
   echo json($data).PHP_EOL;
   exit(($data['status']??'degraded')==='ok'?0:1);
  }
  if($once){
-  echo json(AutomationWorker::tick($batch,$runs)).PHP_EOL;
+  echo json(WorkspaceAutomationWorker::tick($batch,$runs)).PHP_EOL;
   exit(0);
  }
  $running=true;
@@ -28,7 +28,7 @@ try{
   pcntl_signal(SIGINT,static function() use (&$running): void {$running=false;});
  }
  while($running){
-  try{AutomationWorker::tick($batch,$runs);}
+  try{WorkspaceAutomationWorker::tick($batch,$runs);}
   catch(Throwable $e){error_log('TaskEsc automation worker: '.$e->getMessage());}
   usleep(500000);
  }

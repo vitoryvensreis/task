@@ -29,3 +29,8 @@ Esta entrega inclui apenas um avanço seguro da Etapa 6, **não sua conclusão**
 - SMTP é transporte global compartilhado e só executa um flush por cron, sem duplicar mensagens.
 - Cron HTTP deixa de executar jobs multiempresa sem identidade validada; use somente `php bin/cron.php`.
 - O worker AI continua aguardando isolamento completo: nenhum conteúdo confidencial de outro workspace é processado via fallback.
+
+## Worker de automações
+- Cursor de eventos próprio para cada workspace no modo multiempresa; o estado original segue intocado no modo legado.
+- Rotinas de vencimento, reprocessamento e medição de fila recebem filtro do workspace autenticado no worker.
+- A migração de cursores depende do backup pré-deploy e não ativa outra empresa automaticamente.

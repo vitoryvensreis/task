@@ -6,7 +6,7 @@ final class AutomationPermanentException extends RuntimeException {}
 final class AutomationWorker
 {
     public const MAX_ATTEMPTS=4;
-    private static int $lastScheduleScanAt=0;
+    private static array $lastScheduleScans=[];
 
     private static function workspaceId(): int {
         if(WorkspaceContext::legacyCiFixture())return 0;
@@ -18,6 +18,35 @@ final class AutomationWorker
         if(!$ws||(int)(DB::one('SELECT COUNT(*) n FROM workspaces')['n']??0)!==1)
             throw new RuntimeException('Automation worker only supports the staged single workspace.');
         return (int)$ws['id'];
+    }
+    private static function state(bool $lock=false): ?array {
+        if(WorkspaceTenantMode::enabled())
+         return DB::one('SELECT * FROM automation_workspace_cursors WHERE workspace_id=?'.($lock?' FOR UPDATE':''),[self::workspaceId()]);
+        return DB::one('SELECT * FROM automation_worker_state WHERE id=1'.($lock?' FOR UPDATE':''));
+    }
+    private static function initState(int $last): void {
+        if(WorkspaceTenantMode::enabled())
+         DB::run('INSERT INTO automation_workspace_cursors (workspace_id,last_outbox_id,heartbeat_at,updated_at) VALUES (?,?,?,?)',
+          [self::workspaceId(),$last,now(),now()]);
+        else DB::insert('automation_worker_state',['id'=>1,'last_outbox_id'=>$last,'heartbeat_at'=>now(),'updated_at'=>now()]);
+    }
+    private static function updateState(array $data): void {
+        if(!WorkspaceTenantMode::enabled()){DB::update('automation_worker_state',1,$data);return;}
+        $parts=[];$args=[];
+        foreach($data as $key=>$value){
+         if(!in_array($key,['last_outbox_id','heartbeat_at','updated_at'],true))
+          throw new InvalidArgumentException('Invalid cursor field.');
+         $parts[]='`'.$key.'`=?';$args[]=$value;
+        }
+        $args[]=self::workspaceId();
+        DB::run('UPDATE automation_workspace_cursors SET '.implode(',',$parts).' WHERE workspace_id=?',$args);
+    }
+    private static function insertRun(array $columns,array $values): int {
+        if(WorkspaceTenantMode::enabled()){$columns[]='workspace_id';$values[]=self::workspaceId();}
+        $cols=implode(',',array_map(static fn($v)=>'`'.$v.'`',$columns));
+        $sql='INSERT IGNORE INTO automation_runs ('.$cols.') VALUES ('.
+          implode(',',array_fill(0,count($columns),'?')).')';
+        return DB::run($sql,$values)->rowCount();
     }
     private static function ws(string $alias=''): string {
         if(WorkspaceContext::legacyCiFixture())return '';
@@ -45,15 +74,15 @@ final class AutomationWorker
     public static function ingestOutbox(int $limit=100): int
     {
         return DB::tx(function() use($limit): int {
-            $state=DB::one('SELECT * FROM automation_worker_state WHERE id=1 FOR UPDATE');
+            $state=self::state(true);
             if(!$state){
-                $max=(int)(DB::one('SELECT COALESCE(MAX(id),0) n FROM event_outbox')['n']??0);
-                DB::insert('automation_worker_state',['id'=>1,'last_outbox_id'=>$max,'heartbeat_at'=>now(),'updated_at'=>now()]);
+                $max=(int)(DB::one('SELECT COALESCE(MAX(id),0) n FROM event_outbox WHERE 1=1'.self::ws())['n']??0);
+                self::initState($max);
                 return 0;
             }
             $last=(int)$state['last_outbox_id'];
             $rows=DB::all('SELECT id,event_hash,event_type,entity_type,entity_id,payload_json,created_at FROM event_outbox WHERE id>?'.self::ws().' ORDER BY id LIMIT '.(int)$limit,[$last]);
-            if(!$rows){DB::update('automation_worker_state',1,['heartbeat_at'=>now(),'updated_at'=>now()]);return 0;}
+            if(!$rows){self::updateState(['heartbeat_at'=>now(),'updated_at'=>now()]);return 0;}
             $supported=array_flip(Automation::triggerEvents());$automations=[];$created=0;$maxId=$last;
             foreach($rows as $event){
                 $maxId=max($maxId,(int)$event['id']);
@@ -80,13 +109,12 @@ final class AutomationWorker
                     'payload'=>self::safeTriggerPayload($payload),
                 ];
                 foreach($automations[$type] as $automation){
-                    $q=DB::run("INSERT IGNORE INTO automation_runs (automation_id,operation_id,trigger_event,entity_type,entity_id,status,context_json,attempts,available_at,created_at) VALUES (?,?,?,?,?,'pending',?,0,?,?)",[
-                        (int)$automation['id'],$operationId,$type,$entityType,(int)$event['entity_id'],json($context),now(),now()
-                    ]);
-                    $created+=$q->rowCount()>0?1:0;
+                    $created+=self::insertRun(['automation_id','operation_id','trigger_event','entity_type','entity_id','status','context_json','attempts','available_at','created_at'],[
+                        (int)$automation['id'],$operationId,$type,$entityType,(int)$event['entity_id'],'pending',json($context),0,now(),now()
+                    ])>0?1:0;
                 }
             }
-            DB::update('automation_worker_state',1,['last_outbox_id'=>$maxId,'heartbeat_at'=>now(),'updated_at'=>now()]);
+            self::updateState(['last_outbox_id'=>$maxId,'heartbeat_at'=>now(),'updated_at'=>now()]);
             return $created;
         });
     }
@@ -94,8 +122,9 @@ final class AutomationWorker
     public static function scheduleDueTriggers(bool $force=false): int
     {
         $nowTs=time();
-        if(!$force&&self::$lastScheduleScanAt>0&&($nowTs-self::$lastScheduleScanAt)<30)return 0;
-        self::$lastScheduleScanAt=$nowTs;
+        $scope=self::workspaceId();$last=self::$lastScheduleScans[$scope]??0;
+        if(!$force&&$last>0&&($nowTs-$last)<30)return 0;
+        self::$lastScheduleScans[$scope]=$nowTs;
         $scheduled=Automation::scheduledTriggerEvents();
         if(!$scheduled)return 0;
         $marks=implode(',',array_fill(0,count($scheduled),'?'));
@@ -112,18 +141,18 @@ final class AutomationWorker
             if($trigger==='demand.due_soon'){
                 $hours=max(1,min(720,(int)($cfg['hours_before']??24)));
                 $until=gmdate('Y-m-d H:i:s',$nowTs+$hours*3600);
-                $rows=DB::all("SELECT d.id,d.due_at FROM demands d JOIN stages s ON s.id=d.stage_id WHERE d.deleted_at IS NULL AND d.draft=0 AND s.kind NOT IN ('completed','cancelled','archived') AND d.due_at>? AND d.due_at<=? ORDER BY d.due_at,d.id",[$utcNow,$until]);
+                $rows=DB::all("SELECT d.id,d.due_at FROM demands d JOIN stages s ON s.id=d.stage_id WHERE d.deleted_at IS NULL AND d.draft=0 AND s.kind NOT IN ('completed','cancelled','archived') AND d.due_at>? AND d.due_at<=?".self::ws('d')." ORDER BY d.due_at,d.id",[$utcNow,$until]);
                 foreach($rows as $row)$created+=self::createScheduledRun($automationId,$trigger,'demand',(int)$row['id'],(string)$row['due_at'],['hours_before'=>$hours]);
             }elseif($trigger==='demand.overdue'){
-                $rows=DB::all("SELECT d.id,d.due_at FROM demands d JOIN stages s ON s.id=d.stage_id WHERE d.deleted_at IS NULL AND d.draft=0 AND s.kind NOT IN ('completed','cancelled','archived') AND d.due_at<? ORDER BY d.due_at,d.id",[$utcNow]);
+                $rows=DB::all("SELECT d.id,d.due_at FROM demands d JOIN stages s ON s.id=d.stage_id WHERE d.deleted_at IS NULL AND d.draft=0 AND s.kind NOT IN ('completed','cancelled','archived') AND d.due_at<?".self::ws('d')." ORDER BY d.due_at,d.id",[$utcNow]);
                 foreach($rows as $row)$created+=self::createScheduledRun($automationId,$trigger,'demand',(int)$row['id'],(string)$row['due_at'],[]);
             }elseif($trigger==='invoice.due_soon'){
                 $days=max(1,min(60,(int)($cfg['days_before']??3)));
                 $until=(new DateTimeImmutable($localToday,$localTz))->modify('+'.$days.' days')->format('Y-m-d');
-                $rows=DB::all("SELECT i.id,i.due_on FROM invoices i WHERE i.deleted_at IS NULL AND i.status<>'cancelled' AND i.due_on>? AND i.due_on<=? AND COALESCE((SELECT SUM(p.amount_cents+COALESCE(p.discount_cents,0)) FROM payments p WHERE p.invoice_id=i.id),0)<i.amount_cents ORDER BY i.due_on,i.id",[$localToday,$until]);
+                $rows=DB::all("SELECT i.id,i.due_on FROM invoices i WHERE i.deleted_at IS NULL AND i.status<>'cancelled' AND i.due_on>? AND i.due_on<=? AND COALESCE((SELECT SUM(p.amount_cents+COALESCE(p.discount_cents,0)) FROM payments p WHERE p.invoice_id=i.id),0)<i.amount_cents".self::ws('i')." ORDER BY i.due_on,i.id",[$localToday,$until]);
                 foreach($rows as $row)$created+=self::createScheduledRun($automationId,$trigger,'invoice',(int)$row['id'],(string)$row['due_on'],['days_before'=>$days]);
             }elseif($trigger==='invoice.overdue'){
-                $rows=DB::all("SELECT i.id,i.due_on FROM invoices i WHERE i.deleted_at IS NULL AND i.status<>'cancelled' AND i.due_on<? AND COALESCE((SELECT SUM(p.amount_cents+COALESCE(p.discount_cents,0)) FROM payments p WHERE p.invoice_id=i.id),0)<i.amount_cents ORDER BY i.due_on,i.id",[$localToday]);
+                $rows=DB::all("SELECT i.id,i.due_on FROM invoices i WHERE i.deleted_at IS NULL AND i.status<>'cancelled' AND i.due_on<? AND COALESCE((SELECT SUM(p.amount_cents+COALESCE(p.discount_cents,0)) FROM payments p WHERE p.invoice_id=i.id),0)<i.amount_cents".self::ws('i')." ORDER BY i.due_on,i.id",[$localToday]);
                 foreach($rows as $row)$created+=self::createScheduledRun($automationId,$trigger,'invoice',(int)$row['id'],(string)$row['due_on'],[]);
             }
         }
@@ -144,10 +173,9 @@ final class AutomationWorker
             ],
             'payload'=>$payload+['scheduled'=>1,'due_value'=>$dueValue],
         ];
-        $q=DB::run("INSERT IGNORE INTO automation_runs (automation_id,operation_id,trigger_event,entity_type,entity_id,status,context_json,attempts,available_at,created_at) VALUES (?,?,?,?,?,'pending',?,0,?,?)",[
-            $automationId,$operationId,$trigger,$entityType,$entityId,json($context),now(),now()
-        ]);
-        return $q->rowCount()>0?1:0;
+        return self::insertRun(['automation_id','operation_id','trigger_event','entity_type','entity_id','status','context_json','attempts','available_at','created_at'],[
+            $automationId,$operationId,$trigger,$entityType,$entityId,'pending',json($context),0,now(),now()
+        ])>0?1:0;
     }
 
     public static function executeReady(int $limit=20): int
@@ -195,7 +223,7 @@ final class AutomationWorker
     public static function health(int $freshSeconds=90): array
     {
         $issues=Migrations::automationIssues();
-        $state=DB::one('SELECT * FROM automation_worker_state WHERE id=1');
+        $state=self::state();
         $heartbeat=$state['heartbeat_at']??null;$age=null;
         if($heartbeat)$age=max(0,time()-(strtotime((string)$heartbeat.' UTC')?:time()));
         $fresh=$age!==null&&$age<=$freshSeconds;
@@ -213,15 +241,15 @@ final class AutomationWorker
 
     public static function stats(): array
     {
-        $state=DB::one('SELECT last_outbox_id FROM automation_worker_state WHERE id=1');
-        $max=(int)(DB::one('SELECT COALESCE(MAX(id),0) n FROM event_outbox')['n']??0);
+        $state=self::state();
+        $max=(int)(DB::one('SELECT COALESCE(MAX(id),0) n FROM event_outbox WHERE 1=1'.self::ws())['n']??0);
         $last=(int)($state['last_outbox_id']??0);
         $runs=DB::one("SELECT
           SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) pending,
           SUM(CASE WHEN status='retry' THEN 1 ELSE 0 END) retrying,
           SUM(CASE WHEN status='running' THEN 1 ELSE 0 END) running,
           SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) failed
-          FROM automation_runs")??[];
+          FROM automation_runs WHERE 1=1".self::ws())??[];
         return [
             'outbox_lag'=>max(0,$max-$last),
             'pending'=>(int)($runs['pending']??0),
@@ -457,11 +485,11 @@ final class AutomationWorker
 
     private static function heartbeat(): void
     {
-        DB::run('UPDATE automation_worker_state SET heartbeat_at=?,updated_at=? WHERE id=1',[now(),now()]);
+        self::updateState(['heartbeat_at'=>now(),'updated_at'=>now()]);
     }
 
     private static function recoverStale(): void
     {
-        DB::run("UPDATE automation_runs SET status='retry',available_at=?,last_error='worker_recovered' WHERE status='running' AND started_at<?",[now(),gmdate('Y-m-d H:i:s',time()-300)]);
+        DB::run("UPDATE automation_runs SET status='retry',available_at=?,last_error='worker_recovered' WHERE status='running' AND started_at<?".self::ws(),[now(),gmdate('Y-m-d H:i:s',time()-300)]);
     }
 }

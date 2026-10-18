@@ -37,7 +37,30 @@ try {
   if($action==='support.list'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET')out(SupportDesk::threads());
   if($action==='support.messages'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET')out(SupportDesk::messages($p));
   if($action==='support.send'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST'){
-   checkCsrf();out(SupportDesk::send($p,$_FILES['image']??null));
+   checkCsrf();
+   $result=SupportDesk::send($p,$_FILES['image']??null);
+   $recipient=(int)($result['_recipient']??0);
+   $notificationId=(int)($result['_notification_id']??0);
+   $title=(string)($result['_title']??'Novo atendimento TaskEsc');
+   $preview=(string)($result['_preview']??'Nova mensagem no suporte.');
+   $recipientIsMaster=(bool)($result['_master_recipient']??false);
+   foreach(array_keys($result) as $key)if(str_starts_with((string)$key,'_'))unset($result[$key]);
+   header('Content-Type: application/json; charset=utf-8');
+   header('Cache-Control: no-store');
+   echo json($result);
+   if(function_exists('fastcgi_finish_request'))fastcgi_finish_request();
+   else {if(ob_get_level())@ob_flush();@flush();}
+   if($recipient>0&&$notificationId>0){
+    try{
+     $unread=(int)(DB::one('SELECT COUNT(*) n FROM notifications WHERE user_id=? AND seen=0',[$recipient])['n']??0);
+     Push::notifyUser($recipient,[
+      'notification_id'=>$notificationId,'title'=>$title,'body'=>$preview,
+      'url'=>base($recipientIsMaster?'master/suporte':'dashboard?suporte=1'),
+      'tag'=>'taskesc-support-'.$notificationId,'scope'=>'support','badge_count'=>$unread
+     ]);
+    }catch(Throwable $e){error_log('TaskEsc support push: '.get_class($e));}
+   }
+   exit;
   }
   fail('Método não permitido.',405);
  }

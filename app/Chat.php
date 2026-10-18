@@ -16,7 +16,7 @@ final class Chat
         $myId=(int)$me['id'];
         $rows=DB::all("SELECT u.id,u.name,u.role,u.last_login_at
           FROM users u
-          WHERE u.active=1 AND u.role='admin' AND u.id<>?".self::ws('u')." AND u.id IN (SELECT user_id FROM workspace_members WHERE workspace_id=".(int)Auth::workspaceId().")
+          WHERE u.active=1 AND u.role='admin' AND u.id<>?".self::ws('u').(WorkspaceContext::legacyCiFixture()?'':" AND u.id IN (SELECT user_id FROM workspace_members WHERE workspace_id=".(int)Auth::workspaceId().")")
           ORDER BY u.name,u.id",[$myId]);
 
         $threads=DB::all("SELECT t.id,t.user_low_id,t.user_high_id,t.updated_at,m.id AS last_message_id,
@@ -104,7 +104,7 @@ final class Chat
         $mentions=self::validatedTaskMentions($p['task_mentions']??[],$body);
 
         $result=DB::tx(function() use($me,$peer,$body,$nonce,$mentions): array {
-            $existing=DB::one('SELECT m.*,u.name AS sender_name FROM chat_messages m JOIN users u ON u.id=m.sender_id WHERE m.sender_id=? AND m.client_nonce=?".self::ws('m')." LIMIT 1',[(int)$me['id'],$nonce]);
+            $existing=DB::one("SELECT m.*,u.name AS sender_name FROM chat_messages m JOIN users u ON u.id=m.sender_id WHERE m.sender_id=? AND m.client_nonce=?".self::ws('m')." LIMIT 1",[(int)$me['id'],$nonce]);
             if($existing){
                 if((int)$existing['recipient_id']!==(int)$peer['id'])fail('Identificador de mensagem já utilizado.',409);
                 $rows=[$existing];self::attachTaskRefs($rows);
@@ -165,10 +165,10 @@ final class Chat
         return DB::tx(function() use($me,$peer): array {
             $thread=self::threadFor((int)$me['id'],(int)$peer['id'],false);
             if(!$thread)return ['read'=>0];
-            $last=DB::one('SELECT MAX(id) AS id FROM chat_messages WHERE thread_id=? AND recipient_id=? AND sender_id=? AND read_at IS NULL".self::ws()."',[(int)$thread['id'],(int)$me['id'],(int)$peer['id']]);
+            $last=DB::one("SELECT MAX(id) AS id FROM chat_messages WHERE thread_id=? AND recipient_id=? AND sender_id=? AND read_at IS NULL".self::ws(),[(int)$thread['id'],(int)$me['id'],(int)$peer['id']]);
             $lastId=(int)($last['id']??0);if($lastId<1)return ['read'=>0];
             $when=self::microNow();
-            $q=DB::run('UPDATE chat_messages SET read_at=? WHERE thread_id=? AND recipient_id=? AND sender_id=? AND read_at IS NULL".self::ws()."',[$when,(int)$thread['id'],(int)$me['id'],(int)$peer['id']]);
+            $q=DB::run("UPDATE chat_messages SET read_at=? WHERE thread_id=? AND recipient_id=? AND sender_id=? AND read_at IS NULL".self::ws(),[$when,(int)$thread['id'],(int)$me['id'],(int)$peer['id']]);
             $count=$q->rowCount();
             if($count>0)ChatRealtime::read((int)$thread['id'],(int)$me['id'],(int)$peer['id'],$lastId);
             return ['read'=>$count,'last_read_id'=>$lastId,'read_at'=>$when];

@@ -14,6 +14,7 @@
  }
  const activation=document.body.dataset.activate;
  if(activation){
+  show('#master-auth-surface',true);
   show('#master-activate',true);
   $('#master-activate-form').addEventListener('submit',async e=>{
    e.preventDefault();const b=e.submitter;b.disabled=true;
@@ -27,16 +28,16 @@
  let csrf;
  try{
   const auth=await request('auth.me');csrf=auth.csrf;
-  if(!auth.user?.is_master||!(auth.user.role==='master'||!!auth.user.is_support)){show('#master-login',true);return}
+  if(!auth.user?.is_master||!(auth.user.role==='master'||!!auth.user.is_support)){show('#master-auth-surface',true);show('#master-login',true);return}
   const data=await request('master.workspaces');
-  show('#master-panel',true);
-  const workspaces=$('#master-workspaces'),admins=$('#master-administrators'),planPanel=$('#master-plans');
+  show('#master-shell',true);show('#master-panel',true);
+  const workspaces=$('#master-workspaces'),admins=$('#master-administrators'),planPanel=$('#master-plans'),dashboard=$('#master-dashboard'),shell=$('#master-shell');
   const tabs=[...document.querySelectorAll('[data-master-tab]')];
   const tabRoutes={overview:'master',clients:'master/clientes',plans:'master/planos',workspaces:'master/workspaces',support:'master/suporte'};
   const currentTab=()=>Object.entries(tabRoutes).find(([,p])=>location.pathname.replace(/\/+$/,'').endsWith('/'+p))?.[0]||'overview';
 
   if(location.pathname.endsWith('/master.php'))history.replaceState(null,'',base+'/master'+location.search+location.hash);
-  const clear=()=>{workspaces.replaceChildren();admins.replaceChildren();planPanel.replaceChildren();message('#master-panel-message','')};
+  const clear=()=>{dashboard.replaceChildren();workspaces.replaceChildren();admins.replaceChildren();planPanel.replaceChildren();message('#master-panel-message','')};
   function supportCard(w){
    const wrap=el('article','','master-mini');
    wrap.append(el('h3',w.name),el('p',w.slug+' · '+w.status));
@@ -51,13 +52,98 @@
     catch(err){message('#master-panel-message',err.message,true);b.disabled=false}
    });wrap.append(form);return wrap;
   }
+  const number=(x)=>new Intl.NumberFormat('pt-BR',{maximumFractionDigits:0}).format(Number(x)||0);
+  function statCard(title,value,hint,disabled=false){
+   const card=el('article','master-kpi');
+   card.append(el('div','master-kpi-label',title),el('div','master-kpi-number'+(disabled?' disabled':''),value),el('div','master-kpi-hint',hint));
+   return card;
+  }
+  function sectionHead(title,description,button){
+   const h=el('div','master-panel-header'),left=el('div');
+   left.append(el('h3','',title),el('small','',description));h.append(left);
+   if(button){const b=el('button','master-panel-link',button.label);b.type='button';b.onclick=()=>draw(button.tab).catch(err=>message('#master-panel-message',err.message,true));h.append(b)}
+   return h;
+  }
+  function registrations(rows){
+   const chart=el('div','master-bars');chart.setAttribute('role','img');
+   chart.setAttribute('aria-label','Novos usuários associados a workspaces nos últimos seis meses');
+   const top=Math.max(1,...rows.map(r=>Number(r.users)||0));
+   for(const r of rows){
+    const col=el('div','master-bar-column'),space=el('div','master-bar-space'),bar=el('div','master-bar');
+    const value=Math.max(0,Number(r.users)||0);
+    bar.style.height=value===0?'3px':Math.max(5,Math.round((value/top)*94))+'%';
+    bar.title=(r.month||'')+': '+value+' novo(s) usuário(s)';
+    bar.append(el('span','master-bar-value',number(value)));
+    space.append(bar);col.append(space,el('span','',(r.month||'').slice(5)+'/'+(r.month||'').slice(2,4)));chart.append(col);
+   }
+   return chart;
+  }
+  function splitRow(label,value,top){
+   const row=el('div','master-split-row');
+   row.append(el('span','',label));
+   const rail=el('div','master-progress');const fill=el('i');fill.style.width=Math.max(0,Math.min(100,top>0?(value/top)*100:0))+'%';rail.append(fill);
+   row.append(rail,el('span','master-split-total',number(value)));return row;
+  }
+  async function renderMasterDashboard(){
+   const stats=await request('master.dashboard');
+   dashboard.append(el('p','master-description','Acompanhe os indicadores gerais da plataforma. Dados de tarefas e financeiro das empresas só aparecem em uma sessão de suporte autorizada.'));
+   if(!stats.metrics?.billing_enabled){
+    const note=el('div','master-billing-note');
+    note.append(el('span','master-icon','ⓘ'));
+    const copy=el('div');copy.append(el('b','','Vendas e receita de assinaturas ainda não disponíveis'),el('span','','A cobrança SaaS não foi ativada. Os valores financeiros dos clientes não são receita da plataforma e não entram neste painel.'));note.append(copy);dashboard.append(note);
+   }
+   const m=stats.metrics||{};
+   const grid=el('div','master-stats');
+   [
+    ['VENDAS / RECEITA SAAS','Aguardando cobrança','Nenhuma transação SaaS registrada',true],
+    ['USUÁRIOS ATIVOS',number(m.active_users),number(m.active_admins)+' administrador(es) · contas habilitadas',false],
+    ['WORKSPACES',number(m.workspaces),'Ambiente multiempresa em homologação',false],
+    ['PLANOS ATRIBUÍDOS',number(m.assigned_plans),number(m.public_plans)+' plano(s) público(s)',false],
+    ['ATENDIMENTOS',number(m.support_threads),number(m.unread_support)+' notificação(ões) não lida(s)',false]
+   ].forEach(([title,val,hint,disabled])=>grid.append(statCard(title,val,hint,disabled)));
+   dashboard.append(grid);
+   const analytics=el('div','master-dashboard-grid');
+   const activity=el('section','panel');
+   activity.append(sectionHead('Crescimento de usuários','Novos usuários vinculados aos workspaces nos últimos 6 meses'));
+   activity.append(registrations(stats.monthly_registrations||[]));analytics.append(activity);
+   const distribution=el('section','panel');
+   distribution.append(sectionHead('Usuários por perfil','Contas ativas vinculadas ao workspace'));
+   const list=el('div','master-split-list');
+   const titles={owner:'Proprietário',admin:'Administradores',staff:'Equipe',client:'Clientes'};
+   const roles=stats.users_by_role||[];
+   const top=Math.max(1,...roles.map(r=>Number(r.total)||0));
+   if(!roles.length)list.append(el('div','master-empty','Nenhum usuário encontrado.'));
+   else for(const r of roles)list.append(splitRow(titles[r.role]||r.role,Number(r.total)||0,top));
+   distribution.append(list);analytics.append(distribution);
+   dashboard.append(analytics);
+   const lower=el('div','master-dashboard-grid master-lower');
+   const work=el('section','panel');work.append(sectionHead('Workspaces cadastrados','Plano atribuído e quantidade de contas ativas',{label:'Gerenciar',tab:'workspaces'}));
+   const wr=stats.recent_workspaces||[];
+   if(wr.length){
+    const wrap=el('div','master-table-wrap'),table=el('table','master-table'),head=el('thead'),theadrow=el('tr');
+    for(const col of ['Workspace','Plano','Usuários','Estado'])theadrow.append(el('th','',col));
+    head.append(theadrow);const body=el('tbody');
+    for(const w of wr){const tr=el('tr');tr.append(el('td','',w.name||'—'),el('td','',w.plan_name||'Sem plano'),el('td','',number(w.active_users)));
+      const state=el('td'),badge=el('span','master-status-chip',w.status==='staged'?'Em homologação':w.status||'—');state.append(badge);tr.append(state);body.append(tr)}
+    table.append(head,body);wrap.append(table);work.append(wrap);
+   }else work.append(el('div','master-empty','Nenhum workspace cadastrado.'));
+   lower.append(work);
+   const plans=el('section','panel');plans.append(sectionHead('Distribuição de planos','Planos cadastrados e quantidade de workspaces vinculados',{label:'Ver planos',tab:'plans'}));
+   const dist=el('div','master-split-list'),planRows=stats.workspaces_by_plan||[];
+   if(planRows.length){const topPlan=Math.max(1,...planRows.map(p=>Number(p.total)||0));for(const p of planRows)dist.append(splitRow(p.name||'Sem nome',Number(p.total)||0,topPlan));}
+   else dist.append(el('div','master-empty','Nenhum plano encontrado.'));
+   plans.append(dist);lower.append(plans);dashboard.append(lower);
+   dashboard.append(el('p','master-description','Atualizado em '+new Date((stats.as_of||'').replace(' ','T')+'Z').toLocaleString('pt-BR')+' · Somente dados cadastrais agregados.'));
+  }
   async function draw(tab){
    if(tabRoutes[tab]&&!location.pathname.replace(/\/+$/,'').endsWith('/'+tabRoutes[tab]))
     history.replaceState(null,'',base+'/'+tabRoutes[tab]);
-   clear();tabs.forEach(b=>b.classList.toggle('active',b.dataset.masterTab===tab));
-   show('#master-workspaces',tab==='overview'||tab==='workspaces');show('#master-administrators',tab==='clients');show('#master-plans',tab==='plans');
-   $('#master-panel-title').textContent=({overview:'Visão geral da plataforma',clients:'Clientes e administradores',workspaces:'Gerenciamento de workspaces',plans:'Planos de assinatura e acesso',support:'Atendimentos'})[tab];
+   clear();tabs.forEach(b=>{const active=b.dataset.masterTab===tab;b.classList.toggle('active',active);if(b.classList.contains('nav-btn')){b.setAttribute('aria-current',active?'page':'false')}});shell.classList.remove('menu-open');
+   show('#master-dashboard',tab==='overview');show('#master-workspaces',tab==='workspaces');show('#master-administrators',tab==='clients');show('#master-plans',tab==='plans');
+   $('#master-panel-title').textContent=({overview:'Dashboard',clients:'Clientes (ADMs)',workspaces:'Workspaces',plans:'Planos de acesso',support:'Atendimentos'})[tab];
+   $('#master-page-kicker').textContent=({overview:'VISÃO GERAL · PLATAFORMA',clients:'GESTÃO DE CONTAS',workspaces:'EMPRESAS E ACESSOS',plans:'ASSINATURAS · PLANOS',support:'SUPORTE · ATENDIMENTO'})[tab];
    if(tab==='support'){window.dispatchEvent(new Event('taskesc:open-support'));return;}
+   if(tab==='overview'){await renderMasterDashboard();return;}
    if(tab==='plans'){
     const list=await request('master.plans');
     planPanel.append(el('p','Crie planos com módulos e limites de equipe. A disponibilidade pública apenas mostra o catálogo; nenhuma cobrança ou novo workspace será ativado automaticamente.','master-note'));
@@ -139,22 +225,16 @@
     }
     return;
    }
-   if(tab==='overview'){
-    const grid=el('div','','master-grid');
-    const status=el('div','','master-mini');status.append(el('h3',String(data.workspaces.length)),el('p','Workspace cadastrado'));
-    const isolation=el('div','','master-mini');isolation.append(el('h3','Protegido'),el('p','Multiempresa ainda bloqueada até homologação'));
-    grid.append(status,isolation);workspaces.append(grid);
-    workspaces.append(el('p','O ADM Master não tem acesso automático aos dados de outras empresas. Use uma sessão de suporte com motivo registrado.','master-note'));
-    if(data.support_active){const link=el('a','Retornar ao suporte ativo');link.href=base+'/dashboard';workspaces.append(link)}
-    return;
-   }
    const grid=el('div','','master-grid');for(const w of data.workspaces)grid.append(supportCard(w));workspaces.append(grid);
    if(data.support_active){const link=el('a','Abrir sessão de suporte ativa');link.href=base+'/dashboard';workspaces.append(link)}
   }
   for(const t of tabs)t.addEventListener('click',()=>draw(t.dataset.masterTab).catch(e=>message('#master-panel-message',e.message,true)));
+  $('#master-refresh').onclick=()=>draw(currentTab()).catch(e=>message('#master-panel-message',e.message,true));
+  $('#master-menu').onclick=()=>shell.classList.toggle('menu-open');
+  $('#master-nav-backdrop').onclick=()=>shell.classList.remove('menu-open');
   await draw(currentTab());
   window.addEventListener('popstate',()=>draw(currentTab()).catch(e=>message('#master-panel-message',e.message,true)));
   if(currentTab()==='support')window.dispatchEvent(new Event('taskesc:open-support'));
   $('#master-logout').addEventListener('click',async()=>{try{await request('auth.logout',{})}finally{location.href=base+'/dashboard'}});
- }catch(err){show('#master-login',true);message('#master-panel-message',err.message,true)}
+ }catch(err){show('#master-auth-surface',true);show('#master-login',true);message('#master-panel-message',err.message,true)}
 })();

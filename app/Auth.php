@@ -79,7 +79,9 @@ final class Auth {
    'staff'=>['dashboard.view','tasks.read','tasks.edit','tasks.move','tasks.delete','tasks.comment','tasks.files','agenda.read','agenda.write','reports.read'],
    'client'=>['dashboard.view','tasks.read','tasks.create','tasks.edit','tasks.move','tasks.comment','tasks.files','agenda.read']
   ];
-  return $map[$role]??[];
+  $abilities=$map[$role]??[];
+  if(!MasterSupport::isSupport())$abilities=array_values(array_diff($abilities,['agenda.read','agenda.write']));
+  return $abilities;
  }
  public static function can(string $ability): bool {return in_array($ability,self::abilities(),true);}
  public static function requireAbility(string $ability): void {if(!self::can($ability))fail('Você não possui permissão para esta ação.',403);}

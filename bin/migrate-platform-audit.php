@@ -22,11 +22,11 @@ try{
   throw new RuntimeException('Backup checksum invalid.');
  if((int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0)!==30)
   throw new RuntimeException('Schema 30 expected.');
- $ddl=file_get_contents(ROOT.'/database/migrations/039_platform_audit_log.sql');
+ $ddl=file_get_contents(ROOT.'/database/migrations/040_platform_audit_log.sql');
  if(!$ddl)throw new RuntimeException('Migration unavailable.');
  DB::run($ddl);
  echo json(['platform_audit_log_ready'=>true,'tenant_audits_preserved'=>true]).PHP_EOL;
 }catch(Throwable $e){
- error_log('Platform mail migration blocked: '.$e->getMessage());
- fwrite(STDERR,"Platform mail migration blocked.\n");exit(2);
+ error_log('Platform audit migration blocked: '.$e->getMessage());
+ fwrite(STDERR,"Platform audit migration blocked.\n");exit(2);
 }

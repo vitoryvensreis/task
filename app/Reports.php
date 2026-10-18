@@ -10,7 +10,7 @@ final class Reports {
   $to=datev($p['to']??(new DateTimeImmutable('last day of this month',$tz))->format('Y-m-d'),false);
   if($from>$to)fail('Período inválido.');
   [$dw,$da]=Auth::demandFilter('d');$params=[...$da,$from.' 00:00:00',$to.' 23:59:59'];$where=$dw.' AND d.created_at BETWEEN ? AND ?';
-  $counts=DB::all('SELECT s.id,s.name,s.color,COUNT(d.id) AS total FROM stages s LEFT JOIN demands d ON d.stage_id=s.id AND '.$where.' ".self::ws('s')." GROUP BY s.id ORDER BY s.position',$params);
+  $counts=DB::all('SELECT s.id,s.name,s.color,COUNT(d.id) AS total FROM stages s LEFT JOIN demands d ON d.stage_id=s.id AND '.$where.self::ws('s').' GROUP BY s.id ORDER BY s.position',$params);
   $summary=DB::one('SELECT COUNT(*) AS received,SUM(CASE WHEN s.kind IN (\'production\',\'approval\') THEN 1 ELSE 0 END) AS in_progress,SUM(CASE WHEN s.kind=\'completed\' THEN 1 ELSE 0 END) AS completed,SUM(CASE WHEN d.due_at<? AND s.kind NOT IN (\'completed\',\'cancelled\',\'archived\') THEN 1 ELSE 0 END) AS overdue FROM demands d JOIN stages s ON s.id=d.stage_id WHERE '.$dw.' AND d.created_at BETWEEN ? AND ?',[$to.' 23:59:59',...$da,$from.' 00:00:00',$to.' 23:59:59']);
   if(Auth::$user['role']!=='admin'){
    $financial=null;

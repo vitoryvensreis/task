@@ -104,7 +104,8 @@ final class SystemHealth {
     DB::run('UPDATE settings SET value=? WHERE `key`=?',[now(),'system_health_watch_last_sent_at']);
     $title=$recovered?'Alertas do TaskEsc normalizados':'Atenção no TaskEsc';
     $body=$recovered?'As falhas monitoradas foram resolvidas.':implode("\n",$issues);
-    foreach(DB::all("SELECT id FROM users WHERE active=1 AND role='admin'") as $user){
+    foreach(DB::all("SELECT u.id FROM users u JOIN platform_master_identities p ON p.user_id=u.id
+      WHERE p.email=? AND p.status='verified' AND u.role='admin' AND u.active=1",[WorkspaceFoundation::MASTER_EMAIL]) as $user){
      Notify::user((int)$user['id'],$title,$body,null,'system-health:v2:'.$sequence.':'.$user['id']);
     }
    }

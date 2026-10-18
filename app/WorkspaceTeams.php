@@ -44,7 +44,8 @@ final class WorkspaceTeams {
  }
 
  public static function list(): array {
-  $ws=self::owner();self::available();
+  Auth::load();Auth::admin();if(Auth::isPreview())fail('Equipe indisponível durante visualização do cliente.',403);
+  $ws=Auth::workspaceId();self::available();
   $plan=PlatformPlans::workspacePlan($ws);
   $members=DB::all("SELECT u.id,u.name,u.email,u.active,wm.role,wm.status,wm.custom_role_id,
     r.name AS custom_role_name
@@ -59,7 +60,7 @@ final class WorkspaceTeams {
     WHERE i.workspace_id=? AND i.status='pending' ORDER BY i.created_at DESC LIMIT 100",[$ws]);
   $used=0;
   foreach($members as $m)if($m['role']==='staff'&&$m['status']==='active'&&(int)$m['active']===1)$used++;
-  return ['members'=>$members,'invites'=>$pending,'plan'=>$plan['name']??'',
+  return ['members'=>$members,'invites'=>$pending,'can_invite'=>(Auth::$origin==='web'&&!MasterSupport::isSupport()&&(Auth::$workspace['role']??'')==='owner'),'plan'=>$plan['name']??'',
     'team_limit'=>$plan['team_limit'],'team_used'=>$used];
  }
 
@@ -79,7 +80,7 @@ final class WorkspaceTeams {
    if($already) {
     $member=DB::one('SELECT role,status FROM workspace_members WHERE user_id=? AND workspace_id=? FOR UPDATE',[(int)$already['id'],$ws]);
     $inv=DB::one('SELECT id,status FROM team_invitations WHERE workspace_id=? AND user_id=? FOR UPDATE',[$ws,(int)$already['id']]);
-    if(!$member||!$inv||$inv['status']!=='pending'||$member['role']!=='staff'
+    if(!$member||!$inv||!in_array($inv['status'],['pending','revoked'],true)||$member['role']!=='staff'
        ||(int)$already['active']!==0)fail('E-mail já cadastrado. Utilize outro endereço ou edite o membro existente.',409);
     $userId=(int)$already['id'];
    } else {
@@ -144,7 +145,11 @@ final class WorkspaceTeams {
    DB::run('UPDATE users SET active=1,password_hash=? WHERE id=?',[$hash,$uid]);
    DB::run("UPDATE workspace_members SET status='active' WHERE workspace_id=? AND user_id=?",[$ws,$uid]);
    DB::run("UPDATE team_invitations SET status='accepted',accepted_at=?,updated_at=? WHERE id=?",[now(),now(),(int)$invite['id']]);
-   audit('user',$uid,'team.invite_accepted',null,['workspace_id'=>$ws]);
+   WorkspaceJobScope::forWorkspace($ws,static function()use($ws,$uid):void {
+    DB::insert('audit_log',['workspace_id'=>$ws,'user_id'=>$uid,'entity'=>'user',
+     'entity_id'=>$uid,'action'=>'team.invite_accepted','before_json'=>null,
+     'after_json'=>json(['workspace_id'=>$ws]),'origin'=>'web','created_at'=>now()]);
+   });
    return ['accepted'=>true];
   });
  }

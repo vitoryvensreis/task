@@ -173,6 +173,7 @@ function smokeWebSocket(string $url, string $origin, string $connectionToken, st
 }
 
 $tempUserId = 0;
+$smokeExitCode = 0;
 $sessionIds = [];
 $smokeStage = 'bootstrap';
 $rateBucket = hash('sha256', 'login|127.0.0.1');
@@ -272,7 +273,7 @@ try {
         $code = 'stage_'.$smokeStage.'_'.$kind;
     }
     fwrite(STDERR, json_encode(['status' => 'error', 'code' => $code], JSON_UNESCAPED_SLASHES).PHP_EOL);
-    exit(1);
+    $smokeExitCode = 1; // Run finally: do not leak test users on failed login.
 } finally {
     if (session_status() === PHP_SESSION_ACTIVE) session_write_close();
     foreach (array_unique($sessionIds) as $sid) @unlink(ROOT.'/storage/sessions/sess_'.$sid);
@@ -283,3 +284,4 @@ try {
         try { DB::run('DELETE FROM users WHERE id=?', [$tempUserId]); } catch (Throwable) {}
     }
 }
+if ($smokeExitCode !== 0) exit($smokeExitCode);

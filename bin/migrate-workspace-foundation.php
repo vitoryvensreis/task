@@ -32,6 +32,12 @@ try{
 }catch(Throwable $e){
  $msg=$e->getMessage();
  $code=preg_match('/\A[a-z0-9_]+\z/D',$msg)?$msg:'workspace_migration_blocked';
- fwrite(STDERR,json(['status'=>'blocked','code'=>$code]).PHP_EOL);
+ $issues=[];
+ if(str_starts_with($msg,'Workspace schema drift: ')){
+  $raw=substr($msg,strlen('Workspace schema drift: '));
+  foreach(explode(',',$raw) as $issue)
+   if(preg_match('/^[a-z0-9_]+$/D',$issue))$issues[]=$issue;
+ }
+ fwrite(STDERR,json(['status'=>'blocked','code'=>$code,'schema_issues'=>$issues]).PHP_EOL);
  exit(1);
 }

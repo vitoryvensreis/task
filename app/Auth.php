@@ -128,15 +128,15 @@ final class Auth {
  }
  public static function twoFactorStatus(): array {self::load();return ['enabled'=>(bool)(self::$user['twofa_enabled']??0),'admin'=>self::$user['role']==='admin'];}
  public static function twoFactorSetup(): array {
-  self::admin();$secret=self::base32Encode(random_bytes(20));DB::update('users',(int)self::$user['id'],['twofa_secret'=>secretEncrypt($secret),'twofa_enabled'=>0,'twofa_recovery_json'=>null]);$issuer=rawurlencode(trim(setting('brand_name','TaskEsc'))?:'TaskEsc');$label=rawurlencode((string)self::$user['email']);$uri='otpauth://totp/'.$issuer.':'.$label.'?secret='.$secret.'&issuer='.$issuer.'&digits=6&period=30';return ['secret'=>$secret,'otpauth_uri'=>$uri];
+  self::admin();if(MasterSupport::isSupport())fail('2FA do proprietário bloqueado em suporte.',403);$secret=self::base32Encode(random_bytes(20));DB::update('users',(int)self::$user['id'],['twofa_secret'=>secretEncrypt($secret),'twofa_enabled'=>0,'twofa_recovery_json'=>null]);$issuer=rawurlencode(trim(setting('brand_name','TaskEsc'))?:'TaskEsc');$label=rawurlencode((string)self::$user['email']);$uri='otpauth://totp/'.$issuer.':'.$label.'?secret='.$secret.'&issuer='.$issuer.'&digits=6&period=30';return ['secret'=>$secret,'otpauth_uri'=>$uri];
  }
  public static function twoFactorEnable(array $p): array {
-  self::admin();$u=DB::one('SELECT * FROM users WHERE id=?',[self::$user['id']]);$secret=self::twoFactorSecret($u);if($secret===''||!self::verifyTotp($secret,trim((string)($p['code']??''))))fail('Código do autenticador inválido.');
+  self::admin();if(MasterSupport::isSupport())fail('2FA do proprietário bloqueado em suporte.',403);$u=DB::one('SELECT * FROM users WHERE id=?',[self::$user['id']]);$secret=self::twoFactorSecret($u);if($secret===''||!self::verifyTotp($secret,trim((string)($p['code']??''))))fail('Código do autenticador inválido.');
   $plain=[];$hashed=[];for($i=0;$i<8;$i++){$raw=strtoupper(bin2hex(random_bytes(4)));$code=substr($raw,0,4).'-'.substr($raw,4,4);$plain[]=$code;$hashed[]=hash('sha256',str_replace('-','',$code));}
   DB::update('users',(int)$u['id'],['twofa_enabled'=>1,'twofa_recovery_json'=>json($hashed)]);self::$user['twofa_enabled']=1;audit('user',(int)$u['id'],'2fa.enabled');return ['saved'=>true,'recovery_codes'=>$plain];
  }
  public static function twoFactorDisable(array $p): array {
-  self::admin();$u=DB::one('SELECT * FROM users WHERE id=?',[self::$user['id']]);$password=(string)($p['current_password']??'');if($password===''||!password_verify($password,(string)$u['password_hash']))fail('Senha atual incorreta.');
+  self::admin();if(MasterSupport::isSupport())fail('2FA do proprietário bloqueado em suporte.',403);$u=DB::one('SELECT * FROM users WHERE id=?',[self::$user['id']]);$password=(string)($p['current_password']??'');if($password===''||!password_verify($password,(string)$u['password_hash']))fail('Senha atual incorreta.');
   $code=trim((string)($p['code']??''));if(!self::twoFactorAccept($u,$code))fail('Código de verificação inválido.');
   DB::update('users',(int)$u['id'],['twofa_enabled'=>0,'twofa_secret'=>null,'twofa_recovery_json'=>null]);self::$user['twofa_enabled']=0;audit('user',(int)$u['id'],'2fa.disabled');return ['saved'=>true];
  }
@@ -144,13 +144,13 @@ final class Auth {
   self::load();$u=DB::one('SELECT id,name,email,role,email_notifications,twofa_enabled,last_login_at FROM users WHERE id=? AND active=1',[self::$user['id']]);if(!$u)fail('Usuário não encontrado.',404);return $u;
  }
  public static function profileSave(array $p): array {
-  self::load();$u=DB::one('SELECT * FROM users WHERE id=? AND active=1',[self::$user['id']]);if(!$u)fail('Usuário não encontrado.',404);
+  self::load();if(MasterSupport::isSupport())fail('Credenciais do proprietário não podem ser alteradas em suporte.',403);$u=DB::one('SELECT * FROM users WHERE id=? AND active=1',[self::$user['id']]);if(!$u)fail('Usuário não encontrado.',404);
   $name=required($p,'name',150);$email=strtolower(required($p,'email',190));if(!filter_var($email,FILTER_VALIDATE_EMAIL))fail('E-mail inválido.');
   if($email!==strtolower((string)$u['email'])){$current=(string)($p['current_password']??'');if($current===''||!password_verify($current,(string)$u['password_hash']))fail('Informe sua senha atual para alterar o e-mail.',422);if(DB::one('SELECT id FROM users WHERE email=? AND id<>?',[$email,$u['id']]))fail('Este e-mail já está em uso.',409);}
   $row=['name'=>$name,'email'=>$email,'email_notifications'=>(int)(bool)($p['email_notifications']??0)];DB::update('users',(int)$u['id'],$row);audit('user',(int)$u['id'],'profile.update',['name'=>$u['name'],'email'=>$u['email'],'email_notifications'=>$u['email_notifications']],$row);self::$user=array_merge(self::$user,$row);return ['saved'=>true,'user'=>self::$user];
  }
  public static function passwordChange(array $p): array {
-  self::load();$u=DB::one('SELECT * FROM users WHERE id=? AND active=1',[self::$user['id']]);if(!$u)fail('Usuário não encontrado.',404);
+  self::load();if(MasterSupport::isSupport())fail('Credenciais do proprietário não podem ser alteradas em suporte.',403);$u=DB::one('SELECT * FROM users WHERE id=? AND active=1',[self::$user['id']]);if(!$u)fail('Usuário não encontrado.',404);
   $current=(string)($p['current_password']??'');if($current===''||!password_verify($current,(string)$u['password_hash']))fail('Senha atual incorreta.',422);
   $new=(string)($p['new_password']??'');$confirm=(string)($p['confirm_password']??'');if($new!==$confirm)fail('A confirmação da nova senha não confere.',422);if(password_verify($new,(string)$u['password_hash']))fail('Escolha uma senha diferente da atual.',422);
   $hash=self::password($new);DB::update('users',(int)$u['id'],['password_hash'=>$hash]);audit('user',(int)$u['id'],'password.change');if(session_status()===PHP_SESSION_ACTIVE)session_regenerate_id(true);return ['saved'=>true];

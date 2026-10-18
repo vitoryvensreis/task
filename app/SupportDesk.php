@@ -16,7 +16,8 @@ final class SupportDesk {
  }
 
  private static function target(array $input,array $actor): array {
-  if((int)(DB::one('SELECT COUNT(*) n FROM workspaces')['n']??0)!==1)
+  $multi=WorkspaceTenantMode::enabled();
+  if(!$multi&&(int)(DB::one('SELECT COUNT(*) n FROM workspaces')['n']??0)!==1)
    fail('O atendimento está temporariamente limitado ao workspace homologado.',503);
   if($actor['master']){
    $workspace=integer($input['workspace_id']??0,1);
@@ -28,19 +29,21 @@ final class SupportDesk {
   $row=DB::one("SELECT w.id,w.name,u.id AS tenant_user_id,u.name AS tenant_name,u.email AS tenant_email
     FROM workspaces w JOIN workspace_members wm ON wm.workspace_id=w.id
     JOIN users u ON u.id=wm.user_id
-    WHERE w.id=? AND w.slug=? AND w.status=?
+    WHERE w.id=? AND w.status IN ('staged','active')
       AND wm.user_id=? AND wm.role IN ('owner','admin') AND wm.status='active'
       AND u.active=1 AND u.role='admin'",
-    [$workspace,WorkspaceFoundation::SLUG,WorkspaceFoundation::STATUS,$tenant]);
-  if(!$row)fail('Conversa de suporte não encontrada.',404);
+    [$workspace,$tenant]);
+  if(!$row||(!$multi&&!DB::one('SELECT 1 FROM workspaces WHERE id=? AND slug=?',[$workspace,WorkspaceFoundation::SLUG])))
+   fail('Conversa de suporte não encontrada.',404);
   return $row;
  }
 
  public static function threads(): array {
   $actor=self::actor();
-  $args=[];$where="WHERE w.slug=? AND w.status=? AND wm.role IN ('owner','admin')
+  $multi=WorkspaceTenantMode::enabled();
+  $args=[];$where="WHERE w.status IN ('staged','active') AND wm.role IN ('owner','admin')
     AND wm.status='active' AND u.active=1 AND u.role='admin'";
-  $args=[WorkspaceFoundation::SLUG,WorkspaceFoundation::STATUS];
+  if(!$multi){$where.=" AND w.slug=?";$args[] = WorkspaceFoundation::SLUG;}
   if(!$actor['master']){$where.=" AND u.id=?";$args[]=$actor['id'];}
   return DB::all("SELECT w.id AS workspace_id,w.name AS workspace_name,u.id AS tenant_user_id,
      u.name AS tenant_name,u.email AS tenant_email,
@@ -108,7 +111,8 @@ final class SupportDesk {
    @chmod($dir.'/'.$filename,0600);
   }
   try{
-   $delivery=EventOutbox::transaction(static function()use($target,$actor,$nonce,$body,$filename,$mime):array {
+   $write=static function()use($target,$actor,$nonce,$body,$filename,$mime):array {
+    return EventOutbox::transaction(static function()use($target,$actor,$nonce,$body,$filename,$mime):array {
     $id=DB::insert('workspace_support_messages',[
      'workspace_id'=>(int)$target['id'],'tenant_user_id'=>(int)$target['tenant_user_id'],
      'sender_user_id'=>$actor['id'],'sender_role'=>$actor['master']?'master':'tenant',
@@ -136,7 +140,10 @@ final class SupportDesk {
      ]);
     }else{$notificationId=0;}
     return ['id'=>$id,'recipient'=>$recipient,'notification_id'=>$notificationId];
-   });
+    });
+   };
+   $delivery=WorkspaceTenantMode::enabled()
+     ?WorkspaceJobScope::forWorkspace((int)$target['id'],$write):$write();
    $id=(int)$delivery['id'];
   }catch(Throwable $error){
    if($filename)@unlink(ROOT.'/storage/support/'.$filename);

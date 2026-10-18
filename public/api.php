@@ -26,8 +26,17 @@ try {
   }
   if($action==='master.support_seen'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST'){
    if(!MasterSupport::isActor()||MasterSupport::isSupport())fail('Acesso restrito ao ADM Master.',403);
-   DB::run("UPDATE notifications SET seen=1 WHERE user_id=? AND seen=0
-    AND dedupe_key LIKE 'support.message.%'",[(int)Auth::$actor['id']]);
+   $masterId=(int)Auth::$actor['id'];
+   if(WorkspaceTenantMode::enabled()){
+    $workspaces=DB::all("SELECT DISTINCT workspace_id FROM notifications
+      WHERE user_id=? AND seen=0 AND dedupe_key LIKE 'support.message.%'",[$masterId]);
+    foreach($workspaces as $ws)WorkspaceJobScope::forWorkspace((int)$ws['workspace_id'],
+      static function()use($masterId,$ws):void {
+       DB::run("UPDATE notifications SET seen=1 WHERE workspace_id=? AND user_id=? AND seen=0
+         AND dedupe_key LIKE 'support.message.%'",[(int)$ws['workspace_id'],$masterId]);
+      });
+   }else DB::run("UPDATE notifications SET seen=1 WHERE user_id=? AND seen=0
+    AND dedupe_key LIKE 'support.message.%'",[$masterId]);
    out(['saved'=>true]);
   }
   if(in_array($action,['master.wpp_status','master.wpp_start','master.wpp_qr','master.wpp_test','master.wpp_close','master.wpp_disconnect'],true)){

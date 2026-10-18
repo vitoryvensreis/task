@@ -27,7 +27,10 @@ final class Notify {
   if($key&&DB::one('SELECT id FROM notifications WHERE dedupe_key=?'.(WorkspaceTenantMode::enabled()?' AND workspace_id=?':''),WorkspaceTenantMode::enabled()?[$key,(int)(Auth::$workspace['id']??WorkspaceJobScope::currentId())]:[$key]))return null;
   $notificationId=DB::insert('notifications',['user_id'=>$id,'title'=>mb_substr($title,0,190),'body'=>$body,'demand_id'=>$demand,'dedupe_key'=>$key,'created_at'=>now()]);
   if($push){
-   $unread=(int)(DB::one('SELECT COUNT(*) AS n FROM notifications WHERE user_id=? AND seen=0',[$id])['n']??0);
+   $multi=WorkspaceTenantMode::enabled();
+   $scope=(int)(Auth::$workspace['id']??WorkspaceJobScope::currentId());
+   $unread=(int)(DB::one('SELECT COUNT(*) AS n FROM notifications WHERE user_id=? AND seen=0'.($multi?' AND workspace_id=?':''),
+     $multi?[$id,$scope]:[$id])['n']??0);
    Push::notifyUser($id,[
     'notification_id'=>$notificationId,
     'title'=>$title,
@@ -83,9 +86,21 @@ final class Notify {
  }
 
  public static function flush(): array {
+  $multi=WorkspaceTenantMode::enabled();
+  $scope=(int)(Auth::$workspace['id']??WorkspaceJobScope::currentId());
+  if($multi&&$scope===0){
+   $sent=0;$failed=0;
+   foreach(DB::all("SELECT id FROM workspaces WHERE status IN ('staged','active') ORDER BY id") as $ws){
+    $one=WorkspaceJobScope::forWorkspace((int)$ws['id'],static fn()=>self::flush());
+    $sent+=(int)$one['sent'];$failed+=(int)$one['failed'];
+   }
+   return ['sent'=>$sent,'failed'=>$failed,'status'=>'per_workspace'];
+  }
   $sent=0;$failed=0;
   if(empty(config('smtp',[])['host']))return ['sent'=>0,'failed'=>0,'status'=>'SMTP não configurado'];
-  foreach(DB::all("SELECT * FROM mail_queue WHERE status='pending' AND next_attempt<=? AND attempts<5 ORDER BY id LIMIT 20",[now()]) as $m){
+  foreach(DB::all("SELECT * FROM mail_queue WHERE status='pending' AND next_attempt<=? AND attempts<5".
+      ($multi?' AND workspace_id=?':'')." ORDER BY id LIMIT 20",
+      $multi?[now(),$scope]:[now()]) as $m){
    $attempt=(int)$m['attempts']+1;$attemptAt=now();
    try{
     self::smtp($m['recipient'],$m['subject'],$m['body']);

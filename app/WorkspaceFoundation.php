@@ -114,7 +114,7 @@ final class WorkspaceFoundation {
      status VARCHAR(24) NOT NULL DEFAULT 'staged',
      created_at DATETIME NOT NULL,updated_at DATETIME NOT NULL,
      PRIMARY KEY(id),UNIQUE KEY uq_ws_slug(slug),
-     KEY idx_ws_owner(owner_user_id),
+     UNIQUE KEY uq_ws_one_owner(owner_user_id),
      CONSTRAINT fk_ws_owner FOREIGN KEY(owner_user_id) REFERENCES users(id) ON DELETE RESTRICT
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
    'workspace_members'=>"CREATE TABLE workspace_members (
@@ -122,6 +122,7 @@ final class WorkspaceFoundation {
      role VARCHAR(24) NOT NULL,status VARCHAR(24) NOT NULL DEFAULT 'active',
      joined_at DATETIME NOT NULL,
      PRIMARY KEY(workspace_id,user_id),
+     UNIQUE KEY uq_ws_one_membership(user_id),
      KEY idx_ws_members_user(user_id,status,workspace_id),
      CONSTRAINT fk_ws_member_workspace FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE RESTRICT,
      CONSTRAINT fk_ws_member_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE

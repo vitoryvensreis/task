@@ -184,7 +184,10 @@ final class WorkspaceFoundation {
      [self::MARKER])['value']??0);
    if($version>self::VERSION)throw new RuntimeException('Future workspace migration version.');
    if($version===self::VERSION){
-    $issues=self::issues(true);
+    // Initial migration backfilled every historical user. After B1 auth is
+    // deployed, an intentionally unlinked or revoked user MUST be denied
+    // login; such a user is not a structural migration error.
+    $issues=array_values(array_diff(self::issues(true),['unlinked_legacy_users']));
     if($issues)throw new RuntimeException('Workspace schema drift: '.implode(',',$issues));
     return ['version'=>$version,'already_applied'=>true,'status'=>'staged'];
    }

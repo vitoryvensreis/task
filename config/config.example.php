@@ -17,17 +17,5 @@ return [
    'secret' => '',
    'webhook_url' => '',
  ],
- 'ai_whatsapp' => [
-   'enabled' => false, // Ative somente na configuração privada da VPS.
-   'admin_control_enabled' => false, // Operações administrativas amplas (não inclui financeiro autorizado por confirmação).
-   'financial_write_enabled' => true, // Somente ADM no privado, com confirmação por código; defina false para desativar.
-   'agenda_control_enabled' => false, // Agenda: criação/edição/cancelamento privados com confirmação.
-   'provider' => 'gemini',
-   'fallback_provider' => 'groq',
-   'gemini_api_key' => '',
-   'gemini_model' => 'gemini-3.8-flash',
-   'groq_api_key' => '',
-   'groq_model' => 'openai/gpt-oss-120b',
- ],
  'trusted_origins' => ['https://chatgpt.com','https://chat.openai.com'],
 ];

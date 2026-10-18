@@ -16,7 +16,7 @@ final class Chat
         $myId=(int)$me['id'];
         $rows=DB::all("SELECT u.id,u.name,u.role,u.last_login_at
           FROM users u
-          WHERE u.active=1 AND u.role='admin' AND u.id<>?".self::ws('u').(WorkspaceContext::legacyCiFixture()?'':" AND u.id IN (SELECT user_id FROM workspace_members WHERE workspace_id=".(int)Auth::workspaceId().")")
+          WHERE u.active=1 AND u.role='admin' AND u.id<>?".self::ws('u').(WorkspaceContext::legacyCiFixture()?'':" AND u.id IN (SELECT user_id FROM workspace_members WHERE workspace_id=".(int)Auth::workspaceId().")")."
           ORDER BY u.name,u.id",[$myId]);
 
         $threads=DB::all("SELECT t.id,t.user_low_id,t.user_high_id,t.updated_at,m.id AS last_message_id,

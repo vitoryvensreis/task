@@ -1,9 +1,13 @@
 <?php
 final class Demands {
+ private static function ci(): bool {return WorkspaceContext::legacyCiFixture();}
+ private static function wsData(array $row): array {return self::ci()?$row:($row+['workspace_id'=>Auth::workspaceId()]);}
+ private static function wsWhere(string $alias=''): string {return self::ci()?'':' AND '.($alias!==''?$alias.'.':'').'workspace_id=?';}
+ private static function wsArgs(array $args): array {return self::ci()?$args:[...$args,Auth::workspaceId()];}
  private static function responsible(int $userId,int $clientId): int {
   if($userId<1)fail('Selecione um responsável para a task.',422);
-  $user=DB::one("SELECT id,role FROM users WHERE id=? AND active=1 AND role IN ('admin','staff')",[$userId]);if(!$user)fail('Responsável inválido.',422);
-  if($user['role']==='staff'&&!DB::one('SELECT client_id FROM user_clients WHERE user_id=? AND client_id=?',[$userId,$clientId]))fail('O responsável da equipe precisa estar vinculado a este cliente.',422);
+  if(!self::ci())WorkspaceCatalog::requireUser($userId,true);$user=DB::one("SELECT id,role FROM users WHERE id=? AND active=1 AND role IN ('admin','staff')",[$userId]);if(!$user)fail('Responsável inválido.',422);
+  if($user['role']==='staff'&&!DB::one('SELECT client_id FROM user_clients WHERE user_id=? AND client_id=?'.self::wsWhere(),self::wsArgs([$userId,$clientId])))fail('O responsável da equipe precisa estar vinculado a este cliente.',422);
   return (int)$user['id'];
  }
  public static function list(array $p): array {
@@ -17,7 +21,7 @@ final class Demands {
   if(!empty($p['due_to'])){$w.=' AND d.due_at<=?';$a[]=datev($p['due_to'],false).' 23:59:59';}
   if(empty($p['include_closed']))$w.=" AND s.kind NOT IN ('cancelled','archived')";
   $sortMap=['updated'=>'d.updated_at DESC','due'=>'d.due_at ASC','created'=>'d.created_at DESC','title'=>'d.title ASC','priority'=>"FIELD(d.priority,'urgent','high','normal','low'),d.due_at ASC"];$order=$sortMap[(string)($p['sort']??'updated')]??$sortMap['updated'];
-  $base=' FROM demands d JOIN clients c ON c.id=d.client_id JOIN categories ca ON ca.id=d.category_id JOIN stages s ON s.id=d.stage_id LEFT JOIN users u ON u.id=d.assigned_to WHERE '.$w;
+  $base=' FROM demands d JOIN clients c ON c.id=d.client_id'.(self::ci()?'':' AND c.workspace_id=d.workspace_id').' JOIN categories ca ON ca.id=d.category_id'.(self::ci()?'':' AND ca.workspace_id=d.workspace_id').' JOIN stages s ON s.id=d.stage_id'.(self::ci()?'':' AND s.workspace_id=d.workspace_id').' LEFT JOIN users u ON u.id=d.assigned_to WHERE '.$w;
   $select='SELECT d.*,c.name AS client_name,c.commercial_type AS client_commercial_type,c.monthly_amount_cents,ca.name AS category_name,s.name AS stage_name,s.kind AS stage_kind,s.color AS stage_color,u.name AS assigned_name';
   if(!empty($p['paginate'])){
    $page=max(1,(int)($p['page']??1));$per=max(10,min(100,(int)($p['per_page']??30)));$total=(int)(DB::one('SELECT COUNT(*) AS n'.$base,$a)['n']??0);$offset=($page-1)*$per;
@@ -32,7 +36,7 @@ final class Demands {
    unset($d['internal_notes']);
    unset($d['whatsapp_recipient_mode'],$d['whatsapp_custom_phone']);
    if(Auth::$user['role']==='staff')unset($d['amount_cents']);
-   elseif(!Auth::isPreview()&&!DB::one('SELECT client_id FROM user_clients WHERE user_id=? AND client_id=? AND can_finance=1',[Auth::$user['id'],$d['client_id']]))unset($d['amount_cents']);
+   elseif(!Auth::isPreview()&&!DB::one('SELECT client_id FROM user_clients WHERE user_id=? AND client_id=? AND can_finance=1'.self::wsWhere(),self::wsArgs([Auth::$user['id'],$d['client_id']])))unset($d['amount_cents']);
   }
   return $d;
  }
@@ -77,9 +81,9 @@ final class Demands {
 
    $client=integer($p['client_id']??($old['client_id']??0),1);$clientRow=Auth::client($client);
    if($old&&$client!==(int)$old['client_id'])fail('O cliente de uma task existente não pode ser trocado.');
-   $category=integer($p['category_id']??($old['category_id']??0),1);$categoryRow=DB::one('SELECT * FROM categories WHERE id=? AND active=1',[$category]);if(!$categoryRow)fail('Categoria inválida.');
+   $category=integer($p['category_id']??($old['category_id']??0),1);$categoryRow=DB::one('SELECT * FROM categories WHERE id=? AND active=1'.self::wsWhere(),self::wsArgs([$category]));if(!$categoryRow)fail('Categoria inválida.');
    $assignedSource=array_key_exists('assigned_to',$p)?(int)$p['assigned_to']:(int)($old['assigned_to']??0);if(!$old&&!$assignedSource)$assignedSource=(int)($categoryRow['default_assigned_to']??0);if($role==='client'&&$old)$assignedSource=(int)($old['assigned_to']??0);$assigned=self::responsible($assignedSource,$client);
-   $project=$old['project_id']??null;if(isset($p['project_id']))$project=!empty($p['project_id'])?(int)$p['project_id']:null;if($project&&!DB::one('SELECT id FROM projects WHERE id=? AND client_id=?',[$project,$client]))fail('Projeto de outro cliente.');
+   $project=$old['project_id']??null;if(isset($p['project_id']))$project=!empty($p['project_id'])?(int)$p['project_id']:null;if($project&&!DB::one('SELECT id FROM projects WHERE id=? AND client_id=?'.self::wsWhere(),self::wsArgs([$project,$client])))fail('Projeto de outro cliente.');
 
    $dueInput=trim((string)($p['due_at']??($old['due_at']??'')));if($dueInput===''&&!$old)$dueInput=businessDeadline(max(1,(int)($categoryRow['default_due_hours']??24)))->format('Y-m-d\\TH:i');if($dueInput==='')fail('Informe a data de entrega.');$due=timestamp($dueInput);if(!$due)fail('Informe a data de entrega.');validateDelivery($due,$old['due_at']??null);
    $priority=enumv($p['priority']??($old['priority']??($categoryRow['default_priority']??'normal')),['low','normal','high','urgent'],'prioridade');
@@ -104,15 +108,15 @@ final class Demands {
     $whatsappMode=(string)($old['whatsapp_recipient_mode']??'creator');
     $whatsappCustomPhone=$old['whatsapp_custom_phone']??null;
    }
-   if(!$old&&empty($p['allow_duplicate'])){$duplicate=DB::one('SELECT id,title FROM demands WHERE client_id=? AND category_id=? AND title=? AND due_at=? AND deleted_at IS NULL LIMIT 1',[$client,$category,trim((string)($p['title']??'')),$due]);if($duplicate)fail('Já existe uma task igual para este cliente, serviço e entrega.',409,['duplicate_id'=>(int)$duplicate['id']]);}
+   if(!$old&&empty($p['allow_duplicate'])){$duplicate=DB::one('SELECT id,title FROM demands WHERE client_id=? AND category_id=? AND title=? AND due_at=? AND deleted_at IS NULL'.self::wsWhere().' LIMIT 1',self::wsArgs([$client,$category,trim((string)($p['title']??'')),$due]));if($duplicate)fail('Já existe uma task igual para este cliente, serviço e entrega.',409,['duplicate_id'=>(int)$duplicate['id']]);}
    $details=$old?decode($old['details_json']??'{}'):[];
    $row=[
     'client_id'=>$client,'project_id'=>$project,'category_id'=>$category,'title'=>required($p,'title',190),'brief'=>required($p,'brief',20000),
     'details_json'=>json($details),'due_at'=>$due,'priority'=>$priority,'whatsapp_recipient_mode'=>$whatsappMode,'whatsapp_custom_phone'=>$whatsappCustomPhone,'draft'=>(int)(bool)($p['draft']??0),'updated_at'=>now()
    ];
 
-   $firstStage=DB::one('SELECT * FROM stages WHERE active=1 ORDER BY position,id LIMIT 1');if(!$firstStage)fail('Crie ao menos uma coluna ativa no Kanban.');
-   $stage=$old?DB::one('SELECT * FROM stages WHERE id=? AND active=1',[$old['stage_id']]):$firstStage;if(!$stage)fail('A etapa atual foi removida. Mova a task pelo Kanban.',409);
+   $firstStage=DB::one('SELECT * FROM stages WHERE active=1'.self::wsWhere().' ORDER BY position,id LIMIT 1',self::wsArgs([]));if(!$firstStage)fail('Crie ao menos uma coluna ativa no Kanban.');
+   $stage=$old?DB::one('SELECT * FROM stages WHERE id=? AND active=1'.self::wsWhere(),self::wsArgs([$old['stage_id']])):$firstStage;if(!$stage)fail('A etapa atual foi removida. Mova a task pelo Kanban.',409);
    $row['stage_id']=(int)$stage['id'];
 
    if($role==='admin'){
@@ -133,11 +137,11 @@ final class Demands {
    $row['completed_at']=$stage['kind']==='completed'?($old['completed_at']??now()):null;$row['first_completed_at']=$old['first_completed_at']??$row['completed_at'];
    if($row['draft']&&$accepted)fail('Publique o rascunho antes de iniciar a produção.');
 
-   if($old){$row['version']=(int)$old['version']+1;DB::update('demands',$id,$row);}else{$id=DB::insert('demands',$row+['created_by'=>Auth::$user['id'],'created_at'=>now()]);}
-   $fresh=DB::one('SELECT d.*,s.kind AS stage_kind FROM demands d JOIN stages s ON s.id=d.stage_id WHERE d.id=?',[$id]);
-   if(!$old)DB::insert('transitions',['demand_id'=>$id,'from_stage'=>null,'to_stage'=>$fresh['stage_id'],'actor_id'=>Auth::$user['id'],'happened_at'=>now()]);
+   if($old){$row['version']=(int)$old['version']+1;DB::update('demands',$id,$row);}else{$id=DB::insert('demands',self::wsData($row+['created_by'=>Auth::$user['id'],'created_at'=>now()]));}
+   $fresh=DB::one('SELECT d.*,s.kind AS stage_kind FROM demands d JOIN stages s ON s.id=d.stage_id'.(self::ci()?'':' AND s.workspace_id=d.workspace_id').' WHERE d.id=?'.self::wsWhere('d'),self::wsArgs([$id]));
+   if(!$old)DB::insert('transitions',self::wsData(['demand_id'=>$id,'from_stage'=>null,'to_stage'=>$fresh['stage_id'],'actor_id'=>Auth::$user['id'],'happened_at'=>now()]));
    audit('demand',$id,$old?'updated':'created',$old,$row);if(!$fresh['draft'])Notify::demand($fresh,$old?'Task atualizada':'Nova task',$fresh['title']);
-   if(!$old){$labels=[];if(!empty($p['template_id']))$labels=decode(DB::one('SELECT checklist_json FROM templates WHERE id=?',[(int)$p['template_id']])['checklist_json']??'[]');elseif(!empty($categoryRow['checklist_json']))$labels=decode($categoryRow['checklist_json'],[]);foreach($labels as $label)if(trim((string)$label)!=='')DB::insert('checklists',['demand_id'=>$id,'label'=>mb_substr((string)$label,0,255),'done'=>0]);}
+   if(!$old){$labels=[];if(!empty($p['template_id']))$labels=decode(DB::one('SELECT checklist_json FROM templates WHERE id=?'.self::wsWhere(),self::wsArgs([(int)$p['template_id']]))['checklist_json']??'[]');elseif(!empty($categoryRow['checklist_json']))$labels=decode($categoryRow['checklist_json'],[]);foreach($labels as $label)if(trim((string)$label)!=='')DB::insert('checklists',self::wsData(['demand_id'=>$id,'label'=>mb_substr((string)$label,0,255),'done'=>0]));}
    $oldProject=(int)($old['project_id']??0);$newProject=(int)($fresh['project_id']??0);$alsoProjects=$old&&$oldProject!==$newProject?[$oldProject]:[];
    DemandRealtime::emit($old?'demand.updated':'demand.created',$fresh,['change'=>$old?'save.updated':'save.created','previous_project_id'=>$oldProject?:null],isset(Auth::$user['id'])?(int)Auth::$user['id']:null,$alsoProjects);
    return ['id'=>$id,'version'=>(int)$fresh['version'],'url'=>base('kanban/task/'.$id)];

@@ -43,16 +43,10 @@ jobs:
       - name: Validar isolamento e fallback realtime
         run: |
           set -e
-          php tests/ai-whatsapp-fast-path.php
-          php tests/ai-admin-approval.php
-          php tests/ai-finance-only.php
-          php tests/ai-whatsapp-group-trigger.php
-          php tests/ai-agenda-config.php
           php tests/realtime.php
-          php tests/ai-whatsapp-providers.php
           php tests/wppconnect-contract.php
           php tests/automation-contract.php
-          python3 -m py_compile ops/realtime-step1.py ops/realtime-step3.py ops/realtime-step4.py ops/automation-worker.py ops/ai-whatsapp-worker.py ops/wppconnect-webhook-probe.py
+          python3 -m py_compile ops/realtime-step1.py ops/realtime-step3.py ops/realtime-step4.py ops/automation-worker.py ops/wppconnect-webhook-probe.py
           python3 tests/realtime-ops.py
           rm -rf ops/__pycache__
 
@@ -73,7 +67,6 @@ jobs:
           node tests/realtime-frontend.mjs
           node tests/automation-frontend.mjs
           node tests/automation-pan.mjs
-          node tests/ai-usage-frontend.mjs
           node --check public/assets/vendor/centrifuge-5.7.4.js
           node --check public/service-worker.js
           node - <<'NODE'
@@ -167,11 +160,7 @@ jobs:
           php tests/realtime-domain.php
           php tests/wppconnect-realtime.php
           php tests/automation-core.php
-          php tests/google-health.php
           php tests/chat.php
-          php tests/ai-whatsapp-inbox.php
-          php tests/ai-whatsapp-access.php
-          php tests/ai-whatsapp-tools.php
           php tests/workspace-foundation.php
 
   deploy:
@@ -459,7 +448,6 @@ jobs:
             php bin/migrate-workspace-roles.php --apply "--backup-manifest=$BACKUP_MANIFEST"
             php -r 'require "app/bootstrap.php"; echo json(WorkspaceTeams::migrate()).PHP_EOL;'
             php bin/migrate-workspace-db-stage1.php --apply "--backup-manifest=$BACKUP_MANIFEST"
-            php bin/migrate-workspace-calendars.php --apply "--backup-manifest=$BACKUP_MANIFEST"
             php bin/migrate-workspace-automation-cursors.php --apply "--backup-manifest=$BACKUP_MANIFEST"
             php -r 'require "app/bootstrap.php"; echo json(WorkspaceContactsIndex::apply()).PHP_EOL;'
             php bin/provision-gabriella.php --apply "--backup-manifest=$BACKUP_MANIFEST"
@@ -481,9 +469,6 @@ jobs:
             php bin/migrate-outbox.php "--backup-manifest=$BACKUP_MANIFEST"
             php bin/migrate-chat.php "--backup-manifest=$BACKUP_MANIFEST"
             php bin/migrate-automation.php "--backup-manifest=$BACKUP_MANIFEST"
-            php bin/migrate-ai-whatsapp-inbox.php "--backup-manifest=$BACKUP_MANIFEST"
-            php bin/migrate-ai-whatsapp-access.php "--backup-manifest=$BACKUP_MANIFEST"
-            php bin/migrate-ai-whatsapp-tools.php "--backup-manifest=$BACKUP_MANIFEST"
             php bin/migrate-whatsapp-contacts.php "--backup-manifest=$BACKUP_MANIFEST"
           REMOTE
 
@@ -553,53 +538,26 @@ jobs:
             fi
           REMOTE
 
-      - name: Instalar worker TaskEsc AI
+      - name: Desativar definitivamente worker IA legado
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_PORT: ${{ secrets.VPS_PORT }}
           VPS_USER: ${{ secrets.VPS_USER }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
           set -euo pipefail
-          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
             set -euo pipefail
-            if [ "$(id -u)" -eq 0 ]; then
-              python3 "$DEPLOY_PATH/ops/ai-whatsapp-worker.py" install --deploy-path "$DEPLOY_PATH"
-            else
-              sudo -n python3 "$DEPLOY_PATH/ops/ai-whatsapp-worker.py" install --deploy-path "$DEPLOY_PATH"
+            if command -v systemctl >/dev/null 2>&1; then
+              if [ "$(id -u)" -eq 0 ]; then
+                systemctl disable --now taskesc-ai-whatsapp-worker.service || true
+                rm -f /etc/systemd/system/taskesc-ai-whatsapp-worker.service
+                systemctl daemon-reload
+              else
+                sudo -n systemctl disable --now taskesc-ai-whatsapp-worker.service || true
+                sudo -n rm -f /etc/systemd/system/taskesc-ai-whatsapp-worker.service
+                sudo -n systemctl daemon-reload
+              fi
             fi
-          REMOTE
-
-      - name: Health worker TaskEsc AI
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_PORT: ${{ secrets.VPS_PORT }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-        run: |
-          set -euo pipefail
-          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
-            set -euo pipefail
-            if [ "$(id -u)" -eq 0 ]; then
-              python3 "$DEPLOY_PATH/ops/ai-whatsapp-worker.py" check --deploy-path "$DEPLOY_PATH"
-            else
-              sudo -n python3 "$DEPLOY_PATH/ops/ai-whatsapp-worker.py" check --deploy-path "$DEPLOY_PATH"
-            fi
-          REMOTE
-
-      - name: Diagnosticar WhatsApp e conexao WPPConnect (somente leitura)
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_PORT: ${{ secrets.VPS_PORT }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
-            set -euo pipefail
-            cd "$DEPLOY_PATH"
-            php bin/ai-whatsapp-incident.php || true
           REMOTE
 
       - name: Verificar URL de webhook do WPPConnect (sem imprimir secrets)

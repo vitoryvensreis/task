@@ -26,6 +26,7 @@ require ROOT.'/app/Demands.php';
 function fail(string $message,int $status=422,array $details=[]):never {throw new RuntimeException($message,$status);}
 
 function now():string {return gmdate('Y-m-d H:i:s');}
+function decode(?string $raw,mixed $fallback=[]):mixed {return $raw?json_decode($raw,true,512,JSON_THROW_ON_ERROR):$fallback;}
 function base(string $path=''):string{return 'https://task.escotilhaprodutora.com/'.ltrim($path,'/');}
 function testws(bool $ok,string $message):void {if(!$ok)throw new RuntimeException($message);}
 function refuses(callable $operation,string $reason):void {

@@ -55,6 +55,8 @@ $assetVersion=static function(string $file):string {
    <button class="nav-btn" data-master-tab="plans" type="button"><span class="nav-icon">▤</span>Planos de acesso</button>
    <button class="nav-btn" data-master-tab="workspaces" type="button"><span class="nav-icon">▣</span>Workspaces</button>
    <button class="nav-btn" data-master-tab="support" type="button"><span class="nav-icon">◉</span>Atendimentos</button>
+   <button class="nav-btn" data-master-tab="ai" type="button"><span class="nav-icon">◈</span>Monitoramento IA</button>
+   <button class="nav-btn" data-master-tab="health" type="button"><span class="nav-icon">◉</span>Saúde & Logs</button>
    <button class="nav-btn" data-master-tab="settings" type="button"><span class="nav-icon">⚙</span>Configurações</button>
   </nav>
   <div class="sidebar-bottom">
@@ -84,11 +86,14 @@ $assetVersion=static function(string $file):string {
    <section id="master-workspaces" class="master-view hidden" aria-label="Workspaces"></section>
    <section id="master-settings" class="master-view hidden" aria-label="Configurações da plataforma"></section>
    <section id="master-support" class="master-view hidden" aria-label="Atendimento ao cliente"></section>
+   <section id="master-ai" class="master-view hidden" aria-label="Monitoramento de IA"></section>
+   <section id="master-health" class="master-view hidden" aria-label="Saúde e logs da plataforma"></section>
   </div>
  </main>
 </div>
 <script src="<?=e($basePath)?>/assets/vendor/centrifuge-5.7.4.js" defer></script>
 <script src="<?=e($basePath)?>/assets/master-settings.js?v=<?=e($assetVersion('master-settings.js'))?>" defer></script>
+<script src="<?=e($basePath)?>/assets/master-operations.js?v=<?=e($assetVersion('master-operations.js'))?>" defer></script>
 <script src="<?=e($basePath)?>/assets/master.js?v=<?=e($assetVersion('master.js'))?>" defer></script>
 <script src="<?=e($basePath)?>/assets/support-chat.js?v=<?=e($assetVersion('support-chat.js'))?>" defer></script>
 </body></html>

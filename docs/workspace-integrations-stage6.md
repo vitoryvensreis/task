@@ -23,3 +23,9 @@ Esta entrega inclui apenas um avanço seguro da Etapa 6, **não sua conclusão**
 - Os endpoints oficiais de fechar e logout são utilizados, com confirmação da senha Master e auditoria de plataforma.
 - O número é transporte global, mas o processamento de mensagens e automações deve resolver o workspace pelo usuário autenticado, nunca pelo payload externo.
 - AI inbound multitenant ainda exige roteamento auditado; não ativar em produção sem ele.
+
+## Worker do cron
+- No modo multiempresa, financeiro (mensalidades e ciclos) e Google Agenda são executados dentro de `WorkspaceJobScope::forWorkspace` por empresa ativa.
+- SMTP é transporte global compartilhado e só executa um flush por cron, sem duplicar mensagens.
+- Cron HTTP deixa de executar jobs multiempresa sem identidade validada; use somente `php bin/cron.php`.
+- O worker AI continua aguardando isolamento completo: nenhum conteúdo confidencial de outro workspace é processado via fallback.

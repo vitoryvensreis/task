@@ -5,6 +5,8 @@ final class Finance {
   if(PHP_SAPI==='cli' && !Auth::$user) {
    $explicit=WorkspaceJobScope::currentId();
    if($explicit>0)return $explicit;
+   if(WorkspaceTenantMode::enabled())
+    throw new RuntimeException('Explicit workspace scope is required for finance worker.');
    $w=DB::one('SELECT id FROM workspaces WHERE slug=? AND status=?',[WorkspaceFoundation::SLUG,WorkspaceFoundation::STATUS]);
    $n=(int)(DB::one('SELECT COUNT(*) n FROM workspaces')['n']??0);
    if(!$w||$n!==1)throw new RuntimeException('Workspace worker boundary is not configured.');

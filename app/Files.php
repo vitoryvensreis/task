@@ -18,7 +18,7 @@ final class Files {
   }else fail('Envie um arquivo ou um link.');
   if(in_array($kind,['review','final'],true)&&!$row['shared'])fail('Uma versão para aprovação precisa estar compartilhada.');
   return DB::tx(function() use($d,$kind,$row,$finalLink): array {
-   Auth::demand((int)$d['id'],true);$save=$row;if(in_array($kind,['review','final'],true))$save['version_no']=(int)DB::one('SELECT COALESCE(MAX(version_no),0) AS n FROM files WHERE demand_id=?',[$d['id']])['n']+1;
+   Auth::demand((int)$d['id'],true);$save=$row;if(in_array($kind,['review','final'],true))$save['version_no']=(int)DB::one('SELECT COALESCE(MAX(version_no),0) AS n FROM files WHERE demand_id=?'.self::where(),self::args([$d['id']]))['n']+1;
    $id=DB::insert('files',self::row($save));audit('demand',$d['id'],'file.added',null,['file_id'=>$id,'version'=>$save['version_no']??null,'storage'=>$save['storage_provider']??'local']);Notify::demand($d,$kind==='review'?'Versão para aprovação':'Novo arquivo',$save['label'],!$save['shared']);
    DemandRealtime::emit('demand.file_added',$d,['change'=>'file.added','file_id'=>$id,'version_no'=>$save['version_no']??null,'shared'=>(int)$save['shared']],(int)Auth::$user['id'],[],!$save['shared']?'staff':'all');
    if($kind==='final')DemandRealtime::emit('demand.final_delivered',$d,['change'=>'final.delivered','file_id'=>$id,'version_no'=>$save['version_no']??null,'shared'=>(int)$save['shared']],(int)Auth::$user['id']);
@@ -53,7 +53,7 @@ final class Files {
  private static function finalizeDriveUpload(string $token,array $state,array $drive): array {
   $d=Auth::demand((int)$state['demand_id'],true);$uploadKey=$state['upload_key']??null;
   if($uploadKey){
-   $existing=DB::one('SELECT id,version_no,storage_provider,drive_file_id FROM files WHERE demand_id=? AND upload_key=? LIMIT 1',[$d['id'],$uploadKey]);
+   $existing=DB::one('SELECT id,version_no,storage_provider,drive_file_id FROM files WHERE demand_id=? AND upload_key=?'.self::where().' LIMIT 1',self::args([$d['id'],$uploadKey]));
    if($existing){
     if(!empty($drive['id'])&&($existing['drive_file_id']??'')!==$drive['id'])try{Google::deleteDriveFile((int)$state['account_id'],(string)$drive['id']);}catch(Throwable $e){error_log('TaskEsc duplicate upload cleanup: '.$e->getMessage());}
     unset($_SESSION['drive_uploads'][$token]);$response=['complete'=>true,'id'=>(int)$existing['id'],'version_no'=>$existing['version_no']!==null?(int)$existing['version_no']:null,'storage'=>$existing['storage_provider']??'drive','next_offset'=>(int)$state['size'],'final_delivery_link'=>$state['final_delivery_link']??null,'deduplicated'=>true];$_SESSION['drive_uploads_done'][$token]=$response+['user_id'=>(int)Auth::$user['id'],'expires'=>time()+900];return $response;
@@ -63,17 +63,17 @@ final class Files {
   $result=DB::tx(function() use($d,$state,$drive,$uploadKey): array {
    Auth::demand((int)$d['id'],true);
    // Serializes simultaneous finalizations for the same task, including uploads from other tabs.
-   DB::one('SELECT id FROM demands WHERE id=? FOR UPDATE',[(int)$d['id']]);
+   DB::one('SELECT id FROM demands WHERE id=?'.self::where().' FOR UPDATE',self::args([(int)$d['id']]));
    if($uploadKey){
-    $existing=DB::one('SELECT id,version_no,storage_provider,drive_file_id FROM files WHERE demand_id=? AND upload_key=? LIMIT 1 FOR UPDATE',[$d['id'],$uploadKey]);
+    $existing=DB::one('SELECT id,version_no,storage_provider,drive_file_id FROM files WHERE demand_id=? AND upload_key=?'.self::where().' LIMIT 1 FOR UPDATE',self::args([$d['id'],$uploadKey]));
     if($existing)return ['existing'=>$existing];
    }
    $row=['demand_id'=>$d['id'],'author_id'=>Auth::$user['id'],'label'=>$state['label'],'shared'=>(int)$state['shared'],'kind'=>$state['kind'],'created_at'=>now(),'original_name'=>mb_substr((string)$state['name'],0,255),'disk_name'=>null,'storage_provider'=>'drive','drive_file_id'=>$drive['id'],'drive_account_id'=>(int)$state['account_id'],'drive_web_view_url'=>$drive['webViewLink']??null,'mime'=>$drive['mimeType']??$state['mime'],'size_bytes'=>(int)($drive['size']??$state['size']),'upload_key'=>$uploadKey];
-   if(in_array($state['kind'],['review','final'],true))$row['version_no']=(int)DB::one('SELECT COALESCE(MAX(version_no),0) AS n FROM files WHERE demand_id=?',[$d['id']])['n']+1;
+   if(in_array($state['kind'],['review','final'],true))$row['version_no']=(int)DB::one('SELECT COALESCE(MAX(version_no),0) AS n FROM files WHERE demand_id=?'.self::where(),self::args([$d['id']]))['n']+1;
    try{$id=DB::insert('files',self::row($row));}
    catch(PDOException $e){
     if(!$uploadKey||!str_contains(strtolower($e->getMessage()),'duplicate'))throw $e;
-    $existing=DB::one('SELECT id,version_no,storage_provider,drive_file_id FROM files WHERE upload_key=? LIMIT 1',[$uploadKey]);if(!$existing)throw $e;return ['existing'=>$existing];
+    $existing=DB::one('SELECT id,version_no,storage_provider,drive_file_id FROM files WHERE upload_key=?'.self::where().' LIMIT 1',self::args([$uploadKey]));if(!$existing)throw $e;return ['existing'=>$existing];
    }
    audit('demand',$d['id'],'file.added',null,['file_id'=>$id,'version'=>$row['version_no']??null,'storage'=>'drive']);Notify::demand($d,$state['kind']==='review'?'Versão para aprovação':'Novo arquivo',$row['label'],!$row['shared']);
    DemandRealtime::emit('demand.file_added',$d,['change'=>'file.added','file_id'=>$id,'version_no'=>$row['version_no']??null,'shared'=>(int)$row['shared']],(int)Auth::$user['id'],[],!$row['shared']?'staff':'all');
@@ -119,7 +119,7 @@ final class Files {
   foreach($_SESSION['drive_uploads']??[] as $key=>$state)if((int)($state['expires']??0)<time())unset($_SESSION['drive_uploads'][$key]);
   foreach($_SESSION['drive_uploads_done']??[] as $key=>$state)if((int)($state['expires']??0)<time())unset($_SESSION['drive_uploads_done'][$key]);
   if($uploadKey){
-   $existing=DB::one('SELECT id,version_no,storage_provider FROM files WHERE demand_id=? AND upload_key=? LIMIT 1',[$d['id'],$uploadKey]);
+   $existing=DB::one('SELECT id,version_no,storage_provider FROM files WHERE demand_id=? AND upload_key=?'.self::where().' LIMIT 1',self::args([$d['id'],$uploadKey]));
    if($existing)return ['complete'=>true,'id'=>(int)$existing['id'],'version_no'=>$existing['version_no']!==null?(int)$existing['version_no']:null,'storage'=>$existing['storage_provider']??'drive','next_offset'=>$size,'size'=>$size,'deduplicated'=>true];
    foreach($_SESSION['drive_uploads']??[] as $token=>$state)if(($state['upload_key']??null)===$uploadKey&&(int)($state['user_id']??0)===(int)Auth::$user['id']&&(int)($state['demand_id']??0)===(int)$d['id']){
     return ['upload_token'=>$token,'direct_url'=>(string)$state['location'],'chunk_size'=>(int)($state['chunk_size']??1048576),'next_offset'=>(int)($state['offset']??0),'size'=>$size,'unlimited'=>$limitMb===0,'resumed'=>true];

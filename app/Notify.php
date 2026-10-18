@@ -78,7 +78,8 @@ final class Notify {
 
  public static function log(int $limit=100): array {
   Auth::admin();$limit=max(1,min(300,$limit));
-  return DB::all('SELECT id,recipient,subject,status,attempts,error,next_attempt,last_attempt_at,sent_at,created_at FROM mail_queue ORDER BY id DESC LIMIT '.$limit);
+  $ci=WorkspaceContext::legacyCiFixture();
+  return DB::all('SELECT id,recipient,subject,status,attempts,error,next_attempt,last_attempt_at,sent_at,created_at FROM mail_queue'.($ci?'':' WHERE workspace_id=?').' ORDER BY id DESC LIMIT '.$limit,$ci?[]:[Auth::workspaceId()]);
  }
 
  public static function flush(): array {

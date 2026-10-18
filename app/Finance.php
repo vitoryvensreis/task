@@ -143,7 +143,7 @@ final class Finance {
  }
  private static function expenseCategoryName(mixed $value,bool $allowInactive=false): string {
   $name=mb_substr(trim((string)$value),0,80);if($name==='')fail('Selecione uma categoria de custo.');
-  $row=DB::one('SELECT name FROM expense_categories WHERE name=?'.($allowInactive?'':' AND active=1').' LIMIT 1',[$name]);if(!$row)fail('Categoria de custo inválida ou desativada.',422);return (string)$row['name'];
+  $row=DB::one('SELECT name FROM expense_categories WHERE name=?'.($allowInactive?'':' AND active=1').self::wsWhere().' LIMIT 1',self::args([$name]));if(!$row)fail('Categoria de custo inválida ou desativada.',422);return (string)$row['name'];
  }
  public static function expenseCategories(array $p=[]): array {
   Auth::admin();$all=!empty($p['all']);$w=$all?'':'WHERE ec.active=1';
@@ -151,8 +151,8 @@ final class Finance {
  }
  public static function expenseCategorySave(array $p): array {
   Auth::admin();$id=(int)($p['id']??0);$name=mb_substr(trim(required($p,'name',80)),0,80);if($name==='')fail('Informe o nome da categoria.');
-  $existing=DB::one('SELECT * FROM expense_categories WHERE name=? LIMIT 1',[$name]);if($existing&&(!$id||(int)$existing['id']!==$id)){if(!(int)$existing['active']){DB::update('expense_categories',(int)$existing['id'],['active'=>1,'updated_at'=>now()]);audit('expense_category',(int)$existing['id'],'reactivated',$existing,['name'=>$name,'active'=>1]);return ['id'=>(int)$existing['id'],'reactivated'=>true];}fail('Essa categoria já existe.',409);}
-  $row=['name'=>$name,'active'=>(int)(bool)($p['active']??1),'updated_at'=>now()];if($id){$old=self::owned('expense_categories',$id);if(!$old)fail('Categoria não encontrada.',404);if($old['name']!==$name){DB::run('UPDATE expenses SET category=? WHERE category=?',[$name,$old['name']]);DB::run('UPDATE expense_rules SET category=? WHERE category=?',[$name,$old['name']]);}DB::update('expense_categories',$id,$row);audit('expense_category',$id,'updated',$old,$row);}else{$id=DB::insert('expense_categories',$row+['created_by'=>(int)Auth::$user['id'],'created_at'=>now()]);audit('expense_category',$id,'created',null,$row);}return ['id'=>$id];
+  $existing=DB::one('SELECT * FROM expense_categories WHERE name=?'.self::wsWhere().' LIMIT 1',self::args([$name]));if($existing&&(!$id||(int)$existing['id']!==$id)){if(!(int)$existing['active']){DB::update('expense_categories',(int)$existing['id'],['active'=>1,'updated_at'=>now()]);audit('expense_category',(int)$existing['id'],'reactivated',$existing,['name'=>$name,'active'=>1]);return ['id'=>(int)$existing['id'],'reactivated'=>true];}fail('Essa categoria já existe.',409);}
+  $row=['name'=>$name,'active'=>(int)(bool)($p['active']??1),'updated_at'=>now()];if($id){$old=self::owned('expense_categories',$id);if(!$old)fail('Categoria não encontrada.',404);if($old['name']!==$name){DB::run('UPDATE expenses SET category=? WHERE category=?'.self::wsWhere(),self::args([$name,$old['name']]));DB::run('UPDATE expense_rules SET category=? WHERE category=?'.self::wsWhere(),self::args([$name,$old['name']]));}DB::update('expense_categories',$id,$row);audit('expense_category',$id,'updated',$old,$row);}else{$id=DB::insert('expense_categories',self::data($row+['created_by'=>(int)Auth::$user['id'],'created_at'=>now()]));audit('expense_category',$id,'created',null,$row);}return ['id'=>$id];
  }
  public static function expenseCategoryDelete(array $p): array {
   Auth::admin();$id=integer($p['id']??0,1);$row=self::owned('expense_categories',$id);if(!$row)fail('Categoria não encontrada.',404);if(mb_strtolower((string)$row['name'])==='outros')fail('A categoria Outros deve permanecer disponível.',409);DB::update('expense_categories',$id,['active'=>0,'updated_at'=>now()]);audit('expense_category',$id,'disabled',$row,['active'=>0]);return ['saved'=>true];
@@ -161,21 +161,21 @@ final class Finance {
   Auth::admin();$id=(int)($p['id']??0);$old=$id?self::owned('expenses',$id):null;if($id&&!$old)fail('Custo não encontrado.',404);if($old&&!empty($old['rule_id']))fail('Edite este custo pela regra recorrente; o pagamento pode ser alterado separadamente.',409);
   $status=enumv($p['payment_status']??($old['payment_status']??'pending'),['pending','paid'],'pagamento');$spent=datev($p['spent_on']??'',false);$paidOn=$status==='paid'?datev($p['paid_on']??$spent,false):null;$categoryInput=mb_substr(trim((string)($p['category']??'Outros')),0,80);$category=self::expenseCategoryName($categoryInput,(bool)($old&&(string)$old['category']===$categoryInput));
   $row=['description'=>required($p,'description',190),'vendor'=>mb_substr(trim((string)($p['vendor']??'')),0,190),'category'=>$category,'amount_cents'=>integer($p['amount_cents']??0,1),'spent_on'=>$spent,'payment_status'=>$status,'paid_on'=>$paidOn,'notes'=>mb_substr(trim((string)($p['notes']??'')),0,4000),'updated_at'=>now()];
-  if($id)DB::update('expenses',$id,$row);else $id=DB::insert('expenses',$row+['rule_id'=>null,'source_key'=>null,'created_by'=>(int)Auth::$user['id'],'created_at'=>now()]);
+  if($id)DB::update('expenses',$id,$row);else $id=DB::insert('expenses',self::data($row+['rule_id'=>null,'source_key'=>null,'created_by'=>(int)Auth::$user['id'],'created_at'=>now()]));
   audit('expense',$id,$old?'updated':'created',$old,$row);return ['id'=>$id,'payment_status'=>$status,'paid_on'=>$paidOn];
  }
  public static function expensePayment(array $p): array {
   Auth::admin();$id=integer($p['id']??0,1);$row=self::owned('expenses',$id);if(!$row)fail('Custo não encontrado.',404);$status=enumv($p['payment_status']??'',['pending','paid'],'pagamento');$paidOn=$status==='paid'?datev($p['paid_on']??(new DateTimeImmutable('now',new DateTimeZone(config('timezone','America/Fortaleza'))))->format('Y-m-d'),false):null;DB::update('expenses',$id,['payment_status'=>$status,'paid_on'=>$paidOn,'updated_at'=>now()]);audit('expense',$id,'payment_status',$row,['payment_status'=>$status,'paid_on'=>$paidOn]);return ['saved'=>true,'id'=>$id,'payment_status'=>$status,'paid_on'=>$paidOn];
  }
  public static function expenseDelete(array $p): array {
-  Auth::admin();$id=integer($p['id']??0,1);$row=DB::one('SELECT * FROM expenses WHERE id=? AND deleted_at IS NULL',[$id]);if(!$row)fail('Custo não encontrado.',404);$reason=mb_substr(trim((string)($p['reason']??'Removido pelo financeiro')),0,500);DB::update('expenses',$id,['deleted_at'=>now(),'updated_at'=>now()]);audit('expense',$id,'deleted',$row,['reason'=>$reason]);return ['deleted'=>true];
+  Auth::admin();$id=integer($p['id']??0,1);$row=self::owned('expenses',$id);if(!$row)fail('Custo não encontrado.',404);$reason=mb_substr(trim((string)($p['reason']??'Removido pelo financeiro')),0,500);DB::update('expenses',$id,['deleted_at'=>now(),'updated_at'=>now()]);audit('expense',$id,'deleted',$row,['reason'=>$reason]);return ['deleted'=>true];
  }
  public static function expenseRuleSave(array $p): array {
   Auth::admin();$id=(int)($p['id']??0);$old=$id?self::owned('expense_rules',$id):null;if($id&&!$old)fail('Custo recorrente não encontrado.',404);
   $starts=datev($p['starts_on']??'',false);$ends=!empty($p['ends_on'])?datev($p['ends_on'],false):null;if($ends&&$ends<$starts)fail('A data final não pode ser anterior ao início.');$categoryInput=mb_substr(trim((string)($p['category']??'Outros')),0,80);$category=self::expenseCategoryName($categoryInput,(bool)($old&&(string)$old['category']===$categoryInput));
   $row=['name'=>required($p,'name',190),'vendor'=>mb_substr(trim((string)($p['vendor']??'')),0,190),'category'=>$category,'amount_cents'=>integer($p['amount_cents']??0,1),'recurrence'=>enumv($p['recurrence']??'monthly',['monthly','yearly'],'recorrência'),'starts_on'=>$starts,'ends_on'=>$ends,'active'=>(int)(bool)($p['active']??1),'notes'=>mb_substr(trim((string)($p['notes']??'')),0,4000),'updated_at'=>now()];
-  if($id)DB::update('expense_rules',$id,$row);else $id=DB::insert('expense_rules',$row+['created_by'=>(int)Auth::$user['id'],'created_at'=>now()]);
-  $tz=new DateTimeZone(config('timezone','America/Fortaleza'));$monthFloor=(new DateTimeImmutable('first day of this month',$tz))->format('Y-m-d');DB::run('DELETE FROM expenses WHERE rule_id=? AND spent_on>=?',[$id,$monthFloor]);
+  if($id)DB::update('expense_rules',$id,$row);else $id=DB::insert('expense_rules',self::data($row+['created_by'=>(int)Auth::$user['id'],'created_at'=>now()]));
+  $tz=new DateTimeZone(config('timezone','America/Fortaleza'));$monthFloor=(new DateTimeImmutable('first day of this month',$tz))->format('Y-m-d');DB::run('DELETE FROM expenses WHERE rule_id=? AND spent_on>=?'.self::wsWhere(),self::args([$id,$monthFloor]));
   audit('expense_rule',$id,$old?'updated':'created',$old,$row);if($row['active'])self::syncExpenses($monthFloor,(new DateTimeImmutable('last day of this month',$tz))->format('Y-m-d'));return ['id'=>$id];
  }
  public static function expenseRuleDelete(array $p): array {

@@ -10,6 +10,7 @@ final class Finance {
   }
   return Auth::workspaceId();
  }
+ private static function wsSql(string $alias=''): string {return self::ci()?'':' AND '.($alias!==''?$alias.'.':'').'workspace_id='.(int)self::wsId();}
  private static function wsWhere(string $alias=''): string {return self::ci()?'':' AND '.($alias!==''?$alias.'.':'').'workspace_id=?';}
  private static function args(array $a): array {return self::ci()?$a:[...$a,self::wsId()];}
  private static function data(array $d): array {return self::ci()?$d:($d+['workspace_id'=>self::wsId()]);}
@@ -112,7 +113,7 @@ final class Finance {
   if($from>$to)fail('Período de custos inválido.');return [$from,$to,$tz];
  }
  private static function syncExpenses(string $from,string $to): int {
-  $tz=new DateTimeZone(config('timezone','America/Fortaleza'));$rules=DB::all("SELECT * FROM expense_rules WHERE active=1 AND starts_on<=? AND (ends_on IS NULL OR ends_on>=?)".self::wsWhere()." ORDER BY id",self::args([$to,$from]));$count=0;
+  $tz=new DateTimeZone(config('timezone','America/Fortaleza'));$rules=DB::all("SELECT * FROM expense_rules WHERE 1=1".self::wsSql()." AND active=1 AND starts_on<=? AND (ends_on IS NULL OR ends_on>=?)".self::wsWhere()." ORDER BY id",self::args([$to,$from]));$count=0;
   $monthFloor=(new DateTimeImmutable('first day of this month',$tz))->format('Y-m-d');
   foreach($rules as $rule){
    $dates=[];$start=new DateTimeImmutable((string)$rule['starts_on'],$tz);$end=!empty($rule['ends_on'])?new DateTimeImmutable((string)$rule['ends_on'],$tz):null;
@@ -246,26 +247,26 @@ final class Finance {
  }
  public static function analysis(array $p=[]): array {
   Auth::admin();[$from,$to,$tz]=self::expenseRange($p);self::syncCommercialInvoices($from,$to);self::syncExpenses($from,$to);$today=(new DateTimeImmutable('now',$tz))->format('Y-m-d');
-  $billed=(int)(DB::one("SELECT COALESCE(SUM(amount_cents),0) AS n FROM invoices WHERE status<>'cancelled' AND deleted_at IS NULL AND due_on BETWEEN ? AND ?",[$from,$to])['n']??0);
-  $received=(int)(DB::one("SELECT COALESCE(SUM(p.amount_cents),0) AS n FROM payments p JOIN invoices i ON i.id=p.invoice_id WHERE i.status<>'cancelled' AND i.deleted_at IS NULL AND p.paid_on BETWEEN ? AND ?",[$from,$to])['n']??0);
-  $open=(int)(DB::one("SELECT COALESCE(SUM(GREATEST(0,i.amount_cents-(SELECT COALESCE(SUM(p.amount_cents+COALESCE(p.discount_cents,0)),0) FROM payments p WHERE p.invoice_id=i.id))),0) AS n FROM invoices i WHERE i.status<>'cancelled' AND i.deleted_at IS NULL")['n']??0);
-  $overdue=(int)(DB::one("SELECT COALESCE(SUM(GREATEST(0,i.amount_cents-(SELECT COALESCE(SUM(p.amount_cents+COALESCE(p.discount_cents,0)),0) FROM payments p WHERE p.invoice_id=i.id))),0) AS n FROM invoices i WHERE i.status<>'cancelled' AND i.deleted_at IS NULL AND i.due_on<? AND i.due_on BETWEEN ? AND ?",[$today,$from,$to])['n']??0);
+  $billed=(int)(DB::one("SELECT COALESCE(SUM(amount_cents),0) AS n FROM invoices WHERE 1=1".self::wsSql()." AND status<>'cancelled' AND deleted_at IS NULL AND due_on BETWEEN ? AND ?",[$from,$to])['n']??0);
+  $received=(int)(DB::one("SELECT COALESCE(SUM(p.amount_cents),0) AS n FROM payments p JOIN invoices i ON i.id=p.invoice_id WHERE 1=1".self::wsSql('i')." AND i.status<>'cancelled' AND i.deleted_at IS NULL AND p.paid_on BETWEEN ? AND ?",[$from,$to])['n']??0);
+  $open=(int)(DB::one("SELECT COALESCE(SUM(GREATEST(0,i.amount_cents-(SELECT COALESCE(SUM(p.amount_cents+COALESCE(p.discount_cents,0)),0) FROM payments p WHERE p.invoice_id=i.id))),0) AS n FROM invoices i WHERE 1=1".self::wsSql('i')." AND i.status<>'cancelled' AND i.deleted_at IS NULL")['n']??0);
+  $overdue=(int)(DB::one("SELECT COALESCE(SUM(GREATEST(0,i.amount_cents-(SELECT COALESCE(SUM(p.amount_cents+COALESCE(p.discount_cents,0)),0) FROM payments p WHERE p.invoice_id=i.id))),0) AS n FROM invoices i WHERE 1=1".self::wsSql('i')." AND i.status<>'cancelled' AND i.deleted_at IS NULL AND i.due_on<? AND i.due_on BETWEEN ? AND ?",[$today,$from,$to])['n']??0);
 
-  $operational=(int)(DB::one("SELECT COALESCE(SUM(amount_cents),0) AS n FROM expenses WHERE deleted_at IS NULL AND spent_on BETWEEN ? AND ?",[$from,$to])['n']??0);
-  $task=(int)(DB::one("SELECT COALESCE(SUM(amount_cents),0) AS n FROM costs WHERE spent_on BETWEEN ? AND ?",[$from,$to])['n']??0);$expenses=$operational+$task;
-  $paidOperational=(int)(DB::one("SELECT COALESCE(SUM(amount_cents),0) AS n FROM expenses WHERE deleted_at IS NULL AND payment_status='paid' AND paid_on BETWEEN ? AND ?",[$from,$to])['n']??0);
-  $paidTask=(int)(DB::one("SELECT COALESCE(SUM(amount_cents),0) AS n FROM costs WHERE payment_status='paid' AND paid_on BETWEEN ? AND ?",[$from,$to])['n']??0);$paidExpenses=$paidOperational+$paidTask;
-  $pendingOperational=(int)(DB::one("SELECT COALESCE(SUM(amount_cents),0) AS n FROM expenses WHERE deleted_at IS NULL AND payment_status<>'paid' AND spent_on BETWEEN ? AND ?",[$from,$to])['n']??0);
-  $pendingTask=(int)(DB::one("SELECT COALESCE(SUM(amount_cents),0) AS n FROM costs WHERE payment_status<>'paid' AND spent_on BETWEEN ? AND ?",[$from,$to])['n']??0);$pendingExpenses=$pendingOperational+$pendingTask;
+  $operational=(int)(DB::one("SELECT COALESCE(SUM(amount_cents),0) AS n FROM expenses WHERE 1=1".self::wsSql()." AND deleted_at IS NULL AND spent_on BETWEEN ? AND ?",[$from,$to])['n']??0);
+  $task=(int)(DB::one("SELECT COALESCE(SUM(amount_cents),0) AS n FROM costs WHERE 1=1".self::wsSql()." AND spent_on BETWEEN ? AND ?",[$from,$to])['n']??0);$expenses=$operational+$task;
+  $paidOperational=(int)(DB::one("SELECT COALESCE(SUM(amount_cents),0) AS n FROM expenses WHERE 1=1".self::wsSql()." AND deleted_at IS NULL AND payment_status='paid' AND paid_on BETWEEN ? AND ?",[$from,$to])['n']??0);
+  $paidTask=(int)(DB::one("SELECT COALESCE(SUM(amount_cents),0) AS n FROM costs WHERE 1=1".self::wsSql()." AND payment_status='paid' AND paid_on BETWEEN ? AND ?",[$from,$to])['n']??0);$paidExpenses=$paidOperational+$paidTask;
+  $pendingOperational=(int)(DB::one("SELECT COALESCE(SUM(amount_cents),0) AS n FROM expenses WHERE 1=1".self::wsSql()." AND deleted_at IS NULL AND payment_status<>'paid' AND spent_on BETWEEN ? AND ?",[$from,$to])['n']??0);
+  $pendingTask=(int)(DB::one("SELECT COALESCE(SUM(amount_cents),0) AS n FROM costs WHERE 1=1".self::wsSql()." AND payment_status<>'paid' AND spent_on BETWEEN ? AND ?",[$from,$to])['n']??0);$pendingExpenses=$pendingOperational+$pendingTask;
 
-  $rules=DB::all("SELECT amount_cents,recurrence FROM expense_rules WHERE active=1 AND starts_on<=? AND (ends_on IS NULL OR ends_on>=?)",[$to,$from]);$fixed=0;foreach($rules as $rule)$fixed+=(int)($rule['recurrence']==='yearly'?round((int)$rule['amount_cents']/12):(int)$rule['amount_cents']);
+  $rules=DB::all("SELECT amount_cents,recurrence FROM expense_rules WHERE 1=1".self::wsSql()." AND active=1 AND starts_on<=? AND (ends_on IS NULL OR ends_on>=?)",[$to,$from]);$fixed=0;foreach($rules as $rule)$fixed+=(int)($rule['recurrence']==='yearly'?round((int)$rule['amount_cents']/12):(int)$rule['amount_cents']);
   $projected=$billed-$expenses;$cash=$received-$paidExpenses;$margin=$billed>0?round(($projected/$billed)*100,1):0.0;$cashMargin=$received>0?round(($cash/$received)*100,1):0.0;$futureIn=$open;$futureOut=$pendingExpenses;$futureNet=$futureIn-$futureOut;$overallProjected=$cash+$futureNet;$health=$cash<0||$overallProjected<0?'critical':(($received<=0||$cashMargin<10||$futureOut>$futureIn)?'attention':'healthy');
-  $categories=DB::all("SELECT category, SUM(amount_cents) AS amount_cents FROM (SELECT category,amount_cents FROM expenses WHERE deleted_at IS NULL AND spent_on BETWEEN ? AND ? UNION ALL SELECT 'Custos de task' AS category,amount_cents FROM costs WHERE spent_on BETWEEN ? AND ?) x GROUP BY category ORDER BY amount_cents DESC",[$from,$to,$from,$to]);
+  $categories=DB::all("SELECT category, SUM(amount_cents) AS amount_cents FROM (SELECT category,amount_cents FROM expenses WHERE 1=1".self::wsSql()." AND deleted_at IS NULL AND spent_on BETWEEN ? AND ? UNION ALL SELECT 'Custos de task' AS category,amount_cents FROM costs WHERE 1=1".self::wsSql()." AND spent_on BETWEEN ? AND ?) x GROUP BY category ORDER BY amount_cents DESC",[$from,$to,$from,$to]);
 
-  $billRows=DB::all("SELECT DATE_FORMAT(due_on,'%Y-%m') bucket,SUM(amount_cents) n FROM invoices WHERE status<>'cancelled' AND deleted_at IS NULL AND due_on BETWEEN ? AND ? GROUP BY bucket",[$from,$to]);
-  $paidRows=DB::all("SELECT DATE_FORMAT(p.paid_on,'%Y-%m') bucket,SUM(p.amount_cents) n FROM payments p JOIN invoices i ON i.id=p.invoice_id WHERE i.status<>'cancelled' AND i.deleted_at IS NULL AND p.paid_on BETWEEN ? AND ? GROUP BY bucket",[$from,$to]);
-  $expenseRows=DB::all("SELECT bucket,SUM(n) n FROM (SELECT DATE_FORMAT(spent_on,'%Y-%m') bucket,SUM(amount_cents) n FROM expenses WHERE deleted_at IS NULL AND spent_on BETWEEN ? AND ? GROUP BY bucket UNION ALL SELECT DATE_FORMAT(spent_on,'%Y-%m') bucket,SUM(amount_cents) n FROM costs WHERE spent_on BETWEEN ? AND ? GROUP BY bucket) z GROUP BY bucket",[$from,$to,$from,$to]);
-  $paidExpenseRows=DB::all("SELECT bucket,SUM(n) n FROM (SELECT DATE_FORMAT(paid_on,'%Y-%m') bucket,SUM(amount_cents) n FROM expenses WHERE deleted_at IS NULL AND payment_status='paid' AND paid_on BETWEEN ? AND ? GROUP BY bucket UNION ALL SELECT DATE_FORMAT(paid_on,'%Y-%m') bucket,SUM(amount_cents) n FROM costs WHERE payment_status='paid' AND paid_on BETWEEN ? AND ? GROUP BY bucket) z GROUP BY bucket",[$from,$to,$from,$to]);
+  $billRows=DB::all("SELECT DATE_FORMAT(due_on,'%Y-%m') bucket,SUM(amount_cents) n FROM invoices WHERE 1=1".self::wsSql()." AND status<>'cancelled' AND deleted_at IS NULL AND due_on BETWEEN ? AND ? GROUP BY bucket",[$from,$to]);
+  $paidRows=DB::all("SELECT DATE_FORMAT(p.paid_on,'%Y-%m') bucket,SUM(p.amount_cents) n FROM payments p JOIN invoices i ON i.id=p.invoice_id WHERE 1=1".self::wsSql('i')." AND i.status<>'cancelled' AND i.deleted_at IS NULL AND p.paid_on BETWEEN ? AND ? GROUP BY bucket",[$from,$to]);
+  $expenseRows=DB::all("SELECT bucket,SUM(n) n FROM (SELECT DATE_FORMAT(spent_on,'%Y-%m') bucket,SUM(amount_cents) n FROM expenses WHERE 1=1".self::wsSql()." AND deleted_at IS NULL AND spent_on BETWEEN ? AND ? GROUP BY bucket UNION ALL SELECT DATE_FORMAT(spent_on,'%Y-%m') bucket,SUM(amount_cents) n FROM costs WHERE 1=1".self::wsSql()." AND spent_on BETWEEN ? AND ? GROUP BY bucket) z GROUP BY bucket",[$from,$to,$from,$to]);
+  $paidExpenseRows=DB::all("SELECT bucket,SUM(n) n FROM (SELECT DATE_FORMAT(paid_on,'%Y-%m') bucket,SUM(amount_cents) n FROM expenses WHERE 1=1".self::wsSql()." AND deleted_at IS NULL AND payment_status='paid' AND paid_on BETWEEN ? AND ? GROUP BY bucket UNION ALL SELECT DATE_FORMAT(paid_on,'%Y-%m') bucket,SUM(amount_cents) n FROM costs WHERE 1=1".self::wsSql()." AND payment_status='paid' AND paid_on BETWEEN ? AND ? GROUP BY bucket) z GROUP BY bucket",[$from,$to,$from,$to]);
 
   $bm=[];$pm=[];$em=[];$pem=[];foreach($billRows as $x)$bm[$x['bucket']]=(int)$x['n'];foreach($paidRows as $x)$pm[$x['bucket']]=(int)$x['n'];foreach($expenseRows as $x)$em[$x['bucket']]=(int)$x['n'];foreach($paidExpenseRows as $x)$pem[$x['bucket']]=(int)$x['n'];
   $months=[];$cursor=(new DateTimeImmutable($from,$tz))->modify('first day of this month');$last=(new DateTimeImmutable($to,$tz))->modify('first day of this month');for($i=0;$cursor<=$last&&$i<24;$cursor=$cursor->modify('+1 month'),$i++){$key=$cursor->format('Y-m');$b=$bm[$key]??0;$pmt=$pm[$key]??0;$ex=$em[$key]??0;$pex=$pem[$key]??0;$months[]=['bucket'=>$key,'label'=>$cursor->format('m/Y'),'billed_cents'=>$b,'received_cents'=>$pmt,'expense_cents'=>$ex,'paid_expense_cents'=>$pex,'projected_result_cents'=>$b-$ex,'cash_result_cents'=>$pmt-$pex,'profit_cents'=>$pmt-$pex];}

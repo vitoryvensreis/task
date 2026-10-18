@@ -14,7 +14,7 @@ $activation=preg_match('/\A[a-f0-9]{64}\z/D',$token)===1;
 <style>
 .master-shell{max-width:850px;margin:7vh auto;padding:20px}.master-card{background:#16191e;color:#f6f7f8;border:1px solid #3a3d40;border-radius:18px;padding:28px;margin:18px 0}.master-card p,.master-card small{color:#aab0b8}.master-card input{display:block;width:100%;padding:12px;margin:9px 0 16px;background:#101215;color:white;border:1px solid #59616a;border-radius:9px;box-sizing:border-box}.master-card button{background:#f5f5f5;color:#111;border:0;border-radius:9px;padding:12px 18px;font-weight:700;cursor:pointer}.master-card button:disabled{opacity:.55;cursor:wait}.master-card a{color:#dce4ee}.master-card .error{color:#ffb9b9}.master-card .success{color:#a6e8c8}.master-card label{display:block;margin:14px 0}.master-flag{display:inline-block;background:#242933;padding:6px 12px;border-radius:20px;font-size:12px;letter-spacing:.08em}body{background:#0b0d10;color:#f6f7f8}
 .master-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:22px}.master-tabs button{padding:10px 15px;background:#232936;border:1px solid #454d60;color:#edf1f5}.master-tabs button.active{background:#f1f5f9;color:#171b20}.master-shell{max-width:1080px}.master-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}.master-mini{background:#0c1016;border:1px solid #313946;padding:18px;border-radius:12px}.master-mini p{margin-bottom:8px}.master-mini h3{margin-top:4px}.master-note{border-left:3px solid #9ca3af;padding:10px 14px;background:#121822}.master-reset-form{padding-top:14px;border-top:1px solid #333b48}.master-reset-form .danger{background:#a63b3b;color:#fff}
-</style></head>
+</style><link rel="stylesheet" href="<?=e($basePath)?>/assets/support-chat.css?v=1"></head>
 <body data-base-path="<?=e($basePath)?>" data-activate="<?=e($activation?$token:'')?>">
 <main class="master-shell">
 <div class="master-flag">TASKESC · ADMINISTRAÇÃO DA PLATAFORMA</div>
@@ -36,4 +36,4 @@ $activation=preg_match('/\A[a-f0-9]{64}\z/D',$token)===1;
 <button type="button" id="master-logout">Sair da conta Master</button>
 </section>
 </main>
-<script src="<?=e($basePath)?>/assets/master.js" defer></script></body></html>
+<script src="<?=e($basePath)?>/assets/master.js" defer></script><script src="<?=e($basePath)?>/assets/support-chat.js?v=1" defer></script></body></html>

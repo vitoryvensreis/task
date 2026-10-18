@@ -18,11 +18,15 @@ final class MasterSupport {
   return $w;
  }
  public static function isVerified(array $user): bool {
-  if(strtolower((string)($user['email']??''))!==WorkspaceFoundation::MASTER_EMAIL||
-     ($user['role']??'')!=='admin'||(int)($user['active']??0)!==1)return false;
-  return (bool)DB::one("SELECT 1 FROM platform_master_identities
+  if(($user['role']??'')!=='admin'||(int)($user['active']??0)!==1)return false;
+  $email=strtolower((string)($user['email']??''));
+  if($email===''||!filter_var($email,FILTER_VALIDATE_EMAIL))return false;
+  // Fail closed while an isolated test or un-migrated installation has no Master schema.
+  try{
+   return (bool)DB::one("SELECT 1 FROM platform_master_identities
     WHERE email=? AND user_id=? AND status='verified' LIMIT 1",
-    [WorkspaceFoundation::MASTER_EMAIL,(int)$user['id']]);
+    [$email,(int)$user['id']]);
+  }catch(PDOException){return false;}
  }
  public static function contextFor(array $user): array {
   if(!self::isVerified($user))fail('Identidade do ADM Master ainda não verificada.',403);
@@ -71,6 +75,44 @@ final class MasterSupport {
  }
 
  /** Two-factor reset is a high-risk operation: password step-up + audit. */
+ /** SaaS account directory: metadata and billing readiness, never tenant task data. */
+ public static function customerDirectory(array $p=[]): array {
+  Auth::load();if(!self::isActor())fail('Somente o ADM Master pode consultar clientes.',403);
+  self::singleWorkspace();
+  $search=mb_substr(trim((string)($p['q']??'')),0,150);
+  $args=[];$filter='';
+  if($search!==''){$filter=' AND (w.name LIKE ? OR u.email LIKE ? OR u.name LIKE ?)';$like='%'.$search.'%';$args=[$like,$like,$like];}
+  $rows=DB::all("SELECT w.id,w.name,w.slug,w.status,w.created_at,
+   u.id AS owner_user_id,u.name AS owner_name,u.email AS owner_email,u.twofa_enabled AS owner_twofa,
+   p.id AS plan_id,p.name AS plan_name,p.price_cents,p.billing_period,p.team_limit,
+   (SELECT COUNT(*) FROM workspace_members wm JOIN users member ON member.id=wm.user_id
+    WHERE wm.workspace_id=w.id AND wm.status='active' AND member.active=1) AS active_users,
+   (SELECT COUNT(*) FROM workspace_members wm JOIN users member ON member.id=wm.user_id
+    WHERE wm.workspace_id=w.id AND wm.status='active' AND member.active=1 AND wm.role IN ('admin','staff')
+    AND wm.user_id<>w.owner_user_id) AS team_users,
+   (SELECT COUNT(*) FROM workspace_members wm WHERE wm.workspace_id=w.id AND wm.role='admin' AND wm.status='active') AS admins,
+   (SELECT COUNT(*) FROM workspace_support_sessions ss WHERE ss.workspace_id=w.id) AS support_sessions
+   FROM workspaces w JOIN users u ON u.id=w.owner_user_id
+   LEFT JOIN workspace_access_plans a ON a.workspace_id=w.id
+   LEFT JOIN platform_access_plans p ON p.id=a.plan_id WHERE 1=1".$filter." ORDER BY w.created_at DESC,w.id DESC LIMIT 100",$args);
+  return ['customers'=>$rows,'billing_enabled'=>false,
+   'billing_note'=>'As assinaturas SaaS ainda não geram cobranças. Faturas e pagamentos só terão status depois da integração Asaas e dos webhooks.',
+   'workspace_creation_enabled'=>false];
+ }
+ /** Platform audit entries, filtered by workspace and action, without sensitive change payloads. */
+ public static function platformAudit(array $p=[]): array {
+  Auth::load();if(!self::isActor())fail('Somente o ADM Master pode consultar auditoria.',403);
+  $id=integer($p['workspace_id']??0,0);
+  $action=mb_substr(trim((string)($p['action']??'')),0,70);
+  $where=' WHERE 1=1';$params=[];
+  if($id>0){$where.=' AND a.workspace_id=?';$params[]=$id;}
+  if($action!==''){$where.=' AND a.action LIKE ?';$params[]='%'.$action.'%';}
+  return ['entries'=>DB::all("SELECT a.id,a.workspace_id,w.name AS workspace_name,
+    a.user_id,u.name AS user_name,a.entity,a.entity_id,a.action,a.origin,a.created_at
+    FROM audit_log a LEFT JOIN workspaces w ON w.id=a.workspace_id
+    LEFT JOIN users u ON u.id=a.user_id ".$where." ORDER BY a.id DESC LIMIT 150",$params),
+    'workspaces'=>DB::all('SELECT id,name FROM workspaces ORDER BY name')];
+ }
  public static function resetAdminTwoFactor(array $p): array {
   Auth::load();if(!self::isActor())fail('Ação exclusiva do ADM Master.',403);
   Auth::rate('master-reset-2fa',5,3600);
@@ -280,18 +322,18 @@ final class MasterSupport {
      FROM reset_tokens t JOIN users u ON u.id=t.user_id WHERE t.token_hash=? FOR UPDATE',
      [hash('sha256',$raw)]);
    if(!$token||$token['expires_at']<=now()||
-      strtolower((string)$token['email'])!==WorkspaceFoundation::MASTER_EMAIL||
+      !filter_var((string)$token['email'],FILTER_VALIDATE_EMAIL)||
       $token['role']!=='admin'||(int)$token['active']!==0)
     fail('Convite inválido ou expirado.',403);
    $identity=DB::one('SELECT user_id,status FROM platform_master_identities WHERE email=? FOR UPDATE',
-     [WorkspaceFoundation::MASTER_EMAIL]);
+     [strtolower((string)$token['email'])]);
    if(!$identity||$identity['status']!=='pending_verification'||
        (int)$identity['user_id']!==(int)$token['user_id'])fail('Convite já utilizado.',403);
    if(DB::one('SELECT 1 FROM workspace_members WHERE user_id=?',[(int)$token['user_id']]))
     fail('ADM Master não pode ser membro de empresa.',409);
    DB::update('users',(int)$token['user_id'],['password_hash'=>$hash,'active'=>1]);
    DB::run("UPDATE platform_master_identities SET status='verified',verified_at=?,updated_at=? WHERE email=?",
-     [now(),now(),WorkspaceFoundation::MASTER_EMAIL]);
+     [now(),now(),strtolower((string)$token['email'])]);
    DB::run('DELETE FROM reset_tokens WHERE user_id=?',[(int)$token['user_id']]);
    return ['activated'=>true,'login_url'=>base('index.php')];
   });

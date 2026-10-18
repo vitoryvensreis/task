@@ -98,6 +98,13 @@
   try{await loadThreads();if(alsoMessages)await loadMessages();feedback()}
   catch(e){feedback(e.message,true)}
  }
+ async function updateUnread(){
+  if(!isMaster()||!fab)return;
+  const data=await request('master.support_unread');
+  const badge=$('.ts-support-indicator',fab),count=Math.max(0,Number(data.count)||0);
+  if(badge){badge.textContent=count>99?'99+':String(count);badge.hidden=count===0;}
+  fab.setAttribute('aria-label',count?'Abrir suporte · '+count+' nova(s) mensagem(ns)':'Abrir suporte TaskEsc');
+ }
  function updateConnection(){
   if(!root)return;
   const state=window.TaskEscRealtime?.status?.();
@@ -123,22 +130,19 @@
   if(!root||!user){requestedOpen=true;return}
   requestedOpen=false;opened=true;root.hidden=false;
   root.classList.remove('ts-conversation-active');
-  if(modalBackdrop&&isMaster())modalBackdrop.hidden=false;
+  if(modalBackdrop&&isMaster())modalBackdrop.hidden=true;
+  if(isMaster())request('master.support_seen',new FormData()).then(updateUnread).catch(()=>{});
   fab.hidden=true;
   $('.ts-search',root).value='';
   updateConnection();startPolling();
   sync().then(()=>{if(selected)loadMessages().catch(()=>{});}).catch(()=>{});
-  if(document.body.dataset.masterPage==='1'&&location.pathname==='/master'){
-   history.replaceState(null,'',base+'/master/suporte');
-  }
+
  }
  function closePanel(){
-  opened=false;if(root){root.hidden=true;root.classList.remove('ts-conversation-active')}if(modalBackdrop)modalBackdrop.hidden=true;if(fab&&user&&!isMaster())fab.hidden=false;
+  opened=false;if(root){root.hidden=true;root.classList.remove('ts-conversation-active')}if(modalBackdrop)modalBackdrop.hidden=true;if(fab&&user)fab.hidden=false;
   if(isMaster())window.dispatchEvent(new Event('taskesc:close-support'));
   if(polling)clearInterval(polling);polling=null;
-  if(document.body.dataset.masterPage==='1'&&/\/master\/suporte\/?$/.test(location.pathname)){
-   history.replaceState(null,'',base+'/master');
-  }
+
  }
  function emojiMenu(){
   const box=el('div','ts-emoji-menu');box.hidden=true;
@@ -176,7 +180,7 @@
   }catch(e){feedback(e.message,true)}finally{b.disabled=false}
  }
  function createWidget(){
-  fab=el('button','ts-support-fab','Suporte');fab.type='button';fab.setAttribute('aria-label','Abrir atendimento TaskEsc');
+  fab=el('button','ts-support-fab','💬');fab.type='button';fab.setAttribute('aria-label','Abrir atendimento TaskEsc');
   const counter=el('span','ts-support-indicator');counter.hidden=true;fab.append(counter);
   root=el('section','ts-support-panel');root.hidden=true;root.setAttribute('aria-label','Central de suporte TaskEsc');
   const header=el('header','ts-header');
@@ -236,10 +240,10 @@
   };
   fab.onclick=openPanel;
   if(isMaster()){
-   root.classList.add('ts-master-popup');root.setAttribute('role','dialog');root.setAttribute('aria-modal','true');
+   root.classList.add('ts-master-popup');root.setAttribute('role','dialog');root.setAttribute('aria-modal','false');
    modalBackdrop=el('div','ts-master-overlay');modalBackdrop.hidden=true;
    modalBackdrop.onclick=closePanel;
-   document.body.append(modalBackdrop,fab,root);fab.hidden=true;
+   document.body.append(modalBackdrop,fab,root);fab.hidden=false;
   }else document.body.append(fab,root);
  }
  function handleRealtime(event){
@@ -247,7 +251,7 @@
   if(p?.data?.event_type!=='support.message')return;
   lastSignalAt=Date.now();
   const source=p.data?.payload||{};
-  if(root&&!opened){const indicator=$('.ts-support-indicator',fab);indicator.hidden=false;fab.classList.add('new-message')}
+  if(root&&!opened){updateUnread().catch(()=>{});fab.classList.add('new-message')}
   if(!opened)return;
   if(!selected||Number(source.tenant_user_id)===Number(selected.tenant_user_id)){
    loadMessages().catch(()=>{});
@@ -285,8 +289,9 @@
    }
    user=auth.user;csrf=auth.csrf;
    if(!root)createWidget();
-   fab.hidden=isMaster()||opened;
+   fab.hidden=opened;
    if(user.role==='master')masterSocket().catch(()=>{});
+   if(isMaster()){updateUnread().catch(()=>{});setInterval(()=>{if(user&&!opened)updateUnread().catch(()=>{})},30000)}
    if(requestedOpen||location.search.includes('suporte=1')||/\/master\/suporte\/?$/.test(location.pathname))openPanel();
   }catch{user=null;closePanel();if(fab)fab.hidden=true}
  }

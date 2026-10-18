@@ -40,7 +40,7 @@ window.TaskEscMasterSettings=(()=>{
  function note(host,title,description){
   const box=el('div','ms-info');box.append(el('strong','',title),el('span','',description));host.append(box);return box;
  }
- async function render(host,csrf,base){
+ async function render(host,csrf,base,mode='integrations'){
   host.replaceChildren(el('p','master-description','Carregando configurações globais…'));
   const response=await fetch(base+'/api.php?action=master.settings',{credentials:'same-origin',cache:'no-store'});
   const d=await response.json().catch(()=>({error:'Resposta inválida do servidor.'}));
@@ -77,7 +77,7 @@ window.TaskEscMasterSettings=(()=>{
    try{
     const p=new FormData(files);
     if(![...p.values()].some(v=>v instanceof File&&v.size>0))throw Error('Selecione pelo menos uma imagem.');
-    await send(base,csrf,'master.brand_upload',p);await render(host,csrf,base);
+    await send(base,csrf,'master.brand_upload',p);await render(host,csrf,base,mode);
    }catch(e){status(files,e.message,true);filesButton.disabled=false}
   };
   const email=card(grid,'E-mail e SMTP','Servidor de envio e identidade do remetente.');
@@ -120,9 +120,52 @@ window.TaskEscMasterSettings=(()=>{
     asaas.webhook_token_set?'Cadastrado — deixe vazio para manter':'Token configurado no Asaas');
   submit(fa,'master.asaas_save','asaas',base,csrf);
   asaasCard.append(fa);
+  const drive=card(grid,'Google Drive','Arquivos do sistema são enviados apenas pelas contas Google autorizadas de cada workspace.');
+  note(drive,'Acesso isolado por empresa','Cada administrador conecta as próprias contas Google no workspace. O ADM Master gerencia somente as credenciais globais OAuth aqui.');
+  const wppTools=el('div','mc-integration-tools');
+  wpp.append(wppTools);
+  const state=el('div','mc-feedback');wppTools.append(state);
+  const statusBtn=el('button','secondary','Verificar sessão');statusBtn.type='button';
+  const startBtn=el('button','secondary','Iniciar / Reconectar');startBtn.type='button';
+  const qrBtn=el('button','secondary','Exibir QR Code');qrBtn.type='button';
+  const tools=el('div','mc-actions');tools.append(statusBtn,startBtn,qrBtn);wppTools.append(tools);
+  const qrHolder=el('div','mc-qr');wppTools.append(qrHolder);
+  const wppRequest=async(action,p=null)=>{
+   const isPost=p!==null;
+   const response=await fetch(base+'/api.php?action='+action,{
+    method:isPost?'POST':'GET',credentials:'same-origin',cache:'no-store',
+    headers:{Accept:'application/json',...(isPost?{'Content-Type':'application/json','X-CSRF-Token':csrf}:{})},
+    ...(isPost?{body:JSON.stringify(p)}:{})});
+   const out=await response.json().catch(()=>({error:'Resposta inválida'}));
+   if(!response.ok||out.error)throw Error(out.error||'Erro na integração');return out;
+  };
+  const runWpp=async fn=>{state.textContent='Consultando conexão…';try{await fn()}catch(error){state.textContent=error.message}};
+  statusBtn.onclick=()=>runWpp(async()=>{const d=await wppRequest('master.wpp_status');
+   state.textContent=d.connected?'WhatsApp conectado.':d.message||'WhatsApp desconectado.';});
+  startBtn.onclick=()=>runWpp(async()=>{await wppRequest('master.wpp_start',{});state.textContent='Sessão iniciada. Clique em Exibir QR Code se necessário.'});
+  qrBtn.onclick=()=>runWpp(async()=>{const d=await wppRequest('master.wpp_qr');qrHolder.replaceChildren();
+   const url=d.qrcode;
+   if(typeof url==='string'&&url.startsWith('data:image/png;base64,')){
+    const image=el('img');image.src=url;image.alt='QR Code WhatsApp';qrHolder.append(image);
+   }else state.textContent='Sessão: '+String(d.status||'Aguardando QR Code');
+  });
+  const testForm=el('form','ms-form mc-wpp-test');
+  field(testForm,'Enviar teste para telefone (com DDI)','phone','','tel','5585999999999');
+  field(testForm,'Mensagem de teste','message','TaskEsc · teste de integração WhatsApp');
+  const testButton=el('button','secondary','Enviar teste WhatsApp');testButton.type='submit';
+  testForm.append(testButton);wppTools.append(testForm);
+  testForm.onsubmit=event=>{event.preventDefault();runWpp(async()=>{
+   await wppRequest('master.wpp_test',Object.fromEntries(new FormData(testForm)));
+   state.textContent='Mensagem de teste encaminhada pelo provedor.';})};
   const security=card(grid,'Segurança da plataforma','Acesso e segregação dos dados.');
   note(security,'Acesso exclusivo','Somente a conta ADM Master autenticada pode alterar estas configurações. Ações são auditadas.');
   note(security,'Proteção dos workspaces','Criação de novos workspaces segue bloqueada até a homologação multiempresa.');
+  if(mode==='personalization'){
+   for(const item of [email,wpp,google,asaasCard,drive,security])item.remove();
+  }else{
+   for(const item of [brand,assets,security])item.remove();
+  }
+
  }
  return {render};
 })();

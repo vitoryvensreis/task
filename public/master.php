@@ -23,7 +23,14 @@ $assetVersion=static function(string $file):string {
 <link rel="stylesheet" href="<?=e($basePath)?>/assets/master-dashboard.css?v=<?=e($assetVersion('master-dashboard.css'))?>">
 <link rel="stylesheet" href="<?=e($basePath)?>/assets/support-chat.css?v=<?=e($assetVersion('support-chat.css'))?>">
 </head>
-<body class="master-page" data-master-page="1" data-base-path="<?=e($basePath)?>" data-activate="<?=e($activation?$token:'')?>">
+<?php
+$requestPath=(string)(parse_url($_SERVER['REQUEST_URI']??'',PHP_URL_PATH)??'');
+$routes=['clientes'=>'clients','planos'=>'plans','integracoes'=>'integrations','personalizacao'=>'personalization','configuracoes'=>'settings',
+'monitoramento-ia'=>'ai','saude-logs'=>'health','banner-hero'=>'banner','suporte'=>'overview','workspaces'=>'clients'];
+$routeKey=trim((string)basename(rtrim($requestPath,'/')));
+$initialTab=$routes[$routeKey]??'overview';
+?>
+<body class="master-page" data-master-page="1" data-initial-tab="<?=e($initialTab)?>" data-base-path="<?=e($basePath)?>" data-activate="<?=e($activation?$token:'')?>">
 <section id="master-auth-surface" class="master-access-login hidden">
  <div class="master-auth-card">
   <div class="kicker">TASKESC · ACESSO DA PLATAFORMA</div>
@@ -53,10 +60,11 @@ $assetVersion=static function(string $file):string {
    <button class="nav-btn" data-master-tab="overview" type="button"><span class="nav-icon">▦</span>Dashboard</button>
    <button class="nav-btn" data-master-tab="clients" type="button"><span class="nav-icon">♙</span>Clientes (ADMs)</button>
    <button class="nav-btn" data-master-tab="plans" type="button"><span class="nav-icon">▤</span>Planos de acesso</button>
-   <button class="nav-btn" data-master-tab="workspaces" type="button"><span class="nav-icon">▣</span>Workspaces</button>
-   <button class="nav-btn" data-master-tab="support" type="button"><span class="nav-icon">◉</span>Atendimentos</button>
    <button class="nav-btn" data-master-tab="ai" type="button"><span class="nav-icon">◈</span>Monitoramento IA</button>
    <button class="nav-btn" data-master-tab="health" type="button"><span class="nav-icon">◉</span>Saúde & Logs</button>
+   <button class="nav-btn" data-master-tab="integrations" type="button"><span class="nav-icon">◈</span>Integrações</button>
+   <button class="nav-btn" data-master-tab="personalization" type="button"><span class="nav-icon">◉</span>Personalização</button>
+   <button class="nav-btn" data-master-tab="banner" type="button"><span class="nav-icon">▣</span>Banner Hero</button>
    <button class="nav-btn" data-master-tab="settings" type="button"><span class="nav-icon">⚙</span>Configurações</button>
   </nav>
   <div class="sidebar-bottom">
@@ -74,7 +82,6 @@ $assetVersion=static function(string $file):string {
    </div>
    <div class="top-actions master-topbar-actions">
     <button id="master-refresh" class="secondary" type="button" title="Atualizar indicadores">↻ Atualizar</button>
-    <button class="secondary" data-master-tab="support" type="button">Suporte</button>
     <div class="user-chip">ADM Master · Plataforma</div>
    </div>
   </header>
@@ -85,7 +92,9 @@ $assetVersion=static function(string $file):string {
    <section id="master-plans" class="master-view hidden" aria-label="Planos de acesso"></section>
    <section id="master-workspaces" class="master-view hidden" aria-label="Workspaces"></section>
    <section id="master-settings" class="master-view hidden" aria-label="Configurações da plataforma"></section>
-   <section id="master-support" class="master-view hidden" aria-label="Atendimento ao cliente"></section>
+   <section id="master-integrations" class="master-view hidden" aria-label="Integrações globais"></section>
+   <section id="master-personalization" class="master-view hidden" aria-label="Personalização"></section>
+   <section id="master-banner" class="master-view hidden" aria-label="Banner Hero"></section>
    <section id="master-ai" class="master-view hidden" aria-label="Monitoramento de IA"></section>
    <section id="master-health" class="master-view hidden" aria-label="Saúde e logs da plataforma"></section>
   </div>
@@ -94,6 +103,7 @@ $assetVersion=static function(string $file):string {
 <script src="<?=e($basePath)?>/assets/vendor/centrifuge-5.7.4.js" defer></script>
 <script src="<?=e($basePath)?>/assets/master-settings.js?v=<?=e($assetVersion('master-settings.js'))?>" defer></script>
 <script src="<?=e($basePath)?>/assets/master-operations.js?v=<?=e($assetVersion('master-operations.js'))?>" defer></script>
+<script src="<?=e($basePath)?>/assets/master-console.js?v=<?=e($assetVersion('master-console.js'))?>" defer></script>
 <script src="<?=e($basePath)?>/assets/master.js?v=<?=e($assetVersion('master.js'))?>" defer></script>
 <script src="<?=e($basePath)?>/assets/support-chat.js?v=<?=e($assetVersion('support-chat.js'))?>" defer></script>
 </body></html>

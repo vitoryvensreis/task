@@ -28,7 +28,7 @@ final class Auth {
   $actor=$id?DB::one('SELECT id,name,email,role,active,email_notifications,weekly_report,twofa_enabled,last_login_at FROM users WHERE id=? AND active=1',[$id]):null;self::$actor=$actor;
   self::$workspace=$actor?WorkspaceContext::forUser($actor):null;
    $effective=$actor&&self::$workspace?self::principal($actor,self::$workspace):$actor;
-   if($actor&&strtolower((string)$actor['email'])===WorkspaceFoundation::MASTER_EMAIL&&self::$origin==='api')fail('ADM Master não pode usar credencial de API.',403);
+   if($actor&&self::$origin==='api'&&MasterSupport::isVerified($actor))fail('ADM Master não pode usar credencial de API.',403);
   if($effective&&self::$origin==='web'&&$effective['role']==='admin'&&!empty($_SESSION['preview_client_id'])){
    $cid=(int)$_SESSION['preview_client_id'];$client=WorkspaceContext::legacyCiFixture()?DB::one('SELECT id,name FROM clients WHERE id=? AND active=1',[$cid]):DB::one('SELECT id,name FROM clients WHERE id=? AND active=1 AND workspace_id=?',[$cid,self::$workspace['id']]);
    if($client){self::$previewClientId=$cid;self::$user=$effective;self::$user['actor_role']='admin';self::$user['role']='client';self::$user['is_preview']=1;self::$user['preview_client_id']=$cid;self::$user['preview_client_name']=$client['name'];}
@@ -132,15 +132,15 @@ final class Auth {
  }
  public static function twoFactorStatus(): array {self::load();return ['enabled'=>(bool)(self::$user['twofa_enabled']??0),'admin'=>self::$user['role']==='admin'];}
  public static function twoFactorSetup(): array {
-  self::admin();if(MasterSupport::isSupport())fail('2FA do proprietário bloqueado em suporte.',403);$secret=self::base32Encode(random_bytes(20));DB::update('users',(int)self::$user['id'],['twofa_secret'=>secretEncrypt($secret),'twofa_enabled'=>0,'twofa_recovery_json'=>null]);$issuer=rawurlencode(trim(setting('brand_name','TaskEsc'))?:'TaskEsc');$label=rawurlencode((string)self::$user['email']);$uri='otpauth://totp/'.$issuer.':'.$label.'?secret='.$secret.'&issuer='.$issuer.'&digits=6&period=30';return ['secret'=>$secret,'otpauth_uri'=>$uri];
+  if(!MasterSupport::isActor())self::admin();if(MasterSupport::isSupport())fail('2FA do proprietário bloqueado em suporte.',403);$secret=self::base32Encode(random_bytes(20));DB::update('users',(int)self::$user['id'],['twofa_secret'=>secretEncrypt($secret),'twofa_enabled'=>0,'twofa_recovery_json'=>null]);$issuer=rawurlencode(trim(setting('brand_name','TaskEsc'))?:'TaskEsc');$label=rawurlencode((string)self::$user['email']);$uri='otpauth://totp/'.$issuer.':'.$label.'?secret='.$secret.'&issuer='.$issuer.'&digits=6&period=30';return ['secret'=>$secret,'otpauth_uri'=>$uri];
  }
  public static function twoFactorEnable(array $p): array {
-  self::admin();if(MasterSupport::isSupport())fail('2FA do proprietário bloqueado em suporte.',403);$u=DB::one('SELECT * FROM users WHERE id=?',[self::$user['id']]);$secret=self::twoFactorSecret($u);if($secret===''||!self::verifyTotp($secret,trim((string)($p['code']??''))))fail('Código do autenticador inválido.');
+  if(!MasterSupport::isActor())self::admin();if(MasterSupport::isSupport())fail('2FA do proprietário bloqueado em suporte.',403);$u=DB::one('SELECT * FROM users WHERE id=?',[self::$user['id']]);$secret=self::twoFactorSecret($u);if($secret===''||!self::verifyTotp($secret,trim((string)($p['code']??''))))fail('Código do autenticador inválido.');
   $plain=[];$hashed=[];for($i=0;$i<8;$i++){$raw=strtoupper(bin2hex(random_bytes(4)));$code=substr($raw,0,4).'-'.substr($raw,4,4);$plain[]=$code;$hashed[]=hash('sha256',str_replace('-','',$code));}
   DB::update('users',(int)$u['id'],['twofa_enabled'=>1,'twofa_recovery_json'=>json($hashed)]);self::$user['twofa_enabled']=1;audit('user',(int)$u['id'],'2fa.enabled');return ['saved'=>true,'recovery_codes'=>$plain];
  }
  public static function twoFactorDisable(array $p): array {
-  self::admin();if(MasterSupport::isSupport())fail('2FA do proprietário bloqueado em suporte.',403);$u=DB::one('SELECT * FROM users WHERE id=?',[self::$user['id']]);$password=(string)($p['current_password']??'');if($password===''||!password_verify($password,(string)$u['password_hash']))fail('Senha atual incorreta.');
+  if(!MasterSupport::isActor())self::admin();if(MasterSupport::isSupport())fail('2FA do proprietário bloqueado em suporte.',403);$u=DB::one('SELECT * FROM users WHERE id=?',[self::$user['id']]);$password=(string)($p['current_password']??'');if($password===''||!password_verify($password,(string)$u['password_hash']))fail('Senha atual incorreta.');
   $code=trim((string)($p['code']??''));if(!self::twoFactorAccept($u,$code))fail('Código de verificação inválido.');
   DB::update('users',(int)$u['id'],['twofa_enabled'=>0,'twofa_secret'=>null,'twofa_recovery_json'=>null]);self::$user['twofa_enabled']=0;audit('user',(int)$u['id'],'2fa.disabled');return ['saved'=>true];
  }

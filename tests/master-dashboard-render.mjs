@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 const js=readFileSync('public/assets/master.js','utf8');
 const css=readFileSync('public/assets/master-dashboard.css','utf8');
 const begin=js.indexOf('  const mk=');
-const end=js.indexOf('  async function draw(tab){',begin);
+const end=js.indexOf('  async function draw(tab,navigate=false){',begin);
 assert.ok(begin>=0&&end>begin,'The Master dashboard renderer must exist.');
 const renderer=js.slice(begin,end);
 assert.match(renderer,/const mk=\(tag,cls='',text=''\)=>el\(tag,text,cls\)/,

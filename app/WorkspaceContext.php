@@ -28,7 +28,7 @@ final class WorkspaceContext {
    fail('Usuário sem acesso ao workspace.',403);
   // Master is never a tenant member; only an explicit, audited web support
   // session grants a temporary view as the selected owner.
-  if(strtolower((string)($user['email']??''))===WorkspaceFoundation::MASTER_EMAIL)
+  if(MasterSupport::isVerified($user))
    return MasterSupport::contextFor($user);
   if((int)(DB::one('SELECT COUNT(*) n FROM workspaces')['n']??0)!==1)
    fail('Workspaces adicionais ainda não estão habilitados.',503);

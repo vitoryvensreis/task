@@ -16,6 +16,9 @@ require ROOT.'/app/WorkspaceFoundation.php';
 require ROOT.'/app/WorkspaceFoundationGuard.php';
 require ROOT.'/app/WorkspaceContext.php';
 require ROOT.'/app/Auth.php';
+require ROOT.'/app/WorkspaceCatalog.php';
+require ROOT.'/app/WorkspacePreferences.php';
+require ROOT.'/app/Catalog.php';
 function fail(string $message,int $status=422,array $details=[]):never {throw new RuntimeException($message,$status);}
 
 function now():string {return gmdate('Y-m-d H:i:s');}
@@ -87,6 +90,24 @@ try{
  unset($_SERVER['HTTP_AUTHORIZATION'],$_SERVER['REDIRECT_HTTP_AUTHORIZATION']);
  Auth::$user=null;Auth::$actor=null;Auth::$workspace=null;Auth::$origin='web';
  testws(Auth::workspaceId()===$ws,'Authenticated session did not resolve workspace.');
+ testws((int)WorkspaceCatalog::requireRecord('clients',$client)['id']===$client,
+  'Workspace catalog denied its original client.');
+ testws((int)WorkspaceCatalog::requireRecord('projects',$project)['id']===$project,
+  'Workspace catalog denied its original project.');
+ testws(count(Catalog::clients(['q'=>'Preserved legacy client']))===1,
+  'Workspace client list lost historical client.');
+ $ciClient=DB::insert('clients',['name'=>'Different owner fixture',
+  'workspace_id'=>$ws+991,'created_at'=>now()]);
+ refuses(fn()=>WorkspaceCatalog::requireRecord('clients',$ciClient),
+  'Client from another workspace must not be readable.');
+ testws(count(Catalog::clients(['q'=>'Different owner fixture']))===0,
+  'Client list exposed another workspace record.');
+ WorkspacePreferences::save('brand_name','TaskEsc Workspace CI');
+ testws(WorkspacePreferences::get('brand_name')==='TaskEsc Workspace CI',
+  'Workspace preference not persisted.');
+ testws((string)(DB::one("SELECT value FROM settings WHERE `key`='brand_name'")['value']??'')==='TaskEsc Workspace CI',
+  'Legacy setting not mirrored during staged deployment.');
+
  testws((int)Auth::client($client)['id']===$client,'Existing client no longer accessible to owner.');
  [$clause,$arguments]=Auth::clientFilter('c.id');
  testws(str_contains($clause,'workspace_id')&&$arguments===[$ws],'Admin client filter must be workspace scoped.');

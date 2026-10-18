@@ -52,48 +52,50 @@
     catch(err){message('#master-panel-message',err.message,true);b.disabled=false}
    });wrap.append(form);return wrap;
   }
+  // Dashboard-only helper (tag, className, text); legacy el() is (tag, text, className).
+  const mk=(tag,cls='',text='')=>el(tag,text,cls);
   const number=(x)=>new Intl.NumberFormat('pt-BR',{maximumFractionDigits:0}).format(Number(x)||0);
   function statCard(title,value,hint,disabled=false){
-   const card=el('article','master-kpi');
-   card.append(el('div','master-kpi-label',title),el('div','master-kpi-number'+(disabled?' disabled':''),value),el('div','master-kpi-hint',hint));
+   const card=mk('article','master-kpi');
+   card.append(mk('div','master-kpi-label',title),mk('div','master-kpi-number'+(disabled?' disabled':''),value),mk('div','master-kpi-hint',hint));
    return card;
   }
   function sectionHead(title,description,button){
-   const h=el('div','master-panel-header'),left=el('div');
-   left.append(el('h3','',title),el('small','',description));h.append(left);
-   if(button){const b=el('button','master-panel-link',button.label);b.type='button';b.onclick=()=>draw(button.tab).catch(err=>message('#master-panel-message',err.message,true));h.append(b)}
+   const h=mk('div','master-panel-header'),left=mk('div');
+   left.append(mk('h3','',title),mk('small','',description));h.append(left);
+   if(button){const b=mk('button','master-panel-link',button.label);b.type='button';b.onclick=()=>draw(button.tab).catch(err=>message('#master-panel-message',err.message,true));h.append(b)}
    return h;
   }
   function registrations(rows){
-   const chart=el('div','master-bars');chart.setAttribute('role','img');
+   const chart=mk('div','master-bars');chart.setAttribute('role','img');
    chart.setAttribute('aria-label','Novos usuários associados a workspaces nos últimos seis meses');
    const top=Math.max(1,...rows.map(r=>Number(r.users)||0));
    for(const r of rows){
-    const col=el('div','master-bar-column'),space=el('div','master-bar-space'),bar=el('div','master-bar');
+    const col=mk('div','master-bar-column'),space=mk('div','master-bar-space'),bar=mk('div','master-bar');
     const value=Math.max(0,Number(r.users)||0);
     bar.style.height=value===0?'3px':Math.max(5,Math.round((value/top)*94))+'%';
     bar.title=(r.month||'')+': '+value+' novo(s) usuário(s)';
-    bar.append(el('span','master-bar-value',number(value)));
-    space.append(bar);col.append(space,el('span','',(r.month||'').slice(5)+'/'+(r.month||'').slice(2,4)));chart.append(col);
+    bar.append(mk('span','master-bar-value',number(value)));
+    space.append(bar);col.append(space,mk('span','',(r.month||'').slice(5)+'/'+(r.month||'').slice(2,4)));chart.append(col);
    }
    return chart;
   }
   function splitRow(label,value,top){
-   const row=el('div','master-split-row');
-   row.append(el('span','',label));
-   const rail=el('div','master-progress');const fill=el('i');fill.style.width=Math.max(0,Math.min(100,top>0?(value/top)*100:0))+'%';rail.append(fill);
-   row.append(rail,el('span','master-split-total',number(value)));return row;
+   const row=mk('div','master-split-row');
+   row.append(mk('span','',label));
+   const rail=mk('div','master-progress');const fill=mk('i');fill.style.width=Math.max(0,Math.min(100,top>0?(value/top)*100:0))+'%';rail.append(fill);
+   row.append(rail,mk('span','master-split-total',number(value)));return row;
   }
   async function renderMasterDashboard(){
    const stats=await request('master.dashboard');
-   dashboard.append(el('p','master-description','Acompanhe os indicadores gerais da plataforma. Dados de tarefas e financeiro das empresas só aparecem em uma sessão de suporte autorizada.'));
+   dashboard.append(mk('p','master-description','Acompanhe os indicadores gerais da plataforma. Dados de tarefas e financeiro das empresas só aparecem em uma sessão de suporte autorizada.'));
    if(!stats.metrics?.billing_enabled){
-    const note=el('div','master-billing-note');
-    note.append(el('span','master-icon','ⓘ'));
-    const copy=el('div');copy.append(el('b','','Vendas e receita de assinaturas ainda não disponíveis'),el('span','','A cobrança SaaS não foi ativada. Os valores financeiros dos clientes não são receita da plataforma e não entram neste painel.'));note.append(copy);dashboard.append(note);
+    const note=mk('div','master-billing-note');
+    note.append(mk('span','master-icon','ⓘ'));
+    const copy=mk('div');copy.append(mk('b','','Vendas e receita de assinaturas ainda não disponíveis'),mk('span','','A cobrança SaaS não foi ativada. Os valores financeiros dos clientes não são receita da plataforma e não entram neste painel.'));note.append(copy);dashboard.append(note);
    }
    const m=stats.metrics||{};
-   const grid=el('div','master-stats');
+   const grid=mk('div','master-stats');
    [
     ['VENDAS / RECEITA SAAS','Aguardando cobrança','Nenhuma transação SaaS registrada',true],
     ['USUÁRIOS ATIVOS',number(m.active_users),number(m.active_admins)+' administrador(es) · contas habilitadas',false],
@@ -102,38 +104,38 @@
     ['ATENDIMENTOS',number(m.support_threads),number(m.unread_support)+' notificação(ões) não lida(s)',false]
    ].forEach(([title,val,hint,disabled])=>grid.append(statCard(title,val,hint,disabled)));
    dashboard.append(grid);
-   const analytics=el('div','master-dashboard-grid');
-   const activity=el('section','panel');
+   const analytics=mk('div','master-dashboard-grid');
+   const activity=mk('section','panel');
    activity.append(sectionHead('Crescimento de usuários','Novos usuários vinculados aos workspaces nos últimos 6 meses'));
    activity.append(registrations(stats.monthly_registrations||[]));analytics.append(activity);
-   const distribution=el('section','panel');
+   const distribution=mk('section','panel');
    distribution.append(sectionHead('Usuários por perfil','Contas ativas vinculadas ao workspace'));
-   const list=el('div','master-split-list');
+   const list=mk('div','master-split-list');
    const titles={owner:'Proprietário',admin:'Administradores',staff:'Equipe',client:'Clientes'};
    const roles=stats.users_by_role||[];
    const top=Math.max(1,...roles.map(r=>Number(r.total)||0));
-   if(!roles.length)list.append(el('div','master-empty','Nenhum usuário encontrado.'));
+   if(!roles.length)list.append(mk('div','master-empty','Nenhum usuário encontrado.'));
    else for(const r of roles)list.append(splitRow(titles[r.role]||r.role,Number(r.total)||0,top));
    distribution.append(list);analytics.append(distribution);
    dashboard.append(analytics);
-   const lower=el('div','master-dashboard-grid master-lower');
-   const work=el('section','panel');work.append(sectionHead('Workspaces cadastrados','Plano atribuído e quantidade de contas ativas',{label:'Gerenciar',tab:'workspaces'}));
+   const lower=mk('div','master-dashboard-grid master-lower');
+   const work=mk('section','panel');work.append(sectionHead('Workspaces cadastrados','Plano atribuído e quantidade de contas ativas',{label:'Gerenciar',tab:'workspaces'}));
    const wr=stats.recent_workspaces||[];
    if(wr.length){
-    const wrap=el('div','master-table-wrap'),table=el('table','master-table'),head=el('thead'),theadrow=el('tr');
-    for(const col of ['Workspace','Plano','Usuários','Estado'])theadrow.append(el('th','',col));
-    head.append(theadrow);const body=el('tbody');
-    for(const w of wr){const tr=el('tr');tr.append(el('td','',w.name||'—'),el('td','',w.plan_name||'Sem plano'),el('td','',number(w.active_users)));
-      const state=el('td'),badge=el('span','master-status-chip',w.status==='staged'?'Em homologação':w.status||'—');state.append(badge);tr.append(state);body.append(tr)}
+    const wrap=mk('div','master-table-wrap'),table=mk('table','master-table'),head=mk('thead'),theadrow=mk('tr');
+    for(const col of ['Workspace','Plano','Usuários','Estado'])theadrow.append(mk('th','',col));
+    head.append(theadrow);const body=mk('tbody');
+    for(const w of wr){const tr=mk('tr');tr.append(mk('td','',w.name||'—'),mk('td','',w.plan_name||'Sem plano'),mk('td','',number(w.active_users)));
+      const state=mk('td'),badge=mk('span','master-status-chip',w.status==='staged'?'Em homologação':w.status||'—');state.append(badge);tr.append(state);body.append(tr)}
     table.append(head,body);wrap.append(table);work.append(wrap);
-   }else work.append(el('div','master-empty','Nenhum workspace cadastrado.'));
+   }else work.append(mk('div','master-empty','Nenhum workspace cadastrado.'));
    lower.append(work);
-   const plans=el('section','panel');plans.append(sectionHead('Distribuição de planos','Planos cadastrados e quantidade de workspaces vinculados',{label:'Ver planos',tab:'plans'}));
-   const dist=el('div','master-split-list'),planRows=stats.workspaces_by_plan||[];
+   const plans=mk('section','panel');plans.append(sectionHead('Distribuição de planos','Planos cadastrados e quantidade de workspaces vinculados',{label:'Ver planos',tab:'plans'}));
+   const dist=mk('div','master-split-list'),planRows=stats.workspaces_by_plan||[];
    if(planRows.length){const topPlan=Math.max(1,...planRows.map(p=>Number(p.total)||0));for(const p of planRows)dist.append(splitRow(p.name||'Sem nome',Number(p.total)||0,topPlan));}
-   else dist.append(el('div','master-empty','Nenhum plano encontrado.'));
+   else dist.append(mk('div','master-empty','Nenhum plano encontrado.'));
    plans.append(dist);lower.append(plans);dashboard.append(lower);
-   dashboard.append(el('p','master-description','Atualizado em '+new Date((stats.as_of||'').replace(' ','T')+'Z').toLocaleString('pt-BR')+' · Somente dados cadastrais agregados.'));
+   dashboard.append(mk('p','master-description','Atualizado em '+new Date((stats.as_of||'').replace(' ','T')+'Z').toLocaleString('pt-BR')+' · Somente dados cadastrais agregados.'));
   }
   async function draw(tab){
    if(tabRoutes[tab]&&!location.pathname.replace(/\/+$/,'').endsWith('/'+tabRoutes[tab]))

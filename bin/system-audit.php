@@ -70,11 +70,10 @@ try{
    ((!$workspaceValid&&($presentTables||$workspaceColumns))||$presentFlags))
   $add($critical,'removed_saas_present','Workspace não verificado ou flags do SaaS antigo presentes.');
 
- $essential=['users','clients','stages','categories','projects','demands','files','comments','invoices','payments','google_accounts','calendars','events','settings'];
+ $essential=['users','clients','stages','categories','projects','demands','files','comments','invoices','payments','google_accounts','settings'];
  if(in_array($schema,['22','23','24','25','26','27','28','29','30'],true))array_push($essential,'chat_threads','chat_messages');
  if(in_array($schema,['23','24','25','26','27','28','29','30'],true))$essential[]='chat_message_tasks';
  if(in_array($schema,['24','25','26','27','28','29','30'],true))array_push($essential,'automations','automation_runs','automation_run_steps','automation_worker_state','whatsapp_messages');
- if(in_array($schema,['27','28','29','30'],true))$essential[]='ai_whatsapp_inbox';
  if($schema==='30')$essential[]='whatsapp_contacts';
  foreach($essential as $table)if(!$tableExists($table))$add($critical,'missing_table_'.$table,'Tabela essencial ausente: '.$table);
  if(in_array($schema,['23','24','25','26','27','28','29','30'],true)){
@@ -82,9 +81,6 @@ try{
   foreach($chatIssues as $issue)$add($critical,'chat_'.$issue,'Estrutura do chat incompatível: '.$issue);
   if(!$chatIssues)$info[]=['key'=>'chat_schema','message'=>'Chat administrativo e referências de tasks validados.','meta'=>['valid'=>true]];
  }
- if(in_array($schema,['27','28','29','30'],true))foreach(Migrations::assistantInboxIssues() as $issue)$add($critical,'ai_inbox_'.$issue,'Inbox AI incompatível: '.$issue);
- if(in_array($schema,['28','29','30'],true))foreach(Migrations::assistantAccessIssues() as $issue)$add($critical,'ai_access_'.$issue,'Permissões AI incompatíveis: '.$issue);
- if(in_array($schema,['29','30'],true))foreach(Migrations::assistantToolsIssues() as $issue)$add($critical,'ai_tools_'.$issue,'Fila AI incompatível: '.$issue);
  if($schema==='30')foreach(Migrations::whatsappContactsIssues() as $issue)$add($critical,'contacts_'.$issue,'Agenda WhatsApp incompatível: '.$issue);
  if(in_array($schema,['24','25','26','27','28','29','30'],true)){
   $automationIssues=Migrations::automationIssues();
@@ -106,8 +102,6 @@ try{
   ['costs_demand',"SELECT COUNT(*) n FROM costs c LEFT JOIN demands d ON d.id=c.demand_id WHERE d.id IS NULL"],
   ['invoices_client',"SELECT COUNT(*) n FROM invoices i LEFT JOIN clients c ON c.id=i.client_id WHERE c.id IS NULL"],
   ['payments_invoice',"SELECT COUNT(*) n FROM payments p LEFT JOIN invoices i ON i.id=p.invoice_id WHERE i.id IS NULL"],
-  ['calendars_account',"SELECT COUNT(*) n FROM calendars c LEFT JOIN google_accounts g ON g.id=c.account_id WHERE c.account_id IS NOT NULL AND g.id IS NULL"],
-  ['events_calendar',"SELECT COUNT(*) n FROM events e LEFT JOIN calendars c ON c.id=e.calendar_id WHERE c.id IS NULL"],
   ['notifications_user',"SELECT COUNT(*) n FROM notifications n LEFT JOIN users u ON u.id=n.user_id WHERE u.id IS NULL"]
  ];
  if(in_array($schema,['23','24','25','26','27','28','29','30'],true))$relations[]=['chat_message_tasks_demand',"SELECT COUNT(*) n FROM chat_message_tasks x LEFT JOIN demands d ON d.id=x.demand_id WHERE d.id IS NULL"];

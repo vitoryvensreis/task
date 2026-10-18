@@ -51,8 +51,8 @@ final class AiWhatsAppTools
  public static function context(): array {
   [$where,$params]=Auth::clientFilter('c.id');
   $clients=DB::all('SELECT c.id,c.name FROM clients c WHERE c.active=1 AND '.$where.' ORDER BY c.name LIMIT 40',$params);
-  $categories=DB::all('SELECT id,name,default_assigned_to FROM categories WHERE active=1 ORDER BY name LIMIT 40');
-  $stages=DB::all('SELECT id,name,kind FROM stages WHERE active=1 ORDER BY position,id LIMIT 30');
+  $categories=DB::all('SELECT id,name,default_assigned_to FROM categories WHERE active=1'.(WorkspaceContext::legacyCiFixture()?'':' AND workspace_id=?').' ORDER BY name LIMIT 40',WorkspaceContext::legacyCiFixture()?[]:[Auth::workspaceId()]);
+  $stages=DB::all('SELECT id,name,kind FROM stages WHERE active=1'.(WorkspaceContext::legacyCiFixture()?'':' AND workspace_id=?').' ORDER BY position,id LIMIT 30',WorkspaceContext::legacyCiFixture()?[]:[Auth::workspaceId()]);
   $actor=Auth::$user??[];
   $selfRole=(string)($actor['role']??'');
   $self=in_array($selfRole,['admin','staff'],true)?['id'=>(int)($actor['id']??0),'name'=>(string)($actor['name']??''),'role'=>$selfRole]:null;
@@ -80,7 +80,7 @@ final class AiWhatsAppTools
     if(array_key_exists('stage_id',$args))$params['stage_id']=integer($args['stage_id'],1);
     if(array_key_exists('stage_name',$args)){
      $stageName=required($args,'stage_name',100);
-     $stage=DB::one('SELECT id FROM stages WHERE name=? AND active=1 ORDER BY id LIMIT 1',[$stageName]);
+     $stage=DB::one('SELECT id FROM stages WHERE name=? AND active=1'.(WorkspaceContext::legacyCiFixture()?'':' AND workspace_id=?').' ORDER BY id LIMIT 1',WorkspaceContext::legacyCiFixture()?[$stageName]:[$stageName,Auth::workspaceId()]);
      if(!$stage)fail('Não encontrei essa etapa do Kanban. Informe o nome exato.',422);
      $params['stage_id']=(int)$stage['id'];
     }
@@ -121,7 +121,7 @@ final class AiWhatsAppTools
      $input['assigned_to']=integer($args['assigned_to'],1);
     }else{
      // Preserve the category's designated default. With no default, safely use the authenticated staff/ADM.
-     $category=DB::one('SELECT default_assigned_to FROM categories WHERE id=? AND active=1',[$input['category_id']]);
+     $category=DB::one('SELECT default_assigned_to FROM categories WHERE id=? AND active=1'.(WorkspaceContext::legacyCiFixture()?'':' AND workspace_id=?'),WorkspaceContext::legacyCiFixture()?[$input['category_id']]:[$input['category_id'],Auth::workspaceId()]);
      if(!$category)fail('Categoria inválida.',422);
      if((int)($category['default_assigned_to']??0)<1&&in_array((string)(Auth::$user['role']??''),['admin','staff'],true)){
       $input['assigned_to']=(int)Auth::$user['id'];

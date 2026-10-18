@@ -501,6 +501,13 @@ jobs:
               $r=json_decode(file_get_contents($argv[1]),true,512,JSON_THROW_ON_ERROR);
               echo json_encode(["audit"=>["ok"=>$r["ok"],"schema"=>$r["schema"],"critical_count"=>count($r["critical"]),"warning_count"=>count($r["warnings"]),"warning_keys"=>array_column($r["warnings"],"key"),"cleanup_saas"=>$r["cleanup_saas"],"offline"=>$r["offline"]]],JSON_UNESCAPED_SLASHES).PHP_EOL;
             ' "$AUDIT_FILE"
+            # Read-only ownership preflight for the proposed Gabriella workspace.
+            # This does NOT create or enable a second workspace. It may report
+            # architectural blockers without changing the deployment outcome.
+            echo "Workspace split ownership preflight (read-only):"
+            SPLIT_PREFLIGHT_EXIT=0
+            php bin/plan-second-workspace.php || SPLIT_PREFLIGHT_EXIT=$?
+            echo "Ownership preflight exit: $SPLIT_PREFLIGHT_EXIT (no data changed)"
             exit "$AUDIT_EXIT"
           REMOTE
 

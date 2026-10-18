@@ -123,7 +123,40 @@ window.TaskEscMasterOperations=(()=>{
      }
     };tabs.append(b);
    }
-   content.append(tabs,results);tabs.querySelector('button')?.click();state.textContent='Atualizado em '+date(h.checked_at);
+   content.append(tabs,results);tabs.querySelector('button')?.click();
+   const issues=(h.items||[]).filter(x=>x.status==='error'||x.status==='warn');
+   if(issues.length){
+    const warning=el('div','mc-note');
+    warning.append(el('b','','Por que o estado geral indica atenção ou erro?'),
+      el('span','',issues.map(x=>x.label+': '+x.detail).join(' · ')));
+    content.prepend(warning);
+   }
+   const audits=panel(content,'Auditoria por cliente e ação','Registros de administração e operações de todos os workspaces, sem expor conteúdo de tarefas ou mensagens.');
+   const controls=el('div','master-ops-toolbar'),ws=el('select','select'),actionInput=el('input','input');
+   actionInput.type='search';actionInput.placeholder='Filtrar por ação (ex.: plan.saved)';
+   ws.setAttribute('aria-label','Filtrar por workspace');
+   controls.append(ws,actionInput);
+   const run=el('button','secondary','Pesquisar logs');run.type='button';controls.append(run);
+   audits.append(controls);const auditTable=el('div');audits.append(auditTable);
+   const populate=async()=>{
+    auditTable.replaceChildren(el('p','master-description','Pesquisando auditoria…'));
+    try{
+     const d=await request(base,'master.audit',{
+      workspace_id:ws.value||0,action:actionInput.value.trim()
+     });
+     if(!ws.options.length){
+      const all=el('option','','Todos os clientes');all.value='0';ws.append(all);
+      for(const w of d.workspaces||[]){const op=el('option','',w.name);op.value=w.id;ws.append(op)}
+     }
+     auditTable.replaceChildren();
+     table(auditTable,['Data','Workspace','Usuário','Ação','Entidade'],
+      (d.entries||[]).map(x=>[date(x.created_at),x.workspace_name||'Plataforma',
+       x.user_name||'Sistema',x.action||'—',(x.entity||'—')+' #'+(x.entity_id||0)]));
+    }catch(error){auditTable.replaceChildren(el('div','master-description',error.message))}
+   };
+   run.onclick=populate;actionInput.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();populate()}};
+   await populate();
+   state.textContent='Atualizado em '+date(h.checked_at);
   };
   reload.onclick=()=>load().catch(e=>state.textContent=e.message);
   await load();

@@ -11,16 +11,20 @@ try{
  $columns=DB::all("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND COLUMN_NAME IN ('workspace_id','tenant_account_id','is_platform_master')");
  $marker=DB::one("SELECT value FROM settings WHERE `key`='workspace_foundation_version'");
  $flags=DB::all("SELECT `key` FROM settings WHERE `key` LIKE 'saas%' OR `key` IN ('workspace_context_enabled','workspace_permissions_enabled','workspace_settings_enabled')");
- $ok=$schema===30&&$master&&$owner&&(int)$master['id']!==(int)$owner['id']
-   &&$master['role']==='admin'&&(int)$master['active']===1
+ // Master e-mail is explicitly designated but not currently registered.
+ // The migration will create a PENDING platform identity, never a login.
+ $ok=$schema===30&&$owner
    &&$owner['role']==='admin'&&(int)$owner['active']===1
+   &&(!$master||(int)$master['id']!==(int)$owner['id'])
+   &&(!$master||($master['role']==='admin'&&(int)$master['active']===1))
    &&!$staged&&!$columns&&!$marker&&!$flags;
  $result=[
   'schema'=>$schema,'master_exists'=>(bool)$master,
   'master_active_admin'=>(bool)($master&&$master['role']==='admin'&&(int)$master['active']===1),
   'workspace_owner_exists'=>(bool)$owner,
   'workspace_owner_active_admin'=>(bool)($owner&&$owner['role']==='admin'&&(int)$owner['active']===1),
-  'different_users'=>(bool)($master&&$owner&&(int)$master['id']!==(int)$owner['id']),
+  'different_users'=>(bool)(!$master||($owner&&(int)$master['id']!==(int)$owner['id'])),
+  'master_identity_status'=>$master?'existing_admin':'pending_invitation',
   'existing_workspace_tables'=>count($staged),
   'existing_workspace_or_tenant_columns'=>count($columns),
   'prior_saas_flags'=>count($flags),

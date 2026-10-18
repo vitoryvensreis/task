@@ -47,8 +47,11 @@ final class PlatformSettings {
   $dir=ROOT.'/public/uploads/branding/';
   $icons=['180'=>'pwa-180.png','192'=>'pwa-192.png','512'=>'pwa-512.png','maskable'=>'pwa-maskable-512.png'];
   $out=[];
-  foreach($icons as $key=>$name)
-   $out[$key]=is_file($dir.$name)?base('uploads/branding/'.$name.'?v='.filemtime($dir.$name)):null;
+  foreach($icons as $key=>$name){
+   $custom=is_file($dir.$name);
+   $out[$key]=$custom?base('uploads/branding/'.$name.'?v='.filemtime($dir.$name))
+     :base('assets/taskesc-logo.svg');
+  }
   return $out;
  }
  public static function saveBrand(array $p): array {

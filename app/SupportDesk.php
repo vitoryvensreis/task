@@ -108,11 +108,36 @@ final class SupportDesk {
    @chmod($dir.'/'.$filename,0600);
   }
   try{
-   $id=DB::insert('workspace_support_messages',[
-    'workspace_id'=>(int)$target['id'],'tenant_user_id'=>(int)$target['tenant_user_id'],
-    'sender_user_id'=>$actor['id'],'sender_role'=>$actor['master']?'master':'tenant',
-    'client_nonce'=>$nonce,'body'=>$body,'file_name'=>$filename,'file_mime'=>$mime,'created_at'=>now()
-   ]);
+   $delivery=EventOutbox::transaction(static function()use($target,$actor,$nonce,$body,$filename,$mime):array {
+    $id=DB::insert('workspace_support_messages',[
+     'workspace_id'=>(int)$target['id'],'tenant_user_id'=>(int)$target['tenant_user_id'],
+     'sender_user_id'=>$actor['id'],'sender_role'=>$actor['master']?'master':'tenant',
+     'client_nonce'=>$nonce,'body'=>$body,'file_name'=>$filename,'file_mime'=>$mime,'created_at'=>now()
+    ]);
+    if($actor['master'])$recipient=(int)$target['tenant_user_id'];
+    else{
+     $row=DB::one("SELECT p.user_id FROM platform_master_identities p
+       JOIN users u ON u.id=p.user_id
+       WHERE p.email=? AND p.status='verified' AND u.active=1 AND u.role='admin' LIMIT 1",
+       [WorkspaceFoundation::MASTER_EMAIL]);
+     $recipient=(int)($row['user_id']??0);
+    }
+    if($recipient>0){
+     $payload=['workspace_id'=>(int)$target['id'],'tenant_user_id'=>(int)$target['tenant_user_id'],
+       'message_id'=>$id,'sender_user_id'=>$actor['id']];
+     EventOutbox::enqueue('support:message:'.$id.':user:'.$recipient,'support.message',
+       'support_message',$id,'user:'.$recipient,$payload,(int)$actor['id']);
+     $title=$actor['master']?'Resposta do ADM Master':'Novo atendimento: '.$target['tenant_name'];
+     $preview=mb_substr($body!==''?$body:'Imagem enviada no suporte',0,190);
+     $notificationId=DB::insert('notifications',[
+       'user_id'=>$recipient,'title'=>mb_substr($title,0,190),'body'=>$preview,
+       'demand_id'=>null,'dedupe_key'=>'support.message.'.$id,
+       'created_at'=>now()
+     ]);
+    }else{$notificationId=0;}
+    return ['id'=>$id,'recipient'=>$recipient,'notification_id'=>$notificationId];
+   });
+   $id=(int)$delivery['id'];
   }catch(Throwable $error){
    if($filename)@unlink(ROOT.'/storage/support/'.$filename);
    $duplicate=DB::one('SELECT id FROM workspace_support_messages WHERE workspace_id=? AND tenant_user_id=?
@@ -121,7 +146,11 @@ final class SupportDesk {
    if($duplicate)return ['sent'=>true,'duplicate'=>true,'id'=>(int)$duplicate['id']];
    throw $error;
   }
-  return ['sent'=>true,'id'=>$id];
+  return ['sent'=>true,'id'=>$id,'_recipient'=>(int)$delivery['recipient'],
+   '_notification_id'=>(int)$delivery['notification_id'],
+   '_title'=>$actor['master']?'Resposta do ADM Master':'Novo atendimento de '.$target['tenant_name'],
+   '_preview'=>mb_substr($body!==''?$body:'Imagem enviada no suporte',0,190),
+   '_master_recipient'=>!$actor['master']];
  }
 
  public static function serveImage(array $p): never {

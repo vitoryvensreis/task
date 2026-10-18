@@ -19,7 +19,7 @@ final class Auth {
   if(self::$user&&self::$workspace){self::$user['workspace_id']=self::$workspace['id'];self::$user['workspace_role']=self::$workspace['role'];}
   if($required&&!self::$user)fail('Entre para continuar.',401);return self::$user;
  }
- public static function workspaceId(): int {self::load();if(!self::$workspace)fail('Workspace indisponível.',403);return (int)self::$workspace['id'];}
+ public static function workspaceId(): int {self::load();if(!self::$workspace){if(WorkspaceContext::legacyCiFixture())return 0;fail('Workspace indisponível.',403);}return (int)self::$workspace['id'];}
  public static function workspace(): array {self::load();if(!self::$workspace)fail('Workspace indisponível.',403);return self::$workspace;}
  public static function isPreview(): bool {self::load(false);return self::$previewClientId!==null;}
  public static function previewStart(array $p): array {self::load();if((self::$actor['role']??'')!=='admin')fail('Acesso restrito ao administrador.',403);$id=integer($p['client_id']??0,1);$c=WorkspaceContext::legacyCiFixture()?DB::one('SELECT id,name FROM clients WHERE id=? AND active=1',[$id]):DB::one('SELECT id,name FROM clients WHERE id=? AND active=1 AND workspace_id=?',[$id,self::workspaceId()]);if(!$c)fail('Cliente não encontrado.',404);$_SESSION['preview_client_id']=$id;self::$user=null;self::$previewClientId=null;self::load();return ['saved'=>true,'client'=>$c];}

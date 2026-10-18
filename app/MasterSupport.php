@@ -12,7 +12,7 @@ final class MasterSupport {
   $w=DB::one('SELECT w.id,w.name,w.slug,w.owner_user_id,w.status,u.active AS owner_active,u.role AS owner_role,u.email AS owner_email
     FROM workspaces w JOIN users u ON u.id=w.owner_user_id WHERE w.slug=?',
     [WorkspaceFoundation::SLUG]);
-  if($count!==1||!$w||$w['status']!==WorkspaceFoundation::STATUS||
+  if((!WorkspaceTenantMode::enabled()&&$count!==1)||!$w||$w['status']!==WorkspaceFoundation::STATUS||
      (int)$w['owner_active']!==1||$w['owner_role']!=='admin'||strtolower((string)$w['owner_email'])!==WorkspaceFoundation::OWNER_EMAIL)
    fail('Modo suporte indisponível: workspace único não verificado.',503);
   return $w;
@@ -33,16 +33,18 @@ final class MasterSupport {
   $w=self::singleWorkspace();
   $sessionId=(int)($_SESSION['workspace_support_id']??0);
   if(Auth::$origin!=='web'||$sessionId<1)return ['id'=>0,'name'=>'Plataforma TaskEsc','slug'=>'platform','role'=>'master'];
-  $session=DB::one('SELECT s.id,s.workspace_id,s.master_user_id,s.expires_at,s.ended_at
-    FROM workspace_support_sessions s WHERE s.id=? AND s.master_user_id=? AND s.workspace_id=?',
-    [$sessionId,(int)$user['id'],(int)$w['id']]);
+  $multi=WorkspaceTenantMode::enabled();
+  $session=DB::one('SELECT s.id,s.workspace_id,s.master_user_id,s.expires_at,s.ended_at,w.name,w.slug,w.owner_user_id
+    FROM workspace_support_sessions s JOIN workspaces w ON w.id=s.workspace_id
+    WHERE s.id=? AND s.master_user_id=?'.($multi?'':' AND s.workspace_id=?'),
+    $multi?[$sessionId,(int)$user['id']]:[$sessionId,(int)$user['id'],(int)$w['id']]);
   if(!$session||$session['ended_at']!==null||$session['expires_at']<=now()){
    unset($_SESSION['workspace_support_id']);
    return ['id'=>0,'name'=>'Plataforma TaskEsc','slug'=>'platform','role'=>'master'];
   }
-  return ['id'=>(int)$w['id'],'name'=>(string)$w['name'],
-    'slug'=>(string)$w['slug'],'role'=>'owner',
-    'support_session_id'=>$sessionId,'owner_user_id'=>(int)$w['owner_user_id']];
+  return ['id'=>(int)$session['workspace_id'],'name'=>(string)$session['name'],
+    'slug'=>(string)$session['slug'],'role'=>'owner',
+    'support_session_id'=>$sessionId,'owner_user_id'=>(int)$session['owner_user_id']];
  }
  public static function isActor(): bool {
   return Auth::$origin==='web'&&Auth::$actor!==null&&self::isVerified(Auth::$actor);
@@ -65,13 +67,14 @@ final class MasterSupport {
  public static function administrators(): array {
   Auth::load();if(!self::isActor())fail('Somente o ADM Master pode listar administradores.',403);
   $w=self::singleWorkspace();
+  $multi=WorkspaceTenantMode::enabled();
   return DB::all("SELECT u.id,u.name,u.email,u.active,u.twofa_enabled,wm.role AS workspace_role,
     w.id AS workspace_id,w.name AS workspace_name
     FROM workspace_members wm
     JOIN users u ON u.id=wm.user_id
     JOIN workspaces w ON w.id=wm.workspace_id
-    WHERE wm.workspace_id=? AND wm.role IN ('owner','admin')
-    ORDER BY wm.role='owner' DESC,u.name",[(int)$w['id']]);
+    WHERE ".($multi?'1=1':'wm.workspace_id=?')." AND wm.role IN ('owner','admin')
+    ORDER BY w.name,wm.role='owner' DESC,u.name",$multi?[]:[(int)$w['id']]);
  }
 
  /** Two-factor reset is a high-risk operation: password step-up + audit. */
@@ -238,7 +241,12 @@ final class MasterSupport {
   $reason=required($input,'reason',190);
   if(mb_strlen($reason)<8)fail('Informe o motivo do suporte (mínimo 8 caracteres).',422);
   $w=self::singleWorkspace();
-  if($workspaceId!==(int)$w['id'])fail('Workspace indisponível.',404);
+  if(WorkspaceTenantMode::enabled()){
+   $w=DB::one("SELECT w.id,w.owner_user_id,w.name,w.slug,w.status,u.active AS owner_active,u.role AS owner_role
+      FROM workspaces w JOIN users u ON u.id=w.owner_user_id WHERE w.id=?",[$workspaceId]);
+   if(!$w||!in_array((string)$w['status'],[WorkspaceFoundation::STATUS,'active'],true)||
+     (int)$w['owner_active']!==1||$w['owner_role']!=='admin')fail('Workspace indisponível.',404);
+  }elseif($workspaceId!==(int)$w['id'])fail('Workspace indisponível.',404);
   $masterId=(int)Auth::$actor['id'];
   $expires=gmdate('Y-m-d H:i:s',time()+self::SESSION_SECONDS);
   $id=DB::tx(static function()use($workspaceId,$masterId,$reason,$expires):int {

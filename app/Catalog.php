@@ -88,7 +88,7 @@ public static function clientSave(array $p): array {
   Auth::admin();
   $id=(int)($p['id']??0);$old=$id?DB::one('SELECT id,role,active,whatsapp_phone,ai_assistant_enabled FROM users WHERE id=?',[$id]):null;if($id&&!$old)fail('Usuário não encontrado.',404);if($id&&!WorkspaceContext::legacyCiFixture())WorkspaceContext::assertUserBelongs($id,Auth::workspaceId());
   $email=strtolower(required($p,'email',190));if(!filter_var($email,FILTER_VALIDATE_EMAIL))fail('E-mail inválido.');if($email===WorkspaceFoundation::MASTER_EMAIL)fail('Esta conta é reservada à administração da plataforma.',403);if(DB::one('SELECT id FROM users WHERE email=? AND id<>?',[$email,$id]))fail('Este e-mail já está em uso.',409);
-  $role=enumv($p['role']??'client',['admin','staff','client'],'perfil');$whatsapp=WppConnect::normalizePhone(required($p,'whatsapp_phone',20));$row=['name'=>required($p,'name',150),'email'=>$email,'whatsapp_phone'=>$whatsapp,'role'=>$role,'active'=>(int)(bool)($p['active']??1),'email_notifications'=>(int)(bool)($p['email_notifications']??1),
+  $role=enumv($p['role']??'client',['admin','staff','client'],'perfil');if($role==='admin'&&(!$old||$old['role']!=='admin'))fail('Cada workspace possui apenas um administrador proprietário. Convide membros como Equipe.',403);$whatsapp=WppConnect::normalizePhone(required($p,'whatsapp_phone',20));$row=['name'=>required($p,'name',150),'email'=>$email,'whatsapp_phone'=>$whatsapp,'role'=>$role,'active'=>(int)(bool)($p['active']??1),'email_notifications'=>(int)(bool)($p['email_notifications']??1),
    'ai_assistant_enabled'=>$role==='admin'?0:(array_key_exists('ai_assistant_enabled',$p)?(int)(bool)$p['ai_assistant_enabled']:(int)($old['ai_assistant_enabled']??0))];
   // One number can authenticate only one user. Existing duplicates fail closed in the resolver.
   if(DB::one('SELECT id FROM users WHERE whatsapp_phone=? AND id<>? LIMIT 1',[$whatsapp,$id]))fail('Este WhatsApp já está vinculado a outro usuário.',409);
@@ -98,6 +98,9 @@ public static function clientSave(array $p): array {
   $links=$p['clients']??[];if(!is_array($links))fail('Vínculos de clientes inválidos.',422);$cleanLinks=[];
   if($role!=='admin')foreach($links as $link){$cid=integer($link['client_id']??0,1);Auth::client($cid);if(isset($cleanLinks[$cid]))continue;$cleanLinks[$cid]=['client_id'=>$cid,'can_approve'=>(int)(bool)($link['can_approve']??1),'can_finance'=>$role==='client'?(int)(bool)($link['can_finance']??0):0];}
   $workspaceId=Auth::workspaceId();
+  if($id&&$row['active']===1&&!WorkspaceContext::legacyCiFixture()&&
+    DB::one("SELECT 1 FROM team_invitations WHERE workspace_id=? AND user_id=? AND status='pending'",[$workspaceId,$id]))
+    fail('Este membro precisa aceitar o convite antes de ativar a conta.',409);
   $oldMemberRoleId=(!WorkspaceContext::legacyCiFixture()&&$id>0)
     ?(int)(DB::one('SELECT custom_role_id FROM workspace_members WHERE workspace_id=? AND user_id=?',[$workspaceId,$id])['custom_role_id']??0):0;
   $customRoleId=array_key_exists('custom_role_id',$p)?integer($p['custom_role_id']??0,0):$oldMemberRoleId;

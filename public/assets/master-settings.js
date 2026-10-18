@@ -160,11 +160,16 @@ window.TaskEscMasterSettings=(()=>{
   const security=card(grid,'Segurança da plataforma','Acesso e segregação dos dados.');
   note(security,'Acesso exclusivo','Somente a conta ADM Master autenticada pode alterar estas configurações. Ações são auditadas.');
   note(security,'Proteção dos workspaces','Criação de novos workspaces segue bloqueada até a homologação multiempresa.');
-  if(mode==='personalization'){
-   for(const item of [email,wpp,google,asaasCard,drive,security])item.remove();
-  }else{
-   for(const item of [brand,assets,security])item.remove();
-  }
+  const tabItems=mode==='personalization'?
+    [{key:'identidade',label:'Identidade visual',node:brand},
+     {key:'icones',label:'Ícones e PWA',node:assets}]:
+    [{key:'whatsapp',label:'WhatsApp',node:wpp},
+     {key:'email',label:'E-mail / SMTP',node:email},
+     {key:'asaas',label:'Asaas',node:asaasCard},
+     {key:'google',label:'Google OAuth',node:google},
+     {key:'drive',label:'Google Drive',node:drive}];
+  grid.remove();
+  window.TaskEscMasterTabs.mount(host,tabItems,mode==='personalization'?'aparencia':'integracoes');
 
  }
  return {render};

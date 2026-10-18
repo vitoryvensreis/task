@@ -59,7 +59,7 @@ final class WorkspaceTeams {
     LEFT JOIN workspace_role_definitions r ON r.id=i.role_id AND r.workspace_id=i.workspace_id
     WHERE i.workspace_id=? AND i.status='pending' ORDER BY i.created_at DESC LIMIT 100",[$ws]);
   $used=0;
-  foreach($members as $m)if($m['role']==='staff'&&$m['status']==='active'&&(int)$m['active']===1)$used++;
+  foreach($members as $m)if(in_array($m['role'],['admin','staff'],true)&&$m['status']==='active'&&(int)$m['active']===1&&(int)$m['id']!==(int)(Auth::$workspace['owner_user_id']??0))$used++;
   return ['members'=>$members,'invites'=>$pending,'can_invite'=>(Auth::$origin==='web'&&!MasterSupport::isSupport()&&(Auth::$workspace['role']??'')==='owner'),'plan'=>$plan['name']??'',
     'team_limit'=>$plan['team_limit'],'team_used'=>$used];
  }
@@ -105,7 +105,7 @@ final class WorkspaceTeams {
     base('convite.php?token='.$token)."\n\nSe não reconhece este convite, ignore.");
    audit('user',$userId,'team.invited',null,['email'=>$email,'workspace_id'=>$ws]);
   });
-  return ['invited'=>true,'email'=>$email,'expires_in_hours'=>48];
+  return ['invited'=>true,'queued_for_delivery'=>true,'email'=>$email,'expires_in_hours'=>48];
  }
 
  public static function revoke(array $p): array {
@@ -138,6 +138,8 @@ final class WorkspaceTeams {
    $u=DB::one('SELECT id,active,role,email FROM users WHERE id=? FOR UPDATE',[$uid]);
    if(!$u||(int)$u['active']!==0||$u['role']!=='staff'||strcasecmp($u['email'],$invite['email'])!==0)
     fail('A conta do convite não está disponível.',409);
+   if($invite['role_id']!==null&&!DB::one('SELECT 1 FROM workspace_role_definitions WHERE id=? AND workspace_id=? AND active=1',[(int)$invite['role_id'],$ws]))
+    fail('A função do convite foi desativada. Solicite um novo convite.',409);
    $member=DB::one('SELECT role,status FROM workspace_members WHERE workspace_id=? AND user_id=? FOR UPDATE',[$ws,$uid]);
    if(!$member||$member['role']!=='staff'||$member['status']!=='inactive')
     fail('O vínculo da equipe não está pendente.',409);

@@ -101,6 +101,7 @@ $initialTab=$routes[$routeKey]??'overview';
  </main>
 </div>
 <script src="<?=e($basePath)?>/assets/vendor/centrifuge-5.7.4.js" defer></script>
+<script src="<?=e($basePath)?>/assets/master-tabs.js?v=<?=e($assetVersion('master-tabs.js'))?>" defer></script>
 <script src="<?=e($basePath)?>/assets/master-settings.js?v=<?=e($assetVersion('master-settings.js'))?>" defer></script>
 <script src="<?=e($basePath)?>/assets/master-operations.js?v=<?=e($assetVersion('master-operations.js'))?>" defer></script>
 <script src="<?=e($basePath)?>/assets/master-console.js?v=<?=e($assetVersion('master-console.js'))?>" defer></script>

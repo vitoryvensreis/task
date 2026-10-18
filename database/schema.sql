@@ -111,3 +111,5 @@ INSERT INTO settings (`key`,value) VALUES ('schema_version','30'),('brand_name',
 -- and idx_ws_<table> indexes are preserved for the Vitor operation.
 -- Final DROP DEFAULT for legacy tenant columns requires scoped INSERT
 -- writers in Stage 2 and is not applied in this compatibility release.
+
+-- Stage 6: calendar/event workspace_id added after validated backup by bin/migrate-workspace-calendars.php.

@@ -459,6 +459,7 @@ jobs:
             php bin/migrate-workspace-roles.php --apply "--backup-manifest=$BACKUP_MANIFEST"
             php -r 'require "app/bootstrap.php"; echo json(WorkspaceTeams::migrate()).PHP_EOL;'
             php bin/migrate-workspace-db-stage1.php --apply "--backup-manifest=$BACKUP_MANIFEST"
+            php bin/migrate-workspace-calendars.php --apply "--backup-manifest=$BACKUP_MANIFEST"
             php -r 'require "app/bootstrap.php"; echo json(WorkspaceContactsIndex::apply()).PHP_EOL;'
             php bin/provision-gabriella.php --apply "--backup-manifest=$BACKUP_MANIFEST"
           REMOTE_SCRIPT

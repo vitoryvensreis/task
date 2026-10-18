@@ -168,8 +168,8 @@ final class AutomationWorker
             $run['attempts']=$attempts;$run['status']='running';return $run;
         });
         if(!$claimed)return;
-        self::entityWorkspace((string)$claimed['entity_type'],(int)$claimed['entity_id']);
         try{
+            self::entityWorkspace((string)$claimed['entity_type'],(int)$claimed['entity_id']);
             $definition=json_decode((string)$claimed['definition_json'],true,64,JSON_THROW_ON_ERROR);
             $definition=Automation::validateDefinition(is_array($definition)?$definition:[],(string)$claimed['automation_trigger']);
             $context=json_decode((string)$claimed['context_json'],true,32,JSON_THROW_ON_ERROR);

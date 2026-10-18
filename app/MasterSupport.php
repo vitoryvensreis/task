@@ -47,7 +47,7 @@ final class MasterSupport {
   return self::isActor()&&(bool)(Auth::$workspace['support_session_id']??0);
  }
  public static function requireCalendar(): void {
-  if(WorkspaceContext::legacyCiFixture()&&defined('TASKESC_REALTIME_DOMAIN_FIXTURE'))return;
+  if(WorkspaceContext::legacyCiFixture()&&(defined('TASKESC_REALTIME_DOMAIN_FIXTURE')||defined('TASKESC_LEGACY_AI_CALENDAR_FIXTURE')))return;
   Auth::load();
   if(!self::isSupport())fail('A agenda é exclusiva do ADM Master em modo suporte.',403);
  }

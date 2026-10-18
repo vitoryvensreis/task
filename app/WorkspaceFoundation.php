@@ -245,6 +245,13 @@ final class WorkspaceFoundation {
      'workspace.mode'=>'staged'] as $key=>$value)
     DB::run('INSERT IGNORE INTO workspace_settings (workspace_id,`key`,value,updated_at)
       VALUES (?,?,?,?)',[$workspaceId,$key,$value,now()]);
+   // Replicate safe legacy workspace preferences; leave platform security,
+   // OAuth tokens, cron state and calendar/Google-sync configuration global.
+   DB::run("INSERT IGNORE INTO workspace_settings (workspace_id,`key`,value,updated_at)
+     SELECT ?,s.`key`,s.value,? FROM settings s WHERE s.`key` IN
+       ('brand_name','brand_color','logo_url','timezone','upload_mb',
+        'retention_days','min_delivery_business_hours','dashboard_default_period',
+        'drive_account_id','drive_root_folder_id')",[$workspaceId,now()]);
 
    // Additive DDL, resumable after interruption. Defaults point only to the
    // initial, existing operation. Before onboarding a second tenant remove

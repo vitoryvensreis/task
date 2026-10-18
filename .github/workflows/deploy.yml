@@ -447,6 +447,7 @@ jobs:
             set -euo pipefail
             cd "$DEPLOY_PATH"
             php bin/migrate-workspace-foundation.php --apply "--backup-manifest=$BACKUP_MANIFEST"
+            php bin/migrate-platform-access.php --apply "--backup-manifest=$BACKUP_MANIFEST"
           REMOTE_SCRIPT
 
       - name: Aplicar migrações realtime, chat e automações com backup validado

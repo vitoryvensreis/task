@@ -51,7 +51,8 @@
   async function draw(tab){
    clear();tabs.forEach(b=>b.classList.toggle('active',b.dataset.masterTab===tab));
    show('#master-workspaces',tab==='overview'||tab==='workspaces');show('#master-administrators',tab==='clients');show('#master-plans',tab==='plans');
-   $('#master-panel-title').textContent=({overview:'Visão geral da plataforma',clients:'Clientes e administradores',workspaces:'Gerenciamento de workspaces',plans:'Planos de assinatura e acesso'})[tab];
+   $('#master-panel-title').textContent=({overview:'Visão geral da plataforma',clients:'Clientes e administradores',workspaces:'Gerenciamento de workspaces',plans:'Planos de assinatura e acesso',support:'Atendimentos'})[tab];
+   if(tab==='support'){window.dispatchEvent(new Event('taskesc:open-support'));return;}
    if(tab==='plans'){
     const list=await request('master.plans');
     planPanel.append(el('p','Crie planos com módulos e limites de equipe. A disponibilidade pública apenas mostra o catálogo; nenhuma cobrança ou novo workspace será ativado automaticamente.','master-note'));
@@ -147,6 +148,7 @@
   }
   for(const t of tabs)t.addEventListener('click',()=>draw(t.dataset.masterTab).catch(e=>message('#master-panel-message',e.message,true)));
   await draw('overview');
+  if(location.pathname.match(/\/master\/suporte\/?$/))window.dispatchEvent(new Event('taskesc:open-support'));
   $('#master-logout').addEventListener('click',async()=>{try{await request('auth.logout',{})}finally{location.href=base+'/dashboard'}});
  }catch(err){show('#master-login',true);message('#master-panel-message',err.message,true)}
 })();

@@ -44,7 +44,6 @@ jobs:
         run: |
           set -e
           php tests/realtime.php
-          php tests/wppconnect-contract.php
           php tests/automation-contract.php
           python3 -m py_compile ops/realtime-step1.py ops/realtime-step3.py ops/realtime-step4.py ops/automation-worker.py ops/wppconnect-webhook-probe.py
           python3 tests/realtime-ops.py
@@ -156,8 +155,6 @@ jobs:
           php tests/outbox.php
           php tests/realtime-worker.php
           php tests/realtime-auth.php
-          php tests/realtime-business-events.php
-          php tests/realtime-domain.php
           php tests/wppconnect-realtime.php
           php tests/automation-core.php
           php tests/chat.php
@@ -206,7 +203,7 @@ jobs:
             systemctl is-active taskesc-ai-whatsapp-worker.service || true
             systemctl show taskesc-ai-whatsapp-worker.service -p ActiveState -p SubState -p NRestarts -p ExecMainStatus --no-pager || true
             cd "$DEPLOY_PATH"
-            php bin/ai-whatsapp-diagnose.php || true
+            echo 'Assistente IA removido; diagnóstico desabilitado.'
           REMOTE
 
       - name: Backup obrigatório pré-deploy

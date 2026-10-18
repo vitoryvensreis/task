@@ -506,7 +506,7 @@ jobs:
             # architectural blockers without changing the deployment outcome.
             echo "Workspace split ownership preflight (read-only):"
             SPLIT_PREFLIGHT_EXIT=0
-            php bin/plan-second-workspace.php || SPLIT_PREFLIGHT_EXIT=$?
+            php bin/plan-second-workspace.php --gabriella-email=gabriella-diasl@hotmail.com || SPLIT_PREFLIGHT_EXIT=$?
             echo "Ownership preflight exit: $SPLIT_PREFLIGHT_EXIT (no data changed)"
             exit "$AUDIT_EXIT"
           REMOTE

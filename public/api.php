@@ -7,13 +7,27 @@ try {
  $raw=file_get_contents('php://input');$body=[];
  if(str_contains(strtolower($_SERVER['CONTENT_TYPE']??''),'application/json')&&$raw!==''){$body=json_decode($raw,true,512,JSON_THROW_ON_ERROR);if(!is_array($body))fail('JSON inválido.');}
  $p=[...$_GET,...$_POST,...$body];unset($p['action']);
+ if($action==='master.activate'){
+  if(($_SERVER['REQUEST_METHOD']??'GET')!=='POST')fail('Método não permitido.',405);
+  installed();out(MasterSupport::activate($p));
+ }
  if($action==='auth.login'){installed();out(Auth::login($p));}
  if($action==='auth.2fa'){installed();out(Auth::twoFactorVerify($p));}
  if($action==='auth.logout'){session_start();$_SESSION=[];if(ini_get('session.use_cookies')){$params=session_get_cookie_params();setcookie(session_name(),'',['expires'=>time()-42000,'path'=>$params['path'],'domain'=>$params['domain'],'secure'=>$params['secure'],'httponly'=>$params['httponly'],'samesite'=>$params['samesite']??'Lax']);}session_destroy();out(['logged_out'=>true]);}
  installed();
+ if(in_array($action,['master.workspaces','master.start','master.stop','master.invite'],true)){
+  if(($_SERVER['REQUEST_METHOD']??'GET')!=='GET')checkCsrf();
+  Auth::load();
+  if($action==='master.workspaces'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET')out(MasterSupport::workspaceList());
+  if($action==='master.start'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST')out(MasterSupport::start($p));
+  if($action==='master.stop'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST')out(MasterSupport::stop());
+  if($action==='master.invite'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST')out(MasterSupport::invite());
+  fail('Método não permitido.',405);
+ }
  if($action==='auth.me'){Auth::load();out(['user'=>Auth::$user,'csrf'=>csrf()]);}
  if($action==='meta'){Auth::load();out(Catalog::meta());}
  Auth::load();
+ if((Auth::$user['role']??'')==='master')fail('Escolha um workspace no painel do ADM Master.',403);
  if($action==='preview.start'){checkCsrf();out(Auth::previewStart($p));}
  if($action==='preview.stop'){checkCsrf();out(Auth::previewStop());}
  if(($_SERVER['REQUEST_METHOD']??'GET')!=='GET'&&Auth::$origin!=='api'){checkCsrf();Auth::guardPreviewWrite();}
@@ -131,7 +145,7 @@ try {
   'google.accounts'=>Google::accounts(),
   'google.connect'=>Google::connect($p),
   'google.disconnect'=>Google::disconnect($p),
-  'google.sync'=>Auth::admin()?:Google::sync(!empty($p['calendar_id'])?(int)$p['calendar_id']:null),
+  'google.sync'=>MasterSupport::requireCalendar()?:Google::sync(!empty($p['calendar_id'])?(int)$p['calendar_id']:null),
   'notifications'=>Auth::isPreview()?[]:DB::all('SELECT * FROM notifications WHERE user_id=? ORDER BY id DESC LIMIT 50',[Auth::$user['id']]),
   'notifications.seen'=>DB::run('UPDATE notifications SET seen=1 WHERE user_id=?',[Auth::$user['id']])&&['saved'=>true],
   default=>fail('Ação não encontrada.',404),

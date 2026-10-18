@@ -1,6 +1,23 @@
 <?php
 final class Auth {
  public static ?array $user=null;public static ?array $actor=null;public static ?array $workspace=null;public static ?int $previewClientId=null;public static string $origin='web';public static string $scopes='tools.read tools.write';
+ private static function principal(array $actor,array $workspace): array {
+  if(($workspace['role']??'')==='master'){
+   $actor['role']='master';$actor['is_master']=1;$actor['is_support']=0;
+   return $actor;
+  }
+  if(isset($workspace['support_session_id'])){
+   if(self::$origin!=='web')fail('Suporte Master disponível apenas na sessão web.',403);
+   $owner=DB::one('SELECT id,name,email,role,active,email_notifications,weekly_report,twofa_enabled,last_login_at FROM users WHERE id=? AND role=? AND active=1',
+    [(int)$workspace['owner_user_id'],'admin']);
+   if(!$owner)fail('Proprietário do workspace indisponível.',403);
+   $owner['is_master']=1;$owner['is_support']=1;
+   $owner['support_master_id']=(int)$actor['id'];
+   $owner['support_session_id']=(int)$workspace['support_session_id'];
+   return $owner;
+  }
+  return $actor;
+ }
  public static function load(bool $required=true): ?array {
   if(self::$user)return self::$user;
   $bearer=$_SERVER['HTTP_AUTHORIZATION']??$_SERVER['REDIRECT_HTTP_AUTHORIZATION']??'';$id=null;
@@ -10,16 +27,18 @@ final class Auth {
   }else{$id=$_SESSION['user_id']??null;}
   $actor=$id?DB::one('SELECT id,name,email,role,active,email_notifications,weekly_report,twofa_enabled,last_login_at FROM users WHERE id=? AND active=1',[$id]):null;self::$actor=$actor;
   self::$workspace=$actor?WorkspaceContext::forUser($actor):null;
-  if($actor&&self::$origin==='web'&&$actor['role']==='admin'&&!empty($_SESSION['preview_client_id'])){
+   $effective=$actor&&self::$workspace?self::principal($actor,self::$workspace):$actor;
+   if($actor&&strtolower((string)$actor['email'])===WorkspaceFoundation::MASTER_EMAIL&&self::$origin==='api')fail('ADM Master não pode usar credencial de API.',403);
+  if($effective&&self::$origin==='web'&&$effective['role']==='admin'&&!empty($_SESSION['preview_client_id'])){
    $cid=(int)$_SESSION['preview_client_id'];$client=WorkspaceContext::legacyCiFixture()?DB::one('SELECT id,name FROM clients WHERE id=? AND active=1',[$cid]):DB::one('SELECT id,name FROM clients WHERE id=? AND active=1 AND workspace_id=?',[$cid,self::$workspace['id']]);
-   if($client){self::$previewClientId=$cid;self::$user=$actor;self::$user['actor_role']='admin';self::$user['role']='client';self::$user['is_preview']=1;self::$user['preview_client_id']=$cid;self::$user['preview_client_name']=$client['name'];}
+   if($client){self::$previewClientId=$cid;self::$user=$effective;self::$user['actor_role']='admin';self::$user['role']='client';self::$user['is_preview']=1;self::$user['preview_client_id']=$cid;self::$user['preview_client_name']=$client['name'];}
    else unset($_SESSION['preview_client_id']);
   }
-  if(!self::$user&&$actor){self::$user=$actor;self::$user['is_preview']=0;}
+  if(!self::$user&&$effective){self::$user=$effective;self::$user['is_preview']=0;}
   if(self::$user&&self::$workspace){self::$user['workspace_id']=self::$workspace['id'];self::$user['workspace_role']=self::$workspace['role'];}
   if($required&&!self::$user)fail('Entre para continuar.',401);return self::$user;
  }
- public static function workspaceId(): int {self::load();if(!self::$workspace){if(WorkspaceContext::legacyCiFixture())return 0;fail('Workspace indisponível.',403);}return (int)self::$workspace['id'];}
+ public static function workspaceId(): int {self::load();if(!self::$workspace){if(WorkspaceContext::legacyCiFixture())return 0;fail('Workspace indisponível.',403);}if((int)self::$workspace['id']<1&&!WorkspaceContext::legacyCiFixture())fail('Selecione um workspace no modo suporte.',403);return (int)self::$workspace['id'];}
  public static function workspace(): array {self::load();if(!self::$workspace)fail('Workspace indisponível.',403);return self::$workspace;}
  public static function isPreview(): bool {self::load(false);return self::$previewClientId!==null;}
  public static function previewStart(array $p): array {self::load();if((self::$actor['role']??'')!=='admin')fail('Acesso restrito ao administrador.',403);$id=integer($p['client_id']??0,1);$c=WorkspaceContext::legacyCiFixture()?DB::one('SELECT id,name FROM clients WHERE id=? AND active=1',[$id]):DB::one('SELECT id,name FROM clients WHERE id=? AND active=1 AND workspace_id=?',[$id,self::workspaceId()]);if(!$c)fail('Cliente não encontrado.',404);$_SESSION['preview_client_id']=$id;self::$user=null;self::$previewClientId=null;self::load();return ['saved'=>true,'client'=>$c];}
@@ -60,16 +79,19 @@ final class Auth {
    'staff'=>['dashboard.view','tasks.read','tasks.edit','tasks.move','tasks.delete','tasks.comment','tasks.files','agenda.read','agenda.write','reports.read'],
    'client'=>['dashboard.view','tasks.read','tasks.create','tasks.edit','tasks.move','tasks.comment','tasks.files','agenda.read']
   ];
-  return $map[$role]??[];
+  $abilities=$map[$role]??[];
+  if(!MasterSupport::isSupport())$abilities=array_values(array_diff($abilities,['agenda.read','agenda.write']));
+  return $abilities;
  }
  public static function can(string $ability): bool {return in_array($ability,self::abilities(),true);}
  public static function requireAbility(string $ability): void {if(!self::can($ability))fail('Você não possui permissão para esta ação.',403);}
 
  private static function finalizeLogin(array $u): array {
   $workspace=WorkspaceContext::forUser($u);
-  session_regenerate_id(true);$_SESSION['user_id']=$u['id'];unset($_SESSION['preview_client_id'],$_SESSION['pending_2fa_user_id'],$_SESSION['pending_2fa_until'],$_SESSION['workspace_id'],$_SESSION['workspace_support_id']);$_SESSION['csrf']=bin2hex(random_bytes(24));
+  $effective=self::principal($u,$workspace);
+   session_regenerate_id(true);$_SESSION['user_id']=$u['id'];unset($_SESSION['preview_client_id'],$_SESSION['pending_2fa_user_id'],$_SESSION['pending_2fa_until'],$_SESSION['workspace_id'],$_SESSION['workspace_support_id']);$_SESSION['csrf']=bin2hex(random_bytes(24));
   DB::update('users',(int)$u['id'],['last_login_at'=>now(),'last_login_ip'=>mb_substr((string)($_SERVER['REMOTE_ADDR']??''),0,45)]);
-  unset($u['password_hash'],$u['twofa_secret'],$u['twofa_recovery_json']);self::$actor=$u;self::$workspace=$workspace;self::$user=$u;self::$user['is_preview']=0;self::$user['workspace_id']=$workspace['id'];self::$user['workspace_role']=$workspace['role'];audit('user',(int)$u['id'],'login',null,['ip'=>$_SERVER['REMOTE_ADDR']??'']);
+  unset($u['password_hash'],$u['twofa_secret'],$u['twofa_recovery_json']);self::$actor=$u;self::$workspace=$workspace;self::$user=$effective;self::$user['is_preview']=0;self::$user['workspace_id']=$workspace['id'];self::$user['workspace_role']=$workspace['role'];audit('user',(int)$u['id'],'login',null,['ip'=>$_SERVER['REMOTE_ADDR']??'']);
   return ['user'=>self::$user,'csrf'=>csrf()];
  }
  public static function login(array $p): array {
@@ -106,15 +128,15 @@ final class Auth {
  }
  public static function twoFactorStatus(): array {self::load();return ['enabled'=>(bool)(self::$user['twofa_enabled']??0),'admin'=>self::$user['role']==='admin'];}
  public static function twoFactorSetup(): array {
-  self::admin();$secret=self::base32Encode(random_bytes(20));DB::update('users',(int)self::$user['id'],['twofa_secret'=>secretEncrypt($secret),'twofa_enabled'=>0,'twofa_recovery_json'=>null]);$issuer=rawurlencode(trim(setting('brand_name','TaskEsc'))?:'TaskEsc');$label=rawurlencode((string)self::$user['email']);$uri='otpauth://totp/'.$issuer.':'.$label.'?secret='.$secret.'&issuer='.$issuer.'&digits=6&period=30';return ['secret'=>$secret,'otpauth_uri'=>$uri];
+  self::admin();if(MasterSupport::isSupport())fail('2FA do proprietário bloqueado em suporte.',403);$secret=self::base32Encode(random_bytes(20));DB::update('users',(int)self::$user['id'],['twofa_secret'=>secretEncrypt($secret),'twofa_enabled'=>0,'twofa_recovery_json'=>null]);$issuer=rawurlencode(trim(setting('brand_name','TaskEsc'))?:'TaskEsc');$label=rawurlencode((string)self::$user['email']);$uri='otpauth://totp/'.$issuer.':'.$label.'?secret='.$secret.'&issuer='.$issuer.'&digits=6&period=30';return ['secret'=>$secret,'otpauth_uri'=>$uri];
  }
  public static function twoFactorEnable(array $p): array {
-  self::admin();$u=DB::one('SELECT * FROM users WHERE id=?',[self::$user['id']]);$secret=self::twoFactorSecret($u);if($secret===''||!self::verifyTotp($secret,trim((string)($p['code']??''))))fail('Código do autenticador inválido.');
+  self::admin();if(MasterSupport::isSupport())fail('2FA do proprietário bloqueado em suporte.',403);$u=DB::one('SELECT * FROM users WHERE id=?',[self::$user['id']]);$secret=self::twoFactorSecret($u);if($secret===''||!self::verifyTotp($secret,trim((string)($p['code']??''))))fail('Código do autenticador inválido.');
   $plain=[];$hashed=[];for($i=0;$i<8;$i++){$raw=strtoupper(bin2hex(random_bytes(4)));$code=substr($raw,0,4).'-'.substr($raw,4,4);$plain[]=$code;$hashed[]=hash('sha256',str_replace('-','',$code));}
   DB::update('users',(int)$u['id'],['twofa_enabled'=>1,'twofa_recovery_json'=>json($hashed)]);self::$user['twofa_enabled']=1;audit('user',(int)$u['id'],'2fa.enabled');return ['saved'=>true,'recovery_codes'=>$plain];
  }
  public static function twoFactorDisable(array $p): array {
-  self::admin();$u=DB::one('SELECT * FROM users WHERE id=?',[self::$user['id']]);$password=(string)($p['current_password']??'');if($password===''||!password_verify($password,(string)$u['password_hash']))fail('Senha atual incorreta.');
+  self::admin();if(MasterSupport::isSupport())fail('2FA do proprietário bloqueado em suporte.',403);$u=DB::one('SELECT * FROM users WHERE id=?',[self::$user['id']]);$password=(string)($p['current_password']??'');if($password===''||!password_verify($password,(string)$u['password_hash']))fail('Senha atual incorreta.');
   $code=trim((string)($p['code']??''));if(!self::twoFactorAccept($u,$code))fail('Código de verificação inválido.');
   DB::update('users',(int)$u['id'],['twofa_enabled'=>0,'twofa_secret'=>null,'twofa_recovery_json'=>null]);self::$user['twofa_enabled']=0;audit('user',(int)$u['id'],'2fa.disabled');return ['saved'=>true];
  }
@@ -122,13 +144,13 @@ final class Auth {
   self::load();$u=DB::one('SELECT id,name,email,role,email_notifications,twofa_enabled,last_login_at FROM users WHERE id=? AND active=1',[self::$user['id']]);if(!$u)fail('Usuário não encontrado.',404);return $u;
  }
  public static function profileSave(array $p): array {
-  self::load();$u=DB::one('SELECT * FROM users WHERE id=? AND active=1',[self::$user['id']]);if(!$u)fail('Usuário não encontrado.',404);
+  self::load();if(MasterSupport::isSupport())fail('Credenciais do proprietário não podem ser alteradas em suporte.',403);$u=DB::one('SELECT * FROM users WHERE id=? AND active=1',[self::$user['id']]);if(!$u)fail('Usuário não encontrado.',404);
   $name=required($p,'name',150);$email=strtolower(required($p,'email',190));if(!filter_var($email,FILTER_VALIDATE_EMAIL))fail('E-mail inválido.');
   if($email!==strtolower((string)$u['email'])){$current=(string)($p['current_password']??'');if($current===''||!password_verify($current,(string)$u['password_hash']))fail('Informe sua senha atual para alterar o e-mail.',422);if(DB::one('SELECT id FROM users WHERE email=? AND id<>?',[$email,$u['id']]))fail('Este e-mail já está em uso.',409);}
   $row=['name'=>$name,'email'=>$email,'email_notifications'=>(int)(bool)($p['email_notifications']??0)];DB::update('users',(int)$u['id'],$row);audit('user',(int)$u['id'],'profile.update',['name'=>$u['name'],'email'=>$u['email'],'email_notifications'=>$u['email_notifications']],$row);self::$user=array_merge(self::$user,$row);return ['saved'=>true,'user'=>self::$user];
  }
  public static function passwordChange(array $p): array {
-  self::load();$u=DB::one('SELECT * FROM users WHERE id=? AND active=1',[self::$user['id']]);if(!$u)fail('Usuário não encontrado.',404);
+  self::load();if(MasterSupport::isSupport())fail('Credenciais do proprietário não podem ser alteradas em suporte.',403);$u=DB::one('SELECT * FROM users WHERE id=? AND active=1',[self::$user['id']]);if(!$u)fail('Usuário não encontrado.',404);
   $current=(string)($p['current_password']??'');if($current===''||!password_verify($current,(string)$u['password_hash']))fail('Senha atual incorreta.',422);
   $new=(string)($p['new_password']??'');$confirm=(string)($p['confirm_password']??'');if($new!==$confirm)fail('A confirmação da nova senha não confere.',422);if(password_verify($new,(string)$u['password_hash']))fail('Escolha uma senha diferente da atual.',422);
   $hash=self::password($new);DB::update('users',(int)$u['id'],['password_hash'=>$hash]);audit('user',(int)$u['id'],'password.change');if(session_status()===PHP_SESSION_ACTIVE)session_regenerate_id(true);return ['saved'=>true];

@@ -47,7 +47,7 @@ final class RealtimeAuth
         $channels = ['user:'.(int)$user['id']];
         if (in_array(($user['role'] ?? ''), ['admin','staff'], true)) {
             $channels[] = 'staff/global';
-            $channels[] = 'agenda/global';
+            if(MasterSupport::isSupport())$channels[] = 'agenda/global';
         }
         if (($user['role'] ?? '') === 'admin') {
             $channels[] = 'kanban/global';
@@ -69,7 +69,8 @@ final class RealtimeAuth
             return;
         }
 
-        if ($channel === 'staff/global' || $channel === 'agenda/global') {
+        if ($channel === 'agenda/global') {MasterSupport::requireCalendar();return;}
+        if ($channel === 'staff/global') {
             if (!in_array(($user['role'] ?? ''), ['admin','staff'], true) || Auth::isPreview()) fail('Sem permissão para este canal realtime.', 403);
             return;
         }

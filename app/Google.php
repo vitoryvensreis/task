@@ -41,7 +41,7 @@ final class Google {
  public static function connect(array $p=[]): array {
   Auth::admin();
   if(!config('google_client_id')||!config('google_client_secret'))fail('Configure Client ID e Client Secret nas integrações.');
-  $purpose=enumv($p['purpose']??'calendar',['calendar','drive'],'tipo de conexão');$returnTo=enumv($p['return_to']??($purpose==='drive'?'settings':'agenda'),['agenda','clients','settings'],'retorno');
+  $purpose=enumv($p['purpose']??'calendar',['calendar','drive'],'tipo de conexão');if($purpose==='calendar')MasterSupport::requireCalendar();$returnTo=enumv($p['return_to']??($purpose==='drive'?'settings':'agenda'),['agenda','clients','settings'],'retorno');
   $state=bin2hex(random_bytes(24));$verifier=bin2hex(random_bytes(32));
   $_SESSION['google_state']=['state'=>$state,'verifier'=>$verifier,'expires'=>time()+600,'user_id'=>Auth::$user['id'],'purpose'=>$purpose,'return_to'=>$returnTo];
   $scopes=['openid','email'];
@@ -55,7 +55,7 @@ final class Google {
   Auth::admin();$s=$_SESSION['google_state']??null;unset($_SESSION['google_state']);
   if(!$s||$s['expires']<time()||$s['user_id']!=Auth::$user['id']||!hash_equals($s['state'],$q['state']??''))fail('Autorização expirada ou inválida.',400);
   if(isset($q['error']))fail('A autorização do Google foi cancelada.');
-  $purpose=$s['purpose']??'calendar';$returnTo=$s['return_to']??($purpose==='drive'?'settings':'agenda');
+  $purpose=$s['purpose']??'calendar';if($purpose==='calendar')MasterSupport::requireCalendar();$returnTo=$s['return_to']??($purpose==='drive'?'settings':'agenda');
   $tokens=self::http('https://oauth2.googleapis.com/token','POST',['code'=>required($q,'code'),'client_id'=>config('google_client_id'),'client_secret'=>config('google_client_secret'),'redirect_uri'=>base('google-callback.php'),'grant_type'=>'authorization_code','code_verifier'=>$s['verifier']],null,[],true);
   $info=self::http('https://www.googleapis.com/oauth2/v3/userinfo','GET',null,$tokens['access_token']);
   $old=DB::one('SELECT * FROM google_accounts WHERE user_id=? AND google_sub=?'.(WorkspaceContext::legacyCiFixture()?'':' AND workspace_id=?'),WorkspaceContext::legacyCiFixture()?[Auth::$user['id'],$info['sub']]:[Auth::$user['id'],$info['sub'],Auth::workspaceId()]);

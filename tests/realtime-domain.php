@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 define('ROOT',dirname(__DIR__));
+define('TASKESC_REALTIME_DOMAIN_FIXTURE',true);
 $port=getenv('OUTBOX_TEST_PORT');
 if(!$port)throw new RuntimeException('Run only against the disposable CI database.');
 

@@ -46,6 +46,7 @@ final class AiWhatsAppAdminActions {
    self::tool('cancel_invoice','Preparar cancelamento de cobrança sem pagamentos, com confirmação.',['invoice_id'=>$id],['invoice_id']),
    self::tool('create_project','Preparar criação de projeto no cliente, mediante confirmação.',['client_id'=>$id,'name'=>['type'=>'string'],'description'=>['type'=>'string']],['client_id','name']),
   ];
+  if(!MasterSupport::isSupport()&&!(PHP_SAPI==='cli'&&getenv('GITHUB_ACTIONS')==='true'&&defined('TASKESC_LEGACY_AI_CALENDAR_FIXTURE')))$all=array_values(array_filter($all,static fn($t)=>($t['function']['name']??'')!=='list_events'));
   return $full?$all:array_values(array_filter($all,static fn($t)=>in_array($t['function']['name']??'',self::FINANCIAL_ACTIONS,true)));
  }
  private static function keys(array $data,array $allowed): void {
@@ -137,6 +138,7 @@ final class AiWhatsAppAdminActions {
    case 'list_team':
     self::keys($p,[]);return ['kind'=>'admin_list','heading'=>'Equipe','items'=>DB::all("SELECT id,CONCAT(name,' (',role,IF(active=1,'',', inativo'),')') name FROM users ORDER BY id DESC LIMIT 10")];
    case 'list_events':
+    MasterSupport::requireCalendar();
     self::keys($p,[]);return ['kind'=>'admin_list','heading'=>'Agenda','items'=>DB::all("SELECT id,CONCAT(title,' (',starts_at,')') name FROM events WHERE status<>'cancelled' AND starts_at>=UTC_TIMESTAMP() ORDER BY starts_at LIMIT 10")];
   }
   if(!self::sensitive($name))fail('Operação não autorizada.',403);

@@ -15,6 +15,8 @@ require ROOT.'/app/DB.php';
 require ROOT.'/app/WorkspaceFoundation.php';
 require ROOT.'/app/WorkspaceFoundationGuard.php';
 require ROOT.'/app/WorkspaceContext.php';
+require ROOT.'/app/MasterSupport.php';
+require ROOT.'/app/Notify.php';
 require ROOT.'/app/Auth.php';
 require ROOT.'/app/WorkspaceCatalog.php';
 require ROOT.'/app/WorkspacePreferences.php';
@@ -23,6 +25,7 @@ require ROOT.'/app/Demands.php';
 function fail(string $message,int $status=422,array $details=[]):never {throw new RuntimeException($message,$status);}
 
 function now():string {return gmdate('Y-m-d H:i:s');}
+function base(string $path=''):string{return 'https://task.escotilhaprodutora.com/'.ltrim($path,'/');}
 function testws(bool $ok,string $message):void {if(!$ok)throw new RuntimeException($message);}
 function refuses(callable $operation,string $reason):void {
  try{$operation();}catch(RuntimeException|LogicException){return;}
@@ -137,6 +140,48 @@ try{
  testws((string)DB::one('SELECT status FROM workspace_members WHERE user_id=? AND workspace_id=?',
   [$fresh,$ws])['status']==='active','Explicitly reactivating a disabled user should restore access.');
 
+
+ // B9: Master may authenticate only after explicit verification; no tenant
+ // data is available without an active, audited support session.
+ Auth::$user=null;Auth::$actor=null;Auth::$workspace=null;Auth::$previewClientId=null;Auth::$origin='web';
+ $_SESSION=['user_id'=>$owner];
+ $invitation=MasterSupport::invite();
+ testws($invitation['email']===WorkspaceFoundation::MASTER_EMAIL,'Master invite recipient differs from owner-approved email.');
+ $queued=DB::one("SELECT body FROM mail_queue WHERE recipient=? ORDER BY id DESC LIMIT 1",[WorkspaceFoundation::MASTER_EMAIL]);
+ testws((bool)$queued&&preg_match('/master\\.php\\?activate=([a-f0-9]{64})/',(string)$queued['body'],$match)===1,
+   'Master invitation must contain a one-time activation token.');
+ refuses(fn()=>MasterSupport::activate(['token'=>str_repeat('0',64),
+   'password'=>'Strong CI Master Password 2026','confirm_password'=>'Strong CI Master Password 2026']),
+   'Invalid activation token must be rejected.');
+ $activated=MasterSupport::activate(['token'=>$match[1],
+   'password'=>'Strong CI Master Password 2026','confirm_password'=>'Strong CI Master Password 2026']);
+ testws(($activated['activated']??false)===true,'Master activation did not verify the invite.');
+ refuses(fn()=>MasterSupport::activate(['token'=>$match[1],
+   'password'=>'Strong CI Master Password 2026','confirm_password'=>'Strong CI Master Password 2026']),
+   'Invitation token must not be reusable.');
+ $master=(int)(DB::one('SELECT id FROM users WHERE email=? AND active=1',
+    [WorkspaceFoundation::MASTER_EMAIL])['id']??0);
+ testws($master>0&&!DB::one('SELECT 1 FROM workspace_members WHERE user_id=?',[$master]),
+   'Verified Master must not be a tenant member.');
+ $_SESSION=['user_id'=>$master];Auth::$user=null;Auth::$actor=null;Auth::$workspace=null;Auth::$previewClientId=null;Auth::$origin='web';
+ testws(Auth::load()['role']==='master','Verified Master should start in platform-only mode.');
+ refuses(fn()=>Auth::workspaceId(),'Master must not inherit owner workspace.');
+ testws(MasterSupport::workspaceList()['workspaces'][0]['id']===$ws,
+   'Master should see workspace metadata, not inherit its contents.');
+ $support=DB::insert('workspace_support_sessions',['workspace_id'=>$ws,
+   'master_user_id'=>$master,'reason'=>'Temporary CI support session',
+   'started_at'=>now(),'expires_at'=>gmdate('Y-m-d H:i:s',time()+7200)]);
+ $_SESSION['workspace_support_id']=$support;
+ Auth::$user=null;Auth::$actor=null;Auth::$workspace=null;
+ testws(Auth::load()['role']==='admin'&&(int)Auth::$user['id']===$owner
+   &&(int)Auth::$actor['id']===$master&&MasterSupport::isSupport(),
+   'Master must be attributed separately from selected workspace owner.');
+ DB::run('UPDATE workspace_support_sessions SET expires_at=? WHERE id=?',
+   [gmdate('Y-m-d H:i:s',time()-60),$support]);
+ Auth::$user=null;Auth::$actor=null;Auth::$workspace=null;
+ testws(Auth::load()['role']==='master'&&!MasterSupport::isSupport(),
+   'Expired support session must immediately revoke tenant context.');
+ $_SESSION=['user_id'=>$owner];Auth::$user=null;Auth::$actor=null;Auth::$workspace=null;Auth::$origin='web';
  $newClient=DB::insert('clients',['name'=>'Legacy user interface keeps default',
   'created_at'=>gmdate('Y-m-d H:i:s')]);
  testws((int)(DB::one('SELECT workspace_id FROM clients WHERE id=?',[$newClient])['workspace_id']??0)===$ws,

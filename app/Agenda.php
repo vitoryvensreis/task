@@ -1,12 +1,12 @@
 <?php
 final class Agenda {
- public static function calendars(): array {Auth::staff();$rows=DB::all('SELECT c.id,c.name,c.color,c.account_id,c.access_role,c.selected,c.write_enabled,c.synced_at,c.last_error,a.email AS account_email,a.status AS account_status FROM calendars c LEFT JOIN google_accounts a ON a.id=c.account_id WHERE c.account_id IS NULL OR a.calendar_enabled=1 ORDER BY c.account_id,c.name');if(Auth::$user['role']!=='admin')$rows=array_values(array_filter($rows,fn($c)=>!$c['account_id']));return $rows;}
+ public static function calendars(): array {Auth::staff();MasterSupport::requireCalendar();$rows=DB::all('SELECT c.id,c.name,c.color,c.account_id,c.access_role,c.selected,c.write_enabled,c.synced_at,c.last_error,a.email AS account_email,a.status AS account_status FROM calendars c LEFT JOIN google_accounts a ON a.id=c.account_id WHERE c.account_id IS NULL OR a.calendar_enabled=1 ORDER BY c.account_id,c.name');if(Auth::$user['role']!=='admin')$rows=array_values(array_filter($rows,fn($c)=>!$c['account_id']));return $rows;}
  private static function payload(array $r): array {
   unset($r['remote_json']);foreach(['attendees_json'=>'attendees','conference_json'=>'conference','attachments_json'=>'attachments'] as $field=>$target){try{$r[$target]=decode($r[$field]??null,[]);}catch(Throwable){$r[$target]=[];}unset($r[$field]);}
   return $r;
  }
- public static function list(array $p): array {$from=timestamp($p['from']??gmdate('Y-m-01'));$to=timestamp($p['to']??gmdate('Y-m-t').'T23:59:59Z');if(!$from||!$to||$from>=$to)fail('Período inválido.');$w="e.ends_at>? AND e.starts_at<? AND e.status<>'cancelled' AND c.selected=1";$a=[$from,$to];if(!empty($p['calendar_id'])){$w.=' AND e.calendar_id=?';$a[]=(int)$p['calendar_id'];}if(Auth::$user['role']!=='admin'){[$dw,$da]=Auth::demandFilter('d');$w.=' AND e.private=0 AND e.demand_id IN (SELECT d.id FROM demands d WHERE '.$dw.')';$a=[...$a,...$da];}$rows=DB::all('SELECT e.*,c.name AS calendar_name,c.color,c.account_id,c.access_role,c.write_enabled FROM events e JOIN calendars c ON c.id=e.calendar_id WHERE '.$w.' ORDER BY starts_at',$a);$seen=[];$out=[];foreach($rows as $r){$key=$r['account_id']&&$r['google_id']?$r['google_id'].'|'.$r['starts_at'].'|'.$r['title']:'local:'.$r['id'];if(isset($seen[$key]))continue;$seen[$key]=true;$out[]=self::payload($r);}return $out;}
- public static function detail(array $p): array {
+ public static function list(array $p): array {MasterSupport::requireCalendar();$from=timestamp($p['from']??gmdate('Y-m-01'));$to=timestamp($p['to']??gmdate('Y-m-t').'T23:59:59Z');if(!$from||!$to||$from>=$to)fail('Período inválido.');$w="e.ends_at>? AND e.starts_at<? AND e.status<>'cancelled' AND c.selected=1";$a=[$from,$to];if(!empty($p['calendar_id'])){$w.=' AND e.calendar_id=?';$a[]=(int)$p['calendar_id'];}if(Auth::$user['role']!=='admin'){[$dw,$da]=Auth::demandFilter('d');$w.=' AND e.private=0 AND e.demand_id IN (SELECT d.id FROM demands d WHERE '.$dw.')';$a=[...$a,...$da];}$rows=DB::all('SELECT e.*,c.name AS calendar_name,c.color,c.account_id,c.access_role,c.write_enabled FROM events e JOIN calendars c ON c.id=e.calendar_id WHERE '.$w.' ORDER BY starts_at',$a);$seen=[];$out=[];foreach($rows as $r){$key=$r['account_id']&&$r['google_id']?$r['google_id'].'|'.$r['starts_at'].'|'.$r['title']:'local:'.$r['id'];if(isset($seen[$key]))continue;$seen[$key]=true;$out[]=self::payload($r);}return $out;}
+ public static function detail(array $p): array {MasterSupport::requireCalendar();
   Auth::staff();$id=integer($p['id']??0,1);$r=DB::one('SELECT e.*,c.name AS calendar_name,c.color,c.account_id,c.access_role,c.write_enabled FROM events e JOIN calendars c ON c.id=e.calendar_id WHERE e.id=?',[$id]);if(!$r)fail('Compromisso não encontrado.',404);
   if(Auth::$user['role']!=='admin'){if($r['private']||!$r['demand_id'])fail('Compromisso indisponível.',403);Auth::demand((int)$r['demand_id']);}
   if($r['account_id']&&$r['google_id']&&$r['access_role']!=='freeBusyReader'){try{Google::refreshEvent($id);$r=DB::one('SELECT e.*,c.name AS calendar_name,c.color,c.account_id,c.access_role,c.write_enabled FROM events e JOIN calendars c ON c.id=e.calendar_id WHERE e.id=?',[$id])?:$r;}catch(Throwable $e){error_log('Agenda event detail refresh: '.$e->getMessage());}}
@@ -14,7 +14,7 @@ final class Agenda {
   return self::payload($r);
  }
  public static function conflicts(string $start,string $end,int $buffer,int $exclude=0): array {$s=gmdate('Y-m-d H:i:s',strtotime($start.' UTC')-$buffer*60);$e=gmdate('Y-m-d H:i:s',strtotime($end.' UTC')+$buffer*60);$rows=DB::all("SELECT e.id,e.title,e.starts_at,e.ends_at,e.private,c.name AS calendar_name FROM events e JOIN calendars c ON c.id=e.calendar_id WHERE c.selected=1 AND e.status<>'cancelled' AND e.id<>? AND DATE_SUB(e.starts_at,INTERVAL e.buffer_minutes MINUTE)<? AND DATE_ADD(e.ends_at,INTERVAL e.buffer_minutes MINUTE)>?",[$exclude,$e,$s]);return $rows;}
- public static function save(array $p,bool $deferGoogleSync=false): array {
+ public static function save(array $p,bool $deferGoogleSync=false): array {MasterSupport::requireCalendar();
   Auth::admin();
   $local=DB::tx(function() use($p): array {
    $id=(int)($p['id']??0);$old=$id?DB::one('SELECT * FROM events WHERE id=? FOR UPDATE',[$id]):null;if($id&&!$old)fail('Compromisso não encontrado.',404);if($old&&(int)$old['version']!==integer($p['version']??0,1))fail('O compromisso mudou. Atualize a agenda.',409);
@@ -31,7 +31,7 @@ final class Agenda {
   if($local['has_google']&&$fresh&&!$deferGoogleSync)EventOutbox::transaction(fn()=>AgendaRealtime::event('agenda.event_synced',$fresh,'google.push',(int)Auth::$user['id']));
   return ['id'=>(int)$local['id'],'sync_status'=>$fresh['sync_status']??$local['sync_status'],'google_synced'=>(bool)($sync['synced']??false),'message'=>$local['has_google']?(($sync['synced']??false)?'Compromisso salvo no TaskEsc e no Google Agenda.':'Compromisso salvo; o Google será tentado novamente pelo cron.'):'Compromisso salvo.'];
  }
-  public static function cancel(array $p,bool $deferGoogleSync=false): array {
+  public static function cancel(array $p,bool $deferGoogleSync=false): array {MasterSupport::requireCalendar();
   Auth::admin();
   $local=DB::tx(function() use($p): array {
    $e=DB::one('SELECT e.*,c.account_id,c.write_enabled FROM events e JOIN calendars c ON c.id=e.calendar_id WHERE e.id=? FOR UPDATE',[integer($p['id'],1)]);if(!$e)fail('Compromisso não encontrado.',404);if(!$e['write_enabled'])fail('Agenda somente leitura.',403);if((int)$e['version']!==integer($p['version']??0,1))fail('O compromisso foi alterado. Atualize.',409);
@@ -40,19 +40,19 @@ final class Agenda {
   if($local['has_google']&&!$deferGoogleSync){Google::syncCalendarNow((int)$local['calendar_id']);$fresh=DB::one('SELECT * FROM events WHERE id=?',[$local['id']]);if($fresh)EventOutbox::transaction(fn()=>AgendaRealtime::event('agenda.event_synced',$fresh,'google.push.cancel',(int)Auth::$user['id']));}
   return ['saved'=>true];
  }
-  public static function calendarSave(array $p): array {
+  public static function calendarSave(array $p): array {MasterSupport::requireCalendar();
   Auth::admin();
   return DB::tx(function() use($p): array {
    $id=(int)($p['id']??0);$row=['name'=>required($p,'name',190),'color'=>$p['color']??'#737373','selected'=>(int)(bool)($p['selected']??1),'write_enabled'=>(int)(bool)($p['write_enabled']??1)];if(!preg_match('/^#[a-f0-9]{6}$/i',$row['color']))fail('Cor inválida.');$editing=$id>0;if($editing){$c=DB::one('SELECT * FROM calendars WHERE id=? FOR UPDATE',[$id]);if(!$c)fail('Agenda não encontrada.');if(!in_array($c['access_role'],['owner','writer','writerWithoutPrivateAccess']))$row['write_enabled']=0;$row['dirty']=1;DB::update('calendars',$id,$row);}else $id=DB::insert('calendars',$row);AgendaRealtime::calendar('agenda.calendar_changed',$id,$editing?'calendar.updated':'calendar.created',(int)Auth::$user['id']);return ['id'=>$id];
   });
  }
-  public static function calendarSelect(array $p): array {
+  public static function calendarSelect(array $p): array {MasterSupport::requireCalendar();
   Auth::admin();
   return DB::tx(function() use($p): array {
    $id=integer($p['id']??0,1);$c=DB::one('SELECT * FROM calendars WHERE id=? FOR UPDATE',[$id]);if(!$c)fail('Agenda não encontrada.',404);$selected=(int)(bool)($p['selected']??0);DB::update('calendars',$id,['selected'=>$selected,'dirty'=>$selected?1:0]);audit('calendar',$id,$selected?'selected':'unselected');AgendaRealtime::calendar('agenda.calendar_changed',$id,$selected?'calendar.selected':'calendar.unselected',(int)Auth::$user['id']);return ['saved'=>true,'selected'=>$selected];
   });
  }
-  public static function resolve(array $p): array {
+  public static function resolve(array $p): array {MasterSupport::requireCalendar();
   Auth::admin();
   return DB::tx(function() use($p): array {
    $e=DB::one('SELECT * FROM events WHERE id=? FOR UPDATE',[integer($p['id'],1)]);if(!$e||$e['sync_status']!=='conflict')fail('Não existe conflito pendente.');$choice=enumv($p['choice']??'',['remote','local'],'resolução');$remote=decode($e['remote_json']);if($choice==='remote'){if(($remote['status']??'')==='cancelled')$changes=['status'=>'cancelled','sync_status'=>'synced','sync_error'=>null];else $changes=Google::eventFields($remote)+['sync_status'=>'synced','sync_error'=>null];DB::update('events',$e['id'],$changes+['version'=>$e['version']+1,'updated_at'=>now()]);}else{if(($remote['status']??'')==='cancelled')fail('O evento foi excluído no Google. Crie um novo compromisso para restaurar a reserva.');DB::update('events',$e['id'],['google_etag'=>$remote['etag']??null,'sync_status'=>'pending','sync_error'=>null,'version'=>$e['version']+1,'updated_at'=>now()]);}audit('event',$e['id'],'resolve.'.$choice);$fresh=DB::one('SELECT * FROM events WHERE id=?',[$e['id']])?:$e;AgendaRealtime::event('agenda.event_resolved',$fresh,'resolve.'.$choice,(int)Auth::$user['id']);return ['saved'=>true];

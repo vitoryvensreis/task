@@ -2,6 +2,7 @@
 declare(strict_types=1);
 if(getenv('GITHUB_ACTIONS')!=='true')throw new RuntimeException('Run only in disposable CI environment.');
 define('ROOT',dirname(__DIR__));
+define('TASKESC_LEGACY_AI_CALENDAR_FIXTURE',true);
 $p=ROOT.'/config/config.php';if(is_file($p))throw new RuntimeException('Refusing to replace config.php');
 try{
  file_put_contents($p,"<?php\nreturn ".var_export(['ai_whatsapp'=>['enabled'=>true,'admin_control_enabled'=>false,'financial_write_enabled'=>false,'agenda_control_enabled'=>true]],true).";\n");

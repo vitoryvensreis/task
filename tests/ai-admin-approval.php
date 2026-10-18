@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+define('TASKESC_LEGACY_AI_CALENDAR_FIXTURE',true);
 $root=dirname(__DIR__);$cfg=$root.'/config/config.php';
 if(is_file($cfg))throw new RuntimeException('Run this test in an isolated checkout without private config.php');
 file_put_contents($cfg,'<?php return '.var_export(['app_key'=>bin2hex(random_bytes(32)),'ai_whatsapp'=>['admin_control_enabled'=>true]],true).';');

@@ -102,7 +102,7 @@ try {
 
     $service = new RealtimeAuth(new Realtime($configFile));
     $connection = $service->connection([]);
-    rtCheck($connection['channels']===['user:'.$staff,'staff/global','agenda/global','client:'.$c1],'Staff bootstrap channels must include staff, agenda and authorized client collections');
+    rtCheck($connection['channels']===['user:'.$staff,'staff/global','client:'.$c1],'Staff bootstrap channels must include staff and authorized client collections');
     $claims = rtDecodeJwt($connection['token'],$secret);
     rtCheck(($claims['sub']??null)===(string)$staff,'Connection JWT sub must be authenticated user string');
     rtCheck((int)$claims['exp']-(int)$claims['iat']===Realtime::TOKEN_TTL_SECONDS,'Connection JWT TTL mismatch');
@@ -114,7 +114,7 @@ try {
     $service->subscription(['channel'=>'client:'.$c1]);
     $service->subscription(['channel'=>'user:'.$staff]);
     $service->subscription(['channel'=>'staff/global']);
-    $service->subscription(['channel'=>'agenda/global']);
+    rtStatus(fn()=> $service->subscription(['channel'=>'agenda/global']),403);
     rtStatus(fn()=> $service->subscription(['channel'=>'wpp/global']),403);
     rtStatus(fn()=> $service->subscription(['channel'=>'demand:'.$d2]),403);
     rtStatus(fn()=> $service->subscription(['channel'=>'project:'.$p2]),403);
@@ -126,10 +126,10 @@ try {
 
     $adminUser=rtReset($admin);
     $adminService=new RealtimeAuth(new Realtime($configFile));
-    rtCheck($adminService->connection([])['channels']===['user:'.$admin,'staff/global','agenda/global','kanban/global','wpp/global'],'Admin bootstrap must include personal, staff, agenda, kanban and WPP globals');
+    rtCheck($adminService->connection([])['channels']===['user:'.$admin,'staff/global','kanban/global','wpp/global'],'Admin bootstrap must include personal, staff, kanban and WPP globals');
     $adminService->subscription(['channel'=>'kanban/global']);
     $adminService->subscription(['channel'=>'staff/global']);
-    $adminService->subscription(['channel'=>'agenda/global']);
+    rtStatus(fn()=> $adminService->subscription(['channel'=>'agenda/global']),403);
     $adminService->subscription(['channel'=>'wpp/global']);
     $adminService->subscription(['channel'=>'demand:'.$d2]);
     $adminService->subscription(['channel'=>'project:'.$p2]);

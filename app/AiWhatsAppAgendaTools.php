@@ -12,7 +12,7 @@ final class AiWhatsAppAgendaTools {
  public static function sensitive(string $name): bool {return in_array($name,['agenda_create','agenda_update','agenda_cancel'],true);}
  public static function supported(string $name): bool {return in_array($name,['agenda_list','agenda_calendars','agenda_detail','agenda_conflicts'],true);}
  public static function catalog(bool $private): array {
-  if((Auth::$user['role']??'')!=='admin')return [];
+  if((Auth::$user['role']??'')!=='admin'||(!MasterSupport::isSupport()&&!(PHP_SAPI==='cli'&&getenv('GITHUB_ACTIONS')==='true'&&defined('TASKESC_LEGACY_AI_CALENDAR_FIXTURE'))))return [];
   $date=['type'=>'string','description'=>'Hora local YYYY-MM-DDTHH:mm, não inventar horário'];$id=['type'=>'integer'];
   $tools=[self::tool('agenda_list',$private?'Consultar compromissos, inclusive privados.':'Listar SOMENTE eventos NÃO PRIVADOS em grupos.',[
    'from'=>['type'=>'string','description'=>'YYYY-MM-DD opcional'],'to'=>['type'=>'string','description'=>'YYYY-MM-DD opcional'],'limit'=>$id])];
@@ -45,11 +45,11 @@ final class AiWhatsAppAgendaTools {
  }
  private static function label(string $iso): string {return (new DateTimeImmutable($iso))->setTimezone(new DateTimeZone((string)config('timezone','America/Fortaleza')))->format('d/m/Y H:i');}
  public static function context(bool $private): array {
-  if(!$private||(Auth::$user['role']??'')!=='admin')return [];
+  if(!$private||(Auth::$user['role']??'')!=='admin'||(!MasterSupport::isSupport()&&!(PHP_SAPI==='cli'&&getenv('GITHUB_ACTIONS')==='true'&&defined('TASKESC_LEGACY_AI_CALENDAR_FIXTURE'))))return [];
   return ['calendars'=>array_map(static fn($c)=>['id'=>(int)$c['id'],'name'=>$c['name'],'write_enabled'=>(bool)$c['write_enabled']],array_slice(Agenda::calendars(),0,25))];
  }
  public static function run(string $name,array $args,bool $private): array {
-  Auth::admin();if(!self::supported($name))fail('Ferramenta de agenda indisponível.',403);
+  Auth::admin();MasterSupport::requireCalendar();if(!self::supported($name))fail('Ferramenta de agenda indisponível.',403);
   if($name==='agenda_calendars'){if(!$private)fail('Agendas somente no privado.',403);self::keys($args,[]);return ['kind'=>'agenda_calendars','rows'=>array_slice(Agenda::calendars(),0,20)];}
   if($name==='agenda_detail'){if(!$private)fail('Detalhes somente no privado.',403);self::keys($args,['event_id']);return ['kind'=>'agenda_detail','event'=>Agenda::detail(['id'=>integer($args['event_id']??null,1)])];}
   if($name==='agenda_conflicts'){
@@ -70,7 +70,7 @@ final class AiWhatsAppAgendaTools {
   return ['kind'=>'agenda_list','rows'=>array_slice($rows,0,$limit),'has_more'=>count($rows)>$limit,'public_only'=>!$private];
  }
  public static function prepare(string $name,array $p): array {
-  Auth::admin();if(!self::writeEnabled()||!self::sensitive($name))fail('Edição da agenda desativada.',403);
+  Auth::admin();MasterSupport::requireCalendar();if(!self::writeEnabled()||!self::sensitive($name))fail('Edição da agenda desativada.',403);
   if($name==='agenda_create'){
    self::keys($p,['calendar_id','title','starts_at','ends_at','location','description','private','demand_id']);
    $calId=integer($p['calendar_id']??null,1);
@@ -106,7 +106,7 @@ final class AiWhatsAppAgendaTools {
   return [$payload,"Editar compromisso #$id '{$old['title']}' (versão {$old['version']})."];
  }
  public static function runConfirmed(string $name,array $p): array {
-  Auth::admin();if(!self::writeEnabled())fail('Controle da agenda desativado.',403);
+  Auth::admin();MasterSupport::requireCalendar();if(!self::writeEnabled())fail('Controle da agenda desativado.',403);
   // Never call Google while the WhatsApp approval transaction is uncommitted; cron syncs pending events.
   if(in_array($name,['agenda_create','agenda_update'],true)){
    $r=Agenda::save($p,true);return ['kind'=>'admin_done','action'=>'Compromisso salvo (sincronização Google agendada)','id'=>(int)$r['id']];

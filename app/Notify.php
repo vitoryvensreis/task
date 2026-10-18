@@ -76,7 +76,12 @@ final class Notify {
  public static function mail(string $to,string $subject,string $body): void {
   $to=strtolower(trim($to));
   if(!filter_var($to,FILTER_VALIDATE_EMAIL))return;
-  DB::insert('mail_queue',['recipient'=>$to,'subject'=>mb_substr($subject,0,190),'body'=>$body,'status'=>'pending','attempts'=>0,'next_attempt'=>now(),'created_at'=>now()]);
+  $multi=WorkspaceTenantMode::enabled();
+  $workspace=(int)(Auth::$workspace['id']??WorkspaceJobScope::currentId());
+  if($multi&&$workspace<1&&!MasterSupport::isActor())
+   throw new LogicException('Envio de e-mail exige um workspace ou ADM Master verificado.');
+  $queue=$multi&&$workspace===0?'platform_mail_queue':'mail_queue';
+  DB::insert($queue,['recipient'=>$to,'subject'=>mb_substr($subject,0,190),'body'=>$body,'status'=>'pending','attempts'=>0,'next_attempt'=>now(),'created_at'=>now()]);
  }
 
  public static function log(int $limit=100): array {
@@ -94,7 +99,8 @@ final class Notify {
     $one=WorkspaceJobScope::forWorkspace((int)$ws['id'],static fn()=>self::flush());
     $sent+=(int)$one['sent'];$failed+=(int)$one['failed'];
    }
-   return ['sent'=>$sent,'failed'=>$failed,'status'=>'per_workspace'];
+   $platform=self::flushPlatform();
+   return ['sent'=>$sent+$platform['sent'],'failed'=>$failed+$platform['failed'],'status'=>'per_workspace'];
   }
   $sent=0;$failed=0;
   if(empty(config('smtp',[])['host']))return ['sent'=>0,'failed'=>0,'status'=>'SMTP não configurado'];
@@ -110,6 +116,29 @@ final class Notify {
     $terminal=$attempt>=5;
     DB::update('mail_queue',$m['id'],['status'=>$terminal?'failed':'pending','attempts'=>$attempt,'error'=>mb_substr($e->getMessage(),0,1000),'last_attempt_at'=>$attemptAt,'next_attempt'=>gmdate('Y-m-d H:i:s',time()+min(3600,60*2**max(0,$attempt-1)))]);
     $failed++;
+   }
+  }
+  return ['sent'=>$sent,'failed'=>$failed];
+ }
+
+ /** The Master queue is platform-owned and is never attached to a tenant. */
+ private static function flushPlatform(): array {
+  $sent=0;$failed=0;
+  if(empty(config('smtp',[])['host']))return ['sent'=>0,'failed'=>0];
+  foreach(DB::all("SELECT * FROM platform_mail_queue WHERE status='pending'
+      AND next_attempt<=? AND attempts<5 ORDER BY id LIMIT 20",[now()]) as $m){
+   $attempt=(int)$m['attempts']+1;$attemptAt=now();
+   try{
+    self::smtp($m['recipient'],$m['subject'],$m['body']);
+    DB::update('platform_mail_queue',(int)$m['id'],['status'=>'sent',
+      'attempts'=>$attempt,'error'=>null,'last_attempt_at'=>$attemptAt,'sent_at'=>now()]);
+    $sent++;
+   }catch(Throwable $error){
+    $failed++;
+    DB::update('platform_mail_queue',(int)$m['id'],['status'=>$attempt>=5?'failed':'pending',
+      'attempts'=>$attempt,'error'=>mb_substr($error->getMessage(),0,1000),
+      'last_attempt_at'=>$attemptAt,
+      'next_attempt'=>gmdate('Y-m-d H:i:s',time()+min(3600,60*2**max(0,$attempt-1)))]);
    }
   }
   return ['sent'=>$sent,'failed'=>$failed];

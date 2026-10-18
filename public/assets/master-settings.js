@@ -99,7 +99,7 @@ window.TaskEscMasterSettings=(()=>{
   field(fw,'Sessão','session',w.session||'taskesc');
   field(fw,'Segredo WPPConnect','secret','','password',w.secret_set?'Configurado — deixe vazio para manter':'Informe o segredo');
   submit(fw,'master.settings_save','whatsapp',base,csrf);wpp.append(fw);
-  const google=card(grid,'Integração Google OAuth','Credenciais globais do Calendar e Google Drive.');
+  const google=card(grid,'Integração Google OAuth','Credenciais globais do Google Drive.');
   const fgAuth=el('form','ms-form');field(fgAuth,'Google Client ID','google_client_id',d.google_client_id||'');
   field(fgAuth,'Google Client Secret','google_client_secret','','password',d.google_secret_set?'Configurado — deixe vazio para manter':'Não configurado');
   submit(fgAuth,'master.settings_save','google',base,csrf);google.append(fgAuth);

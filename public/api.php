@@ -19,19 +19,19 @@ try {
  if(in_array($action,['master.support_unread','master.support_seen','master.wpp_status','master.wpp_start','master.wpp_qr','master.wpp_test','master.wpp_close','master.wpp_disconnect','master.customers','master.workspace_members','master.workspace_profile_save','master.workspace_limit_save','master.admin_access','master.audit','master.account','master.profile_save','master.password_save','master.twofa_setup','master.twofa_enable','master.twofa_disable','master.invite_additional','master.asaas','master.asaas_save','master.health','master.logs','master.error_resolve','master.settings','master.settings_save','master.brand_upload','master.workspaces','master.dashboard','master.administrators','master.reset_2fa','master.plans','master.plan_save','master.plan_assign','master.start','master.stop','master.invite'],true)){
   if(($_SERVER['REQUEST_METHOD']??'GET')!=='GET')checkCsrf();
   Auth::load();
-  if(in_array($action,['master.wpp_status','master.wpp_start','master.wpp_qr','master.wpp_test','master.wpp_close','master.wpp_disconnect'],true)){
-   if(!MasterSupport::isActor()||MasterSupport::isSupport())fail('Integração reservada ao ADM Master.',403);
    if($action==='master.support_unread'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET'){
-   if(!MasterSupport::isActor())fail('Acesso restrito ao ADM Master.',403);
+   if(!MasterSupport::isActor()||MasterSupport::isSupport())fail('Acesso restrito ao ADM Master.',403);
    out(['count'=>(int)(DB::one("SELECT COUNT(*) n FROM notifications WHERE user_id=? AND seen=0
     AND dedupe_key LIKE 'support.message.%'",[(int)Auth::$actor['id']])['n']??0)]);
   }
   if($action==='master.support_seen'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST'){
-   if(!MasterSupport::isActor())fail('Acesso restrito ao ADM Master.',403);
+   if(!MasterSupport::isActor()||MasterSupport::isSupport())fail('Acesso restrito ao ADM Master.',403);
    DB::run("UPDATE notifications SET seen=1 WHERE user_id=? AND seen=0
     AND dedupe_key LIKE 'support.message.%'",[(int)Auth::$actor['id']]);
    out(['saved'=>true]);
   }
+  if(in_array($action,['master.wpp_status','master.wpp_start','master.wpp_qr','master.wpp_test','master.wpp_close','master.wpp_disconnect'],true)){
+   if(!MasterSupport::isActor()||MasterSupport::isSupport())fail('Integração reservada ao ADM Master.',403);
   if($action==='master.wpp_status'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET')out(WppConnect::status());
    if($action==='master.wpp_start'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST')out(WppConnect::start());
    if($action==='master.wpp_qr'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET')out(WppConnect::qr());

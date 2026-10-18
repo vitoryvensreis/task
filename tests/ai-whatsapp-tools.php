@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 define('ROOT',dirname(__DIR__));
+define('TASKESC_LEGACY_AI_CALENDAR_FIXTURE',true);
 $port=getenv('OUTBOX_TEST_PORT');if(!$port)throw new RuntimeException('CI database required');
 @unlink(ROOT.'/config/config.php');
 $c=['base_url'=>'https://task.escotilhaprodutora.com','timezone'=>'America/Fortaleza','db'=>['host'=>'127.0.0.1','port'=>(int)$port,'name'=>'taskesc_test','user'=>'root','password'=>'taskesc-ci-only'],'app_key'=>bin2hex(random_bytes(32)),'ai_whatsapp'=>['enabled'=>false,'groq_api_key'=>'','admin_control_enabled'=>true]];

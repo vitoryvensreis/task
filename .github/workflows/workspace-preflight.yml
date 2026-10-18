@@ -1,7 +1,6 @@
 name: Read-only workspace preflight
+# Historic pre-migration audit: manual only; production already migrated.
 on:
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read

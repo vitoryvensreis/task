@@ -14,6 +14,10 @@ function config(?string $key=null,mixed $default=null):mixed {
 require ROOT.'/app/DB.php';
 require ROOT.'/app/WorkspaceFoundation.php';
 require ROOT.'/app/WorkspaceFoundationGuard.php';
+require ROOT.'/app/WorkspaceContext.php';
+require ROOT.'/app/Auth.php';
+function fail(string $message,int $status=422,array $details=[]):never {throw new RuntimeException($message,$status);}
+
 function now():string {return gmdate('Y-m-d H:i:s');}
 function testws(bool $ok,string $message):void {if(!$ok)throw new RuntimeException($message);}
 function refuses(callable $operation,string $reason):void {
@@ -66,6 +70,38 @@ try{
  testws((int)(DB::one('SELECT COUNT(*) n FROM invoices')['n']??0)===1,'Original invoice removed.');
  testws((int)(DB::one('SELECT COUNT(*) n FROM files')['n']??0)===1,'Original attachment removed.');
  testws(WorkspaceFoundation::apply()['already_applied']===true,'Migration not idempotent.');
+ // B1: resolve the correct workspace from membership, never from caller input.
+ $ownerIdentity=DB::one('SELECT id,email,role,active FROM users WHERE id=?',[$owner]);
+ $ctx=WorkspaceContext::forUser($ownerIdentity);
+ testws($ctx['id']===$ws&&$ctx['role']==='owner','Owner workspace context incorrect.');
+ $_SESSION=['user_id'=>$owner];
+ unset($_SERVER['HTTP_AUTHORIZATION'],$_SERVER['REDIRECT_HTTP_AUTHORIZATION']);
+ Auth::$user=null;Auth::$actor=null;Auth::$workspace=null;Auth::$origin='web';
+ testws(Auth::workspaceId()===$ws,'Authenticated session did not resolve workspace.');
+ testws((int)Auth::client($client)['id']===$client,'Existing client no longer accessible to owner.');
+ [$clause,$arguments]=Auth::clientFilter('c.id');
+ testws(str_contains($clause,'workspace_id')&&$arguments===[$ws],'Admin client filter must be workspace scoped.');
+ [$clause,$arguments]=Auth::demandFilter('d');
+ testws(str_contains($clause,'workspace_id')&&$arguments===[$ws],'Admin task filter must be workspace scoped.');
+ refuses(fn()=>WorkspaceContext::syncUser($staff,$ws,'staff',true),'Out-of-transaction membership must fail.');
+ $fresh=DB::tx(function()use($ws):int {
+  $id=DB::insert('users',['name'=>'New staff','email'=>'new-staff@ci.invalid',
+   'password_hash'=>'test','role'=>'staff','active'=>1,'created_at'=>now()]);
+  WorkspaceContext::syncUser($id,$ws,'staff',true);
+  return $id;
+ });
+ testws(WorkspaceContext::forUser(DB::one('SELECT id,email,role,active FROM users WHERE id=?',[$fresh]))['id']===$ws,
+  'New user workspace binding is missing.');
+ DB::run('UPDATE workspace_members SET status=? WHERE user_id=? AND workspace_id=?',['inactive',$fresh,$ws]);
+ refuses(fn()=>WorkspaceContext::forUser(DB::one('SELECT id,email,role,active FROM users WHERE id=?',[$fresh])),
+  'Revoked member must not resolve a workspace.');
+ DB::tx(fn()=>WorkspaceContext::syncUser($fresh,$ws,'staff',true));
+ testws((string)DB::one('SELECT status FROM workspace_members WHERE user_id=? AND workspace_id=?',
+  [$fresh,$ws])['status']==='inactive','Editing an active user must not reactivate revocation.');
+ DB::tx(fn()=>WorkspaceContext::syncUser($fresh,$ws,'staff',true,true));
+ testws((string)DB::one('SELECT status FROM workspace_members WHERE user_id=? AND workspace_id=?',
+  [$fresh,$ws])['status']==='active','Explicitly reactivating a disabled user should restore access.');
+
  $newClient=DB::insert('clients',['name'=>'Legacy user interface keeps default',
   'created_at'=>gmdate('Y-m-d H:i:s')]);
  testws((int)(DB::one('SELECT workspace_id FROM clients WHERE id=?',[$newClient])['workspace_id']??0)===$ws,

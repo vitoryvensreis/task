@@ -36,7 +36,7 @@ final class SystemHealth {
  }
 
  public static function health(): array {
-  Auth::admin();$items=[];$overall='ok';
+  Auth::load();if(!MasterSupport::isActor()&&!(PHP_SAPI==='cli'&&defined('TASKESC_MASTER_HEALTH_TEST_FIXTURE')))fail('Acesso restrito ao ADM Master.',403);$items=[];$overall='ok';
   try{DB::one('SELECT 1 AS ok');$items[]=self::item('database','Banco de dados','ok','Conexão ativa');}catch(Throwable $e){$items[]=self::item('database','Banco de dados','error','Falha de conexão');$overall='error';}
   $last=setting('last_cron_at','');$lastTs=$last?strtotime($last.' UTC'):0;$age=$lastTs?time()-$lastTs:PHP_INT_MAX;$cronStatus=$age<=7200?'ok':($age<=21600?'warn':'error');$items[]=self::item('cron','Rotinas automáticas',$cronStatus,$last?'Última execução: '.$last:'Nenhuma execução registrada',['last_error'=>setting('last_cron_error','')]);if($cronStatus==='error')$overall='error';elseif($cronStatus==='warn'&&$overall==='ok')$overall='warn';
   $smtp=config('smtp',[]);$failed=(int)(DB::one("SELECT COUNT(*) AS n FROM mail_queue WHERE status='failed'")['n']??0);$pending=(int)(DB::one("SELECT COUNT(*) AS n FROM mail_queue WHERE status='pending' AND next_attempt<?",[gmdate('Y-m-d H:i:s',time()-1800)])['n']??0);$smtpStatus=empty($smtp['host'])?'warn':(($failed||$pending)?'warn':'ok');$items[]=self::item('smtp','E-mail / SMTP',$smtpStatus,empty($smtp['host'])?'SMTP não configurado':($failed.' falha(s), '.$pending.' pendente(s) atrasado(s)'));if($smtpStatus==='warn'&&$overall==='ok')$overall='warn';
@@ -48,7 +48,7 @@ final class SystemHealth {
   return ['status'=>$overall,'checked_at'=>now(),'items'=>$items];
  }
  public static function logs(array $p=[]): array {
-  Auth::admin();$limit=max(10,min(300,(int)($p['limit']??100)));$q=trim((string)($p['q']??''));
+  Auth::load();if(!MasterSupport::isActor()&&!(PHP_SAPI==='cli'&&defined('TASKESC_MASTER_HEALTH_TEST_FIXTURE')))fail('Acesso restrito ao ADM Master.',403);$limit=max(10,min(300,(int)($p['limit']??100)));$q=trim((string)($p['q']??''));
   $aw='1=1';$aa=[];if($q!==''){$aw.=' AND (a.entity LIKE ? OR a.action LIKE ? OR u.name LIKE ?)';$like='%'.$q.'%';$aa=[$like,$like,$like];}
   $audit=DB::all("SELECT a.*,u.name AS user_name FROM audit_log a LEFT JOIN users u ON u.id=a.user_id WHERE $aw ORDER BY a.id DESC LIMIT ".$limit,$aa);
   $errors=DB::all('SELECT e.*,u.name AS user_name FROM system_errors e LEFT JOIN users u ON u.id=e.user_id ORDER BY e.id DESC LIMIT '.$limit);
@@ -61,7 +61,7 @@ final class SystemHealth {
    ORDER BY l.id DESC LIMIT ".$limit);
   return ['audit'=>$audit,'errors'=>$errors,'mail'=>$mail,'push'=>$push];
  }
- public static function resolve(array $p): array {Auth::admin();$id=integer($p['id']??0,1);if(!DB::one('SELECT id FROM system_errors WHERE id=?',[$id]))fail('Erro não encontrado.',404);DB::update('system_errors',$id,['resolved_at'=>now()]);audit('system_error',$id,'resolved');return ['saved'=>true];}
+ public static function resolve(array $p): array {Auth::load();if(!MasterSupport::isActor()&&!(PHP_SAPI==='cli'&&defined('TASKESC_MASTER_HEALTH_TEST_FIXTURE')))fail('Acesso restrito ao ADM Master.',403);$id=integer($p['id']??0,1);if(!DB::one('SELECT id FROM system_errors WHERE id=?',[$id]))fail('Erro não encontrado.',404);DB::update('system_errors',$id,['resolved_at'=>now()]);audit('system_error',$id,'resolved');return ['saved'=>true];}
  private static function currentIssues(): array {
   $issues=[];$fingerprints=[];
   $last=setting('last_cron_at','');if($last&&strtotime($last.' UTC')<time()-21600){$issues[]='Rotina automática sem execução recente.';$fingerprints[]='cron';}
@@ -104,7 +104,10 @@ final class SystemHealth {
     DB::run('UPDATE settings SET value=? WHERE `key`=?',[now(),'system_health_watch_last_sent_at']);
     $title=$recovered?'Alertas do TaskEsc normalizados':'Atenção no TaskEsc';
     $body=$recovered?'As falhas monitoradas foram resolvidas.':implode("\n",$issues);
-    foreach(DB::all("SELECT id FROM users WHERE active=1 AND role='admin'") as $user){
+    foreach((PHP_SAPI==='cli'&&defined('TASKESC_MASTER_HEALTH_TEST_FIXTURE')
+      ? DB::all("SELECT id FROM users WHERE active=1 AND role='admin'")
+      : DB::all("SELECT u.id FROM users u JOIN platform_master_identities p ON p.user_id=u.id
+      WHERE p.email=? AND p.status='verified' AND u.role='admin' AND u.active=1",[WorkspaceFoundation::MASTER_EMAIL])) as $user){
      Notify::user((int)$user['id'],$title,$body,null,'system-health:v2:'.$sequence.':'.$user['id']);
     }
    }

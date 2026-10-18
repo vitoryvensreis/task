@@ -16,9 +16,34 @@ try {
  if($action==='auth.2fa'){installed();out(Auth::twoFactorVerify($p));}
  if($action==='auth.logout'){session_start();$_SESSION=[];if(ini_get('session.use_cookies')){$params=session_get_cookie_params();setcookie(session_name(),'',['expires'=>time()-42000,'path'=>$params['path'],'domain'=>$params['domain'],'secure'=>$params['secure'],'httponly'=>$params['httponly'],'samesite'=>$params['samesite']??'Lax']);}session_destroy();out(['logged_out'=>true]);}
  installed();
- if(in_array($action,['master.settings','master.settings_save','master.brand_upload','master.workspaces','master.dashboard','master.administrators','master.reset_2fa','master.plans','master.plan_save','master.plan_assign','master.start','master.stop','master.invite'],true)){
+ if(in_array($action,['master.asaas','master.asaas_save','master.ai_usage','master.ai_policy','master.ai_policy_save','master.health','master.logs','master.error_resolve','master.settings','master.settings_save','master.brand_upload','master.workspaces','master.dashboard','master.administrators','master.reset_2fa','master.plans','master.plan_save','master.plan_assign','master.start','master.stop','master.invite'],true)){
   if(($_SERVER['REQUEST_METHOD']??'GET')!=='GET')checkCsrf();
   Auth::load();
+  if($action==='master.asaas'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET')out(PlatformAsaasCredentials::get());
+  if($action==='master.asaas_save'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST')out(PlatformAsaasCredentials::save($p));
+  if(in_array($action,['master.ai_usage','master.ai_policy','master.ai_policy_save','master.health','master.logs','master.error_resolve'],true)){
+   if(!MasterSupport::isActor()||Auth::$origin!=='web')fail('Somente o ADM Master pode acessar o monitoramento.',403);
+   if($action==='master.ai_usage'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET'){
+    $days=integer($p['days']??7,1,30);if(!in_array($days,[1,7,14,30],true))fail('Período inválido.',422);
+    $provider=enumv($p['provider']??'all',['all','gemini','groq'],'provedor');
+    out(AiWhatsAppUsageDashboard::aggregate($days,$provider));
+   }
+   if($action==='master.ai_policy'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET'){
+    $policy=AiWhatsAppUsagePolicy::current();$counts=AiWhatsAppUsagePolicy::reservedToday();
+    out(['policy'=>$policy,'today_utc'=>gmdate('Y-m-d'),'usage_today'=>$counts,
+      'alerts'=>AiWhatsAppUsagePolicy::alertFlags($policy,$counts)]);
+   }
+   if($action==='master.ai_policy_save'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST'){
+    try{$policy=AiWhatsAppUsagePolicy::validate($p);}catch(InvalidArgumentException){fail('Política de IA inválida.',422);}
+    DB::run('INSERT INTO settings (`key`,value) VALUES (?,?) ON DUPLICATE KEY UPDATE value=VALUES(value)',['ai_usage_policy_v1',json($policy)]);
+    audit('platform',0,'master.ai_usage_policy.save',null,['fields'=>array_keys($policy)]);
+    out(['saved'=>true,'policy'=>$policy]);
+   }
+   if($action==='master.health'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET')out(SystemHealth::health());
+   if($action==='master.logs'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET')out(SystemHealth::logs($p));
+   if($action==='master.error_resolve'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST')out(SystemHealth::resolve($p));
+   fail('Método não permitido.',405);
+  }
   if($action==='master.settings'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET')out(PlatformSettings::get());
   if($action==='master.settings_save'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST'){
    $section=(string)($p['section']??'');
@@ -77,6 +102,7 @@ try {
  if($action==='preview.stop'){checkCsrf();out(Auth::previewStop());}
  if(($_SERVER['REQUEST_METHOD']??'GET')!=='GET'&&Auth::$origin!=='api'){checkCsrf();Auth::guardPreviewWrite();}
  WorkspaceRoles::requireForAction($action,$p);
+ if(in_array($action,['ai.usage_dashboard','ai.usage_policy','ai.usage_policy_save','system.health','system.logs','system.error_resolve'],true))fail('Disponível somente no ADM Master.',403);
  if(str_starts_with($action,'wpp.')||str_starts_with($action,'tokens.'))MasterSupport::requirePlatformSettings();
  if(str_starts_with($action,'demands.')||str_starts_with($action,'services.')||str_starts_with($action,'templates.'))PlatformPlans::requireModule('tasks');
  if(str_starts_with($action,'automation.'))PlatformPlans::requireModule('automations');

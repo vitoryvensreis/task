@@ -62,7 +62,7 @@ window.TaskEscMasterSettings=(()=>{
   const previewIcons=el('div','ms-icon-preview');
   for(const [key,label] of [['180','180 × 180'],['192','192 × 192'],['512','512 × 512'],['maskable','Maskable']]){
    const item=el('div','ms-icon-item'),box=el('div');
-   if(icons[key]){const image=el('img');image.src=icons[key];image.alt='Ícone '+label;box.append(image)}
+   if(icons[key]){const image=el('img');image.src=icons[key];image.alt='Ícone atual '+label;box.append(image)}
    else box.append(el('span','','Sem ícone'));
    item.append(box,el('small','',label));previewIcons.append(item);
   }assets.append(previewIcons);
@@ -103,6 +103,23 @@ window.TaskEscMasterSettings=(()=>{
   const fgAuth=el('form','ms-form');field(fgAuth,'Google Client ID','google_client_id',d.google_client_id||'');
   field(fgAuth,'Google Client Secret','google_client_secret','','password',d.google_secret_set?'Configurado — deixe vazio para manter':'Não configurado');
   submit(fgAuth,'master.settings_save','google',base,csrf);google.append(fgAuth);
+  const asaas=d.asaas||{};
+  const asaasCard=card(grid,'Asaas · Pagamentos SaaS','Armazene as credenciais para a futura cobrança de assinaturas.');
+  note(asaasCard,asaas.api_key_set?'Chave API cadastrada':'Chave API pendente',
+    'Nenhuma cobrança, checkout ou webhook é ativado automaticamente ao salvar estes dados.');
+  const fa=el('form','ms-form');
+  const envLabel=el('label','ms-field');envLabel.append(el('span','','Ambiente Asaas'));
+  const envSelect=el('select','select');envSelect.name='environment';
+  for(const [value,label] of [['sandbox','Sandbox · Testes'],['production','Produção · Cobranças reais']]){
+   const opt=el('option','',label);opt.value=value;opt.selected=asaas.environment===value;envSelect.append(opt);
+  }
+  envLabel.append(envSelect);fa.append(envLabel);
+  field(fa,'Identificação da conta','account_label',asaas.account_label||'','text','Ex.: TaskEsc plataforma');
+  field(fa,'Chave API Asaas','api_key','','password',asaas.api_key_set?'Cadastrada — deixe vazio para manter':'Cole sua chave privada');
+  field(fa,'Token de autenticação do webhook (opcional)','webhook_auth_token','','password',
+    asaas.webhook_token_set?'Cadastrado — deixe vazio para manter':'Token configurado no Asaas');
+  submit(fa,'master.asaas_save','asaas',base,csrf);
+  asaasCard.append(fa);
   const security=card(grid,'Segurança da plataforma','Acesso e segregação dos dados.');
   note(security,'Acesso exclusivo','Somente a conta ADM Master autenticada pode alterar estas configurações. Ações são auditadas.');
   note(security,'Proteção dos workspaces','Criação de novos workspaces segue bloqueada até a homologação multiempresa.');

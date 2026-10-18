@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 // Isolado: testes anteriores limpam config/config.php ao terminar.
 define('ROOT',dirname(__DIR__));
+define('TASKESC_MASTER_HEALTH_TEST_FIXTURE',true);
 $port=getenv('OUTBOX_TEST_PORT');
 if(!$port)throw new RuntimeException('Testes Google Health apenas no CI descartável.');
 $configPath=ROOT.'/config/config.php';

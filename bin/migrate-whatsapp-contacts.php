@@ -17,7 +17,7 @@ try {
  if(!is_file($backup)||is_link($backup)||filesize($backup)===0||!hash_equals($sha[1],hash_file('sha256',$backup)))throw new RuntimeException('backup_verification_failed');
  $saasTables=DB::all("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('workspaces','workspace_members','workspace_settings')");
  $saasColumns=DB::all("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND COLUMN_NAME='workspace_id'");
- if($saasTables||$saasColumns)throw new RuntimeException('removed_saas_detected');
+ if(($saasTables||$saasColumns)&&!WorkspaceFoundationGuard::valid())throw new RuntimeException('removed_saas_detected');
  $before=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);
  if(!in_array($before,[29,30],true))throw new RuntimeException('contacts_schema_source_invalid');
  $migration=Migrations::whatsappContacts();

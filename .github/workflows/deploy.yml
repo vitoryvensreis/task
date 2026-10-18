@@ -186,7 +186,13 @@ jobs:
           chmod 700 ~/.ssh
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -p "$VPS_PORT" -H "$VPS_HOST" >> ~/.ssh/known_hosts
+          for attempt in 1 2 3 4 5; do
+            if ssh-keyscan -T 10 -p "$VPS_PORT" -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 5 ]; then echo "SSH host unavailable"; exit 1; fi
+            sleep 4
+          done
 
       - name: Diagnosticar WhatsApp antes de reiniciar o worker (somente leitura)
         env:

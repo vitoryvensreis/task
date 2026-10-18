@@ -81,7 +81,10 @@ final class AutomationActions
         if($mode==='client')return (string)($subject['client_email']??'');
         $id=(int)($subject[$mode==='creator'?'created_by':'assigned_to']??0);
         if($id<1)return '';
-        $user=DB::one('SELECT email FROM users WHERE id=? AND active=1',[$id]);
+        $user=DB::one('SELECT u.email FROM users u WHERE u.id=? AND u.active=1'.
+           (WorkspaceTenantMode::enabled()?' AND EXISTS (SELECT 1 FROM workspace_members wm
+              WHERE wm.user_id=u.id AND wm.workspace_id='.WorkspaceJobScope::currentId()." AND wm.status='active')":''),
+           [$id]);
         return (string)($user['email']??'');
     }
 
@@ -157,7 +160,10 @@ final class AutomationActions
             $stage=DB::one('SELECT id FROM stages WHERE active=1'.self::scope().' ORDER BY position,id LIMIT 1');
             if(!$client||!$category||!$stage)throw new AutomationPermanentException('task_creation_reference_missing');
             $owner=(int)($run['automation_owner']??0);
-            if(!DB::one('SELECT id FROM users WHERE id=?',[$owner]))throw new AutomationPermanentException('automation_owner_missing');
+            if(!DB::one('SELECT u.id FROM users u WHERE u.id=?'.
+              (WorkspaceTenantMode::enabled()?' AND EXISTS (SELECT 1 FROM workspace_members wm
+                WHERE wm.user_id=u.id AND wm.workspace_id='.WorkspaceJobScope::currentId()." AND wm.status='active')":''),
+              [$owner]))throw new AutomationPermanentException('automation_owner_missing');
             $title=trim(AutomationWorker::renderTemplate((string)$cfg['title'],$subject,$eventContext));
             $brief=trim(AutomationWorker::renderTemplate((string)$cfg['brief'],$subject,$eventContext));
             if($title===''||$brief==='')throw new AutomationPermanentException('task_creation_template_empty');
@@ -165,7 +171,12 @@ final class AutomationActions
             $assigned=null;
             if((int)($subject['client_id']??0)===$cid){
                 $candidate=(int)($subject['assigned_to']??0);
-                if($candidate>0&&DB::one("SELECT u.id FROM users u LEFT JOIN user_clients uc ON uc.user_id=u.id AND uc.client_id=? WHERE u.id=? AND u.active=1 AND (u.role='admin' OR (u.role='staff' AND uc.client_id IS NOT NULL))",[$cid,$candidate]))$assigned=$candidate;
+                if($candidate>0&&DB::one("SELECT u.id FROM users u
+                    LEFT JOIN user_clients uc ON uc.user_id=u.id AND uc.client_id=?".self::scope('uc')."
+                    WHERE u.id=? AND u.active=1 AND (u.role='admin' OR (u.role='staff' AND uc.client_id IS NOT NULL))".
+                    (WorkspaceTenantMode::enabled()?' AND EXISTS (SELECT 1 FROM workspace_members wm
+                      WHERE wm.user_id=u.id AND wm.workspace_id='.WorkspaceJobScope::currentId()." AND wm.status='active')":''),
+                    [$cid,$candidate]))$assigned=$candidate;
             }
             $id=DB::insert('demands',[
                 'client_id'=>$cid,'project_id'=>null,'category_id'=>(int)$category['id'],'stage_id'=>(int)$stage['id'],

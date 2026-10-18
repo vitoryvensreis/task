@@ -159,7 +159,7 @@ final class AiWhatsAppCrossModuleReport
      'scope'=>'Somente projetos vinculados às tarefas visíveis com prazo no período; não é o cadastro completo.'];
    }
   }
-  if($p['agenda']){
+  if($p['agenda']){MasterSupport::requireCalendar();
    $events=AiWhatsAppAgendaTools::run('agenda_list',['from'=>$from,'to'=>$to,'limit'=>5],true);
    $result['sections']['agenda']=[
     'items'=>array_map(static fn($e)=>['id'=>(int)$e['id'],

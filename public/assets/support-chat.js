@@ -180,7 +180,16 @@
   }catch(e){feedback(e.message,true)}finally{b.disabled=false}
  }
  function createWidget(){
-  fab=el('button','ts-support-fab','💬');fab.type='button';fab.setAttribute('aria-label','Abrir atendimento TaskEsc');
+  fab=el('button','ts-support-fab');fab.type='button';fab.setAttribute('aria-label','Abrir atendimento TaskEsc');
+  // Inline vector icon, never an emoji glyph (consistent across Windows, Android and iOS).
+  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('width','23');svg.setAttribute('height','23');
+  svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');
+  svg.setAttribute('stroke-width','1.8');svg.setAttribute('stroke-linecap','round');svg.setAttribute('stroke-linejoin','round');
+  svg.setAttribute('aria-hidden','true');svg.classList.add('ts-support-icon');
+  const outline=document.createElementNS('http://www.w3.org/2000/svg','path');
+  outline.setAttribute('d','M7.9 20A9 9 0 1 0 4 16.1L2 22Z');
+  svg.append(outline);fab.append(svg);
   const counter=el('span','ts-support-indicator');counter.hidden=true;fab.append(counter);
   root=el('section','ts-support-panel');root.hidden=true;root.setAttribute('aria-label','Central de suporte TaskEsc');
   const header=el('header','ts-header');

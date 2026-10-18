@@ -21,13 +21,16 @@ final class WorkspaceRoles {
  public static function catalog(): array {return self::ALLOWED;}
 
  /** Defense-in-depth for legacy endpoints that check staff role but not every ability. */
- public static function requireForAction(string $action): void {
+ public static function requireForAction(string $action,array $data=[]): void {
   Auth::load();
   if((Auth::$user['role']??'')!=='staff')return;
+  if($action==='demands.save'){
+   Auth::requireAbility((int)($data['id']??0)>0?'tasks.edit':'tasks.create');return;
+  }
   $map=[
    'dashboard'=>'dashboard.view',
    'demands.list'=>'tasks.read','demands.get'=>'tasks.read',
-   'demands.save'=>'tasks.edit','demands.stage'=>'tasks.move',
+   'demands.stage'=>'tasks.move',
    'demands.reorder'=>'tasks.move','demands.bulk'=>'tasks.edit',
    'demands.delete'=>'tasks.delete','demands.comment'=>'tasks.comment',
    'demands.checklist'=>'tasks.edit','demands.time'=>'tasks.edit',

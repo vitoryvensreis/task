@@ -57,6 +57,49 @@ final class MasterSupport {
   if(WorkspaceContext::legacyCiFixture())return;
   if(!self::isSupport())fail('Configuração exclusiva do ADM Master em modo suporte.',403);
  }
+ /** Master sees tenant administrators, never client tasks or financial data. */
+ public static function administrators(): array {
+  Auth::load();if(!self::isActor())fail('Somente o ADM Master pode listar administradores.',403);
+  $w=self::singleWorkspace();
+  return DB::all("SELECT u.id,u.name,u.email,u.active,u.twofa_enabled,wm.role AS workspace_role,
+    w.id AS workspace_id,w.name AS workspace_name
+    FROM workspace_members wm
+    JOIN users u ON u.id=wm.user_id
+    JOIN workspaces w ON w.id=wm.workspace_id
+    WHERE wm.workspace_id=? AND wm.role IN ('owner','admin')
+    ORDER BY wm.role='owner' DESC,u.name",[(int)$w['id']]);
+ }
+
+ /** Two-factor reset is a high-risk operation: password step-up + audit. */
+ public static function resetAdminTwoFactor(array $p): array {
+  Auth::load();if(!self::isActor())fail('Ação exclusiva do ADM Master.',403);
+  Auth::rate('master-reset-2fa',5,3600);
+  $target=integer($p['user_id']??0,1);
+  $reason=required($p,'reason',190);
+  if(mb_strlen($reason)<12)fail('Informe a justificativa com pelo menos 12 caracteres.',422);
+  $password=(string)($p['master_password']??'');
+  $master=DB::one('SELECT password_hash FROM users WHERE id=? AND active=1',[(int)Auth::$actor['id']]);
+  if(!$master||!password_verify($password,(string)$master['password_hash']))
+   fail('Confirme a senha do ADM Master para redefinir o 2FA.',403);
+  $w=self::singleWorkspace();
+  return DB::tx(static function() use($target,$reason,$w):array {
+   $user=DB::one("SELECT u.id,u.name,u.twofa_enabled,u.role,u.active
+     FROM users u JOIN workspace_members wm ON wm.user_id=u.id
+     WHERE u.id=? AND wm.workspace_id=? AND wm.role IN ('owner','admin')
+       AND u.role='admin' FOR UPDATE",[$target,(int)$w['id']]);
+   if(!$user)fail('Administrador não pertence ao workspace.',404);
+   DB::run('UPDATE users SET twofa_enabled=0,twofa_secret=NULL,twofa_recovery_json=NULL WHERE id=?',[$target]);
+   DB::insert('audit_log',[
+    'workspace_id'=>(int)$w['id'],'user_id'=>(int)Auth::$actor['id'],
+    'entity'=>'user','entity_id'=>$target,'action'=>'master.2fa_reset',
+    'before_json'=>json(['twofa_enabled'=>(bool)$user['twofa_enabled']]),
+    'after_json'=>json(['twofa_enabled'=>false,'reason'=>$reason,'master_actor_id'=>(int)Auth::$actor['id']]),
+    'origin'=>'support','created_at'=>now()
+   ]);
+   return ['reset'=>true,'user_id'=>$target];
+  });
+ }
+
  public static function workspaceList(): array {
   Auth::load();if(!self::isActor())fail('Área exclusiva do ADM Master.',403);
   $w=self::singleWorkspace();

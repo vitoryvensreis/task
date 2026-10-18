@@ -20,7 +20,7 @@ public static function meta(): array {
  }
  public static function clients(array $p): array {Auth::admin();$ci=WorkspaceContext::legacyCiFixture();return DB::all('SELECT c.*,ga.email AS drive_email,ga.status AS drive_status,ga.drive_enabled FROM clients c LEFT JOIN google_accounts ga ON ga.id=c.drive_account_id WHERE c.active=1'.($ci?'':' AND c.workspace_id=?').' AND c.name LIKE ? ORDER BY c.name',$ci?['%'.($p['q']??'').'%']:[Auth::workspaceId(),'%'.($p['q']??'').'%']);}
 public static function clientDetail(array $p): array {
-  Auth::admin();$id=integer($p['id']??0,1);$client=DB::one('SELECT c.*,ga.email AS drive_email,ga.status AS drive_status,ga.last_error AS drive_error FROM clients c LEFT JOIN google_accounts ga ON ga.id=c.drive_account_id WHERE c.id=?'.(WorkspaceContext::legacyCiFixture()?'':' AND c.workspace_id=?'),WorkspaceContext::legacyCiFixture()?[$id]:[$id,Auth::workspaceId()]);if(!$client)fail('Cliente não encontrado.',404);
+  Auth::admin();$id=integer($p['id']??0,1);Auth::client($id);$client=DB::one('SELECT c.*,ga.email AS drive_email,ga.status AS drive_status,ga.last_error AS drive_error FROM clients c LEFT JOIN google_accounts ga ON ga.id=c.drive_account_id WHERE c.id=?'.(WorkspaceContext::legacyCiFixture()?'':' AND c.workspace_id=?'),WorkspaceContext::legacyCiFixture()?[$id]:[$id,Auth::workspaceId()]);if(!$client)fail('Cliente não encontrado.',404);
   $taskSummary=DB::one("SELECT COUNT(*) total,SUM(CASE WHEN s.kind='completed' THEN 1 ELSE 0 END) completed,SUM(CASE WHEN s.kind NOT IN ('completed','cancelled','archived') THEN 1 ELSE 0 END) open,SUM(CASE WHEN d.due_at<? AND s.kind NOT IN ('completed','cancelled','archived') THEN 1 ELSE 0 END) overdue FROM demands d JOIN stages s ON s.id=d.stage_id WHERE d.client_id=? AND d.deleted_at IS NULL",[now(),$id]);
   $tasks=DB::all("SELECT d.id,d.title,d.due_at,d.priority,d.amount_cents,d.billing_mode,d.updated_at,s.name stage_name,s.kind stage_kind,s.color stage_color,ca.name category_name,u.name assigned_name FROM demands d JOIN stages s ON s.id=d.stage_id JOIN categories ca ON ca.id=d.category_id LEFT JOIN users u ON u.id=d.assigned_to WHERE d.client_id=? AND d.deleted_at IS NULL ORDER BY d.updated_at DESC LIMIT 30",[$id]);
   $financial=DB::one("SELECT COALESCE(SUM(CASE WHEN i.status<>'cancelled' AND i.deleted_at IS NULL THEN i.amount_cents ELSE 0 END),0) billed_cents,COALESCE(SUM(CASE WHEN i.status<>'cancelled' AND i.deleted_at IS NULL THEN (SELECT COALESCE(SUM(p.amount_cents),0) FROM payments p WHERE p.invoice_id=i.id) ELSE 0 END),0) paid_cents,COALESCE(SUM(CASE WHEN i.status<>'cancelled' AND i.deleted_at IS NULL THEN (SELECT COALESCE(SUM(p.discount_cents),0) FROM payments p WHERE p.invoice_id=i.id) ELSE 0 END),0) discount_cents,COALESCE(SUM(CASE WHEN i.status<>'cancelled' AND i.deleted_at IS NULL THEN GREATEST(0,i.amount_cents-(SELECT COALESCE(SUM(p.amount_cents+COALESCE(p.discount_cents,0)),0) FROM payments p WHERE p.invoice_id=i.id)) ELSE 0 END),0) open_cents FROM invoices i WHERE i.client_id=?",[$id]);
@@ -32,7 +32,7 @@ public static function clientDetail(array $p): array {
  }
 public static function clientSave(array $p): array {
   Auth::admin();$id=(int)($p['id']??0);$old=$id?Auth::client($id):null;$isNew=!$old;$type=enumv($p['commercial_type']??($old['commercial_type']??'one_off'),['one_off','monthly'],'modelo comercial');$monthly=$type==='monthly'?integer($p['monthly_amount_cents']??($old['monthly_amount_cents']??0),0,1000000000):0;$paymentDay=$type==='monthly'?integer($p['monthly_payment_day']??($old['monthly_payment_day']??10),1,31):10;$driveId=array_key_exists('drive_account_id',$p)?(int)$p['drive_account_id']:(int)($old['drive_account_id']??0);
-  if($driveId&&!DB::one("SELECT id FROM google_accounts WHERE id=? AND status='connected' AND drive_enabled=1 AND scopes LIKE ?",[$driveId,'%https://www.googleapis.com/auth/drive.file%']))fail('O Google Drive selecionado não está disponível. Reconecte essa conta como Drive.');
+  if($driveId)WorkspaceCatalog::validateDrive($driveId);if($driveId&&!DB::one("SELECT id FROM google_accounts WHERE id=? AND status='connected' AND drive_enabled=1 AND scopes LIKE ?",[$driveId,'%https://www.googleapis.com/auth/drive.file%']))fail('O Google Drive selecionado não está disponível. Reconecte essa conta como Drive.');
   $whatsapp=WppConnect::normalizePhone(required($p,'whatsapp_phone',20));
   $row=['name'=>required($p,'name',190),'brand'=>mb_substr($p['brand']??($old['brand']??''),0,190),'commercial_type'=>$type,'monthly_amount_cents'=>$monthly,'monthly_payment_day'=>$paymentDay,'drive_account_id'=>$driveId?:null,'email'=>trim($p['email']??($old['email']??'')),'phone'=>mb_substr($p['phone']??($old['phone']??''),0,60),'whatsapp_phone'=>$whatsapp,'document'=>mb_substr($p['document']??($old['document']??''),0,40),'notes'=>$p['notes']??($old['notes']??''),'brand_url'=>urlv($p['brand_url']??($old['brand_url']??'')),'active'=>(int)(bool)($p['active']??1)];
   if($row['email']&&!filter_var($row['email'],FILTER_VALIDATE_EMAIL))fail('E-mail inválido.');
@@ -45,15 +45,15 @@ public static function clientSave(array $p): array {
   }
   $driveChanged=$old&&((int)($old['drive_account_id']??0)!==$driveId);if($driveChanged)$row['drive_folder_id']=null;
   $result=DB::tx(function() use(&$id,$old,$isNew,$row,$driveChanged,$createAccess,$accessEmail,$accessName,$accessHash): array {
-   if($id)DB::update('clients',$id,$row);else $id=DB::insert('clients',$row+['drive_folder_id'=>null,'created_at'=>now()]);
-   if($driveChanged)DB::run('UPDATE demands SET drive_folder_id=NULL WHERE client_id=?',[$id]);
+   if($id)DB::update('clients',$id,$row);else $id=DB::insert('clients',$row+['drive_folder_id'=>null,'created_at'=>now()]+(WorkspaceContext::legacyCiFixture()?[]:['workspace_id'=>Auth::workspaceId()]));
+   if($driveChanged)DB::run('UPDATE demands SET drive_folder_id=NULL WHERE client_id=?'.(WorkspaceContext::legacyCiFixture()?'':' AND workspace_id=?'),WorkspaceContext::legacyCiFixture()?[$id]:[$id,Auth::workspaceId()]);
    audit('client',$id,$isNew?'created':'save',$old,$row);
    if($isNew)AutomationEvent::emit('client.created','client',$id,['client_id'=>$id,'change'=>'client.created'],(int)Auth::$user['id']);
    $userId=null;
    if($createAccess){
     $userId=DB::insert('users',['name'=>$accessName,'email'=>$accessEmail,'whatsapp_phone'=>$row['whatsapp_phone'],'password_hash'=>$accessHash,'role'=>'client','active'=>1,'email_notifications'=>1,'created_at'=>now()]);
     if(!WorkspaceContext::legacyCiFixture())WorkspaceContext::syncUser($userId,Auth::workspaceId(),'client',true);
-    DB::insert('user_clients',['user_id'=>$userId,'client_id'=>$id,'can_approve'=>1,'can_finance'=>0]);
+    DB::insert('user_clients',['user_id'=>$userId,'client_id'=>$id,'can_approve'=>1,'can_finance'=>0]+(WorkspaceContext::legacyCiFixture()?[]:['workspace_id'=>Auth::workspaceId()]));
     audit('user',$userId,'client_access.created',null,['client_id'=>$id,'client_name'=>$row['name'],'email'=>$accessEmail]);
     audit('client',$id,'access.created',null,['user_id'=>$userId,'email'=>$accessEmail]);
    }
@@ -66,8 +66,8 @@ public static function clientSave(array $p): array {
   $old=Auth::client($id);if(!(int)($old['active']??0))fail('Este cliente já está excluído ou inativo.',409);
   $revoked=[];
   DB::tx(function() use($id,$reason,$old,&$revoked): void {
-   $linked=DB::all("SELECT u.id,u.name,u.email FROM users u JOIN user_clients uc ON uc.user_id=u.id WHERE uc.client_id=? AND u.role='client'",[$id]);
-   DB::run('DELETE FROM user_clients WHERE client_id=?',[$id]);
+   $linked=DB::all("SELECT u.id,u.name,u.email FROM users u JOIN user_clients uc ON uc.user_id=u.id WHERE uc.client_id=? AND u.role='client'".(WorkspaceContext::legacyCiFixture()?'':' AND uc.workspace_id=?'),WorkspaceContext::legacyCiFixture()?[$id]:[$id,Auth::workspaceId()]);
+   DB::run('DELETE FROM user_clients WHERE client_id=?'.(WorkspaceContext::legacyCiFixture()?'':' AND workspace_id=?'),WorkspaceContext::legacyCiFixture()?[$id]:[$id,Auth::workspaceId()]);
    foreach($linked as $u){
     $other=DB::one('SELECT client_id FROM user_clients WHERE user_id=? LIMIT 1',[$u['id']]);
     if(!$other){DB::update('users',(int)$u['id'],['active'=>0]);if(!WorkspaceContext::legacyCiFixture())WorkspaceContext::syncUser((int)$u['id'],Auth::workspaceId(),'client',false);$revoked[]=['id'=>(int)$u['id'],'name'=>$u['name'],'email'=>$u['email']];audit('user',(int)$u['id'],'client_access.revoked',null,['client_id'=>$id,'client_name'=>$old['name'],'reason'=>$reason]);}
@@ -80,9 +80,9 @@ public static function clientSave(array $p): array {
  }
  public static function clientLog(array $p=[]): array {
   Auth::admin();$limit=max(1,min(200,(int)($p['limit']??100)));
-  return DB::all("SELECT a.id,a.entity_id AS client_id,a.action,a.before_json,a.after_json,a.origin,a.created_at,u.name AS user_name,u.email AS user_email,c.name AS client_name FROM audit_log a LEFT JOIN users u ON u.id=a.user_id LEFT JOIN clients c ON c.id=a.entity_id WHERE a.entity='client' ORDER BY a.id DESC LIMIT ".$limit);
+  return DB::all("SELECT a.id,a.entity_id AS client_id,a.action,a.before_json,a.after_json,a.origin,a.created_at,u.name AS user_name,u.email AS user_email,c.name AS client_name FROM audit_log a LEFT JOIN users u ON u.id=a.user_id LEFT JOIN clients c ON c.id=a.entity_id WHERE a.entity='client'".(WorkspaceContext::legacyCiFixture()?'':' AND a.workspace_id=?')." ORDER BY a.id DESC LIMIT ".$limit,WorkspaceContext::legacyCiFixture()?[]:[Auth::workspaceId()]);
  }
- public static function projectSave(array $p): array {Auth::admin();$client=integer($p['client_id']??0,1);Auth::client($client);$id=(int)($p['id']??0);if($id&&!DB::one('SELECT id FROM projects WHERE id=?',[$id]))fail('Projeto não encontrado.',404);$row=['client_id'=>$client,'name'=>required($p,'name',190),'description'=>$p['description']??''];if($id)DB::update('projects',$id,$row);else $id=DB::insert('projects',$row+['created_at'=>now()]);audit('project',$id,'save',null,$row);return ['id'=>$id];}
+ public static function projectSave(array $p): array {Auth::admin();$client=integer($p['client_id']??0,1);Auth::client($client);$id=(int)($p['id']??0);if($id)WorkspaceCatalog::requireRecord('projects',$id);$row=['client_id'=>$client,'name'=>required($p,'name',190),'description'=>$p['description']??''];if($id)DB::update('projects',$id,$row);else $id=DB::insert('projects',$row+['created_at'=>now()]+(WorkspaceContext::legacyCiFixture()?[]:['workspace_id'=>Auth::workspaceId()]));audit('project',$id,'save',null,$row);return ['id'=>$id];}
  public static function users(): array {Auth::admin();$ws=Auth::workspaceId();if(WorkspaceContext::legacyCiFixture())return DB::all('SELECT id,name,email,whatsapp_phone,role,active,email_notifications,weekly_report,ai_assistant_enabled FROM users ORDER BY name');$rows=DB::all('SELECT u.id,u.name,u.email,u.whatsapp_phone,u.role,u.active,u.email_notifications,u.weekly_report,u.ai_assistant_enabled FROM users u JOIN workspace_members wm ON wm.user_id=u.id WHERE wm.workspace_id=? ORDER BY u.name',[$ws]);foreach($rows as &$r)$r['clients']=DB::all('SELECT * FROM user_clients WHERE user_id=? AND workspace_id=?',[$r['id'],$ws]);return $rows;}
  public static function userSave(array $p): array {
   Auth::admin();
@@ -102,9 +102,9 @@ public static function clientSave(array $p): array {
    $isNew=!$old;
    if($id)DB::update('users',$id,$row);else $id=DB::insert('users',$row+['created_at'=>now()]);
    if(!WorkspaceContext::legacyCiFixture())WorkspaceContext::syncUser($id,$workspaceId,(string)$row['role'],(int)$row['active']===1,$old!==null&&(int)$old['active']===0&&(int)$row['active']===1);
-   DB::run('DELETE FROM user_clients WHERE user_id=?',[$id]);
+   DB::run('DELETE FROM user_clients WHERE user_id=?'.(WorkspaceContext::legacyCiFixture()?'':' AND workspace_id=?'),WorkspaceContext::legacyCiFixture()?[$id]:[$id,$workspaceId]);
    foreach($cleanLinks as $link){
-    DB::insert('user_clients',['user_id'=>$id,'client_id'=>$link['client_id'],'can_approve'=>$link['can_approve'],'can_finance'=>$link['can_finance']]);
+    DB::insert('user_clients',['user_id'=>$id,'client_id'=>$link['client_id'],'can_approve'=>$link['can_approve'],'can_finance'=>$link['can_finance']]+(WorkspaceContext::legacyCiFixture()?[]:['workspace_id'=>$workspaceId]));
     if($isNew&&($row['role']??'')==='staff')AutomationEvent::emit('client.team_member_added','client',(int)$link['client_id'],[
      'client_id'=>(int)$link['client_id'],'user_id'=>$id,'role'=>'staff','change'=>'team_member.created'
     ],(int)Auth::$user['id']);

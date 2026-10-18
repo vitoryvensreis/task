@@ -7,12 +7,15 @@ final class WhatsappContacts {
   Auth::admin();
   $q=trim((string)($p['q']??''));
   if(mb_strlen($q)>190)fail('Busca de contato muito longa.',422);
-  $where='';$args=[];
+  $ci=WorkspaceContext::legacyCiFixture();
+  $where=$ci?'':' WHERE workspace_id=?';$args=$ci?[]:[Auth::workspaceId()];
   if($q!==''){
    $digits=preg_replace('/\D+/','',$q);
-   $where=' WHERE name LIKE ?';
-   $args=['%'.$q.'%'];
+   $where.=$ci?' WHERE ':' AND ';
+   $where.='(name LIKE ?';
+   $args[]='%'.$q.'%';
    if($digits!==''){$where.=' OR phone LIKE ?';$args[]='%'.$digits.'%';}
+   $where.=')';
   }
   if(!empty($p['paginate'])){
    $page=integer($p['page']??1,1,1000000);$perPage=integer($p['per_page']??20,1,100);
@@ -31,9 +34,10 @@ final class WhatsappContacts {
   return DB::tx(static function() use($p): array {
    $id=integer($p['id']??0,0);$name=required($p,'name',190);
    $phone=WppConnect::normalizePhone((string)($p['phone']??''));
-   $old=$id?DB::one('SELECT id,name,phone FROM whatsapp_contacts WHERE id=? FOR UPDATE',[$id]):null;
+   $ci=WorkspaceContext::legacyCiFixture();$ws=$ci?0:Auth::workspaceId();
+   $old=$id?DB::one('SELECT id,name,phone FROM whatsapp_contacts WHERE id=?'.($ci?'':' AND workspace_id=?').' FOR UPDATE',$ci?[$id]:[$id,$ws]):null;
    if($id&&!$old)fail('Contato não encontrado.',404);
-   if(DB::one('SELECT id FROM whatsapp_contacts WHERE phone=? AND id<>? LIMIT 1',[$phone,$id]))fail('Este WhatsApp já está cadastrado na agenda.',409);
+   if(DB::one('SELECT id FROM whatsapp_contacts WHERE phone=? AND id<>?'.($ci?'':' AND workspace_id=?').' LIMIT 1',$ci?[$phone,$id]:[$phone,$id,$ws]))fail('Este WhatsApp já está cadastrado na agenda.',409);
    $now=now();
    try {
     if($id)DB::update('whatsapp_contacts',$id,['name'=>$name,'phone'=>$phone,'updated_at'=>$now]);
@@ -51,9 +55,10 @@ final class WhatsappContacts {
   Auth::admin();
   return DB::tx(static function() use($p): array {
    $id=integer($p['id']??0,1);
-   $old=DB::one('SELECT id,name,phone FROM whatsapp_contacts WHERE id=? FOR UPDATE',[$id]);
+   $ci=WorkspaceContext::legacyCiFixture();
+   $old=DB::one('SELECT id,name,phone FROM whatsapp_contacts WHERE id=?'.($ci?'':' AND workspace_id=?').' FOR UPDATE',$ci?[$id]:[$id,Auth::workspaceId()]);
    if(!$old)fail('Contato não encontrado.',404);
-   DB::run('DELETE FROM whatsapp_contacts WHERE id=?',[$id]);
+   DB::run('DELETE FROM whatsapp_contacts WHERE id=?'.($ci?'':' AND workspace_id=?'),$ci?[$id]:[$id,Auth::workspaceId()]);
    audit('whatsapp_contact',$id,'deleted',$old,null);
    return ['deleted'=>true,'id'=>$id];
   });
@@ -67,10 +72,12 @@ final class WhatsappContacts {
   if($name===''||mb_strlen($name)>190)fail('Informe o nome do contato de WhatsApp (até 190 caracteres).',422);
   $phone=WppConnect::normalizePhone($phone);
   $now=now();
-  DB::run('INSERT INTO whatsapp_contacts (name,phone,created_by,created_at,updated_at) VALUES (?,?,?,?,?) ON DUPLICATE KEY UPDATE name=VALUES(name),updated_at=VALUES(updated_at)',[
-   $name,$phone,(int)Auth::$user['id'],$now,$now
-  ]);
-  $contact=DB::one('SELECT id,name,phone FROM whatsapp_contacts WHERE phone=?',[$phone]);
+  $ci=WorkspaceContext::legacyCiFixture();$ws=$ci?0:Auth::workspaceId();
+  $columns=$ci?'name,phone,created_by,created_at,updated_at':'name,phone,created_by,created_at,updated_at,workspace_id';
+  $values=$ci?'?,?,?,?,?':'?,?,?,?,?,?';
+  DB::run('INSERT INTO whatsapp_contacts ('.$columns.') VALUES ('.$values.') ON DUPLICATE KEY UPDATE name=VALUES(name),updated_at=VALUES(updated_at)',
+   $ci?[$name,$phone,(int)Auth::$user['id'],$now,$now]:[$name,$phone,(int)Auth::$user['id'],$now,$now,$ws]);
+  $contact=DB::one('SELECT id,name,phone FROM whatsapp_contacts WHERE phone=?'.($ci?'':' AND workspace_id=?'),$ci?[$phone]:[$phone,$ws]);
   if(!$contact)throw new RuntimeException('Não foi possível salvar o contato.');
   return $contact;
  }

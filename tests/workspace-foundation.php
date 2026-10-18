@@ -141,11 +141,26 @@ try{
 
  // B9: Master may authenticate only after explicit verification; no tenant
  // data is available without an active, audited support session.
- $master=DB::insert('users',['name'=>'Verified platform Master',
-   'email'=>WorkspaceFoundation::MASTER_EMAIL,'password_hash'=>'test',
-   'role'=>'admin','active'=>1,'created_at'=>now()]);
- DB::run("UPDATE platform_master_identities SET user_id=?,status='verified',verified_at=?,updated_at=? WHERE email=?",
-   [$master,now(),now(),WorkspaceFoundation::MASTER_EMAIL]);
+ Auth::$user=null;Auth::$actor=null;Auth::$workspace=null;Auth::$previewClientId=null;Auth::$origin='web';
+ $_SESSION=['user_id'=>$owner];
+ $invitation=MasterSupport::invite();
+ testws($invitation['email']===WorkspaceFoundation::MASTER_EMAIL,'Master invite recipient differs from owner-approved email.');
+ $queued=DB::one("SELECT body FROM mail_queue WHERE recipient=? ORDER BY id DESC LIMIT 1",[WorkspaceFoundation::MASTER_EMAIL]);
+ testws((bool)$queued&&preg_match('/master\\.php\\?activate=([a-f0-9]{64})/',(string)$queued['body'],$match)===1,
+   'Master invitation must contain a one-time activation token.');
+ refuses(fn()=>MasterSupport::activate(['token'=>str_repeat('0',64),
+   'password'=>'Strong CI Master Password 2026','confirm_password'=>'Strong CI Master Password 2026']),
+   'Invalid activation token must be rejected.');
+ $activated=MasterSupport::activate(['token'=>$match[1],
+   'password'=>'Strong CI Master Password 2026','confirm_password'=>'Strong CI Master Password 2026']);
+ testws(($activated['activated']??false)===true,'Master activation did not verify the invite.');
+ refuses(fn()=>MasterSupport::activate(['token'=>$match[1],
+   'password'=>'Strong CI Master Password 2026','confirm_password'=>'Strong CI Master Password 2026']),
+   'Invitation token must not be reusable.');
+ $master=(int)(DB::one('SELECT id FROM users WHERE email=? AND active=1',
+    [WorkspaceFoundation::MASTER_EMAIL])['id']??0);
+ testws($master>0&&!DB::one('SELECT 1 FROM workspace_members WHERE user_id=?',[$master]),
+   'Verified Master must not be a tenant member.');
  $_SESSION=['user_id'=>$master];Auth::$user=null;Auth::$actor=null;Auth::$workspace=null;Auth::$previewClientId=null;Auth::$origin='web';
  testws(Auth::load()['role']==='master','Verified Master should start in platform-only mode.');
  refuses(fn()=>Auth::workspaceId(),'Master must not inherit owner workspace.');

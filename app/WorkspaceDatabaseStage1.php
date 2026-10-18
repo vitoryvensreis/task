@@ -25,7 +25,7 @@ final class WorkspaceDatabaseStage1 {
 
  public static function apply(): array {
   if(DB::conn()->inTransaction())throw new LogicException('DDL cannot be run inside a transaction.');
-  $lock='taskesc-workspace-db-stage1-'.(string)(DB::one('SELECT SHA1(DATABASE()) h')['h']??'');
+  $lock='taskesc-wsdb1-'.(string)(DB::one('SELECT SHA1(DATABASE()) h')['h']??'');
   if((int)(DB::one('SELECT GET_LOCK(?,10) acquired',[$lock])['acquired']??0)!==1)
    throw new RuntimeException('Workspace stage1 migration is already running.');
   try {

@@ -7,7 +7,7 @@ declare(strict_types=1);
  * This stage is compatible with today's single-workspace application:
  * - verifies all 44 tenant columns, indexes and original data ownership;
  * - ensures a single tenant membership for each non-Master user;
- * - ensures each owner owns only one workspace;
+ * - preserves the existing owner lookup index, allowing one owner to own multiple workspaces;
  * - records that default retirement is PENDING application-scoped writers.
  *
  * Do not silently drop the legacy workspace defaults while any writer omits
@@ -43,9 +43,8 @@ final class WorkspaceDatabaseStage1 {
      (int)$owner['active']!==1||$owner['role']!=='admin')
     throw new RuntimeException('Original owner mismatch.');
 
-   $duplicateOwners=DB::one('SELECT owner_user_id FROM workspaces GROUP BY owner_user_id HAVING COUNT(*)>1 LIMIT 1');
    $duplicateMembership=DB::one('SELECT user_id FROM workspace_members GROUP BY user_id HAVING COUNT(*)>1 LIMIT 1');
-   if($duplicateOwners||$duplicateMembership)throw new RuntimeException('An owner or member has multiple workspace bindings.');
+   if($duplicateMembership)throw new RuntimeException('A user has multiple workspace memberships.');
    $tables=WorkspaceFoundation::DATA_TABLES;
    foreach($tables as $table=>$key) {
     $definition=DB::one('SELECT DATA_TYPE,COLUMN_TYPE,IS_NULLABLE,COLUMN_DEFAULT
@@ -62,10 +61,8 @@ final class WorkspaceDatabaseStage1 {
     if(!self::indexExists($table,'idx_ws_'.$table))
       throw new RuntimeException('Missing workspace index on '.$table);
    }
-   // These constraints are compatible with existing data, and prevent an
-   // accidental second membership/ownership before the scoped APIs arrive.
-   if(!self::indexExists('workspaces','uq_ws_one_owner'))
-    DB::run('ALTER TABLE workspaces ADD UNIQUE KEY uq_ws_one_owner (owner_user_id)');
+   // One legacy user must belong to one workspace at a time; workspace has
+   // exactly one owner through workspaces.owner_user_id.
    if(!self::indexExists('workspace_members','uq_ws_one_membership'))
     DB::run('ALTER TABLE workspace_members ADD UNIQUE KEY uq_ws_one_membership (user_id)');
 

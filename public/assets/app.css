@@ -2325,3 +2325,15 @@ button.compact-row{cursor:pointer}.compact-row:hover{border-color:#3a4854}.compa
  .contacts-directory-pager{flex-wrap:wrap}
  .contacts-edit-modal{width:min(94vw,480px)}
 }
+
+
+/* Equipe: convites por workspace sem aumentar a largura ou rolagem do painel. */
+.team-invite-panel{margin-top:14px;border-radius:5px}
+.team-invite-list{display:grid;gap:7px;max-width:100%;margin-top:12px}
+.team-invite-row{display:flex;align-items:center;justify-content:space-between;gap:13px;min-width:0;padding:12px;border:1px solid var(--border,#293742);border-radius:5px}
+.team-invite-row>div{min-width:0;overflow-wrap:anywhere}
+.team-invite-row strong{font-size:12px}
+.team-invite-row button{flex-shrink:0;border-radius:5px}
+#company-invite-form{margin-top:16px;padding-top:12px;border-top:1px solid var(--border,#293742)}
+#company-invite-form .input{border-radius:5px}
+@media(max-width:600px){.team-invite-row{align-items:flex-start;flex-direction:column}.team-invite-row button{align-self:flex-end}}

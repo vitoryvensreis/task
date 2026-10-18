@@ -313,3 +313,27 @@ body.master-page{margin:0;background:var(--bg);color:var(--text)}
 .mc-customer-row .mc-pending-state{display:inline-block;color:#e9c487;font-size:11px;font-weight:650;letter-spacing:.1px}
 .mc-customer-pending .mc-row-actions button{white-space:nowrap}
 @media(max-width:600px){.mc-customer-row.mc-customer-pending{gap:10px;padding:13px 11px}}
+
+/* ADM Master · company management: compact, responsive cards and modal tabs. */
+.master-page .mc-company-usage{display:block;color:#83a8c1;font-size:10px;line-height:1.35;margin-top:3px;white-space:normal}
+.master-page .mc-customer-ident>div:last-child{min-width:0}
+.master-page .mc-detail-pane{width:100%;min-width:0;padding:0 1px 8px}
+.master-page .mc-detail-pane>h3{margin:4px 0 10px;font-size:14px}
+.master-page .mc-dialog .master-inner-shell{gap:11px}
+.master-page .mc-dialog .master-inner-tabs{padding:4px;gap:3px;overflow-x:auto;flex-wrap:nowrap;scrollbar-width:thin}
+.master-page .mc-dialog .master-inner-tab{font-size:11px;flex:0 0 auto;padding:7px 10px;min-height:33px}
+.master-page .mc-dialog .master-inner-content{min-height:135px}
+.master-page .mc-dialog .mc-profile-stats{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.master-page .mc-dialog .mc-profile-stats>div{padding:10px}
+.master-page .mc-dialog .mc-profile-stats strong{font-size:12px}
+.master-page .mc-dialog .mc-team-row{flex-wrap:wrap}
+.master-page .mc-dialog .mc-team-row .mc-actions{justify-content:flex-start}
+.master-page .mc-dialog .mc-limit-form{border-top:1px solid #2a3845;padding-top:13px;margin-top:17px}
+.master-page .mc-dialog .mc-form>h3{margin:6px 0 1px}
+.master-page .mc-dialog .mc-note{margin-bottom:4px}
+@media(max-width:550px){
+ .master-page .mc-dialog .mc-profile-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .master-page .mc-company-usage{font-size:10px}
+ .master-page .mc-dialog .mc-team-row{align-items:flex-start;flex-direction:column}
+ .master-page .mc-dialog .mc-team-row .mc-actions{width:100%;gap:5px}
+}

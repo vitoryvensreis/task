@@ -1,5 +1,0 @@
--- Stage 6: calendar and event ownership. Installed by guarded PHP migration 038.
--- Adds (workspace_id BIGINT UNSIGNED NOT NULL DEFAULT original workspace id)
--- and idx_ws_calendars / idx_ws_events (workspace_id,id).
--- Migrates none of Vitor's records to other workspaces.
--- DO NOT run DDL manually: backup and structural checks are compulsory.

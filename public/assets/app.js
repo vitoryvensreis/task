@@ -817,18 +817,18 @@
   function closeMobileNav(){document.querySelector('.sidebar')?.classList.remove('open');document.body.classList.remove('nav-open')}
   function buildNav(){
     const admin=S.user.role==='admin',staff=S.user.role!=='client';
+    const hasModule=feature=>S.user.is_support||S.meta?.access_plan?.features?.[feature]!==false;
     const items=[
       ['dashboard','layout-dashboard','Dashboard','⌂'],
-      ['kanban','columns-3','Kanban','▦'],
-      ['demands','list-checks','Tasks','✓'],
+      ...(hasModule('tasks')?[['kanban','columns-3','Kanban','▦'],['demands','list-checks','Tasks','✓']]:[]),
       ...(S.user.is_support?[['agenda','calendar-days','Agenda','◷']]:[]),
       ...(admin?[
         ['clients','users','Clientes','♙'],
-        ['contacts','users','Contatos','☏'],
-        ['services','briefcase','Serviços','✦'],
+        ...(hasModule('contacts')?[['contacts','users','Contatos','☏']]:[]),
+        ...(hasModule('tasks')?[['services','briefcase','Serviços','✦']]:[]),
         ['finance','wallet','Financeiro','R$'],
         ['reports','chart-bar','Relatórios','▤'],
-        ['automations','workflow','Automações','◇'],
+        ...(hasModule('automations')?[['automations','workflow','Automações','◇']]:[]),
         ['logs','activity','Saúde & Logs','◉'],
         ['ai-monitor','bot','Monitoramento IA','IA']
       ]:[]),
@@ -838,7 +838,7 @@
     $('#nav').innerHTML=items.map(i=>`<button class="nav-btn" type="button" data-page="${i[0]}"><span class="nav-icon">${icon(i[1],i[3])}</span><span>${i[0]==='settings'&&S.user.role!=='admin'?'Minha conta':i[2]}</span></button>`).join('');
     $$('.nav-btn').forEach(b=>b.onclick=()=>go(b.dataset.page,true,true));
     const label=S.user.role==='client'?'Nova solicitação':'Nova task';$('#new-demand').innerHTML=`${icon('plus','+')}<span class="button-label">${label}</span>`;
-    $('#new-demand').classList.toggle('hidden',!!S.user.is_preview||!can('tasks.create'));paintIcons();
+    $('#new-demand').classList.toggle('hidden',!!S.user.is_preview||!can('tasks.create')||!hasModule('tasks'));paintIcons();
   }
   async function init(){try{const m=await api('auth.me',{},'GET',false);S.user=m.user;S.csrf=m.csrf;if(m.user?.role==='master'){location.href=appPath('master.php');return}S.meta=await api('meta');showApp()}catch(e){showLogin()}}
   $('#login-form').onsubmit=async e=>{e.preventDefault();$('#login-error').textContent='Entrando…';const data=Object.fromEntries(new FormData(e.target));try{const r=await api('auth.login',data,'POST',false);if(r.twofa_required){$('#login-form').classList.add('hidden');$('#twofa-form').classList.remove('hidden');$('#twofa-form [name="code"]')?.focus();return}S.user=r.user;S.csrf=r.csrf;if(r.user?.role==='master'){location.href=appPath('master.php');return}S.meta=await api('meta');showApp()}catch(x){$('#login-error').textContent=x.message}};

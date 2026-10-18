@@ -30,9 +30,9 @@ $activation=preg_match('/\A[a-f0-9]{64}\z/D',$token)===1;
 </section>
 <section id="master-login" class="master-card hidden"><h2>Entre com sua conta Master</h2><p>Use o login normal do TaskEsc com o e-mail verificado.</p><a href="<?=e($basePath)?>/index.php">Ir para o login</a></section>
 <section id="master-panel" class="master-card hidden">
-<div class="master-tabs" role="tablist" aria-label="Administração Master"><button type="button" data-master-tab="overview">Visão geral</button><button type="button" data-master-tab="clients">Clientes (ADMs)</button><button type="button" data-master-tab="workspaces">Workspaces</button></div>
+<div class="master-tabs" role="tablist" aria-label="Administração Master"><button type="button" data-master-tab="overview">Visão geral</button><button type="button" data-master-tab="clients">Clientes (ADMs)</button><button type="button" data-master-tab="plans">Planos de acesso</button><button type="button" data-master-tab="workspaces">Workspaces</button></div>
 <h2 id="master-panel-title">Visão geral</h2><p>Esta tela mostra apenas dados cadastrais dos workspaces. Nenhum dado operacional é exibido antes de iniciar o suporte.</p>
-<div id="master-workspaces"></div><div id="master-administrators" class="hidden"></div><p id="master-panel-message" aria-live="polite"></p>
+<div id="master-workspaces"></div><div id="master-administrators" class="hidden"></div><div id="master-plans" class="hidden"></div><p id="master-panel-message" aria-live="polite"></p>
 <button type="button" id="master-logout">Sair da conta Master</button>
 </section>
 </main>

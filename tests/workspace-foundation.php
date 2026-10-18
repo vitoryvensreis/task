@@ -16,6 +16,7 @@ require ROOT.'/app/WorkspaceFoundation.php';
 require ROOT.'/app/WorkspaceFoundationGuard.php';
 require ROOT.'/app/WorkspaceContext.php';
 require ROOT.'/app/MasterSupport.php';
+require ROOT.'/app/Notify.php';
 require ROOT.'/app/Auth.php';
 require ROOT.'/app/WorkspaceCatalog.php';
 require ROOT.'/app/WorkspacePreferences.php';
@@ -24,6 +25,7 @@ require ROOT.'/app/Demands.php';
 function fail(string $message,int $status=422,array $details=[]):never {throw new RuntimeException($message,$status);}
 
 function now():string {return gmdate('Y-m-d H:i:s');}
+function base(string $path=''):string{return 'https://task.escotilhaprodutora.com/'.ltrim($path,'/');}
 function testws(bool $ok,string $message):void {if(!$ok)throw new RuntimeException($message);}
 function refuses(callable $operation,string $reason):void {
  try{$operation();}catch(RuntimeException|LogicException){return;}

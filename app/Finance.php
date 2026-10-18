@@ -160,8 +160,13 @@ final class Finance {
   $row=DB::one('SELECT name FROM expense_categories WHERE name=?'.($allowInactive?'':' AND active=1').self::wsWhere().' LIMIT 1',self::args([$name]));if(!$row)fail('Categoria de custo inválida ou desativada.',422);return (string)$row['name'];
  }
  public static function expenseCategories(array $p=[]): array {
-  Auth::admin();$all=!empty($p['all']);$w=$all?'':'WHERE ec.active=1';
-  return DB::all("SELECT ec.*, (SELECT COUNT(*) FROM expenses e WHERE e.deleted_at IS NULL AND e.category=ec.name)+(SELECT COUNT(*) FROM expense_rules r WHERE r.category=ec.name) AS usage_count FROM expense_categories ec $w ORDER BY ec.active DESC,ec.name");
+  Auth::admin();$all=!empty($p['all']);$w=$all?'WHERE 1=1':'WHERE ec.active=1';
+  $link= self::ci()?'': ' AND e.workspace_id=ec.workspace_id';
+  $rule= self::ci()?'': ' AND r.workspace_id=ec.workspace_id';
+  return DB::all("SELECT ec.*,
+    (SELECT COUNT(*) FROM expenses e WHERE e.deleted_at IS NULL AND e.category=ec.name".$link.")+
+    (SELECT COUNT(*) FROM expense_rules r WHERE r.category=ec.name".$rule.")
+    AS usage_count FROM expense_categories ec $w".self::wsSql('ec')." ORDER BY ec.active DESC,ec.name");
  }
  public static function expenseCategorySave(array $p): array {
   Auth::admin();$id=(int)($p['id']??0);$name=mb_substr(trim(required($p,'name',80)),0,80);if($name==='')fail('Informe o nome da categoria.');

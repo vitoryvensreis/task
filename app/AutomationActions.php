@@ -4,9 +4,16 @@ declare(strict_types=1);
 /** Execução das ações administrativas com efeitos de negócio idempotentes por nó. */
 final class AutomationActions
 {
+    private static function scope(string $alias=''): string {
+        if(!WorkspaceTenantMode::enabled())return '';
+        $id=WorkspaceJobScope::currentId();
+        if($id<1)throw new LogicException('Automation requires an explicit company.');
+        return ' AND '.($alias!==''?$alias.'.':'').'workspace_id='.$id;
+    }
+
     private static function stored(int $runId,string $nodeId): ?array
     {
-        $step=DB::one('SELECT status,output_json FROM automation_run_steps WHERE run_id=? AND node_id=?',[$runId,$nodeId]);
+        $step=DB::one('SELECT status,output_json FROM automation_run_steps WHERE run_id=? AND node_id=?'.self::scope(),[$runId,$nodeId]);
         if(!$step||!in_array($step['status'],['success','skipped'],true))return null;
         return $step['output_json']?decode((string)$step['output_json'],[]):[];
     }
@@ -33,19 +40,20 @@ final class AutomationActions
         return DB::tx(function() use($run,$node,&$subject,$stepId): array {
             $previous=self::stored((int)$run['id'],(string)$node['id']);if($previous!==null)return $previous;
             $id=(int)$subject['demand_id'];
-            $d=DB::one('SELECT * FROM demands WHERE id=? AND deleted_at IS NULL FOR UPDATE',[$id]);
+            $d=DB::one('SELECT * FROM demands WHERE id=? AND deleted_at IS NULL'.self::scope().' FOR UPDATE',[$id]);
             if(!$d||!empty($d['draft']))throw new AutomationPermanentException('task_unavailable_or_draft');
             $operation=(string)$node['config']['operation'];$value=(string)$node['config']['value'];
             $field=match($operation){'stage'=>'stage_id','priority'=>'priority','assign'=>'assigned_to',default=>throw new AutomationPermanentException('task_operation_invalid')};
             if($operation==='stage'){
-                $stage=DB::one('SELECT id,kind,name FROM stages WHERE id=? AND active=1',[(int)$value]);
+                $stage=DB::one('SELECT id,kind,name FROM stages WHERE id=? AND active=1'.self::scope(),[(int)$value]);
                 if(!$stage)throw new AutomationPermanentException('target_stage_not_available');
                 $value=(string)$stage['id'];
             }elseif($operation==='assign'){
                 if((int)$value>0){
-                    $user=DB::one("SELECT id,role FROM users WHERE id=? AND active=1 AND role IN ('admin','staff')",[(int)$value]);
+                    $user=DB::one("SELECT id,role FROM users WHERE id=? AND active=1 AND role IN ('admin','staff')".
+                        (WorkspaceTenantMode::enabled()?' AND id IN (SELECT user_id FROM workspace_members WHERE workspace_id='.WorkspaceJobScope::currentId().')':''),[(int)$value]);
                     if(!$user)throw new AutomationPermanentException('assignee_not_available');
-                    if($user['role']==='staff'&&!DB::one('SELECT 1 FROM user_clients WHERE user_id=? AND client_id=?',[(int)$value,(int)$d['client_id']]))throw new AutomationPermanentException('assignee_not_linked_to_client');
+                    if($user['role']==='staff'&&!DB::one('SELECT 1 FROM user_clients WHERE user_id=? AND client_id=?'.self::scope(),[(int)$value,(int)$d['client_id']]))throw new AutomationPermanentException('assignee_not_linked_to_client');
                 }
             }
             if((string)($d[$field]??'0')===$value){$out=['skipped'=>true,'reason'=>'task_already_has_value','id'=>$id];self::record($stepId,$out);return $out;}
@@ -99,11 +107,16 @@ final class AutomationActions
         elseif($mode==='assigned_user')$ids=[(int)($subject['assigned_to']??0)];
         elseif($mode==='client_users'){
             $cid=(int)($subject['client_id']??0);
-            if($cid>0)$ids=array_map('intval',array_column(DB::all("SELECT u.id FROM users u JOIN user_clients uc ON uc.user_id=u.id WHERE uc.client_id=? AND u.active=1 AND u.role='client'",[$cid]),'id'));
+            if($cid>0)$ids=array_map('intval',array_column(DB::all("SELECT u.id FROM users u JOIN user_clients uc ON uc.user_id=u.id WHERE uc.client_id=? AND u.active=1 AND u.role='client'".self::scope('uc'),[$cid]),'id'));
         }
         $ids=array_values(array_unique(array_filter($ids,fn($n)=>$n>0)));
         if(!$ids)return [];
         $placeholders=implode(',',array_fill(0,count($ids),'?'));
+        if(WorkspaceTenantMode::enabled())
+            return array_map('intval',array_column(DB::all("SELECT u.id FROM users u
+                 JOIN workspace_members wm ON wm.user_id=u.id AND wm.status='active'
+                 WHERE wm.workspace_id=? AND u.active=1 AND u.id IN ($placeholders)",
+                 [WorkspaceJobScope::currentId(),...$ids]),'id'));
         return array_map('intval',array_column(DB::all("SELECT id FROM users WHERE active=1 AND id IN ($placeholders)",$ids),'id'));
     }
 
@@ -118,7 +131,11 @@ final class AutomationActions
             $new=[];
             foreach($users as $uid){
                 $key='auto-push:'.$run['id'].':'.$node['id'].':'.$uid;
-                $q=DB::run('INSERT IGNORE INTO notifications (user_id,title,body,demand_id,dedupe_key,created_at) VALUES (?,?,?,?,?,?)',[$uid,mb_substr($title,0,190),$body,$demandId?:null,$key,now()]);
+                $args=[$uid,mb_substr($title,0,190),$body,$demandId?:null,$key,now()];
+                if(WorkspaceTenantMode::enabled())
+                    $q=DB::run('INSERT IGNORE INTO notifications (workspace_id,user_id,title,body,demand_id,dedupe_key,created_at) VALUES (?,?,?,?,?,?,?)',
+                      [WorkspaceJobScope::currentId(),...$args]);
+                else $q=DB::run('INSERT IGNORE INTO notifications (user_id,title,body,demand_id,dedupe_key,created_at) VALUES (?,?,?,?,?,?)',$args);
                 if($q->rowCount())$new[]=$uid;
             }
             self::record($stepId,$users?['notified'=>count($new),'users'=>count($users)]:['skipped'=>true,'reason'=>'no_push_recipients']);return $new;
@@ -135,9 +152,9 @@ final class AutomationActions
         return DB::tx(function() use($run,$node,$subject,$eventContext,$stepId): array {
             $previous=self::stored((int)$run['id'],(string)$node['id']);if($previous!==null)return $previous;
             $cfg=$node['config'];$cid=($cfg['client_mode']==='specific')?(int)$cfg['client_id']:(int)($subject['client_id']??0);
-            $client=DB::one('SELECT id,commercial_type FROM clients WHERE id=? AND active=1',[$cid]);
-            $category=DB::one('SELECT id FROM categories WHERE id=? AND active=1',[(int)$cfg['category_id']]);
-            $stage=DB::one('SELECT id FROM stages WHERE active=1 ORDER BY position,id LIMIT 1');
+            $client=DB::one('SELECT id,commercial_type FROM clients WHERE id=? AND active=1'.self::scope(),[$cid]);
+            $category=DB::one('SELECT id FROM categories WHERE id=? AND active=1'.self::scope(),[(int)$cfg['category_id']]);
+            $stage=DB::one('SELECT id FROM stages WHERE active=1'.self::scope().' ORDER BY position,id LIMIT 1');
             if(!$client||!$category||!$stage)throw new AutomationPermanentException('task_creation_reference_missing');
             $owner=(int)($run['automation_owner']??0);
             if(!DB::one('SELECT id FROM users WHERE id=?',[$owner]))throw new AutomationPermanentException('automation_owner_missing');
@@ -159,7 +176,7 @@ final class AutomationActions
             ]);
             DB::insert('transitions',['demand_id'=>$id,'from_stage'=>null,'to_stage'=>(int)$stage['id'],'actor_id'=>(int)$run['automation_owner'],'happened_at'=>now()]);
             self::log($id,'automation.created',[],['automation_id'=>(int)$run['automation_id'],'source_entity_id'=>(int)$run['entity_id']]);
-            $d=DB::one('SELECT * FROM demands WHERE id=?',[$id]);
+            $d=DB::one('SELECT * FROM demands WHERE id=?'.self::scope(),[$id]);
             DemandRealtime::emit('demand.created',$d,['change'=>'automation.created','automation_generated'=>1],null);
             $out=['created'=>true,'id'=>$id,'title'=>$title];self::record($stepId,$out);return $out;
         });

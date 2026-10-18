@@ -9,7 +9,7 @@ final class MasterSupport {
  private const SESSION_SECONDS=7200;
  private static function singleWorkspace(): array {
   $count=(int)(DB::one('SELECT COUNT(*) n FROM workspaces')['n']??0);
-  $w=DB::one('SELECT w.id,w.name,w.slug,w.owner_user_id,w.status,u.active AS owner_active,u.role AS owner_role
+  $w=DB::one('SELECT w.id,w.name,w.slug,w.owner_user_id,w.status,u.active AS owner_active,u.role AS owner_role,u.email AS owner_email
     FROM workspaces w JOIN users u ON u.id=w.owner_user_id WHERE w.slug=?',
     [WorkspaceFoundation::SLUG]);
   if($count!==1||!$w||$w['status']!==WorkspaceFoundation::STATUS||

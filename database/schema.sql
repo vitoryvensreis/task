@@ -97,3 +97,60 @@ INSERT INTO categories (id,name,fields_json) VALUES (1,'Design gráfico','[]'),(
 INSERT INTO calendars(name) VALUES ('Produção');
 INSERT INTO settings (`key`,value) VALUES ('schema_version','30'),('brand_name','TaskEsc'),('brand_color','#ffffff'),('logo_url',''),('timezone','America/Fortaleza'),('upload_mb','0'),('retention_days','365'),('drive_account_id',''),('drive_root_folder_id',''),('min_delivery_business_hours','24'),('last_cron_at',''),('last_cron_error',''),('monitor_email',''),('browser_notifications','1'),('dashboard_default_period','month');
 
+
+
+-- Workspace DB Stage 1: current business data remains with Escotilha Produtora.
+-- These metadata tables allow unique ownership and one tenant membership per user.
+-- The additive legacy workspace_id columns are backfilled by WorkspaceFoundation::apply()
+-- after the first owner account exists. In the next stage, all writers must explicitly
+-- supply workspace_id before legacy column DEFAULTs can be removed.
+-- No additional workspace or retired SaaS table is seeded by schema.sql.
+CREATE TABLE IF NOT EXISTS workspaces (
+ id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+ slug VARCHAR(100) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ name VARCHAR(190) NOT NULL,
+ owner_user_id INT NOT NULL,
+ status VARCHAR(24) NOT NULL DEFAULT 'staged',
+ created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL,
+ PRIMARY KEY(id), UNIQUE KEY uq_ws_slug(slug),
+ UNIQUE KEY uq_ws_one_owner(owner_user_id),
+ CONSTRAINT fk_ws_owner FOREIGN KEY(owner_user_id) REFERENCES users(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS workspace_members (
+ workspace_id BIGINT UNSIGNED NOT NULL, user_id INT NOT NULL,
+ role VARCHAR(24) NOT NULL, status VARCHAR(24) NOT NULL DEFAULT 'active',
+ joined_at DATETIME NOT NULL,
+ PRIMARY KEY(workspace_id,user_id),
+ UNIQUE KEY uq_ws_one_membership(user_id),
+ KEY idx_ws_members_user(user_id,status,workspace_id),
+ CONSTRAINT fk_ws_member_workspace FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE RESTRICT,
+ CONSTRAINT fk_ws_member_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS workspace_settings (
+ workspace_id BIGINT UNSIGNED NOT NULL,
+ `key` VARCHAR(100) NOT NULL, value LONGTEXT NOT NULL, updated_at DATETIME NOT NULL,
+ PRIMARY KEY(workspace_id,`key`),
+ CONSTRAINT fk_ws_setting_workspace FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS workspace_support_sessions (
+ id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+ workspace_id BIGINT UNSIGNED NOT NULL, master_user_id INT NOT NULL,
+ reason VARCHAR(190) NULL, started_at DATETIME NOT NULL,
+ expires_at DATETIME NOT NULL, ended_at DATETIME NULL,
+ PRIMARY KEY(id),
+ KEY idx_ws_support_master(master_user_id,ended_at,id),
+ KEY idx_ws_support_workspace(workspace_id,ended_at,id),
+ CONSTRAINT fk_ws_support_workspace FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE RESTRICT,
+ CONSTRAINT fk_ws_support_master FOREIGN KEY(master_user_id) REFERENCES users(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS platform_master_identities (
+ email VARCHAR(190) NOT NULL, user_id INT NULL,
+ status VARCHAR(32) NOT NULL DEFAULT 'pending_verification',
+ verified_at DATETIME NULL, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL,
+ PRIMARY KEY(email), UNIQUE KEY uq_platform_master_user(user_id),
+ CONSTRAINT fk_platform_master_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

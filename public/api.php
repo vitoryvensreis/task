@@ -33,6 +33,7 @@ try {
  if($action==='preview.start'){checkCsrf();out(Auth::previewStart($p));}
  if($action==='preview.stop'){checkCsrf();out(Auth::previewStop());}
  if(($_SERVER['REQUEST_METHOD']??'GET')!=='GET'&&Auth::$origin!=='api'){checkCsrf();Auth::guardPreviewWrite();}
+ if(str_starts_with($action,'wpp.')||str_starts_with($action,'tokens.'))MasterSupport::requirePlatformSettings();
  $result=match($action){
   'account.get'=>Auth::profile(),
   'account.save'=>Auth::profileSave($p),
@@ -45,11 +46,11 @@ try {
   'push.subscribe'=>Push::subscribe($p),
   'push.unsubscribe'=>Push::unsubscribe($p),
   'push.test'=>Push::test(),
-  'wpp.status'=>MasterSupport::requirePlatformSettings()?:WppConnect::status(),
-  'wpp.groups'=>MasterSupport::requirePlatformSettings()?:WppConnect::groups(),
-  'wpp.start'=>MasterSupport::requirePlatformSettings()?:WppConnect::start(),
-  'wpp.qr'=>MasterSupport::requirePlatformSettings()?:WppConnect::qr(),
-  'wpp.send_test'=>MasterSupport::requirePlatformSettings()?:WppConnect::sendTest($p),
+  'wpp.status'=>WppConnect::status(),
+  'wpp.groups'=>WppConnect::groups(),
+  'wpp.start'=>WppConnect::start(),
+  'wpp.qr'=>WppConnect::qr(),
+  'wpp.send_test'=>WppConnect::sendTest($p),
   'automation.catalog'=>Automation::catalog(),
   'automation.list'=>Automation::list($p),
   'automation.get'=>Automation::get($p),
@@ -97,8 +98,8 @@ try {
   'settings.save'=>Catalog::settingsSave($p),
   'settings.logo_upload'=>Catalog::settingsLogoUpload(),
   'settings.integrations'=>Catalog::integrationSave($p),
-  'tokens.create'=>MasterSupport::requirePlatformSettings()?:Tokens::create($p),
-  'tokens.revoke'=>MasterSupport::requirePlatformSettings()?:Tokens::revoke($p),
+  'tokens.create'=>Tokens::create($p),
+  'tokens.revoke'=>Tokens::revoke($p),
   'services.list'=>Catalog::services(),
   'services.save'=>Catalog::serviceSave($p),
   'services.delete'=>Catalog::serviceDelete($p),

@@ -64,6 +64,7 @@ final class MasterWorkspaceManagement {
    'plan_team_limit'=>$plan['team_limit']??null,
    'team_limit_override'=>$planEffective['team_limit_override']??null,
    'plan_name'=>$plan['name']??'Não atribuído',
+   'integrations'=>WorkspaceIntegrationStatus::forMaster($id),
    'billing'=>['enabled'=>false,'invoices'=>[],'payments'=>[],
      'status'=>'not_integrated']
   ];

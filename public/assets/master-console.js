@@ -240,6 +240,28 @@ window.MasterConsole=(()=>{
      }
      row.append(controls);team.append(row);
     }
+    const integrationsPane=el('section','mc-detail-pane');
+    integrationsPane.append(el('h3','','Integrações desta empresa'));
+    const integrations=d.integrations||{};
+    const integrationStats=el('div','mc-profile-stats');
+    for(const [label,value] of [
+     ['Google Drive',integrations.drive_ready?'Conectado':'Pendente'],
+     ['Google Agenda',integrations.calendar_accounts>0?'Conta conectada':'Sem conta'],
+     ['Agendas selecionadas',fmt(integrations.selected_calendars||0)],
+     ['Arquivos vinculados',fmt(integrations.file_count||0)],
+     ['Automações',fmt(integrations.automation_count||0)],
+     ['Notificações',fmt(integrations.notification_count||0)]
+    ]){
+     const cell=el('div');cell.append(el('small','',label),el('strong','',value));
+     integrationStats.append(cell);
+    }
+    integrationsPane.append(integrationStats);
+    const googleAccounts=(integrations.google_accounts||[]).map(a=>
+      (a.email||'Conta Google')+' · '+(a.status==='connected'?'Conectada':a.status));
+    note(integrationsPane,'Contas Google deste workspace',
+      googleAccounts.length?googleAccounts.join(' | '):'Nenhuma conta Google conectada nesta empresa.');
+    note(integrationsPane,'WhatsApp e operações externas',
+      'WPPConnect e algumas rotinas ainda usam configuração global do ADM Master. A operação independente por empresa só poderá ser habilitada depois do isolamento completo e da homologação.');
     const billing=el('section','mc-detail-pane');
     billing.append(el('h3','','Assinatura e pagamentos'));
     note(billing,'Asaas ainda não está conciliado',
@@ -254,6 +276,7 @@ window.MasterConsole=(()=>{
      {key:'plano',label:'Plano e limites',node:plan},
      {key:'equipe',label:'Administradores',node:team},
      {key:'suporte',label:'Acesso ao workspace',node:access},
+     {key:'integracoes',label:'Integrações',node:integrationsPane},
      {key:'assinatura',label:'Assinatura',node:billing}
     ],'workspace-'+w.id);
    }

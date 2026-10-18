@@ -12,7 +12,7 @@ final class AiWhatsAppAgendaTools {
  public static function sensitive(string $name): bool {return in_array($name,['agenda_create','agenda_update','agenda_cancel'],true);}
  public static function supported(string $name): bool {return in_array($name,['agenda_list','agenda_calendars','agenda_detail','agenda_conflicts'],true);}
  public static function catalog(bool $private): array {
-  if((Auth::$user['role']??'')!=='admin')return [];
+  if((Auth::$user['role']??'')!=='admin'||(!MasterSupport::isSupport()&&!(WorkspaceContext::legacyCiFixture()&&defined('TASKESC_LEGACY_AI_CALENDAR_FIXTURE'))))return [];
   $date=['type'=>'string','description'=>'Hora local YYYY-MM-DDTHH:mm, não inventar horário'];$id=['type'=>'integer'];
   $tools=[self::tool('agenda_list',$private?'Consultar compromissos, inclusive privados.':'Listar SOMENTE eventos NÃO PRIVADOS em grupos.',[
    'from'=>['type'=>'string','description'=>'YYYY-MM-DD opcional'],'to'=>['type'=>'string','description'=>'YYYY-MM-DD opcional'],'limit'=>$id])];

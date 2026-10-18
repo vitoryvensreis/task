@@ -39,6 +39,8 @@ final class WorkspaceContext {
      WHERE wm.user_id=? LIMIT 2',[$id]);
   if(count($links)!==1)fail('Usuário deve possuir um único vínculo empresarial.',403);
   $row=$links[0];
+  if(strtolower((string)($user['email']??''))===PlatformTenantProvisioning::OWNER_EMAIL && (string)$row['slug']!==PlatformTenantProvisioning::SLUG)
+   fail('Acesso ao workspace não autorizado.',403);
   if((!$multi&&$row['slug']!==WorkspaceFoundation::SLUG)||
      !in_array((string)$row['status'],[WorkspaceFoundation::STATUS,...($multi?['active']:[])],true)||
      $row['member_status']!=='active'||

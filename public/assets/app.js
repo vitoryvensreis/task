@@ -820,7 +820,7 @@
     const hasModule=feature=>S.user.is_support||S.meta?.access_plan?.features?.[feature]!==false;
     const items=[
       ['dashboard','layout-dashboard','Dashboard','⌂'],
-      ...(hasModule('tasks')?[['kanban','columns-3','Kanban','▦'],['demands','list-checks','Tasks','✓']]:[]),
+      ...(hasModule('tasks')&&can('tasks.read')?[['kanban','columns-3','Kanban','▦'],['demands','list-checks','Tasks','✓']]:[]),
       ...(S.user.is_support?[['agenda','calendar-days','Agenda','◷']]:[]),
       ...(admin?[
         ['clients','users','Clientes','♙'],
@@ -832,7 +832,7 @@
         ['logs','activity','Saúde & Logs','◉'],
         ['ai-monitor','bot','Monitoramento IA','IA']
       ]:[]),
-      ...(staff&&!admin?[['reports','chart-bar','Relatórios','▤']]:[]),
+      ...(staff&&!admin&&can('reports.read')?[['reports','chart-bar','Relatórios','▤']]:[]),
       ['settings','settings','Configurações','⚙']
     ];
     $('#nav').innerHTML=items.map(i=>`<button class="nav-btn" type="button" data-page="${i[0]}"><span class="nav-icon">${icon(i[1],i[3])}</span><span>${i[0]==='settings'&&S.user.role!=='admin'?'Minha conta':i[2]}</span></button>`).join('');

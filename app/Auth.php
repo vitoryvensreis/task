@@ -1,6 +1,23 @@
 <?php
 final class Auth {
  public static ?array $user=null;public static ?array $actor=null;public static ?array $workspace=null;public static ?int $previewClientId=null;public static string $origin='web';public static string $scopes='tools.read tools.write';
+ private static function principal(array $actor,array $workspace): array {
+  if(($workspace['role']??'')==='master'){
+   $actor['role']='master';$actor['is_master']=1;$actor['is_support']=0;
+   return $actor;
+  }
+  if(isset($workspace['support_session_id'])){
+   if(self::$origin!=='web')fail('Suporte Master disponível apenas na sessão web.',403);
+   $owner=DB::one('SELECT id,name,email,role,active,email_notifications,weekly_report,twofa_enabled,last_login_at FROM users WHERE id=? AND role=? AND active=1',
+    [(int)$workspace['owner_user_id'],'admin']);
+   if(!$owner)fail('Proprietário do workspace indisponível.',403);
+   $owner['is_master']=1;$owner['is_support']=1;
+   $owner['support_master_id']=(int)$actor['id'];
+   $owner['support_session_id']=(int)$workspace['support_session_id'];
+   return $owner;
+  }
+  return $actor;
+ }
  public static function load(bool $required=true): ?array {
   if(self::$user)return self::$user;
   $bearer=$_SERVER['HTTP_AUTHORIZATION']??$_SERVER['REDIRECT_HTTP_AUTHORIZATION']??'';$id=null;
@@ -10,16 +27,18 @@ final class Auth {
   }else{$id=$_SESSION['user_id']??null;}
   $actor=$id?DB::one('SELECT id,name,email,role,active,email_notifications,weekly_report,twofa_enabled,last_login_at FROM users WHERE id=? AND active=1',[$id]):null;self::$actor=$actor;
   self::$workspace=$actor?WorkspaceContext::forUser($actor):null;
-  if($actor&&self::$origin==='web'&&$actor['role']==='admin'&&!empty($_SESSION['preview_client_id'])){
+   $effective=$actor&&self::$workspace?self::principal($actor,self::$workspace):$actor;
+   if($actor&&strtolower((string)$actor['email'])===WorkspaceFoundation::MASTER_EMAIL&&self::$origin==='api')fail('ADM Master não pode usar credencial de API.',403);
+  if($effective&&self::$origin==='web'&&$effective['role']==='admin'&&!empty($_SESSION['preview_client_id'])){
    $cid=(int)$_SESSION['preview_client_id'];$client=WorkspaceContext::legacyCiFixture()?DB::one('SELECT id,name FROM clients WHERE id=? AND active=1',[$cid]):DB::one('SELECT id,name FROM clients WHERE id=? AND active=1 AND workspace_id=?',[$cid,self::$workspace['id']]);
-   if($client){self::$previewClientId=$cid;self::$user=$actor;self::$user['actor_role']='admin';self::$user['role']='client';self::$user['is_preview']=1;self::$user['preview_client_id']=$cid;self::$user['preview_client_name']=$client['name'];}
+   if($client){self::$previewClientId=$cid;self::$user=$effective;self::$user['actor_role']='admin';self::$user['role']='client';self::$user['is_preview']=1;self::$user['preview_client_id']=$cid;self::$user['preview_client_name']=$client['name'];}
    else unset($_SESSION['preview_client_id']);
   }
-  if(!self::$user&&$actor){self::$user=$actor;self::$user['is_preview']=0;}
+  if(!self::$user&&$effective){self::$user=$effective;self::$user['is_preview']=0;}
   if(self::$user&&self::$workspace){self::$user['workspace_id']=self::$workspace['id'];self::$user['workspace_role']=self::$workspace['role'];}
   if($required&&!self::$user)fail('Entre para continuar.',401);return self::$user;
  }
- public static function workspaceId(): int {self::load();if(!self::$workspace){if(WorkspaceContext::legacyCiFixture())return 0;fail('Workspace indisponível.',403);}return (int)self::$workspace['id'];}
+ public static function workspaceId(): int {self::load();if(!self::$workspace){if(WorkspaceContext::legacyCiFixture())return 0;fail('Workspace indisponível.',403);}if((int)self::$workspace['id']<1&&!WorkspaceContext::legacyCiFixture())fail('Selecione um workspace no modo suporte.',403);return (int)self::$workspace['id'];}
  public static function workspace(): array {self::load();if(!self::$workspace)fail('Workspace indisponível.',403);return self::$workspace;}
  public static function isPreview(): bool {self::load(false);return self::$previewClientId!==null;}
  public static function previewStart(array $p): array {self::load();if((self::$actor['role']??'')!=='admin')fail('Acesso restrito ao administrador.',403);$id=integer($p['client_id']??0,1);$c=WorkspaceContext::legacyCiFixture()?DB::one('SELECT id,name FROM clients WHERE id=? AND active=1',[$id]):DB::one('SELECT id,name FROM clients WHERE id=? AND active=1 AND workspace_id=?',[$id,self::workspaceId()]);if(!$c)fail('Cliente não encontrado.',404);$_SESSION['preview_client_id']=$id;self::$user=null;self::$previewClientId=null;self::load();return ['saved'=>true,'client'=>$c];}
@@ -67,9 +86,10 @@ final class Auth {
 
  private static function finalizeLogin(array $u): array {
   $workspace=WorkspaceContext::forUser($u);
-  session_regenerate_id(true);$_SESSION['user_id']=$u['id'];unset($_SESSION['preview_client_id'],$_SESSION['pending_2fa_user_id'],$_SESSION['pending_2fa_until'],$_SESSION['workspace_id'],$_SESSION['workspace_support_id']);$_SESSION['csrf']=bin2hex(random_bytes(24));
+  $effective=self::principal($u,$workspace);
+   session_regenerate_id(true);$_SESSION['user_id']=$u['id'];unset($_SESSION['preview_client_id'],$_SESSION['pending_2fa_user_id'],$_SESSION['pending_2fa_until'],$_SESSION['workspace_id'],$_SESSION['workspace_support_id']);$_SESSION['csrf']=bin2hex(random_bytes(24));
   DB::update('users',(int)$u['id'],['last_login_at'=>now(),'last_login_ip'=>mb_substr((string)($_SERVER['REMOTE_ADDR']??''),0,45)]);
-  unset($u['password_hash'],$u['twofa_secret'],$u['twofa_recovery_json']);self::$actor=$u;self::$workspace=$workspace;self::$user=$u;self::$user['is_preview']=0;self::$user['workspace_id']=$workspace['id'];self::$user['workspace_role']=$workspace['role'];audit('user',(int)$u['id'],'login',null,['ip'=>$_SERVER['REMOTE_ADDR']??'']);
+  unset($u['password_hash'],$u['twofa_secret'],$u['twofa_recovery_json']);self::$actor=$u;self::$workspace=$workspace;self::$user=$effective;self::$user['is_preview']=0;self::$user['workspace_id']=$workspace['id'];self::$user['workspace_role']=$workspace['role'];audit('user',(int)$u['id'],'login',null,['ip'=>$_SERVER['REMOTE_ADDR']??'']);
   return ['user'=>self::$user,'csrf'=>csrf()];
  }
  public static function login(array $p): array {

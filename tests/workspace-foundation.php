@@ -70,6 +70,15 @@ try{
  testws((int)(DB::one('SELECT COUNT(*) n FROM invoices')['n']??0)===1,'Original invoice removed.');
  testws((int)(DB::one('SELECT COUNT(*) n FROM files')['n']??0)===1,'Original attachment removed.');
  testws(WorkspaceFoundation::apply()['already_applied']===true,'Migration not idempotent.');
+ // An orphan/unauthorized login (including a failed smoke fixture) must NOT
+ // block future deploys and must never gain workspace access.
+ $orphan=DB::insert('users',['name'=>'Unlinked fixture','email'=>'unlinked@ci.invalid',
+  'password_hash'=>'test','role'=>'staff','active'=>1,'created_at'=>now()]);
+ testws(WorkspaceFoundation::apply()['already_applied']===true,
+  'A user without membership must not block replay of a completed schema migration.');
+ refuses(fn()=>WorkspaceContext::forUser(DB::one('SELECT id,email,role,active FROM users WHERE id=?',[$orphan])),
+  'An unlinked user must not be allowed to log in.');
+
  // B1: resolve the correct workspace from membership, never from caller input.
  $ownerIdentity=DB::one('SELECT id,email,role,active FROM users WHERE id=?',[$owner]);
  $ctx=WorkspaceContext::forUser($ownerIdentity);

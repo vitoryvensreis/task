@@ -16,10 +16,10 @@ try {
  if($action==='auth.2fa'){installed();out(Auth::twoFactorVerify($p));}
  if($action==='auth.logout'){session_start();$_SESSION=[];if(ini_get('session.use_cookies')){$params=session_get_cookie_params();setcookie(session_name(),'',['expires'=>time()-42000,'path'=>$params['path'],'domain'=>$params['domain'],'secure'=>$params['secure'],'httponly'=>$params['httponly'],'samesite'=>$params['samesite']??'Lax']);}session_destroy();out(['logged_out'=>true]);}
  installed();
- if(in_array($action,['master.support_unread','master.support_seen','master.wpp_status','master.wpp_start','master.wpp_qr','master.wpp_test','master.customers','master.workspace_members','master.workspace_profile_save','master.workspace_limit_save','master.admin_access','master.audit','master.account','master.profile_save','master.password_save','master.twofa_setup','master.twofa_enable','master.twofa_disable','master.invite_additional','master.asaas','master.asaas_save','master.ai_usage','master.ai_policy','master.ai_policy_save','master.health','master.logs','master.error_resolve','master.settings','master.settings_save','master.brand_upload','master.workspaces','master.dashboard','master.administrators','master.reset_2fa','master.plans','master.plan_save','master.plan_assign','master.start','master.stop','master.invite'],true)){
+ if(in_array($action,['master.support_unread','master.support_seen','master.wpp_status','master.wpp_start','master.wpp_qr','master.wpp_test','master.wpp_close','master.wpp_disconnect','master.customers','master.workspace_members','master.workspace_profile_save','master.workspace_limit_save','master.admin_access','master.audit','master.account','master.profile_save','master.password_save','master.twofa_setup','master.twofa_enable','master.twofa_disable','master.invite_additional','master.asaas','master.asaas_save','master.ai_usage','master.ai_policy','master.ai_policy_save','master.health','master.logs','master.error_resolve','master.settings','master.settings_save','master.brand_upload','master.workspaces','master.dashboard','master.administrators','master.reset_2fa','master.plans','master.plan_save','master.plan_assign','master.start','master.stop','master.invite'],true)){
   if(($_SERVER['REQUEST_METHOD']??'GET')!=='GET')checkCsrf();
   Auth::load();
-  if(in_array($action,['master.wpp_status','master.wpp_start','master.wpp_qr','master.wpp_test'],true)){
+  if(in_array($action,['master.wpp_status','master.wpp_start','master.wpp_qr','master.wpp_test','master.wpp_close','master.wpp_disconnect'],true)){
    if(!MasterSupport::isActor()||MasterSupport::isSupport())fail('Integração reservada ao ADM Master.',403);
    if($action==='master.support_unread'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET'){
    if(!MasterSupport::isActor())fail('Acesso restrito ao ADM Master.',403);
@@ -36,6 +36,8 @@ try {
    if($action==='master.wpp_start'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST')out(WppConnect::start());
    if($action==='master.wpp_qr'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET')out(WppConnect::qr());
    if($action==='master.wpp_test'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST')out(WppConnect::sendTest($p));
+   if($action==='master.wpp_close'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST')out(WppConnect::close($p));
+   if($action==='master.wpp_disconnect'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST')out(WppConnect::disconnect($p));
    fail('Método não permitido.',405);
   }
   if($action==='master.customers'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET')out(MasterSupport::customerDirectory($p));

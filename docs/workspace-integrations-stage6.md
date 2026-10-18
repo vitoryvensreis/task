@@ -17,3 +17,9 @@ Esta entrega inclui apenas um avanço seguro da Etapa 6, **não sua conclusão**
 - Em modo multiempresa, calendário local, Google sync, edição, exclusão, conflitos, atualização remota e publicações realtime usam escopo autenticado. Inserts são verificados pela camada DB.
 - WhatsApp global **não é** liberado em modo multiempresa. Webhooks e envios ficam bloqueados até que a sessão do WPPConnect e o worker da IA sejam separados por empresa.
 - A ativação real da Gabriella segue bloqueada até aposentadoria dos defaults implícitos das demais tabelas e homologação de APIs/workers. Nenhuma troca automática para modo multi foi executada.
+
+## WhatsApp — decisão: uma única sessão
+- O ADM Master tem aba própria em `/master/whatsapp`: consultar, conectar, exibir QR, fechar e desconectar a única sessão.
+- Os endpoints oficiais de fechar e logout são utilizados, com confirmação da senha Master e auditoria de plataforma.
+- O número é transporte global, mas o processamento de mensagens e automações deve resolver o workspace pelo usuário autenticado, nunca pelo payload externo.
+- AI inbound multitenant ainda exige roteamento auditado; não ativar em produção sem ele.

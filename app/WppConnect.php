@@ -4,10 +4,22 @@ declare(strict_types=1);
 final class WppConnect
 {
     private static ?string $token=null;
+    private static function masterOnly(): void {
+        Auth::load();
+        if(Auth::$origin!=='web'||!MasterSupport::isActor()||MasterSupport::isSupport())
+            fail('Somente o ADM Master gerencia a sessão WhatsApp da plataforma.',403);
+    }
+    private static function sensitiveConfirmation(array $input): void {
+        self::masterOnly();
+        $row=DB::one('SELECT password_hash FROM users WHERE id=? AND active=1',[(int)Auth::$actor['id']]);
+        if(!$row||!password_verify((string)($input['master_password']??''),(string)$row['password_hash']))
+            fail('Senha do ADM Master incorreta.',403);
+    }
+
 
     public static function status(): array
     {
-        if(!MasterSupport::isActor())Auth::admin();
+        self::masterOnly();
         $cfg=self::settings();
         if(!$cfg['configured'])return [
             'configured'=>false,
@@ -71,7 +83,7 @@ final class WppConnect
 
     public static function start(): array
     {
-        if(!MasterSupport::isActor())Auth::admin();self::requirePost();$cfg=self::requireConfigured();
+        self::masterOnly();self::requirePost();$cfg=self::requireConfigured();
         $payload=['waitQrCode'=>false,'webhook'=>self::webhookUrl()];
         $response=self::request('POST','/api/'.rawurlencode($cfg['session']).'/start-session',$payload,true);
         return ['started'=>true,'session'=>$cfg['session'],'provider_status'=>(int)$response['status']];
@@ -79,7 +91,7 @@ final class WppConnect
 
     public static function qr(): array
     {
-        if(!MasterSupport::isActor())Auth::admin();$cfg=self::requireConfigured();
+        self::masterOnly();$cfg=self::requireConfigured();
         $response=self::requestRaw('GET','/api/'.rawurlencode($cfg['session']).'/qrcode-session',true);
         $contentType=strtolower((string)($response['content_type']??''));
         if(str_starts_with($contentType,'image/png')){
@@ -112,7 +124,7 @@ final class WppConnect
 
     public static function sendTest(array $p): array
     {
-        if(!MasterSupport::isActor())Auth::admin();self::requirePost();$cfg=self::requireConfigured();
+        self::masterOnly();self::requirePost();$cfg=self::requireConfigured();
         $phone=self::normalizePhone((string)($p['phone']??''));
         $message=trim((string)($p['message']??''));
         if($message==='')$message='TaskEsc · teste de integração WPPConnect';
@@ -131,6 +143,27 @@ final class WppConnect
             'provider_status'=>(int)$response['status'],
             'message_id'=>$messageId,
         ];
+    }
+
+    public static function close(array $p): array {
+        self::sensitiveConfirmation($p);self::requirePost();
+        $cfg=self::requireConfigured();
+        $response=self::request('POST','/api/'.rawurlencode($cfg['session']).'/close-session',[],true);
+        self::$token=null;
+        DB::insert('platform_access_log',['actor_user_id'=>(int)Auth::$actor['id'],
+         'action'=>'wpp.session_closed','workspace_id'=>null,
+         'details_json'=>json(['session'=>$cfg['session']]),'created_at'=>now()]);
+        return ['closed'=>true,'provider_status'=>(int)$response['status']];
+    }
+    public static function disconnect(array $p): array {
+        self::sensitiveConfirmation($p);self::requirePost();
+        $cfg=self::requireConfigured();
+        $response=self::request('POST','/api/'.rawurlencode($cfg['session']).'/logout-session',[],true);
+        self::$token=null;
+        DB::insert('platform_access_log',['actor_user_id'=>(int)Auth::$actor['id'],
+         'action'=>'wpp.session_disconnected','workspace_id'=>null,
+         'details_json'=>json(['session'=>$cfg['session']]),'created_at'=>now()]);
+        return ['disconnected'=>true,'provider_status'=>(int)$response['status']];
     }
 
     /** List only the IDs and names of groups belonging to the connected WhatsApp session. */
@@ -285,9 +318,10 @@ final class WppConnect
 
     public static function sendAutomationMessage(string $phone,string $message,bool $isGroup=false): array
     {
-        // One shared WPPConnect session must never send on behalf of multiple tenants.
-        if(WorkspaceTenantMode::enabled())
-            throw new RuntimeException('Individual workspace WhatsApp session required before sending.');
+        // One global transport serves everyone; each automated sender must
+        // provide an explicit tenant worker context for business data access.
+        if(WorkspaceTenantMode::enabled()&&WorkspaceJobScope::currentId()<1)
+            throw new RuntimeException('Explicit worker workspace required for WhatsApp sends.');
         $cfg=self::requireConfigured();
         if($isGroup){
             $phone=self::normalizeGroupId($phone);

@@ -91,7 +91,7 @@ window.TaskEscMasterSettings=(()=>{
   field(fg,'Nome do remetente','from_name',smtp.from_name||'TaskEsc');
   field(fg,'Senha SMTP','password','','password',d.smtp_password_set?'Configurada — deixe vazio para manter':'Não configurada');
   fe.append(fg);submit(fe,'master.settings_save','email',base,csrf);email.append(fe);
-  const wpp=card(grid,'WhatsApp / WPPConnect','Conexão global com o serviço WPPConnect.');
+  const wpp=card(grid,'WhatsApp único da plataforma','Um número compartilhado controlado pelo ADM Master.');
   note(wpp,w.configured?'Credenciais configuradas':'Configuração pendente','Indicador de configuração; não é uma confirmação de sessão conectada.');
   const fw=el('form','ms-form');
   field(fw,'URL interna (localhost)','internal_url',w.internal_url||'http://127.0.0.1:21465');
@@ -128,7 +128,9 @@ window.TaskEscMasterSettings=(()=>{
   const statusBtn=el('button','secondary','Verificar sessão');statusBtn.type='button';
   const startBtn=el('button','secondary','Iniciar / Reconectar');startBtn.type='button';
   const qrBtn=el('button','secondary','Exibir QR Code');qrBtn.type='button';
-  const tools=el('div','mc-actions');tools.append(statusBtn,startBtn,qrBtn);wppTools.append(tools);
+  const closeBtn=el('button','secondary','Fechar sessão');closeBtn.type='button';
+  const disconnectBtn=el('button','secondary','Desconectar número');disconnectBtn.type='button';
+  const tools=el('div','mc-actions');tools.append(statusBtn,startBtn,qrBtn,closeBtn,disconnectBtn);wppTools.append(tools);
   const qrHolder=el('div','mc-qr');wppTools.append(qrHolder);
   const wppRequest=async(action,p=null)=>{
    const isPost=p!==null;
@@ -141,7 +143,7 @@ window.TaskEscMasterSettings=(()=>{
   };
   const runWpp=async fn=>{state.textContent='Consultando conexão…';try{await fn()}catch(error){state.textContent=error.message}};
   statusBtn.onclick=()=>runWpp(async()=>{const d=await wppRequest('master.wpp_status');
-   state.textContent=d.connected?'WhatsApp conectado.':d.message||'WhatsApp desconectado.';});
+   state.textContent=d.connected?'WhatsApp conectado'+(d.phone?' · +'+d.phone:'')+'.':d.message||'WhatsApp desconectado.';});
   startBtn.onclick=()=>runWpp(async()=>{await wppRequest('master.wpp_start',{});state.textContent='Sessão iniciada. Clique em Exibir QR Code se necessário.'});
   qrBtn.onclick=()=>runWpp(async()=>{const d=await wppRequest('master.wpp_qr');qrHolder.replaceChildren();
    const url=d.qrcode;
@@ -149,6 +151,17 @@ window.TaskEscMasterSettings=(()=>{
     const image=el('img');image.src=url;image.alt='QR Code WhatsApp';qrHolder.append(image);
    }else state.textContent='Sessão: '+String(d.status||'Aguardando QR Code');
   });
+  const confirmMaster=async(action,label)=>{
+   const password=window.prompt('Digite a senha do ADM Master para '+label+':');
+   if(password===null||password==='')return;
+   if(!window.confirm('Confirma '+label+' da sessão WhatsApp compartilhada?'))return;
+   await runWpp(async()=>{
+     await wppRequest(action,{master_password:password});
+     qrHolder.replaceChildren();state.textContent='Operação confirmada: '+label+'.';
+   });
+  };
+  closeBtn.onclick=()=>confirmMaster('master.wpp_close','fechar (mantendo a autenticação salva)');
+  disconnectBtn.onclick=()=>confirmMaster('master.wpp_disconnect','desconectar (apaga dados de autenticação)');
   const testForm=el('form','ms-form mc-wpp-test');
   field(testForm,'Enviar teste para telefone (com DDI)','phone','','tel','5585999999999');
   field(testForm,'Mensagem de teste','message','TaskEsc · teste de integração WhatsApp');
@@ -160,16 +173,15 @@ window.TaskEscMasterSettings=(()=>{
   const security=card(grid,'Segurança da plataforma','Acesso e segregação dos dados.');
   note(security,'Acesso exclusivo','Somente a conta ADM Master autenticada pode alterar estas configurações. Ações são auditadas.');
   note(security,'Proteção dos workspaces','Criação de novos workspaces segue bloqueada até a homologação multiempresa.');
-  const tabItems=mode==='personalization'?
+  const tabItems=mode==='whatsapp'? [{key:'whatsapp',label:'Sessão compartilhada',node:wpp}]:mode==='personalization'?
     [{key:'identidade',label:'Identidade visual',node:brand},
      {key:'icones',label:'Ícones e PWA',node:assets}]:
-    [{key:'whatsapp',label:'WhatsApp',node:wpp},
-     {key:'email',label:'E-mail / SMTP',node:email},
+    [{key:'email',label:'E-mail / SMTP',node:email},
      {key:'asaas',label:'Asaas',node:asaasCard},
      {key:'google',label:'Google OAuth',node:google},
      {key:'drive',label:'Google Drive',node:drive}];
   grid.remove();
-  window.TaskEscMasterTabs.mount(host,tabItems,mode==='personalization'?'aparencia':'integracoes');
+  window.TaskEscMasterTabs.mount(host,tabItems,mode==='personalization'?'aparencia':mode==='whatsapp'?'wpp':'integracoes');
 
  }
  return {render};

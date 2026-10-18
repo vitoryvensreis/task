@@ -21,6 +21,7 @@ require ROOT.'/app/Auth.php';
 require ROOT.'/app/WorkspaceCatalog.php';
 require ROOT.'/app/WorkspacePreferences.php';
 require ROOT.'/app/PlatformPlans.php';
+require ROOT.'/app/SupportDesk.php';
 require ROOT.'/app/Catalog.php';
 require ROOT.'/app/Demands.php';
 function fail(string $message,int $status=422,array $details=[]):never {throw new RuntimeException($message,$status);}
@@ -212,6 +213,20 @@ try{
  DB::run("INSERT INTO settings (`key`,value) VALUES('platform_access_v1','1')");
  testws(PlatformPlans::workspacePlan($ws)['team_limit']===null,'Legacy plan was not unlimited.');
  testws(PlatformPlans::publicList()===[],'Private legacy plan must not appear publicly.');
+ // Support messaging is tenant-user isolated. Only essential DDL/scope checks.
+ $supportDdl=file_get_contents(ROOT.'/database/migrations/032_support_desk.sql');
+ testws($supportDdl!==false,'Support migration missing.');
+ foreach(preg_split('/;\\s*(?:\\r?\\n|$)/',$supportDdl) as $statement)
+  if(trim($statement)!=='')DB::run($statement);
+ DB::run("INSERT INTO workspace_support_messages
+  (workspace_id,tenant_user_id,sender_user_id,sender_role,client_nonce,body,created_at)
+  VALUES (?,?,?,?,?,?,?)",[$ws,$owner,$owner,'tenant',str_repeat('a',32),'Help CI',now()]);
+ $supportThreads=SupportDesk::threads();
+ testws(count($supportThreads)===1&&(int)$supportThreads[0]['tenant_user_id']===$owner,
+  'Tenant chat exposed another admin.');
+ $supportMessages=SupportDesk::messages(['tenant_user_id'=>$staff,'workspace_id'=>999]);
+ testws(count($supportMessages['messages'])===1,
+  'Tenant support message scoping rejected its own thread.');
  echo "Workspace schema30 CI OK: owner, memberships, ".count(WorkspaceFoundation::DATA_TABLES).
   " mapped tables, preserved client/task/invoice/file, pending Master, calendar excluded, idempotence, second tenant blocked.\n";
 }catch(Throwable $e){fwrite(STDERR,'Workspace CI failed: '.$e->getMessage()."\n");exit(1);}

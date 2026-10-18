@@ -92,7 +92,7 @@ final class PlatformPlans {
    if($teamLimit!==null){
     $current=(int)(DB::one("SELECT COUNT(*) n FROM workspace_members wm
       JOIN users u ON u.id=wm.user_id
-      WHERE wm.workspace_id=? AND wm.role IN ('admin','staff') AND wm.status='active' AND u.active=1",[$workspaceId])['n']??0);
+      WHERE wm.workspace_id=? AND wm.role IN ('admin','staff') AND wm.status='active' AND u.active=1 AND u.id<>(SELECT owner_user_id FROM workspaces WHERE id=?)",[$workspaceId,$workspaceId])['n']??0);
     if($current>$teamLimit)fail('Este plano permite menos usuários do que a equipe atual. Reduza a equipe antes de trocar.',409);
    }
    DB::run('INSERT INTO workspace_access_plans (workspace_id,plan_id,assigned_by,assigned_at)

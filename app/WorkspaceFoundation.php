@@ -204,6 +204,17 @@ final class WorkspaceFoundation {
    foreach($unknown as $row)if(!in_array($row['TABLE_NAME'],$known,true))
     throw new RuntimeException('Unknown workspace table present.');
 
+   // Verify all legacy objects BEFORE creating any tables or changing columns.
+   foreach(self::DATA_TABLES as $legacyTable=>$legacyKey)
+    if(!self::tableExists($legacyTable)||!self::column($legacyTable,$legacyKey))
+     throw new RuntimeException('Expected legacy schema30 table/key is missing: '.$legacyTable);
+   $allowedOwners=[...array_keys(self::DATA_TABLES),'workspace_members','workspace_settings','workspace_support_sessions'];
+   $existingOwners=DB::all("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA=DATABASE() AND COLUMN_NAME='workspace_id'");
+   foreach($existingOwners as $row)
+    if(!in_array($row['TABLE_NAME'],$allowedOwners,true))
+     throw new RuntimeException('Unexpected workspace_id column: '.$row['TABLE_NAME']);
+
    self::ensureTables();
    $ws=DB::one('SELECT id,owner_user_id,status FROM workspaces WHERE slug=?',[self::SLUG]);
    if(!$ws){

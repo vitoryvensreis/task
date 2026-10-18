@@ -54,7 +54,7 @@ final class PlatformPlans {
   $row=[
    'name'=>$name,'code'=>$code,
    'price_cents'=>integer($p['price_cents']??0,0,1000000000),
-   'billing_period'=>enumv($p['billing_period']??'monthly',['monthly','yearly'],'periodicidade'),
+   'billing_period'=>enumv($p['billing_period']??'monthly',['daily','weekly','biweekly','monthly','bimonthly','quarterly','semiannually','yearly'],'periodicidade'),
    'features_json'=>json($features),'team_limit'=>$limit,
    'public_visible'=>(int)(bool)($p['public_visible']??0),
    'active'=>(int)(bool)($p['active']??1),

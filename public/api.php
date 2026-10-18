@@ -7,6 +7,7 @@ try {
  $raw=file_get_contents('php://input');$body=[];
  if(str_contains(strtolower($_SERVER['CONTENT_TYPE']??''),'application/json')&&$raw!==''){$body=json_decode($raw,true,512,JSON_THROW_ON_ERROR);if(!is_array($body))fail('JSON inválido.');}
  $p=[...$_GET,...$_POST,...$body];unset($p['action']);
+ if($action==='plans.public'){installed();out(PlatformPlans::publicList());}
  if($action==='master.activate'){
   if(($_SERVER['REQUEST_METHOD']??'GET')!=='POST')fail('Método não permitido.',405);
   installed();out(MasterSupport::activate($p));
@@ -15,11 +16,14 @@ try {
  if($action==='auth.2fa'){installed();out(Auth::twoFactorVerify($p));}
  if($action==='auth.logout'){session_start();$_SESSION=[];if(ini_get('session.use_cookies')){$params=session_get_cookie_params();setcookie(session_name(),'',['expires'=>time()-42000,'path'=>$params['path'],'domain'=>$params['domain'],'secure'=>$params['secure'],'httponly'=>$params['httponly'],'samesite'=>$params['samesite']??'Lax']);}session_destroy();out(['logged_out'=>true]);}
  installed();
- if(in_array($action,['master.workspaces','master.administrators','master.reset_2fa','master.start','master.stop','master.invite'],true)){
+ if(in_array($action,['master.workspaces','master.administrators','master.reset_2fa','master.plans','master.plan_save','master.plan_assign','master.start','master.stop','master.invite'],true)){
   if(($_SERVER['REQUEST_METHOD']??'GET')!=='GET')checkCsrf();
   Auth::load();
   if($action==='master.workspaces'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET')out(MasterSupport::workspaceList());
   if($action==='master.administrators'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET')out(MasterSupport::administrators());
+  if($action==='master.plans'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET')out(PlatformPlans::all());
+  if($action==='master.plan_save'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST')out(PlatformPlans::save($p));
+  if($action==='master.plan_assign'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST')out(PlatformPlans::assign($p));
   if($action==='master.reset_2fa'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST')out(MasterSupport::resetAdminTwoFactor($p));
   if($action==='master.start'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST')out(MasterSupport::start($p));
   if($action==='master.stop'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST')out(MasterSupport::stop());
@@ -34,6 +38,9 @@ try {
  if($action==='preview.stop'){checkCsrf();out(Auth::previewStop());}
  if(($_SERVER['REQUEST_METHOD']??'GET')!=='GET'&&Auth::$origin!=='api'){checkCsrf();Auth::guardPreviewWrite();}
  if(str_starts_with($action,'wpp.')||str_starts_with($action,'tokens.'))MasterSupport::requirePlatformSettings();
+ if(str_starts_with($action,'demands.')||str_starts_with($action,'services.')||str_starts_with($action,'templates.'))PlatformPlans::requireModule('tasks');
+ if(str_starts_with($action,'automation.'))PlatformPlans::requireModule('automations');
+ if(str_starts_with($action,'whatsapp_contacts.'))PlatformPlans::requireModule('contacts');
  $result=match($action){
   'account.get'=>Auth::profile(),
   'account.save'=>Auth::profileSave($p),

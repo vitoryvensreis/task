@@ -71,6 +71,44 @@ final class MasterSupport {
  }
 
  /** Two-factor reset is a high-risk operation: password step-up + audit. */
+ /** SaaS account directory: metadata and billing readiness, never tenant task data. */
+ public static function customerDirectory(array $p=[]): array {
+  Auth::load();if(!self::isActor())fail('Somente o ADM Master pode consultar clientes.',403);
+  self::singleWorkspace();
+  $search=mb_substr(trim((string)($p['q']??'')),0,150);
+  $args=[];$filter='';
+  if($search!==''){$filter=' AND (w.name LIKE ? OR u.email LIKE ? OR u.name LIKE ?)';$like='%'.$search.'%';$args=[$like,$like,$like];}
+  $rows=DB::all("SELECT w.id,w.name,w.slug,w.status,w.created_at,
+   u.id AS owner_user_id,u.name AS owner_name,u.email AS owner_email,u.twofa_enabled AS owner_twofa,
+   p.id AS plan_id,p.name AS plan_name,p.price_cents,p.billing_period,p.team_limit,
+   (SELECT COUNT(*) FROM workspace_members wm JOIN users member ON member.id=wm.user_id
+    WHERE wm.workspace_id=w.id AND wm.status='active' AND member.active=1) AS active_users,
+   (SELECT COUNT(*) FROM workspace_members wm JOIN users member ON member.id=wm.user_id
+    WHERE wm.workspace_id=w.id AND wm.status='active' AND member.active=1 AND wm.role IN ('admin','staff')
+    AND wm.user_id<>w.owner_user_id) AS team_users,
+   (SELECT COUNT(*) FROM workspace_members wm WHERE wm.workspace_id=w.id AND wm.role='admin' AND wm.status='active') AS admins,
+   (SELECT COUNT(*) FROM workspace_support_sessions ss WHERE ss.workspace_id=w.id) AS support_sessions
+   FROM workspaces w JOIN users u ON u.id=w.owner_user_id
+   LEFT JOIN workspace_access_plans a ON a.workspace_id=w.id
+   LEFT JOIN platform_access_plans p ON p.id=a.plan_id WHERE 1=1".$filter." ORDER BY w.created_at DESC,w.id DESC LIMIT 100",$args);
+  return ['customers'=>$rows,'billing_enabled'=>false,
+   'billing_note'=>'As assinaturas SaaS ainda não geram cobranças. Faturas e pagamentos só terão status depois da integração Asaas e dos webhooks.',
+   'workspace_creation_enabled'=>false];
+ }
+ /** Platform audit entries, filtered by workspace and action, without sensitive change payloads. */
+ public static function platformAudit(array $p=[]): array {
+  Auth::load();if(!self::isActor())fail('Somente o ADM Master pode consultar auditoria.',403);
+  $id=integer($p['workspace_id']??0,0);
+  $action=mb_substr(trim((string)($p['action']??'')),0,70);
+  $where=' WHERE 1=1';$params=[];
+  if($id>0){$where.=' AND a.workspace_id=?';$params[]=$id;}
+  if($action!==''){$where.=' AND a.action LIKE ?';$params[]='%'.$action.'%';}
+  return ['entries'=>DB::all("SELECT a.id,a.workspace_id,w.name AS workspace_name,
+    a.user_id,u.name AS user_name,a.entity,a.entity_id,a.action,a.origin,a.created_at
+    FROM audit_log a LEFT JOIN workspaces w ON w.id=a.workspace_id
+    LEFT JOIN users u ON u.id=a.user_id ".$where." ORDER BY a.id DESC LIMIT 150",$params),
+    'workspaces'=>DB::all('SELECT id,name FROM workspaces ORDER BY name')];
+ }
  public static function resetAdminTwoFactor(array $p): array {
   Auth::load();if(!self::isActor())fail('Ação exclusiva do ADM Master.',403);
   Auth::rate('master-reset-2fa',5,3600);

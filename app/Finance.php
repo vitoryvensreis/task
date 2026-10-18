@@ -1,9 +1,18 @@
 <?php
 final class Finance {
  private static function ci(): bool {return WorkspaceContext::legacyCiFixture();}
+ private static function wsId(): int {
+  if(PHP_SAPI==='cli' && !Auth::$user) {
+   $w=DB::one('SELECT id FROM workspaces WHERE slug=? AND status=?',[WorkspaceFoundation::SLUG,WorkspaceFoundation::STATUS]);
+   $n=(int)(DB::one('SELECT COUNT(*) n FROM workspaces')['n']??0);
+   if(!$w||$n!==1)throw new RuntimeException('Workspace worker boundary is not configured.');
+   return (int)$w['id'];
+  }
+  return Auth::workspaceId();
+ }
  private static function wsWhere(string $alias=''): string {return self::ci()?'':' AND '.($alias!==''?$alias.'.':'').'workspace_id=?';}
- private static function args(array $a): array {return self::ci()?$a:[...$a,Auth::workspaceId()];}
- private static function data(array $d): array {return self::ci()?$d:($d+['workspace_id'=>Auth::workspaceId()]);}
+ private static function args(array $a): array {return self::ci()?$a:[...$a,self::wsId()];}
+ private static function data(array $d): array {return self::ci()?$d:($d+['workspace_id'=>self::wsId()]);}
  private static function owned(string $table,int $id,bool $lock=false): array {
   if(!in_array($table,['contracts','invoices','expenses','expense_rules','expense_categories'],true))throw new InvalidArgumentException('Recurso financeiro inválido.');
   $row=DB::one('SELECT * FROM `'.$table.'` WHERE id=?'.self::wsWhere().($lock?' FOR UPDATE':''),self::args([$id]));

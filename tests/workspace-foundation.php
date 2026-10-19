@@ -39,6 +39,7 @@ function integer(mixed $v,int $min=0,int $max=1000000000):int {
 }
 
 function now():string {return gmdate('Y-m-d H:i:s');}
+function json(mixed $value):string {return json_encode($value,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);}
 function audit(string $entity,int $id,string $action,mixed $before=null,mixed $after=null):void {
  $ws=(int)(Auth::$workspace['id']??0);
  DB::insert('audit_log',['workspace_id'=>$ws,'user_id'=>(int)(Auth::$user['id']??0)?:null,

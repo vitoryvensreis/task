@@ -104,9 +104,9 @@ window.TaskEscMasterSettings=(()=>{
   field(fgAuth,'Google Client Secret','google_client_secret','','password',d.google_secret_set?'Configurado — deixe vazio para manter':'Não configurado');
   submit(fgAuth,'master.settings_save','google',base,csrf);google.append(fgAuth);
   const asaas=d.asaas||{};
-  const asaasCard=card(grid,'Asaas · Pagamentos SaaS','Armazene as credenciais para a futura cobrança de assinaturas.');
-  note(asaasCard,asaas.api_key_set?'Chave API cadastrada':'Chave API pendente',
-    'Nenhuma cobrança, checkout ou webhook é ativado automaticamente ao salvar estes dados.');
+  const asaasCard=card(grid,'Asaas · Pagamentos SaaS','Conexão de cobrança recorrente da plataforma; gerenciada somente pelo ADM Master.');
+  note(asaasCard,asaas.integration_enabled?'Cobranças habilitadas':'Cobranças desabilitadas',
+    'Nenhuma assinatura é criada automaticamente. Pagadores e valores são confirmados na ficha de cada empresa. O token do webhook deve ser cadastrado também no Asaas.');
   const fa=el('form','ms-form');
   const envLabel=el('label','ms-field');envLabel.append(el('span','','Ambiente Asaas'));
   const envSelect=el('select','select');envSelect.name='environment';
@@ -116,10 +116,23 @@ window.TaskEscMasterSettings=(()=>{
   envLabel.append(envSelect);fa.append(envLabel);
   field(fa,'Identificação da conta','account_label',asaas.account_label||'','text','Ex.: TaskEsc plataforma');
   field(fa,'Chave API Asaas','api_key','','password',asaas.api_key_set?'Cadastrada — deixe vazio para manter':'Cole sua chave privada');
-  field(fa,'Token de autenticação do webhook (opcional)','webhook_auth_token','','password',
-    asaas.webhook_token_set?'Cadastrado — deixe vazio para manter':'Token configurado no Asaas');
-  submit(fa,'master.asaas_save','asaas',base,csrf);
-  asaasCard.append(fa);
+  const webhookToken=field(fa,'Token de autenticação do webhook','webhook_auth_token','','password',
+    asaas.webhook_token_set?'Cadastrado — deixe vazio para manter':'Token de 32 a 255 caracteres, distinto da API Key');
+  webhookToken.minLength=32;webhookToken.maxLength=255;
+  const urlField=field(fa,'URL de recebimento de webhooks','webhook_url',asaas.webhook_url||'');
+  urlField.readOnly=true;urlField.title='Cadastre este endereço no painel Asaas com os eventos PAYMENT_* e SUBSCRIPTION_*';
+  const active=el('label','ms-field');const activeToggle=el('input');activeToggle.type='checkbox';
+  activeToggle.name='enable_billing';activeToggle.value='1';activeToggle.checked=!!asaas.integration_enabled;
+  active.append(activeToggle,el('span','','Habilitar cobranças (confirmação explícita)'));fa.append(active);
+  submit(fa,'master.asaas_save','asaas',base,csrf,()=>render(host,csrf,base,mode));
+  const tools=el('div','ms-footer'),check=el('button','secondary','Verificar conexão Asaas');
+  check.type='button';check.onclick=async()=>{check.disabled=true;
+   try{const r=await send(base,csrf,'master.asaas_test',{});
+    alert('Asaas conectado ('+r.environment+'). Situação da conta: '+r.general_status);
+   }catch(e){alert('Falha de conexão: '+e.message)}finally{check.disabled=false}
+  };tools.append(check);
+  asaasCard.append(fa,tools);
+  note(asaasCard,'Recebimentos protegidos','Ativação exige chave válida, token de webhook e conta de produção aprovada. Cobranças reais só são emitidas com confirmação no ADM Master.');
   const drive=card(grid,'Google Drive','Arquivos do sistema são enviados apenas pelas contas Google autorizadas de cada workspace.');
   note(drive,'Acesso isolado por empresa','Cada administrador conecta as próprias contas Google no workspace. O ADM Master gerencia somente as credenciais globais OAuth aqui.');
   const wppTools=el('div','mc-integration-tools');

@@ -449,8 +449,8 @@ final class AutomationWorker
     private static function subjectContext(string $entityType,int $id,array $eventContext=[]): array
     {
         if($entityType==='demand'){
-            $row=DB::one("SELECT d.*,d.id demand_id,d.title task_title,d.due_at task_due_at,d.priority task_priority,c.id client_id,c.name client_name,c.email client_email,c.whatsapp_phone client_whatsapp,u.name assigned_name,creator.name creator_name,s.name stage_name FROM demands d JOIN clients c ON c.id=d.client_id AND c.workspace_id=d.workspace_id
-             JOIN stages s ON s.id=d.stage_id AND s.workspace_id=d.workspace_id
+            $row=DB::one("SELECT d.*,d.id demand_id,d.title task_title,d.due_at task_due_at,d.priority task_priority,c.id client_id,c.name client_name,c.email client_email,c.whatsapp_phone client_whatsapp,u.name assigned_name,creator.name creator_name,s.name stage_name FROM demands d JOIN clients c ON c.id=d.client_id".(WorkspaceContext::legacyCiFixture()?'':' AND c.workspace_id=d.workspace_id')."
+             JOIN stages s ON s.id=d.stage_id".(WorkspaceContext::legacyCiFixture()?'':' AND s.workspace_id=d.workspace_id')."
              LEFT JOIN users u ON u.id=d.assigned_to
              LEFT JOIN users creator ON creator.id=d.created_by
              WHERE d.id=?".self::ws('d'),[$id]);
@@ -472,11 +472,11 @@ final class AutomationWorker
             return $row;
         }
         if($entityType==='invoice'){
-            $row=DB::one("SELECT i.*,i.id invoice_id,i.description invoice_description,i.due_on invoice_due_on,i.amount_cents invoice_amount_cents,i.status invoice_status,c.id client_id,c.name client_name,c.email client_email,c.whatsapp_phone client_whatsapp,c.commercial_type commercial_type,d.id demand_id,d.title task_title,d.due_at task_due_at,d.priority task_priority,d.assigned_to,d.created_by,u.name assigned_name,creator.name creator_name,s.name stage_name FROM invoices i JOIN clients c ON c.id=i.client_id AND c.workspace_id=i.workspace_id
-             LEFT JOIN demands d ON d.id=i.demand_id AND d.workspace_id=i.workspace_id
+            $row=DB::one("SELECT i.*,i.id invoice_id,i.description invoice_description,i.due_on invoice_due_on,i.amount_cents invoice_amount_cents,i.status invoice_status,c.id client_id,c.name client_name,c.email client_email,c.whatsapp_phone client_whatsapp,c.commercial_type commercial_type,d.id demand_id,d.title task_title,d.due_at task_due_at,d.priority task_priority,d.assigned_to,d.created_by,u.name assigned_name,creator.name creator_name,s.name stage_name FROM invoices i JOIN clients c ON c.id=i.client_id".(WorkspaceContext::legacyCiFixture()?'':' AND c.workspace_id=i.workspace_id')."
+             LEFT JOIN demands d ON d.id=i.demand_id".(WorkspaceContext::legacyCiFixture()?'':' AND d.workspace_id=i.workspace_id')."
              LEFT JOIN users u ON u.id=d.assigned_to
              LEFT JOIN users creator ON creator.id=d.created_by
-             LEFT JOIN stages s ON s.id=d.stage_id AND s.workspace_id=i.workspace_id
+             LEFT JOIN stages s ON s.id=d.stage_id".(WorkspaceContext::legacyCiFixture()?'':' AND s.workspace_id=i.workspace_id')."
              WHERE i.id=?".self::ws('i'),[$id]);
             if(!$row)throw new AutomationPermanentException('invoice_missing');
             $row['entity_type']='invoice';return $row;

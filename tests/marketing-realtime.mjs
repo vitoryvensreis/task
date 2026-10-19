@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
+const landing=read('public/landing.php'),demo=read('public/assets/landing-kanban.js');
+assert.match(landing,/id="demo-kanban"/);
+assert.match(demo,/addEventListener\('dragstart'/);
+assert.match(demo,/addEventListener\('drop'/);
+assert.match(demo,/addEventListener\('keydown'/);
+assert.match(demo,/setInterval\(tick,3900\)/);
+assert.match(read('public/master.php'),/id="master-nav-search"/);
+assert.match(read('public/assets/master.js'),/filterNav/);
+assert.match(read('app/Notify.php'),/notification\.created/);
+assert.match(read('app/AutomationActions.php'),/notification\.created/);
+assert.match(read('public/assets/app.js'),/publication\?\.event_type==='notification\.created'/);
+console.log('Landing demo, Master navigation and realtime notification contracts OK');

@@ -26,8 +26,10 @@ try {
  if($schema!==30||!WorkspaceFoundationGuard::valid())
   throw new RuntimeException('Workspace schema 30 foundation is required.');
  $ws=DB::one('SELECT id FROM workspaces WHERE slug=?',[WorkspaceFoundation::SLUG]);
- if(!$ws||(int)(DB::one('SELECT COUNT(*) n FROM workspaces')['n']??0)!==1)
-  throw new RuntimeException('Only the original workspace is supported.');
+ $multi=WorkspaceTenantMode::enabled();
+ $count=(int)(DB::one('SELECT COUNT(*) n FROM workspaces')['n']??0);
+ if(!$ws||$count!==($multi?2:1))
+  throw new RuntimeException('Unexpected workspace plan installation state.');
  $sql=file_get_contents(ROOT.'/database/migrations/031_platform_access_plans.sql');
  if($sql===false)throw new RuntimeException('Migration missing.');
  foreach(preg_split('/;\s*(?:\r?\n|$)/',$sql) as $statement)
@@ -42,5 +44,5 @@ try {
   DB::run('INSERT IGNORE INTO workspace_access_plans (workspace_id,plan_id,assigned_by,assigned_at) VALUES (?,?,NULL,?)',[(int)$ws['id'],$id,now()]);
   DB::run("INSERT INTO settings (`key`,value) VALUES ('platform_access_v1','1') ON DUPLICATE KEY UPDATE value=VALUES(value)");
  });
- echo json(['applied'=>true,'schema'=>30,'workspace_count'=>1,'legacy_plan'=>'legacy-unlimited','second_workspace_enabled'=>false]).PHP_EOL;
+ echo json(['applied'=>true,'schema'=>30,'workspace_count'=>$count,'legacy_plan'=>'legacy-unlimited','second_workspace_enabled'=>$multi]).PHP_EOL;
 }catch(Throwable $e){fwrite(STDERR,json(['applied'=>false,'error'=>'platform_access_install_blocked','message'=>$e->getMessage()]).PHP_EOL);exit(2);}

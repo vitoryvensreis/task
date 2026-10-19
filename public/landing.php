@@ -19,7 +19,7 @@ $periodNames=['daily'=>'dia','weekly'=>'semana','biweekly'=>'quinzena','monthly'
 <title>TaskEsc — Gestão de tarefas e equipes sem complicação</title>
 <link rel="icon" href="<?=e($root)?>/assets/taskesc-logo.svg">
 <link rel="stylesheet" href="<?=e($root)?>/assets/landing.css?v=1.1">
-<link rel="stylesheet" href="<?=e($root)?>/assets/taskesc-theme.css?v=1">
+<link rel="stylesheet" href="<?=e($root)?>/assets/taskesc-theme.css?v=<?= (int)filemtime(__DIR__.'/assets/taskesc-theme.css') ?>">
 </head>
 <body class="landing-page">
 <div class="site-bg" aria-hidden="true"></div>

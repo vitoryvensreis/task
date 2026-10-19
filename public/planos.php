@@ -28,7 +28,7 @@ h1{font-size:clamp(36px,5vw,64px);letter-spacing:-.05em;line-height:1.07;margin:
 .period{font-size:14px;color:#b5becb;font-weight:400}.feature{padding:11px 0;border-bottom:1px solid #292f38;color:#e8edf5}
 .meta{color:#afb6c1;margin-top:20px}.empty{margin-top:45px;padding:40px;background:#15191f;border:1px solid #333943;border-radius:14px}
 footer{padding-top:44px;color:#7e8997;font-size:13px}
-</style><link rel="stylesheet" href="<?=e(base('assets/taskesc-theme.css'))?>?v=1"></head><body class="plans-page"><main>
+</style><link rel="stylesheet" href="<?=e(base('assets/taskesc-theme.css'))?>?v=<?= (int)filemtime(__DIR__.'/assets/taskesc-theme.css') ?>"></head><body class="plans-page"><main>
 <header><strong>TaskEsc <span style="color:#9fa9b6">/ Planos</span></strong><a href="<?=e(base('dashboard'))?>">Entrar na plataforma</a></header>
 <h1>Planos para diferentes equipes.</h1>
 <p class="lead">Escolha a estrutura que combina com a sua operação. Os módulos e os limites de equipe variam conforme o plano.</p>

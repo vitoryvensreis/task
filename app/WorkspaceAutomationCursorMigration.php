@@ -2,8 +2,13 @@
 declare(strict_types=1);
 final class WorkspaceAutomationCursorMigration {
  public static function apply(): array {
-  if(PHP_SAPI!=='cli'||DB::conn()->inTransaction()||WorkspaceTenantMode::enabled())
-   throw new RuntimeException('Cursor migration requires preactivation CLI mode.');
+  if(PHP_SAPI!=='cli'||DB::conn()->inTransaction())
+   throw new RuntimeException('Cursor migration requires isolated CLI.');
+  if(WorkspaceTenantMode::enabled()){
+   if(!DB::one("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='automation_workspace_cursors'"))
+    throw new RuntimeException('Workspace automation cursor table is missing.');
+   return ['cursor_per_workspace_ready'=>true,'multiworkspace_enabled'=>true];
+  }
   if(!WorkspaceFoundationGuard::valid())throw new RuntimeException('Legacy workspace validation failed.');
   DB::run("CREATE TABLE IF NOT EXISTS automation_workspace_cursors (
     workspace_id BIGINT UNSIGNED NOT NULL,

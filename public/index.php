@@ -1,6 +1,13 @@
 <?php
 declare(strict_types=1);
 require dirname(__DIR__).'/app/bootstrap.php';
+$requestedPath=(string)(parse_url($_SERVER['REQUEST_URI']??'/',PHP_URL_PATH)??'/');
+$entryPath=rtrim((string)(parse_url((string)config('base_url',''),PHP_URL_PATH)??''),'/');
+if($entryPath==='/')$entryPath='';
+if(in_array($requestedPath,[$entryPath.'/', $entryPath.'/index.php'],true)){
+ require __DIR__.'/landing.php';
+ exit;
+}
 $basePath=(string)(parse_url((string)config('base_url',''),PHP_URL_PATH)??'');$basePath='/'.trim($basePath,'/');if($basePath==='/')$basePath='';
 $brandName='TaskEsc';$brandLogo=($basePath?:'').'/assets/taskesc-logo.svg';
 if(config()&&is_file(ROOT.'/storage/installed.lock')){try{$savedName=trim(setting('brand_name','TaskEsc'));if($savedName!=='')$brandName=$savedName;$savedLogo=trim(setting('logo_url',''));if($savedLogo!=='')$brandLogo=$savedLogo;}catch(Throwable){}}

@@ -29,3 +29,26 @@
 @media(max-width:1100px){.master-welcome{flex-direction:column;align-items:start}.master-quick-actions{justify-content:start}}
 @media(max-width:720px){.master-page .master-app .sidebar{position:fixed;left:0;top:0;bottom:0;width:min(286px,88vw);z-index:105;transform:translateX(-110%)}.master-page .master-app.menu-open .sidebar{transform:translateX(0)}.master-page .master-app .topbar{min-height:67px;padding-inline:13px}.master-page .master-app .page-heading h2{font-size:18px}.master-page .master-app .user-chip>span:last-child{display:none}.master-page .master-app .content{padding:14px 12px 24px}.master-welcome{padding:19px}.master-quick-actions{width:100%;gap:7px}.master-page .master-quick-action{flex:1;white-space:normal;text-align:center}.master-page .mc-dialog-body{padding:15px}.master-page .master-inner-tabs{overflow:auto;flex-wrap:nowrap}}
 @media(prefers-reduced-motion:reduce){.master-page button{transition:none!important}}
+
+/* Layout containment: no clipped right-side controls or oversized fixed-width cards. */
+.master-page,.master-page *{box-sizing:border-box}
+.master-page .master-app{width:100%;max-width:100%;min-width:0;overflow-x:clip}
+.master-page .master-app .main{width:0;min-width:0;overflow-x:clip}
+.master-page .master-app .topbar{min-width:0;gap:12px}
+.master-page .master-app .page-heading{min-width:0}
+.master-page .master-app .top-actions{min-width:0;flex-wrap:wrap;justify-content:flex-end}
+.master-page .master-app .content,.master-page .master-view,.master-page .ms-panel,.master-page .mc-dialog{min-width:0;max-width:100%}
+.master-page .master-view :is(input,textarea,select){max-width:100%;min-width:0}
+.master-page .master-view :is(.ms-fields,.ms-grid,.master-grid,.master-stats,.master-dashboard-grid){min-width:0;max-width:100%}
+.master-page .master-view :is(.master-mini,.ms-panel,.mc-customer-row,.master-welcome){overflow-wrap:anywhere}
+.master-page .master-app .sidebar{height:100dvh;max-height:100dvh;position:sticky;top:0;flex-shrink:0;overflow-x:hidden}
+.master-page .master-app .sidebar .sidebar-bottom{position:relative;flex-shrink:0}
+@media(max-width:1100px){.master-page .master-app .topbar .user-chip{display:none}}
+@media(max-width:720px){
+ .master-page .master-app .sidebar{position:fixed;height:100dvh;max-height:100dvh}
+ .master-page .master-app .main{width:100%;min-width:0}
+ .master-page .master-app .topbar{overflow:visible}
+ .master-page .master-app .top-actions{flex-shrink:0}
+ .master-page .master-app .top-actions button{max-width:100%;white-space:normal}
+ .master-page .master-view .master-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+}

@@ -22,7 +22,7 @@ try{
     time()-filemtime($archive)>7200)
   throw new RuntimeException('backup_not_verified');
  $result=PlatformTenantProvisioning::provision();
- echo json($result+['current_vitor_data'=>'unchanged','gabriella_access'=>'not_activated']).PHP_EOL;
+ echo json($result+['current_vitor_data'=>'unchanged','gabriella_access'=>(WorkspaceTenantMode::enabled()?'activated':'not_activated')]).PHP_EOL;
 }catch(Throwable $e){
  error_log('Tenant provisioning deferred: '.$e->getMessage());
  fwrite(STDERR,json(['pending_created'=>false,'reason'=>'prerequisites_not_met']).PHP_EOL);

@@ -205,6 +205,8 @@ try {
   'team.invite_revoke'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?WorkspaceTeams::revoke($p):fail('Método não permitido.',405),
   'users.list'=>Catalog::users(),
   'users.save'=>Catalog::userSave($p),
+  'team.member_delete_preview'=>($_SERVER['REQUEST_METHOD']??'GET')==='GET'?WorkspaceMemberRemoval::preview($p):fail('Método não permitido.',405),
+  'team.member_delete'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?WorkspaceMemberRemoval::delete($p):fail('Método não permitido.',405),
   'company.roles'=>WorkspaceRoles::all(),
   'company.role_save'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?WorkspaceRoles::save($p):fail('Método não permitido.',405),
   'settings.get'=>Catalog::settingsGet(),

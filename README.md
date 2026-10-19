@@ -595,3 +595,11 @@ O campo `users.staff_all_clients` é adicionado de maneira não destrutiva por `
 ### Contas técnicas Realtime Smoke
 
 O comando `php bin/cleanup-realtime-smoke.php` faz apenas diagnóstico. Após backup do banco, `php bin/cleanup-realtime-smoke.php --apply` remove exclusivamente usuários com nome exato **Realtime Smoke**, papel Equipe, e e-mail técnico do padrão `realtime-smoke-<hex>@taskesc.invalid`. Usuários com referências em tabelas de negócio/auditoria não são removidos. O deploy executa o comando **após o backup e as migrações**; bloqueios são registrados sem comprometer a publicação das demais melhorias. Não apague dados de produção para forçar a limpeza.
+
+### Exclusão de membros da equipe
+
+Em **Configurações > Minha equipe**, o botão **Excluir** aparece apenas para membros do tipo Equipe (nunca para o proprietário). A janela de confirmação informa quantas tasks, atribuições padrão, automações e regras de custo serão transferidas ao administrador. É obrigatório digitar **EXCLUIR**.
+
+A remoção é **lógica e transacional**: o membro sai do workspace, sua conta é desativada e anonimizada, seus tokens são revogados e suas atribuições operacionais são transferidas ao proprietário. Conversas privadas, histórico de autoria dos comentários, uploads, logs financeiros e auditoria permanecem vinculados ao registro inativo original, evitando que ações antigas apareçam como realizadas pelo administrador. O membro deixa de aparecer na listagem e seus e-mail/WhatsApp ficam liberados para novas contas. Contas Google conectadas devem ser desconectadas antes da remoção, para não perder permissões do Drive e agendas. As operações de exclusão são restritas ao proprietário autenticado e protegem dados de outros workspaces.
+
+A operação possui confirmação adicional, registro de auditoria e teste transacional em MySQL/MariaDB. O botão não exclui arquivos nem mensagens.

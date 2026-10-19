@@ -256,3 +256,29 @@
 @media(max-width:720px){
  .ts-support-panel .ts-bubble,.ts-support-panel.ts-master-popup .ts-bubble{max-width:94%;min-width:min(135px,42%)}
 }
+
+/* PipeFácil-inspired conversation workspace, using native TaskEsc colors. */
+.ts-support-panel,.ts-support-panel.ts-master-popup{--chat-bg:#0a1016;--chat-border:#283846;--chat-primary:#8db7d1;--chat-sent:#214d57}
+.ts-support-panel.ts-master-popup{width:min(1180px,calc(100vw - 36px));height:min(780px,calc(100dvh - 105px));max-height:calc(100dvh - 105px);right:18px;bottom:84px}
+.ts-support-panel.ts-master-popup .ts-layout{grid-template-columns:minmax(290px,30%) minmax(0,1fr)}
+.ts-support-panel .ts-left{background:#101820;border-right:1px solid var(--chat-border)}
+.ts-support-panel .ts-right{background:#0a1016}
+.ts-support-panel .ts-header{background:#111b24;border-bottom:1px solid var(--chat-border)}
+.ts-support-panel .ts-search{background:#182532!important;border:1px solid #344b60!important}
+.ts-support-panel .ts-thread{border-radius:7px!important}
+.ts-support-panel .ts-thread.active{background:#233747!important;border-color:#42627a!important}
+.ts-support-panel .ts-thread-preview{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ts-support-panel .ts-peer-head{background:#15212c;border-bottom:1px solid var(--chat-border)}
+.ts-support-panel .ts-messages{background-color:var(--chat-bg);background-image:radial-gradient(circle at center,#344b5820 1px,transparent 1px);background-size:23px 23px;padding:22px clamp(16px,2.4vw,35px)}
+.ts-support-panel .ts-bubble{width:max-content;min-width:min(175px,44%);max-width:85%;background:#1f2d38;border:1px solid #344654;border-radius:9px 9px 9px 2px!important;padding:10px 14px}
+.ts-support-panel .ts-bubble.mine{background:var(--chat-sent);border-color:#397481;border-radius:9px 9px 2px 9px!important}
+.ts-support-panel .ts-bubble-text{font-size:13px;line-height:1.5}
+.ts-support-panel .ts-composer{margin-top:auto;background:#15212c;border-top:1px solid var(--chat-border);padding:12px 17px}
+.ts-support-panel .ts-text{background:#0e1820!important;border:1px solid #3a4b5c!important;border-radius:9px!important}
+.ts-support-panel .ts-send{background:#357c91!important;border-color:#4389a0!important;color:#fff!important}
+.ts-support-panel .ts-send:hover{background:#4596ad!important}
+@media(max-width:720px){
+ .ts-support-panel.ts-master-popup{left:8px;right:8px;top:auto;bottom:73px;width:calc(100vw - 16px);height:calc(100dvh - 86px);max-height:calc(100dvh - 86px)}
+ .ts-support-panel .ts-messages{padding:13px}
+ .ts-support-panel .ts-bubble{max-width:94%;min-width:min(135px,42%)}
+}

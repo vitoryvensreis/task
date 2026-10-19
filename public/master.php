@@ -22,6 +22,7 @@ $assetVersion=static function(string $file):string {
 <link rel="stylesheet" href="<?=e($basePath)?>/assets/ux-v3.css?v=<?=e($assetVersion('ux-v3.css'))?>">
 <link rel="stylesheet" href="<?=e($basePath)?>/assets/master-dashboard.css?v=<?=e($assetVersion('master-dashboard.css'))?>">
 <link rel="stylesheet" href="<?=e($basePath)?>/assets/master-ux.css?v=<?=e($assetVersion('master-ux.css'))?>">
+<link rel="stylesheet" href="<?=e($basePath)?>/assets/taskesc-theme.css?v=<?=e($assetVersion('taskesc-theme.css'))?>">
 <link rel="stylesheet" href="<?=e($basePath)?>/assets/support-chat.css?v=<?=e($assetVersion('support-chat.css'))?>">
 </head>
 <?php

@@ -34,6 +34,7 @@ $realtimeJsVersion=is_file(ROOT.'/public/assets/realtime-client.js')?filemtime(R
   <link rel="stylesheet" href="<?=e($basePath)?>/assets/app.css?v=<?=e((string)$appCssVersion)?>">
   <link rel="stylesheet" href="<?=e($basePath)?>/assets/ui-fixes.css?v=3.25.0">
   <link rel="stylesheet" href="<?=e($basePath)?>/assets/ux-v3.css?v=3.18.0">
+  <link rel="stylesheet" href="<?=e($basePath)?>/assets/taskesc-theme.css?v=<?=e((string)(is_file(ROOT.'/public/assets/taskesc-theme.css')?filemtime(ROOT.'/public/assets/taskesc-theme.css'):1))?>">
   <script src="<?=e($basePath)?>/assets/taskesc-icons.js?v=3.4.0" defer></script>
 <link rel="stylesheet" href="<?=e($basePath)?>/assets/support-chat.css?v=1"></head>
 <body data-base-path="<?=e($basePath)?>">

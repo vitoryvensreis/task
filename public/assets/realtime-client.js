@@ -68,6 +68,14 @@
     return String(data.token);
   }
 
+  function emitState(state, channel) {
+    try {
+      window.dispatchEvent(new CustomEvent('taskesc:realtime-state', {
+        detail: {state: state, channel: channel || '', at: Date.now()}
+      }));
+    } catch (_) {}
+  }
+
   function emitPublication(channel, ctx) {
     try {
       window.dispatchEvent(new CustomEvent('taskesc:realtime-publication', {
@@ -89,7 +97,7 @@
       sub.on('error', function (ctx) {
         technical('subscription error: ' + channel, ctx && ctx.error ? ctx.error.code : undefined);
       });
-      sub.on('subscribed', function () { technical('subscribed: ' + channel); });
+      sub.on('subscribed', function () { technical('subscribed: ' + channel); emitState('subscribed', channel); });
       sub.subscribe();
       subscriptions.set(channel, sub);
       return sub;
@@ -128,8 +136,8 @@
         version: 'step6'
       });
       next.on('connecting', function () { lastState = 'connecting'; technical('connecting'); });
-      next.on('connected', function () { lastState = 'connected'; retryAttempt = 0; technical('connected'); });
-      next.on('disconnected', function (ctx) { lastState = 'disconnected'; technical('disconnected', ctx && ctx.code); });
+      next.on('connected', function () { lastState = 'connected'; retryAttempt = 0; technical('connected'); emitState('connected'); });
+      next.on('disconnected', function (ctx) { lastState = 'disconnected'; technical('disconnected', ctx && ctx.code); emitState('disconnected'); });
       next.on('error', function (ctx) {
         technical('connection error', ctx && ctx.error ? ctx.error.code : undefined);
       });

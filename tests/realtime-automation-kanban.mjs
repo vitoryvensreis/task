@@ -1,0 +1,14 @@
+import fs from 'node:fs';
+const app=fs.readFileSync(new URL('../public/assets/app.js',import.meta.url),'utf8');
+const rt=fs.readFileSync(new URL('../public/assets/realtime-client.js',import.meta.url),'utf8');
+const backend=fs.readFileSync(new URL('../app/AutomationActions.php',import.meta.url),'utf8');
+const assert=(condition,message)=>{if(!condition)throw new Error(message)};
+assert(backend.includes("DemandRealtime::emit($event,$subject"),'Automation stage must enqueue realtime outbox in its transaction');
+assert(backend.includes("'demand.stage_changed'"),'Automation action must use stage_changed event');
+assert(rt.includes("emitState('connected')")&&rt.includes("emitState('subscribed', channel)"),'Centrifugo must signal connection and subscription restoration');
+assert(app.includes("window.addEventListener('taskesc:realtime-state'"),'Frontend must reconcile Kanban on reconnection');
+assert(app.includes("eventType:'realtime.reconnected'")&&app.includes("eventType:'realtime.resume'"),'Frontend must recover missed events after reconnect/tab wake');
+assert(app.includes('Date.now()-lastInteractionAt<1200'),'Focused search input cannot indefinitely block stage updates');
+assert(app.includes('filterFocus')&&app.includes('input.focus({preventScroll:true})'),'Kanban search focus must survive refresh');
+assert(!app.includes('lastFullRefresh<180000')&&app.includes('lastFullRefresh<30000'),'Connected fallback must not wait three minutes');
+console.log('Automation -> Outbox -> Kanban websocket recovery/fallback contract OK');

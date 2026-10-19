@@ -12,7 +12,7 @@ final class WorkspaceTenantMode {
  public const MARKER='workspace_multitenant_isolation_v2';
  public static function enabled(): bool {
   try {
-   return (string)(DB::one('SELECT value FROM settings WHERE `key`=?',[self::MARKER])['value']??'')==='ready';
+   return in_array((string)(DB::one('SELECT value FROM settings WHERE `key`=?',[self::MARKER])['value']??''),['ready','isolating'],true);
   }catch(Throwable){return false;}
  }
 

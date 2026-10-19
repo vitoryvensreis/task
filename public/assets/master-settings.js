@@ -125,13 +125,13 @@ window.TaskEscMasterSettings=(()=>{
   activeToggle.name='enable_billing';activeToggle.value='1';activeToggle.checked=!!asaas.integration_enabled;
   active.append(activeToggle,el('span','','Habilitar cobranças (confirmação explícita)'));fa.append(active);
   submit(fa,'master.asaas_save','asaas',base,csrf,()=>render(host,csrf,base,mode));
-  const tools=el('div','ms-footer'),check=el('button','secondary','Verificar conexão Asaas');
+  const asaasTools=el('div','ms-footer'),check=el('button','secondary','Verificar conexão Asaas');
   check.type='button';check.onclick=async()=>{check.disabled=true;
    try{const r=await send(base,csrf,'master.asaas_test',{});
     alert('Asaas conectado ('+r.environment+'). Situação da conta: '+r.general_status);
    }catch(e){alert('Falha de conexão: '+e.message)}finally{check.disabled=false}
-  };tools.append(check);
-  asaasCard.append(fa,tools);
+  };asaasTools.append(check);
+  asaasCard.append(fa,asaasTools);
   note(asaasCard,'Recebimentos protegidos','Ativação exige chave válida, token de webhook e conta de produção aprovada. Cobranças reais só são emitidas com confirmação no ADM Master.');
   const drive=card(grid,'Google Drive','Arquivos do sistema são enviados apenas pelas contas Google autorizadas de cada workspace.');
   note(drive,'Acesso isolado por empresa','Cada administrador conecta as próprias contas Google no workspace. O ADM Master gerencia somente as credenciais globais OAuth aqui.');

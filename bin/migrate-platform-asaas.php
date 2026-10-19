@@ -24,7 +24,8 @@ try{
   throw new RuntimeException('Schema 30 expected.');
  $ddl=file_get_contents(ROOT.'/database/migrations/041_platform_asaas_billing.sql');
  if(!$ddl)throw new RuntimeException('Migration unavailable.');
- DB::run($ddl);
+ foreach(preg_split('/;\\s*(?:\\r?\\n|$)/',$ddl) as $statement)
+  if(trim($statement)!=='')DB::run($statement);
  echo json(['platform_asaas_billing_ready'=>true,'tenant_data_unmodified'=>true]).PHP_EOL;
 }catch(Throwable $e){
  error_log('Platform Asaas billing migration blocked: '.$e->getMessage());

@@ -684,12 +684,11 @@ jobs:
               result="$(sudo -n python3 "$DEPLOY_PATH/ops/realtime-step3.py" diagnostic --deploy-path "$DEPLOY_PATH" 2>&1)" && rc=0 || rc=$?
             fi
             printf '%s\n' "$result"
+            # A healthy process is not sufficient; fail the deployment when
+            # a real synthetic Outbox publication is not acknowledged.
             if [ "$rc" -ne 0 ]; then
-              if printf '%s' "$result" | grep -Eq '"code"[[:space:]]*:[[:space:]]*"worker_probe_empty"'; then
-                echo "::warning::Centrifugo diagnostic has no test publication yet; the next realtime health check remains mandatory."
-              else
-                exit "$rc"
-              fi
+              echo "::error::O teste de publicação realtime falhou. Não marque o Kanban como operacional."
+              exit "$rc"
             fi
           REMOTE
 

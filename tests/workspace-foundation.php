@@ -352,6 +352,21 @@ try{
  testws(WorkspaceActivation::apply()['already_active']===true,'Cutover must be idempotent.');
  testws(WorkspaceDatabaseStage1::apply()['multiworkspace_active']===true,
    'Subsequent deployments must accept two workspaces.');
+ // A CLI publication smoke must not fail with "explicit workspace required":
+ // it selects one existing workspace for a harmless synthetic system event.
+ require_once ROOT.'/app/RealtimeCliProbe.php';
+ require_once ROOT.'/app/EventOutbox.php';
+ $diagnosticId=RealtimeCliProbe::enqueue();
+ $diagnosticRow=DB::one("SELECT workspace_id,channel,event_type,entity_type,published_at
+  FROM event_outbox WHERE id=?",[$diagnosticId]);
+ testws((int)($diagnosticRow['workspace_id']??0)===$ws,
+  'CLI diagnostic must use an existing deterministic workspace scope.');
+ testws($diagnosticRow['channel']==='diagnostic/ws:'.$ws
+  &&$diagnosticRow['event_type']==='realtime.diagnostic'
+  &&$diagnosticRow['entity_type']==='system',
+  'CLI probe must enqueue only a harmless workspace-scoped diagnostic.');
+ testws(WorkspaceJobScope::currentId()===0,'CLI diagnostic must release workspace job scope.');
+
  $moved=DB::one('SELECT role,workspace_id FROM workspace_members WHERE user_id=?',[$gabId]);
  testws($moved['role']==='owner'&&(int)$moved['workspace_id']===$newWs,
    'Gabriella must belong only to her own workspace.');

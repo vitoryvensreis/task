@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
+const read=p=>fs.readFileSync(new URL(p,import.meta.url),'utf8');
 const code=fs.readFileSync(new URL('../public/assets/realtime-client.js',import.meta.url),'utf8');
 const app=fs.readFileSync(new URL('../public/assets/app.js',import.meta.url),'utf8');
 const auth=fs.readFileSync(new URL('../app/RealtimeDiagnostics.php',import.meta.url),'utf8');

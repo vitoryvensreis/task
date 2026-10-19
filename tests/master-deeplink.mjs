@@ -19,7 +19,7 @@ function renderThroughFrontController(path){
  return result.stdout;
 }
 const deepPlan=renderThroughFrontController('/master/planos');
-assert.match(deepPlan,/<title>TaskEsc · ADM Master<\\/title>/,'Master plan URL must render the correct PHP document');
+assert.ok(deepPlan.includes('<title>TaskEsc · ADM Master</title>'),'Master plan URL must render the correct PHP document');
 assert.match(deepPlan,/data-initial-tab="plans"/,'Master plan URL must render the plans tab');
 assert.doesNotMatch(deepPlan,/id="app" class="app hidden"/,'Master plan URL must not return ordinary workspace dashboard');
 assert.match(renderThroughFrontController('/master'),/data-initial-tab="overview"/,'Root Master link must load Master');

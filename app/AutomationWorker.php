@@ -95,6 +95,10 @@ final class AutomationWorker
                 if(!is_array($payload)||!empty($payload['automation_generated']))continue;
                 $operationId=strtolower((string)($payload['operation_id']??''));
                 if(!preg_match('/\A[a-f0-9]{32}\z/D',$operationId))$operationId=substr(hash('sha256',(string)$event['event_hash'].'|'.$type.'|'.$event['entity_id']),0,32);
+                // Events are company-owned: never apply a rule to an entity
+                // that does not belong to this cursor's workspace.
+                try{self::entityWorkspace($entityType,(int)$event['entity_id']);}
+                catch(Throwable){continue;}
                 if(!array_key_exists($type,$automations))$automations[$type]=DB::all('SELECT id FROM automations WHERE active=1 AND trigger_event=?'.self::ws().' ORDER BY id',[$type]);
                 if(!$automations[$type])continue;
                 $context=[
@@ -445,24 +449,35 @@ final class AutomationWorker
     private static function subjectContext(string $entityType,int $id,array $eventContext=[]): array
     {
         if($entityType==='demand'){
-            $row=DB::one("SELECT d.*,d.id demand_id,d.title task_title,d.due_at task_due_at,d.priority task_priority,c.id client_id,c.name client_name,c.email client_email,c.whatsapp_phone client_whatsapp,u.name assigned_name,creator.name creator_name,s.name stage_name FROM demands d JOIN clients c ON c.id=d.client_id JOIN stages s ON s.id=d.stage_id LEFT JOIN users u ON u.id=d.assigned_to LEFT JOIN users creator ON creator.id=d.created_by WHERE d.id=?",[$id]);
+            $row=DB::one("SELECT d.*,d.id demand_id,d.title task_title,d.due_at task_due_at,d.priority task_priority,c.id client_id,c.name client_name,c.email client_email,c.whatsapp_phone client_whatsapp,u.name assigned_name,creator.name creator_name,s.name stage_name FROM demands d JOIN clients c ON c.id=d.client_id AND c.workspace_id=d.workspace_id
+             JOIN stages s ON s.id=d.stage_id AND s.workspace_id=d.workspace_id
+             LEFT JOIN users u ON u.id=d.assigned_to
+             LEFT JOIN users creator ON creator.id=d.created_by
+             WHERE d.id=?".self::ws('d'),[$id]);
             if(!$row)throw new AutomationPermanentException('demand_missing');
             if(($row['whatsapp_recipient_mode']??'')==='assigned_user')$row['whatsapp_recipient_mode']='creator';
             $row['entity_type']='demand';return $row;
         }
         if($entityType==='client'){
-            $row=DB::one("SELECT c.*,c.id client_id,c.name client_name,c.email client_email,c.whatsapp_phone client_whatsapp,c.commercial_type commercial_type FROM clients c WHERE c.id=?",[$id]);
+            $row=DB::one("SELECT c.*,c.id client_id,c.name client_name,c.email client_email,c.whatsapp_phone client_whatsapp,c.commercial_type commercial_type FROM clients c WHERE c.id=?".self::ws('c'),[$id]);
             if(!$row)throw new AutomationPermanentException('client_missing');
             $row['entity_type']='client';
             $teamId=(int)($eventContext['payload']['user_id']??0);
             if($teamId>0){
-                $team=DB::one('SELECT id,name,email,role,whatsapp_phone FROM users WHERE id=?',[$teamId]);
+                $team=DB::one('SELECT u.id,u.name,u.email,u.role,u.whatsapp_phone FROM users u
+                    JOIN workspace_members wm ON wm.user_id=u.id AND wm.workspace_id=? AND wm.status=\'active\'
+                    WHERE u.id=?', [self::workspaceId(),$teamId]);
                 if($team){$row['team_user_id']=(int)$team['id'];$row['team_name']=$team['name'];$row['team_email']=$team['email'];$row['team_user_role']=$team['role'];$row['team_whatsapp']=$team['whatsapp_phone'];}
             }
             return $row;
         }
         if($entityType==='invoice'){
-            $row=DB::one("SELECT i.*,i.id invoice_id,i.description invoice_description,i.due_on invoice_due_on,i.amount_cents invoice_amount_cents,i.status invoice_status,c.id client_id,c.name client_name,c.email client_email,c.whatsapp_phone client_whatsapp,c.commercial_type commercial_type,d.id demand_id,d.title task_title,d.due_at task_due_at,d.priority task_priority,d.assigned_to,d.created_by,u.name assigned_name,creator.name creator_name,s.name stage_name FROM invoices i JOIN clients c ON c.id=i.client_id LEFT JOIN demands d ON d.id=i.demand_id LEFT JOIN users u ON u.id=d.assigned_to LEFT JOIN users creator ON creator.id=d.created_by LEFT JOIN stages s ON s.id=d.stage_id WHERE i.id=?",[$id]);
+            $row=DB::one("SELECT i.*,i.id invoice_id,i.description invoice_description,i.due_on invoice_due_on,i.amount_cents invoice_amount_cents,i.status invoice_status,c.id client_id,c.name client_name,c.email client_email,c.whatsapp_phone client_whatsapp,c.commercial_type commercial_type,d.id demand_id,d.title task_title,d.due_at task_due_at,d.priority task_priority,d.assigned_to,d.created_by,u.name assigned_name,creator.name creator_name,s.name stage_name FROM invoices i JOIN clients c ON c.id=i.client_id AND c.workspace_id=i.workspace_id
+             LEFT JOIN demands d ON d.id=i.demand_id AND d.workspace_id=i.workspace_id
+             LEFT JOIN users u ON u.id=d.assigned_to
+             LEFT JOIN users creator ON creator.id=d.created_by
+             LEFT JOIN stages s ON s.id=d.stage_id AND s.workspace_id=i.workspace_id
+             WHERE i.id=?".self::ws('i'),[$id]);
             if(!$row)throw new AutomationPermanentException('invoice_missing');
             $row['entity_type']='invoice';return $row;
         }

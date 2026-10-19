@@ -51,7 +51,7 @@ final class AutomationActions
             }elseif($operation==='assign'){
                 if((int)$value>0){
                     $user=DB::one("SELECT id,role FROM users WHERE id=? AND active=1 AND role IN ('admin','staff')".
-                        (WorkspaceTenantMode::enabled()?' AND id IN (SELECT user_id FROM workspace_members WHERE workspace_id='.WorkspaceJobScope::currentId().')':''),[(int)$value]);
+                        (WorkspaceTenantMode::enabled()?' AND id IN (SELECT user_id FROM workspace_members WHERE workspace_id='.WorkspaceJobScope::currentId()." AND status='active')":''),[(int)$value]);
                     if(!$user)throw new AutomationPermanentException('assignee_not_available');
                     if($user['role']==='staff'&&!DB::one('SELECT 1 FROM user_clients WHERE user_id=? AND client_id=?'.self::scope(),[(int)$value,(int)$d['client_id']]))throw new AutomationPermanentException('assignee_not_linked_to_client');
                 }

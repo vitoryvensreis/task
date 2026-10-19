@@ -16,12 +16,12 @@ final class RealtimeCliProbe {
     ['kind'=>'worker_publish_test','created_at'=>gmdate('c')],null
    )
   );
-  if(!WorkspaceTenantMode::enabled())return $publish('diagnostic');
+  if(!WorkspaceTenantMode::enabled())return $publish('kanban/global');
   $row=DB::one("SELECT id FROM workspaces WHERE status IN ('staged','active') ORDER BY id LIMIT 1");
   $ws=(int)($row['id']??0);
   if($ws<1)throw new RuntimeException('diagnostic_workspace_missing');
   // This is a synthetic transport probe: deterministic workspace selection
   // does not become a fallback scope for any business mutation.
-  return WorkspaceJobScope::forWorkspace($ws,static fn():int => $publish('diagnostic/ws:'.$ws));
+  return WorkspaceJobScope::forWorkspace($ws,static fn():int => $publish('kanban/ws-'.$ws));
  }
 }

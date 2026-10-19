@@ -15,7 +15,16 @@ assert(app.includes("if(S.page==='kanban')await stableRender(refresh);else await
 assert(api.includes("'realtime.health'=>")&&api.includes("'realtime.probe'=>"),'Admin diagnostics routes must exist');
 assert(auth.includes('Auth::admin()')&&auth.includes('EventOutbox::transaction'),'Probe must be admin-only and use transactional Outbox');
 assert(auth.includes('FROM event_outbox WHERE workspace_id=?'),'Tenant admins must not see other workspaces queue volume');
-assert(auth.includes("WorkspaceTenantMode::enabled()?'kanban/ws:'"),'Probe must use tenant-scoped Kanban channel');
+assert(auth.includes("WorkspaceTenantMode::enabled()?'kanban/ws-'"),'Probe must use tenant-scoped Kanban channel');
+const realtimeAuth=read('../app/RealtimeAuth.php');
+const demandRealtime=read('../app/DemandRealtime.php');
+const automationRealtime=read('../app/AutomationEvent.php');
+const probe=read('../app/RealtimeCliProbe.php');
+for(const [source,name] of [[realtimeAuth,'JWT channels'],[demandRealtime,'demand publish'],[automationRealtime,'automation publish'],[probe,'CLI probe']]){
+  assert(!source.includes('kanban/ws:')&&!source.includes('staff/ws:')&&!source.includes('diagnostic/ws:'),name+' must not use invalid Centrifugo namespaces');
+}
+assert(probe.includes("'kanban/ws-'.$ws")&&probe.includes("'kanban/global'"),'CLI must test the actual Kanban channel');
+assert(realtimeAuth.includes("kanban/ws-")&&demandRealtime.includes("kanban/ws-"),'Backend and client must use the same workspace channel');
 const events=[],urls=[],fakeSubscriptions=[];
 class Centrifuge {
  constructor(url,options){this.url=url;this.options=options;this.handlers={}}
@@ -33,7 +42,7 @@ const context={
  console:{debug(){}},document:{getElementById:id=>elements[id]||null,body:{dataset:{basePath:''}}},
  window:{Centrifuge,console:{debug(){}},setTimeout,clearTimeout,CustomEvent:class {constructor(type,init){this.type=type;this.detail=init.detail}},dispatchEvent:e=>events.push(e)},
  MutationObserver:class{observe(){}},
- fetch:async url=>{urls.push(url);return {ok:true,status:200,json:async()=>({enabled:true,token:'fake',websocket:'wss://example.invalid/realtime/connection/websocket',channels:['kanban/ws:3']})}},
+ fetch:async url=>{urls.push(url);return {ok:true,status:200,json:async()=>({enabled:true,token:'fake',websocket:'wss://example.invalid/realtime/connection/websocket',channels:['kanban/ws-3']})}},
  CustomEvent:class {constructor(type,init){this.type=type;this.detail=init.detail}}
 };
 vm.runInNewContext(code,context,{timeout:2000});
@@ -41,7 +50,7 @@ context.window.TaskEscRealtime.setCsrf('fake-csrf');
 await new Promise(resolve=>setTimeout(resolve,25));
 assert.equal(urls[0],'/realtime-auth.php','Auth request must reach direct PHP path');
 assert.equal(context.window.TaskEscRealtime.status(),'connected','Client should connect successfully');
-assert.equal(context.window.TaskEscRealtime.health().channels[0],'kanban/ws:3','Kanban subscription must be tracked as active');
+assert.equal(context.window.TaskEscRealtime.health().channels[0],'kanban/ws-3','Kanban subscription must be tracked as active');
 assert(events.some(e=>e.type==='taskesc:realtime-state'&&e.detail.state==='subscribed'),'Subscribing should emit connection state');
 context.window.TaskEscRealtime.subscribe('client:4');
 assert.equal(fakeSubscriptions.length,2,'Dynamically subscribed channels must work');

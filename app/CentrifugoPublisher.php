@@ -73,7 +73,14 @@ final class CentrifugoPublisher
             } catch (Throwable) {
                 throw new RuntimeException('centrifugo_response_invalid');
             }
-            if (!is_array($response) || isset($response['error']) || !array_key_exists('result', $response)) {
+            if (is_array($response) && isset($response['error']) && is_array($response['error'])) {
+                $code = filter_var($response['error']['code'] ?? null, FILTER_VALIDATE_INT);
+                if ($code !== false && $code >= 100 && $code <= 999) {
+                    throw new RuntimeException('centrifugo_api_'.$code);
+                }
+                throw new RuntimeException('centrifugo_publish_rejected');
+            }
+            if (!is_array($response) || !array_key_exists('result', $response)) {
                 throw new RuntimeException('centrifugo_publish_rejected');
             }
         } finally {

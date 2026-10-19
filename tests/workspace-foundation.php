@@ -361,7 +361,7 @@ try{
   FROM event_outbox WHERE id=?",[$diagnosticId]);
  testws((int)($diagnosticRow['workspace_id']??0)===$ws,
   'CLI diagnostic must use an existing deterministic workspace scope.');
- testws($diagnosticRow['channel']==='diagnostic/ws:'.$ws
+ testws($diagnosticRow['channel']==='kanban/ws-'.$ws
   &&$diagnosticRow['event_type']==='realtime.diagnostic'
   &&$diagnosticRow['entity_type']==='system',
   'CLI probe must enqueue only a harmless workspace-scoped diagnostic.');
@@ -449,7 +449,7 @@ try{
   WorkspaceJobScope::forWorkspace($workId,static function()use($workId,$taskId):void {
    EventOutbox::transaction(static function()use($workId,$taskId):void {
     EventOutbox::enqueue('automation-ci-'.$workId.'-'.$taskId,
-     'demand.created','demand',$taskId,'staff/ws:'.$workId,
+     'demand.created','demand',$taskId,'staff/ws-'.$workId,
      ['operation_id'=>bin2hex(random_bytes(16))]);
    });
   });

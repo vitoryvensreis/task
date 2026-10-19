@@ -125,7 +125,10 @@ def diagnostic(identity, deploy_path):
                 raise RuntimeError(code)
         raise RuntimeError('worker_diagnostic_empty')
     data = parse_single_json(probe.stdout)
-    safe = {'diagnostic': data.get('diagnostic'), 'event_id': data.get('event_id'), 'attempts': data.get('attempts')}
+    error = data.get('last_error')
+    if not isinstance(error,str) or re.fullmatch(r'[a-z0-9_.:-]{1,80}',error) is None:
+        error = 'none'
+    safe = {'diagnostic': data.get('diagnostic'), 'event_id': data.get('event_id'), 'attempts': data.get('attempts'), 'last_error_code': error}
     print(json.dumps(safe, separators=(',', ':')))
     need(probe.returncode == 0 and data.get('diagnostic') == 'published', 'worker_diagnostic_failed')
 

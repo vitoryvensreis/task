@@ -106,10 +106,10 @@ final class DemandRealtime
             if($ws<1||$bound<1||$ws!==$bound)
                 throw new LogicException('Workspace context does not match realtime demand.');
         }
-        $channels = [$multi?'kanban/ws:'.$ws:'kanban/global'];
+        $channels = [$multi?'kanban/ws-'.$ws:'kanban/global'];
         if (empty($demand['draft'])) {
             if ($audience === 'staff') {
-                $channels[] = $multi?'staff/ws:'.$ws:'staff/global';
+                $channels[] = $multi?'staff/ws-'.$ws:'staff/global';
             } else {
                 $channels[] = 'client:'.$clientId;
                 $channels[] = 'demand:'.$id;

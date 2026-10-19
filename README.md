@@ -621,7 +621,7 @@ A confirmação de disponibilidade **em produção** ainda depende do serviço d
 
 O cliente agora autentica por `/realtime-auth.php` (arquivo PHP direto), evitando depender do rewrite `/realtime.auth` que pode ser interceptado por front proxy. O indicador lateral mostra o estado REAL da conexão e da assinatura do canal: só diz **WebSocket ativo** quando Centrifugo confirmou a assinatura necessária. Um refresh HTTP nunca é representado como WebSocket.
 
-**ADM:** clique no indicador à esquerda para obter diagnóstico sem expor credenciais: configuração, Redis, Centrifugo API, heartbeat do worker, Outbox pendente/esgotada, estados dos canais no browser, e botão **Testar ida e volta**. Esse teste registra `realtime.diagnostic` na mesma Outbox transacional e espera sua publicação no canal `kanban/ws:{workspace}` (ou `kanban/global` em modo legado); se não chegar, informa se o worker publicou ou se o evento ainda está pendente. O teste não altera tasks.
+**ADM:** clique no indicador à esquerda para obter diagnóstico sem expor credenciais: configuração, Redis, Centrifugo API, heartbeat do worker, Outbox pendente/esgotada, estados dos canais no browser, e botão **Testar ida e volta**. Esse teste registra `realtime.diagnostic` na mesma Outbox transacional e espera sua publicação no canal `kanban/ws-{workspace}` (ou `kanban/global` em modo legado); se não chegar, informa se o worker publicou ou se o evento ainda está pendente. O teste não altera tasks.
 
 Em produção, também execute:
 ```bash
@@ -638,3 +638,7 @@ Se o smoke falhar, confira o reverse proxy WebSocket, `/etc/taskesc/realtime.jso
 No modo multiworkspace, todo evento Outbox exige escopo explícito. O diagnóstico do worker agora usa `RealtimeCliProbe::enqueue()` para localizar **somente um workspace existente** e criar um evento sintético `realtime.diagnostic` nesse escopo; não cria workspace, não movimenta tasks e não altera os 339 eventos históricos já esgotados. Um evento publicado via HTTP pela API do Centrifugo é obrigatório para o teste passar. Em caso de falha, o deploy para no passo diagnóstico, em vez de aceitar `worker_probe_empty` como aviso. O helper operacional preserva apenas códigos de erro seguros, sem mostrar secrets.
 
 Se o check mostrar `queue_warning=exhausted_events`, investigar `event_outbox.last_error` por agrupamento antes de reprocessar: não redefinir `attempts` globalmente nem apagar registros do histórico.
+
+
+### Correção da namespace realtime do Kanban
+Centrifugo considera `:` um delimitador de **namespace**. Como `kanban/ws:ID` e `staff/ws:ID` solicitavam namespaces inexistentes, em modo multiworkspace agora usamos `kanban/ws-ID` e `staff/ws-ID`, sem `:`. O canal é sempre validado pelo backend e permanece restrito ao workspace. O diagnóstico CLI publica diretamente no mesmo canal do Kanban, falhando quando a entrega for rejeitada. Erros seguros como `centrifugo_api_102` são exibidos no log sem publicar secrets. Não alterar os eventos históricos da Outbox sem avaliação individual.

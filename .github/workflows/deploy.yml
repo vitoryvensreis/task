@@ -612,9 +612,17 @@ jobs:
           ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "$REMOTE_COMMAND" <<'REMOTE'
             set -euo pipefail
             if [ "$(id -u)" -eq 0 ]; then
-              python3 "$DEPLOY_PATH/ops/realtime-step3.py" diagnostic --deploy-path "$DEPLOY_PATH"
+              result="$(python3 "$DEPLOY_PATH/ops/realtime-step3.py" diagnostic --deploy-path "$DEPLOY_PATH" 2>&1)" && rc=0 || rc=$?
             else
-              sudo -n python3 "$DEPLOY_PATH/ops/realtime-step3.py" diagnostic --deploy-path "$DEPLOY_PATH"
+              result="$(sudo -n python3 "$DEPLOY_PATH/ops/realtime-step3.py" diagnostic --deploy-path "$DEPLOY_PATH" 2>&1)" && rc=0 || rc=$?
+            fi
+            printf '%s\n' "$result"
+            if [ "$rc" -ne 0 ]; then
+              if printf '%s' "$result" | grep -Eq '"code"[[:space:]]*:[[:space:]]*"worker_probe_empty"'; then
+                echo "::warning::Centrifugo diagnostic has no test publication yet; the next realtime health check remains mandatory."
+              else
+                exit "$rc"
+              fi
             fi
           REMOTE
 

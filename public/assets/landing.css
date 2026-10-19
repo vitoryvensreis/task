@@ -38,3 +38,13 @@ h1,h2,h3,p{margin-top:0}h1,h2,h3{font-family:Manrope,system-ui,sans-serif}h1{fon
 #demo-status{line-height:1.5}
 @media(max-width:720px){.demo-toolbar>span:nth-child(2){display:none}#demo-kanban .column{min-height:270px}#demo-kanban .demo-card-stack{min-height:210px}#demo-kanban .ticket strong{font-size:9px}#demo-kanban .ticket .chip{font-size:7px}.demo-avatar{width:16px;height:16px;font-size:7px}}
 @media(prefers-reduced-motion:reduce){#demo-kanban .ticket{animation:none!important;transition:none!important}}
+
+/* The interactive demo is a fixed-height floating showcase, not a vertically growing board. */
+.hero-art .preview{height:clamp(390px,43vw,525px);max-height:525px;display:flex;flex-direction:column;overflow:hidden}
+.hero-art .preview-head{flex-shrink:0;margin:14px 0}
+.hero-art .preview-top,.hero-art .preview-note,.hero-art .demo-toolbar{flex-shrink:0}
+.hero-art #demo-kanban{flex:1;min-height:0;overflow:hidden}
+.hero-art #demo-kanban .column{min-height:0;min-width:0;overflow:hidden;display:flex;flex-direction:column}
+.hero-art #demo-kanban .demo-card-stack{min-height:0;flex:1;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.hero-art #demo-kanban .ticket{flex:0 0 auto}
+@media(max-width:720px){.hero-art .preview{height:420px;max-height:420px}.hero-art #demo-kanban .column{min-height:0}.hero-art #demo-kanban .demo-card-stack{min-height:0}}

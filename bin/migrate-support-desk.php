@@ -19,11 +19,12 @@ try{
  if((int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0)!==30
     ||!WorkspaceFoundationGuard::valid())
   throw new RuntimeException('Single-workspace foundation unavailable.');
- if((int)(DB::one('SELECT COUNT(*) n FROM workspaces')['n']??0)!==1)
-  throw new RuntimeException('Unexpected workspace count.');
+ $multi=WorkspaceTenantMode::enabled();
+ $count=(int)(DB::one('SELECT COUNT(*) n FROM workspaces')['n']??0);
+ if($count!==($multi?2:1))throw new RuntimeException('Unexpected workspace count.');
  $sql=file_get_contents(ROOT.'/database/migrations/032_support_desk.sql');
  if($sql===false)throw new RuntimeException('Migration unavailable.');
  foreach(preg_split('/;\s*(?:\r?\n|$)/',$sql) as $q)if(trim($q)!=='')DB::run($q);
  DB::run("INSERT INTO settings(`key`,value) VALUES('support_desk_v1','1') ON DUPLICATE KEY UPDATE value=VALUES(value)");
- echo json(['support_desk_ready'=>true,'workspace_count'=>1,'multiworkspace_enabled'=>false]).PHP_EOL;
+ echo json(['support_desk_ready'=>true,'workspace_count'=>$count,'multiworkspace_enabled'=>$multi]).PHP_EOL;
 }catch(Throwable $e){error_log('TaskEsc support desk migration refused: '.$e->getMessage());fwrite(STDERR,"Support desk migration blocked.\n");exit(2);}

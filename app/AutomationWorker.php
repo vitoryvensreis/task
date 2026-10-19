@@ -464,7 +464,9 @@ final class AutomationWorker
             $row['entity_type']='client';
             $teamId=(int)($eventContext['payload']['user_id']??0);
             if($teamId>0){
-                $team=DB::one('SELECT u.id,u.name,u.email,u.role,u.whatsapp_phone FROM users u
+                $team=WorkspaceContext::legacyCiFixture()
+                 ?DB::one('SELECT id,name,email,role,whatsapp_phone FROM users WHERE id=?',[$teamId])
+                 :DB::one('SELECT u.id,u.name,u.email,u.role,u.whatsapp_phone FROM users u
                     JOIN workspace_members wm ON wm.user_id=u.id AND wm.workspace_id=? AND wm.status=\'active\'
                     WHERE u.id=?', [self::workspaceId(),$teamId]);
                 if($team){$row['team_user_id']=(int)$team['id'];$row['team_name']=$team['name'];$row['team_email']=$team['email'];$row['team_user_role']=$team['role'];$row['team_whatsapp']=$team['whatsapp_phone'];}

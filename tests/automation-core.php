@@ -341,6 +341,19 @@ try{
  $moved=DB::one('SELECT stage_id,priority FROM demands WHERE id=?',[$demandId]);
  autoCheck((int)$moved['stage_id']===5&&$moved['priority']==='high','Task actions must persist stage and priority.');
  autoCheck((int)DB::one("SELECT COUNT(*) n FROM transitions WHERE demand_id=? AND to_stage=5",[$demandId])['n']>=1,'Automation stage must write transition.');
+ // An automation-triggered move must enqueue the SAME Kanban realtime event
+ // that a manual move uses. Publishing is handled by the Outbox worker.
+ $stageRealtime=DB::all("SELECT id,channel,payload_json FROM event_outbox WHERE event_type='demand.stage_changed' AND entity_type='demand' AND entity_id=? ORDER BY id",[$demandId]);
+ autoCheck(count($stageRealtime)>=1,'Automation move must enqueue a demand.stage_changed event.');
+ $globalStageEvents=array_values(array_filter($stageRealtime,fn($e)=>$e['channel']==='kanban/global'));
+ autoCheck(count($globalStageEvents)===1,'Automation move must invalidate the global Kanban exactly once.');
+ $stagePayload=decode($globalStageEvents[0]['payload_json']);
+ autoCheck((int)($stagePayload['stage_id']??0)===5&&($stagePayload['change']??'')==='automation.stage'
+   &&(int)($stagePayload['previous_stage_id']??0)!==5
+   &&(int)($stagePayload['automation_generated']??0)===1,
+   'Automation stage event must contain the new stage and automation marker.');
+ autoCheck((int)($stagePayload['version']??0)>0,'Automation stage websocket event must have a version.');
+
  autoCheck((int)DB::one("SELECT COUNT(*) n FROM mail_queue WHERE recipient='delivery@ci.invalid' AND subject LIKE 'Entrega final:%'")['n']===1,'Email action must queue exactly one message.');
  autoCheck((int)DB::one('SELECT COUNT(*) n FROM notifications WHERE dedupe_key=?',['auto-push:'.$finalRun['id'].':push:'.$admin])['n']===1,'Push action must persist notification once.');
  autoCheck((int)DB::one("SELECT COUNT(*) n FROM demands WHERE title='Revisar Task automática'")['n']===$initialCopies+1,'Create task action must create one task.');

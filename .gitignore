@@ -3,6 +3,7 @@
 realtime-secrets.env
 /storage/installed.lock
 /storage/uploads/*
+/storage/avatars/*
 /public/uploads/*
 /storage/logs/*
 /storage/cache/*

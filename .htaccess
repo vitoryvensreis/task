@@ -1,4 +1,4 @@
-Options -Indexes
+Options -Indexes -MultiViews
 RewriteEngine On
 
 # Permite usar a pasta do projeto como DocumentRoot quando a hospedagem não
@@ -6,5 +6,6 @@ RewriteEngine On
 RewriteRule ^(?:app|config|database|storage|bin)(?:/|$) - [F,L]
 RewriteRule ^(?:README\.md|\.gitignore|\.env)(?:/|$) - [F,L]
 RewriteRule ^public(?:/|$) - [L]
+RewriteRule ^master(?:/.*)?$ public/master.php [L,QSA]
 RewriteRule ^$ public/ [L]
 RewriteRule ^(.+)$ public/$1 [L]

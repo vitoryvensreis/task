@@ -27,7 +27,8 @@ $assetVersion=static function(string $file):string {
 $requestPath=(string)(parse_url($_SERVER['REQUEST_URI']??'',PHP_URL_PATH)??'');
 $routes=['clientes'=>'clients','planos'=>'plans','integracoes'=>'integrations','personalizacao'=>'personalization','configuracoes'=>'settings',
 'whatsapp'=>'whatsapp','saude-logs'=>'health','banner-hero'=>'banner','suporte'=>'overview','workspaces'=>'clients'];
-$routeKey=trim((string)basename(rtrim($requestPath,'/')));
+$relative=preg_replace('~^.*?/master(?:/|$)~','',$requestPath);
+$routeKey=explode('/',trim((string)$relative,'/'))[0]??'';
 $initialTab=$routes[$routeKey]??'overview';
 ?>
 <body class="master-page" data-master-page="1" data-initial-tab="<?=e($initialTab)?>" data-base-path="<?=e($basePath)?>" data-activate="<?=e($activation?$token:'')?>">

@@ -1,0 +1,10 @@
+import {readFileSync} from 'node:fs';
+import assert from 'node:assert/strict';
+const rules=readFileSync(new URL('../public/.htaccess',import.meta.url),'utf8');
+const page=readFileSync(new URL('../public/master.php',import.meta.url),'utf8');
+const js=readFileSync(new URL('../public/assets/master.js',import.meta.url),'utf8');
+assert.match(rules,/master\(\?:\/\(\?:[\s\S]*whatsapp[\s\S]*\)\(\?:\/\[\^\.\]\*\)\?\)/,'Master nested routes must be rewritten');
+assert.match(page,/\$relative=preg_replace/,'Page must resolve the primary nested section');
+assert.match(js,/const section=relative\.split\('\/'\)\[0\]/,'Client router must resolve nested paths');
+assert.match(js,/window\.addEventListener\('popstate'/,'Back/forward should keep the current Master page');
+console.log('Master deep link regression: OK');

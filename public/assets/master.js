@@ -34,7 +34,15 @@
   const workspaces=$('#master-workspaces'),admins=$('#master-administrators'),planPanel=$('#master-plans'),dashboard=$('#master-dashboard'),settings=$('#master-settings'),support=$('#master-support'),shell=$('#master-shell');
   const tabs=[...document.querySelectorAll('[data-master-tab]')];
   const tabRoutes={overview:'master',clients:'master/clientes',plans:'master/planos',health:'master/saude-logs',settings:'master/configuracoes',integrations:'master/integracoes',whatsapp:'master/whatsapp',personalization:'master/personalizacao',banner:'master/banner-hero'};
-  const currentTab=()=>{const path=location.pathname.replace(/\/+$/,'');if(path.endsWith('/master/workspaces'))return 'clients';if(path.endsWith('/master/suporte'))return 'overview';return Object.entries(tabRoutes).find(([,p])=>path.endsWith('/'+p))?.[0]||document.body.dataset.initialTab||'overview'};
+  const currentTab=()=>{
+   const path=location.pathname.replace(/\/+$/,'');
+   if(path.endsWith('/master.php'))return document.body.dataset.initialTab||'overview';
+   const relative=path.split('/master/')[1]||'';
+   const section=relative.split('/')[0];
+   if(section==='workspaces')return 'clients';
+   if(section==='suporte')return 'overview';
+   return Object.entries(tabRoutes).find(([,route])=>route==='master/'+section)?.[0]||'overview';
+  };
 
   if(location.pathname.endsWith('/master.php'))history.replaceState(null,'',base+'/master'+location.search+location.hash);
   const clear=()=>{dashboard.replaceChildren();workspaces.replaceChildren();admins.replaceChildren();planPanel.replaceChildren();settings.replaceChildren();$('#master-health').replaceChildren();message('#master-panel-message','')};

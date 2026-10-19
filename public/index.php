@@ -5,6 +5,18 @@ $requestedPath=(string)(parse_url($_SERVER['REQUEST_URI']??'/',PHP_URL_PATH)??'/
 $entryPath=rtrim((string)(parse_url((string)config('base_url',''),PHP_URL_PATH)??''),'/');
 if($entryPath==='/')$entryPath='';
 if(in_array($requestedPath,[$entryPath.'/', $entryPath.'/index.php'],true)){
+ // A sessão autenticada nunca volta à landing por navegação direta.
+ // A verificação usa o usuário ativo do backend, não apenas a presença de cookie.
+ try {
+  $activeUser=Auth::load(false);
+  if($activeUser){
+   $destination=(($activeUser['role']??'')==='master' || !empty($activeUser['is_master']) && empty($activeUser['is_support']))?'/master':'/dashboard';
+   header('Location: '.$entryPath.$destination,true,302);
+   exit;
+  }
+ } catch(Throwable $exception) {
+  error_log('TaskEsc landing session check failed: '.$exception->getMessage());
+ }
  require __DIR__.'/landing.php';
  exit;
 }

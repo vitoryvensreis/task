@@ -373,6 +373,40 @@ try{
   'Vitor historical clients cannot move during cutover.');
  testws((int)(DB::one('SELECT workspace_id FROM invoices WHERE id=?',[$invoice])['workspace_id']??0)===$ws,
   'Vitor historical finance cannot move during cutover.');
+
+ // Regression: deleting a file must be workspace-scoped on comments, reviews
+ // and files; otherwise the tenant SQL guard throws an internal error.
+ require_once ROOT.'/app/Files.php';
+ require_once ROOT.'/app/DemandRealtime.php';
+ require_once ROOT.'/app/EventOutbox.php';
+ $ownerSession=DB::one('SELECT id,name,email,role,active FROM users WHERE id=?',[$owner]);
+ Auth::$user=$ownerSession;Auth::$actor=$ownerSession;
+ Auth::$workspace=WorkspaceContext::forUser($ownerSession);Auth::$origin='web';
+ $deletionFile=DB::insert('files',[
+  'workspace_id'=>$ws,'demand_id'=>$demand,'author_id'=>$owner,
+  'label'=>'file removal regression','original_name'=>'example.txt',
+  'storage_provider'=>'url','url'=>'https://example.invalid/example.txt',
+  'shared'=>0,'version_no'=>987,'created_at'=>now()
+ ]);
+ $deletionComment=DB::insert('comments',[
+  'workspace_id'=>$ws,'demand_id'=>$demand,'author_id'=>$owner,
+  'body'=>'historical review reference','internal'=>1,
+  'version_id'=>$deletionFile,'created_at'=>now()
+ ]);
+ $deletionReview=DB::insert('reviews',[
+  'workspace_id'=>$ws,'file_id'=>$deletionFile,'user_id'=>$owner,
+  'decision'=>'approved','created_at'=>now()
+ ]);
+ $deletedFileResult=Files::delete(['file_id'=>$deletionFile]);
+ testws(($deletedFileResult['deleted']??false)===true,'File delete should complete in tenant isolation mode.');
+ testws(!DB::one('SELECT id FROM files WHERE id=?',[$deletionFile]),'File record was not removed.');
+ testws(!DB::one('SELECT id FROM reviews WHERE id=?',[$deletionReview]),'File review was not cleaned up.');
+ testws(DB::one('SELECT version_id FROM comments WHERE id=?',[$deletionComment])['version_id']===null,
+  'Historic comment must survive with detached version.');
+ testws((int)(DB::one('SELECT COUNT(*) n FROM event_outbox WHERE workspace_id=? AND entity_id=? AND event_type=?',
+  [$ws,$demand,'demand.file_deleted'])['n']??0)>0,'File removal must enqueue a realtime event.');
+ Auth::$user=null;Auth::$actor=null;Auth::$workspace=null;
+
  // Automation fanout must NEVER leak a trigger from one company to the other.
  require_once ROOT.'/app/Automation.php';
  require_once ROOT.'/app/AutomationWorker.php';

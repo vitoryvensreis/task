@@ -3,7 +3,8 @@
 
   var app = document.getElementById('app');
   var basePath = (document.body && document.body.dataset.basePath) || '';
-  var authUrl = basePath + '/realtime.auth';
+  // A direct PHP endpoint does not depend on friendly-route rewrites at the VPS proxy.
+  var authUrl = basePath + '/realtime-auth.php';
   var client = null;
   var starting = false;
   var retryTimer = 0;
@@ -12,6 +13,8 @@
   var subscriptions = new Map();
   var wanted = new Set();
   var lastState = 'idle';
+  var lastError = '';
+  var subscribedChannels = new Set();
 
   function visible() {
     return !!app && !app.classList.contains('hidden');
@@ -50,8 +53,10 @@
     if (response.status === 401 || response.status === 403 || response.status === 419) {
       throw unauthorized('TaskEsc session not authorized');
     }
-    if (!response.ok) throw new Error('realtime auth status ' + response.status);
-    var data = await response.json();
+    if (!response.ok) throw new Error('realtime_auth_http_' + response.status);
+    var data;
+    try { data = await response.json(); }
+    catch (_) { throw new Error('realtime_auth_not_json'); }
     if (!data || typeof data !== 'object') throw new Error('invalid realtime auth response');
     return data;
   }
@@ -95,14 +100,18 @@
       });
       sub.on('publication', function (ctx) { emitPublication(channel, ctx); });
       sub.on('error', function (ctx) {
+        lastError = 'subscription_' + String(ctx && ctx.error ? ctx.error.code || 'error' : 'error');
         technical('subscription error: ' + channel, ctx && ctx.error ? ctx.error.code : undefined);
+        emitState('error', channel);
       });
-      sub.on('subscribed', function () { technical('subscribed: ' + channel); emitState('subscribed', channel); });
+      sub.on('subscribed', function () { subscribedChannels.add(channel); technical('subscribed: ' + channel); emitState('subscribed', channel); });
+      sub.on('unsubscribed', function () { subscribedChannels.delete(channel); emitState('unsubscribed', channel); });
       sub.subscribe();
       subscriptions.set(channel, sub);
       return sub;
     } catch (_) {
-      technical('subscription unavailable: ' + channel);
+      lastError = 'subscription_unavailable';
+      technical('subscription unavailable: ' + channel);emitState('error', channel);
       return null;
     }
   }
@@ -121,7 +130,7 @@
   async function start() {
     if (!visible() || !csrfToken || starting || client || typeof window.Centrifuge !== 'function') return;
     starting = true;
-    lastState = 'starting';
+    lastState = 'starting';emitState('starting');
     try {
       var auth = await requestAuth({});
       if (!auth.enabled || !auth.token || !auth.websocket) throw new Error('realtime disabled');
@@ -135,11 +144,13 @@
         name: 'taskesc-web',
         version: 'step6'
       });
-      next.on('connecting', function () { lastState = 'connecting'; technical('connecting'); });
-      next.on('connected', function () { lastState = 'connected'; retryAttempt = 0; technical('connected'); emitState('connected'); });
-      next.on('disconnected', function (ctx) { lastState = 'disconnected'; technical('disconnected', ctx && ctx.code); emitState('disconnected'); });
+      next.on('connecting', function () { lastState = 'connecting'; subscribedChannels.clear(); technical('connecting'); emitState('connecting'); });
+      next.on('connected', function () { lastState = 'connected'; lastError = ''; retryAttempt = 0; technical('connected'); emitState('connected'); });
+      next.on('disconnected', function (ctx) { lastState = 'disconnected'; subscribedChannels.clear(); lastError = 'ws_disconnected_' + String(ctx && ctx.code || 'unknown'); technical('disconnected', ctx && ctx.code); emitState('disconnected'); });
       next.on('error', function (ctx) {
+        lastError = 'connection_' + String(ctx && ctx.error ? ctx.error.code || 'error' : 'error');
         technical('connection error', ctx && ctx.error ? ctx.error.code : undefined);
+        emitState('error');
       });
       next.on('publication', function (ctx) {
         emitPublication(String((ctx && ctx.channel) || ''), ctx);
@@ -153,7 +164,9 @@
       next.connect();
     } catch (error) {
       lastState = 'fallback';
-      technical('unavailable; normal HTTP flow remains active');
+      lastError = String(error && error.message || 'realtime_unavailable').slice(0,90);
+      emitState('fallback');
+      technical('unavailable; normal HTTP flow remains active', lastError);
       client = null;
       if (!(error && error.taskescUnauthorized)) scheduleRetry();
     } finally {
@@ -165,11 +178,12 @@
     if (retryTimer) { clearTimeout(retryTimer); retryTimer = 0; }
     subscriptions.forEach(function (sub) { try { sub.unsubscribe(); } catch (_) {} });
     subscriptions.clear();
+    subscribedChannels.clear();
     if (client) { try { client.disconnect(); } catch (_) {} }
     client = null;
     starting = false;
     retryAttempt = 0;
-    lastState = 'idle';
+    lastState = 'idle';emitState('idle');
     if (clearWanted) wanted.clear();
   }
 
@@ -192,13 +206,17 @@
     if (!sub) return;
     try { sub.unsubscribe(); } catch (_) {}
     subscriptions.delete(channel);
+    subscribedChannels.delete(channel);
+    emitState('unsubscribed',channel);
   }
 
   window.TaskEscRealtime = Object.freeze({
     setCsrf: setCsrf,
     subscribe: subscribe,
     unsubscribe: unsubscribe,
-    status: function () { return lastState; }
+    status: function () { return lastState; },
+    health: function () { return {connection:lastState,channels:Array.from(subscribedChannels),error:lastError}; },
+    reconnect: function () { stop(false); if (csrfToken && visible()) start(); }
   });
 
   if (app) {

@@ -370,7 +370,80 @@
   }
   function realtimeIndicator(){
     const i=$('#sync-indicator');if(!i)return;
-    i.classList.remove('offline');i.innerHTML='<i></i> Tempo real · '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:S.meta?.timezone||'America/Fortaleza'});
+    const state=window.TaskEscRealtime?.health?.()||{connection:'unavailable',channels:[],error:''};
+    const channels=Array.isArray(state.channels)?state.channels:[];
+    const authorizedChannel=S.user?.role==='admin'
+      ?channels.some(ch=>ch.startsWith('kanban/'))
+      :channels.some(ch=>ch.startsWith('client:'));
+    const live=state.connection==='connected'&&authorizedChannel;
+    const label=live?'WebSocket ativo':state.connection==='connected'?'WebSocket sem canal':['starting','connecting'].includes(state.connection)?'WebSocket conectando':'WebSocket offline · HTTP';
+    i.classList.toggle('offline',!live);
+    i.dataset.realtimeStatus=live?'connected':state.connection;
+    i.innerHTML='<i></i> '+label;
+    i.title=S.user?.role==='admin'?'Clique para testar a conexão realtime':'Status da conexão realtime';
+    if(S.user?.role==='admin'){
+      i.setAttribute('role','button');i.setAttribute('tabindex','0');
+      i.onclick=showRealtimeDiagnostics;
+      i.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();showRealtimeDiagnostics()}};
+    }else{
+      i.removeAttribute('role');i.removeAttribute('tabindex');i.onclick=null;i.onkeydown=null;
+    }
+  }
+  async function showRealtimeDiagnostics(){
+    if(S.user?.role!=='admin')return;
+    const client=window.TaskEscRealtime?.health?.()||{connection:'unavailable',channels:[],error:'sdk_missing'};
+    const channels=client.channels||[];
+    $('#modal-root').innerHTML=`<div class="modal-backdrop"><div class="modal compact" role="dialog" aria-modal="true" aria-labelledby="rt-diagnostic-title">
+      <div class="modal-head"><div><h3 id="rt-diagnostic-title">Diagnóstico WebSocket</h3><div class="help">Kanban / Centrifugo / Outbox</div></div><button class="close" data-rt-close type="button">×</button></div>
+      <div class="field-help" id="rt-diagnostic-browser">Navegador: ${esc(client.connection)} · ${Number(channels.length)} canais assinados${client.error?' · '+esc(client.error):''}</div>
+      <div class="panel-sub" id="rt-diagnostic-server">Consultando servidor...</div>
+      <div class="panel-sub" id="rt-diagnostic-probe" aria-live="polite">Use o teste para verificar se uma publicação chega de volta a este navegador.</div>
+      <div class="form-actions"><button type="button" class="secondary" id="rt-diagnostic-refresh">Atualizar status</button><button type="button" class="primary" id="rt-diagnostic-test">Testar ida e volta</button></div>
+    </div></div>`;
+    const close=()=>closeModal();
+    $('#modal-root [data-rt-close]').onclick=close;
+    const refresh=async()=>{
+      const panel=$('#rt-diagnostic-server');if(!panel)return;
+      try{
+        const v=await api('realtime.health');
+        if(!panel.isConnected)return;
+        panel.textContent='Servidor: '+String(v.status)+' | Redis: '+String(v.redis)+' | Centrifugo: '+String(v.centrifugo)+' | Worker: '+String(v.worker)+' | Outbox pendentes: '+Number(v.queue_unpublished||0)+' (vencidos: '+Number(v.queue_due||0)+', esgotados: '+Number(v.queue_exhausted||0)+')';
+      }catch(error){if(panel.isConnected)panel.textContent='Falha ao consultar o servidor: '+error.message}
+      const b=window.TaskEscRealtime?.health?.()||{connection:'unavailable',channels:[],error:'sdk_missing'};
+      const browser=$('#rt-diagnostic-browser');if(browser)browser.textContent='Navegador: '+b.connection+' | Canais ativos: '+(b.channels||[]).join(', ')+' | Último erro: '+(b.error||'nenhum');
+      realtimeIndicator();
+    };
+    $('#rt-diagnostic-refresh').onclick=refresh;
+    $('#rt-diagnostic-test').onclick=async()=>{
+      const result=$('#rt-diagnostic-probe'),button=$('#rt-diagnostic-test');
+      if(!result||!button)return;
+      button.disabled=true;result.textContent='Gerando evento de teste na Outbox...';
+      const received=new Set();
+      const handler=event=>{
+        const v=event?.detail?.data;
+        if(v?.event_type==='realtime.diagnostic'&&/^[a-f0-9]{32}$/.test(String(v.payload?.probe_id||'')))received.add(v.payload.probe_id);
+      };
+      window.addEventListener('taskesc:realtime-publication',handler);
+      try{
+        const v=await api('realtime.probe',{},'POST');
+        if(!result.isConnected)return;
+        result.textContent='Evento #'+Number(v.id)+' na fila. Aguardando confirmação no navegador...';
+        let arrived=received.has(v.probe_id);
+        for(let count=0;count<12&&!arrived;count++){
+          await new Promise(resolve=>setTimeout(resolve,1000));
+          arrived=received.has(v.probe_id);
+        }
+        if(!result.isConnected)return;
+        if(arrived)result.textContent='WebSocket funcionando! Evento recebido neste navegador.';
+        else {
+          const check=await api('realtime.probe_status',{id:Number(v.id)});
+          result.textContent=check.published?'O worker publicou, mas este navegador não recebeu. Confira o proxy WSS, a conexão e a assinatura do canal.':'Evento ainda não publicado. Verifique o worker realtime e a fila Outbox.'+(check.last_error?' Código: '+check.last_error:'');
+        }
+        await refresh();
+      }catch(error){if(result.isConnected)result.textContent='Teste interrompido: '+error.message}
+      finally{window.removeEventListener('taskesc:realtime-publication',handler);if(button.isConnected)button.disabled=false}
+    };
+    await refresh();
   }
   function scheduleRealtimeRefresh(delay=180){
     if(realtimeTimer)clearTimeout(realtimeTimer);
@@ -432,6 +505,7 @@
   // returns, including updates generated by automation workers.
   window.addEventListener('taskesc:realtime-state',event=>{
     const state=String(event?.detail?.state||'');
+    realtimeIndicator();
     if(state!=='connected'&&state!=='subscribed')return;
     if(!S.user||!['dashboard','kanban','demands','finance','reports'].includes(S.page))return;
     if(Date.now()-realtimeLastReconcileAt<2200)return;
@@ -811,7 +885,7 @@
   function showLogin(){document.dispatchEvent(new Event('taskesc:logout'));closeNotifications();closeAdminChat();automationEditorState=null;automationCatalogCache=null;automationListCache=[];document.body.classList.remove('admin-chat-enabled');$('#admin-chat-root')?.classList.add('hidden');S.user=null;window.TaskEscRealtime?.setCsrf?.('');realtimeOwnedChannels.clear();realtimePending.clear();realtimeSeen.clear();S.chatPeerId=0;S.chatContacts=[];S.chatUnread=0;if(realtimeTimer)clearTimeout(realtimeTimer);realtimeTimer=0;if(S.timer)clearInterval(S.timer);S.timer=null;if(notificationRealtimeTimer)clearTimeout(notificationRealtimeTimer);notificationRealtimeTimer=0;$('#app').classList.add('hidden');$('#login').classList.remove('hidden');$('#login-form').reset();$('#login-form').classList.remove('hidden');$('#twofa-form')?.classList.add('hidden');$('#twofa-form')?.reset();$('#login-error').textContent='';if($('#twofa-error'))$('#twofa-error').textContent='';}
   function showApp(){
     const requestedChatPeer=adminChatEnabled()?Number(new URLSearchParams(location.search).get('chat')||0):0;
-    S.user=S.meta.user;document.dispatchEvent(new Event('taskesc:login'));window.TaskEscRealtime?.setCsrf?.(S.csrf);syncRealtimeChannels();$('#login').classList.add('hidden');$('#app').classList.remove('hidden');applyBranding();
+    S.user=S.meta.user;document.dispatchEvent(new Event('taskesc:login'));window.TaskEscRealtime?.setCsrf?.(S.csrf);syncRealtimeChannels();$('#login').classList.add('hidden');$('#app').classList.remove('hidden');realtimeIndicator();applyBranding();
     $('#support-exit')?.classList.toggle('hidden',!S.user.is_support);$('#master-invite')?.classList.toggle('hidden',S.user.workspace_role!=='owner'||!!S.user.is_support);const preview=!!S.user.is_preview;$('#user-chip').textContent=preview?`Visualizando: ${S.user.preview_client_name}`:S.user.name+' · '+({admin:'Administrador',staff:'Equipe',client:'Cliente'}[S.user.role]||S.user.role);updateUserChipAvatar();$('#preview-exit')?.classList.toggle('hidden',!preview);$('#new-demand')?.classList.toggle('hidden',preview||!can('tasks.create'));
     buildNav();setupAdminChat();startAutoRefresh();refreshNotificationBadge();refreshChatBadge();setTimeout(promptPushAfterLogin,650);
     const cleanPath=location.pathname.replace(/\/+$/,''),baseClean=(BASE||'').replace(/\/+$/,'');
@@ -835,8 +909,7 @@
       if(connected&&Date.now()-lastFullRefresh<30000)return;
       if(['dashboard','kanban','demands','finance','reports','logs'].includes(S.page)){
         lastFullRefresh=Date.now();
-        try{await refresh();const i=$('#sync-indicator');
-          if(i)i.innerHTML='<i></i> '+(connected?'Tempo real · ':'Atualizado às ')+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:S.meta.timezone||'America/Fortaleza'});
+        try{await refresh();realtimeIndicator();
         }catch(e){console.debug?.('[TaskEsc refresh] fallback',e)}
       }
     },30000);

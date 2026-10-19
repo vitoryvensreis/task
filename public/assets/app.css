@@ -2415,3 +2415,11 @@ button.compact-row{cursor:pointer}.compact-row:hover{border-color:#3a4854}.compa
 .company-member-delete-dialog #confirm-company-member-delete:disabled{opacity:.45;cursor:not-allowed}
 @media(max-width:760px){.company-member-actions{flex-wrap:wrap}.company-member-transfer-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:420px){.company-member-transfer-grid{grid-template-columns:1fr}}
+
+
+/* Honest realtime connection status: never green for HTTP polling. */
+.sync-indicator[role="button"]{cursor:pointer;border:1px solid transparent;border-radius:8px;outline-offset:2px}
+.sync-indicator[role="button"]:hover,.sync-indicator[role="button"]:focus-visible{border-color:#334454;background:#14202c;color:#d7e5f1}
+.sync-indicator[data-realtime-status="connected"]{color:#9bdac2}
+.sync-indicator[data-realtime-status="connected"] i{background:#45b891}
+.sync-indicator:not([data-realtime-status="connected"]) i{background:#d0a46d}

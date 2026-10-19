@@ -18,7 +18,7 @@ $periodNames=['daily'=>'dia','weekly'=>'semana','biweekly'=>'quinzena','monthly'
 <meta property="og:type" content="website">
 <title>TaskEsc — Gestão de tarefas e equipes sem complicação</title>
 <link rel="icon" href="<?=e($root)?>/assets/taskesc-logo.svg">
-<link rel="stylesheet" href="<?=e($root)?>/assets/landing.css?v=1.0">
+<link rel="stylesheet" href="<?=e($root)?>/assets/landing.css?v=1.1">
 </head>
 <body>
 <div class="site-bg" aria-hidden="true"></div>
@@ -33,13 +33,23 @@ $periodNames=['daily'=>'dia','weekly'=>'semana','biweekly'=>'quinzena','monthly'
 </div>
 <div class="hero-art" aria-label="Prévia ilustrativa de um quadro Kanban do TaskEsc">
 <div class="glow"></div><div class="preview">
-<div class="preview-top"><span class="preview-logo"><span>◈</span> taskesc / operação</span><span class="preview-user">● Equipe conectada</span></div>
+<div class="preview-top"><span class="preview-logo"><span>◈</span> taskesc / operação</span><span class="preview-user">● Ambiente de demonstração</span></div>
 <div class="preview-head"><div><small>PROJETOS / DEMANDAS</small><h2>Visão da equipe</h2></div><span class="preview-pill">Quadro Kanban</span></div>
-<div class="kanban">
-<div class="column"><div class="column-name"><i class="indicator neutral"></i> A fazer <b>03</b></div><div class="ticket"><span class="chip">CONTEÚDO</span><strong>Planejar campanha</strong><p>Briefing e materiais</p><span class="ticket-foot">◷ Hoje <span>●●</span></span></div><div class="ticket"><span class="chip violet">PROJETO</span><strong>Revisar entregas</strong><p>Organização de arquivos</p><span class="ticket-foot">◷ Amanhã <span>●</span></span></div></div>
-<div class="column"><div class="column-name"><i class="indicator orange"></i> Em andamento <b>02</b></div><div class="ticket accent"><span class="chip orange">PRIORIDADE ALTA</span><strong>Produção de materiais</strong><p>Design e revisão final</p><div class="progress"><span></span></div><span class="ticket-foot">↗ Em execução <span>●●●</span></span></div></div>
-<div class="column"><div class="column-name"><i class="indicator green"></i> Concluído <b>06</b></div><div class="ticket"><span class="chip green">ENTREGUE</span><strong>Landing page</strong><p>Pronto para publicação</p><span class="ticket-foot">✓ Finalizado <span>●</span></span></div></div>
-</div><div class="preview-note"><span class="sparkle">✦</span><div><b>Fluxos automáticos</b><small>Quando um status muda, a próxima ação acontece.</small></div><span class="note-arrow">↗</span></div>
+<div class="demo-toolbar"><span class="demo-live"><i></i> Prévia interativa</span><span>Arraste, toque ou mova os cards</span><button id="demo-reset" type="button" aria-label="Reiniciar Kanban de demonstração" title="Reiniciar demonstração">↺ Reiniciar</button></div>
+<div class="kanban" id="demo-kanban" aria-label="Demonstração interativa de quadro Kanban TaskEsc">
+ <div class="column" data-lane="todo" aria-label="A fazer"><div class="column-name"><i class="indicator neutral"></i><span>A fazer</span><b data-count>0</b></div><div class="demo-card-stack" data-stack>
+  <article class="ticket" tabindex="0" role="button" draggable="true" data-demo-task="campaign" aria-label="Mover Planejar campanha para a próxima etapa"><span class="chip">CONTEÚDO</span><strong>Planejar campanha</strong><p>Briefing e referências</p><span class="ticket-foot">◷ Hoje <span class="demo-avatar">VS</span></span></article>
+  <article class="ticket" tabindex="0" role="button" draggable="true" data-demo-task="review" aria-label="Mover Revisar entregas para a próxima etapa"><span class="chip violet">PROJETO</span><strong>Revisar entregas</strong><p>Organização dos arquivos</p><span class="ticket-foot">◷ Amanhã <span class="demo-avatar">GB</span></span></article>
+ </div></div>
+ <div class="column" data-lane="doing" aria-label="Em andamento"><div class="column-name"><i class="indicator orange"></i><span>Em andamento</span><b data-count>0</b></div><div class="demo-card-stack" data-stack>
+  <article class="ticket accent" tabindex="0" role="button" draggable="true" data-demo-task="design" aria-label="Mover Produção de materiais para a próxima etapa"><span class="chip orange">PRIORIDADE ALTA</span><strong>Produção de materiais</strong><p>Design e edição final</p><div class="progress"><span></span></div><span class="ticket-foot">↗ Em execução <span class="demo-avatar">DP</span></span></article>
+  <article class="ticket" tabindex="0" role="button" draggable="true" data-demo-task="website" aria-label="Mover Ajustar interface para a próxima etapa"><span class="chip violet">DESENVOLVIMENTO</span><strong>Ajustar interface</strong><p>Componentes responsivos</p><span class="ticket-foot">↗ Produção <span class="demo-avatar">VR</span></span></article>
+ </div></div>
+ <div class="column" data-lane="done" aria-label="Concluído"><div class="column-name"><i class="indicator green"></i><span>Concluído</span><b data-count>0</b></div><div class="demo-card-stack" data-stack>
+  <article class="ticket" tabindex="0" role="button" draggable="true" data-demo-task="landing" aria-label="Mover Landing page para a próxima etapa"><span class="chip green">ENTREGUE</span><strong>Landing page</strong><p>Pronta para publicar</p><span class="ticket-foot">✓ Finalizado <span class="demo-avatar">TM</span></span></article>
+ </div></div>
+</div>
+<div class="preview-note" role="status" aria-live="polite"><span class="sparkle">✦</span><div><b>Fluxos automáticos</b><small id="demo-status">Mova um card ou assista à demonstração das etapas.</small></div><span class="note-arrow">↗</span></div>
 </div>
 </div></section>
 <section class="value-strip" aria-label="Benefícios"><div class="wrap value-items"><div><b>01</b><span>Centralize todas as demandas</span></div><div><b>02</b><span>Visualize prazos e responsáveis</span></div><div><b>03</b><span>Automatize tarefas repetitivas</span></div></div></section>
@@ -58,4 +68,5 @@ $periodNames=['daily'=>'dia','weekly'=>'semana','biweekly'=>'quinzena','monthly'
 <section class="last-cta"><div class="wrap"><div class="eyebrow">TRANSFORME SUA ROTINA</div><h2>Seu próximo projeto merece<br>um processo melhor.</h2><p>Um lugar para organizar o trabalho e deixar sua equipe focar no que realmente importa.</p><a class="btn btn-large" href="#planos">Conhecer planos <span>→</span></a></div></section>
 </main>
 <footer class="footer"><div class="wrap footer-row"><a class="logo" href="<?=e($root)?>/"><span class="logo-mark">T</span><span>TaskEsc<span class="logo-dot">.</span></span></a><p>Projetos claros. Equipes alinhadas.</p><div><a href="#recursos">Recursos</a><a href="#planos">Planos</a><a href="<?=e($root)?>/dashboard">Acesso à plataforma</a></div></div></footer>
+<script src="<?=e($root)?>/assets/landing-kanban.js?v=1.1" defer></script>
 </body></html>

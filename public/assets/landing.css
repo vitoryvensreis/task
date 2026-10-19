@@ -13,3 +13,28 @@ h1,h2,h3,p{margin-top:0}h1,h2,h3{font-family:Manrope,system-ui,sans-serif}h1{fon
 @media(max-width:1060px){.hero{grid-template-columns:1fr;padding-top:70px;padding-bottom:90px}.hero-copy{max-width:790px}.hero-art{max-width:710px}.preview{transform:none}.features{grid-template-columns:repeat(2,1fr)}.plans-grid{grid-template-columns:repeat(2,1fr)}.site-header nav{gap:14px}.how-inner{gap:35px}}
 @media(max-width:720px){.wrap,.site-header{padding-left:20px;padding-right:20px}.site-header nav{display:none}.site-header{height:72px}.header-actions{gap:10px}.header-actions .btn-small{display:none}.hero{padding-top:60px;padding-bottom:65px;gap:50px;min-height:0}h1{font-size:clamp(39px,11vw,56px)}.hero-copy>p{font-size:15px}.hero-proof{gap:10px}.preview{padding:11px;border-radius:14px}.preview-pill{display:none}.kanban{gap:5px}.column{padding:5px;min-height:210px}.column-name{font-size:8px}.ticket{padding:8px 6px}.ticket strong{font-size:9px}.ticket p,.ticket-foot{font-size:8px}.preview-note{padding:10px}.value-items{grid-template-columns:1fr;gap:12px}.value-items>div{border:0}.section{padding-top:73px;padding-bottom:78px}.features,.plans-grid,.how-inner{grid-template-columns:1fr}.feature{min-height:220px}.plans-empty{flex-direction:column;align-items:start}.footer-row{flex-wrap:wrap;justify-content:start}.footer-row>div{width:100%;flex-wrap:wrap}.hero-actions{gap:10px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition:none!important}}
+
+/* Landing · functional demo Kanban: scoped styles, no application data access */
+.demo-toolbar{display:flex;align-items:center;gap:9px;margin:-8px 0 12px;color:#8e9ba9;font-size:10px;flex-wrap:wrap}
+.demo-toolbar>span:nth-child(2){flex:1;text-align:center;white-space:nowrap}
+.demo-toolbar button{border:1px solid #49515c;background:#222933;color:#c9d4e0;font-size:10px;padding:5px 8px;border-radius:6px;cursor:pointer}
+.demo-toolbar button:hover,.demo-toolbar button:focus-visible{background:#364351;color:#fff}
+.demo-live{display:flex;align-items:center;gap:5px;color:#ecac7b;font-weight:700}
+.demo-live i{display:inline-block;width:6px;height:6px;background:#efa05a;border-radius:50%;box-shadow:0 0 0 4px #efa05a20}
+#demo-kanban .column{min-height:278px;transition:background .2s,border-color .2s}
+#demo-kanban .column.demo-over{background:#473223;border-color:#eeb278}
+#demo-kanban .column-name{gap:6px}
+#demo-kanban .column-name .indicator{margin-right:0;flex-shrink:0}
+#demo-kanban .column-name span{flex:1}
+#demo-kanban .demo-card-stack{min-height:215px;display:flex;flex-direction:column;gap:8px}
+#demo-kanban .ticket{margin:0;cursor:grab;user-select:none;touch-action:manipulation;outline-offset:2px;transition:transform .18s ease,border-color .2s,box-shadow .2s;transform:perspective(600px) translateY(0) rotateX(0) rotateY(0)}
+#demo-kanban .ticket:hover,#demo-kanban .ticket:focus-visible{z-index:2;position:relative;transform:perspective(600px) translateY(-8px) rotateX(var(--demo-rotate-x,0deg)) rotateY(var(--demo-rotate-y,0deg));border-color:#f3a46a;box-shadow:0 14px 27px #0007}
+#demo-kanban .ticket:focus-visible{outline:2px solid #f9ae73}
+#demo-kanban .ticket.demo-dragging{opacity:.4;cursor:grabbing}
+#demo-kanban .ticket strong{font-size:11px}
+#demo-kanban .ticket .chip{font-size:8px}
+#demo-kanban .ticket p{margin-bottom:10px}
+.demo-avatar{display:grid;place-items:center;width:20px;height:20px;color:#ffcaa0;background:#594238;border:1px solid #795745;border-radius:50%;font-size:8px;letter-spacing:0}
+#demo-status{line-height:1.5}
+@media(max-width:720px){.demo-toolbar>span:nth-child(2){display:none}#demo-kanban .column{min-height:270px}#demo-kanban .demo-card-stack{min-height:210px}#demo-kanban .ticket strong{font-size:9px}#demo-kanban .ticket .chip{font-size:7px}.demo-avatar{width:16px;height:16px;font-size:7px}}
+@media(prefers-reduced-motion:reduce){#demo-kanban .ticket{animation:none!important;transition:none!important}}

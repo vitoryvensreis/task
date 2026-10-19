@@ -53,27 +53,87 @@
  .master-page .master-view .master-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 
-/* Master shell v3: eliminate the phantom left gutter and right-edge clipping. */
-body.master-page{width:100%;min-width:0;overflow-x:hidden}
-body.master-page #master-shell.master-app{display:flex!important;align-items:stretch;justify-content:flex-start;gap:0;width:100%;min-width:0;max-width:100%;margin:0;padding:0}
-body.master-page #master-shell.master-app.hidden{display:none!important}
-body.master-page #master-shell.master-app>.sidebar{position:sticky;top:0;left:0;display:flex;flex-direction:column;flex:0 0 248px!important;width:248px!important;min-width:248px;max-width:248px;margin:0;height:100dvh;max-height:100dvh;overflow-y:auto;overflow-x:hidden}
-body.master-page #master-shell.master-app>.main{display:block!important;flex:1 1 0!important;width:calc(100% - 248px)!important;min-width:0!important;max-width:none!important;margin:0!important;overflow:visible!important}
-body.master-page #master-shell.master-app .topbar{position:sticky;top:0;left:0;right:0;width:100%;max-width:100%;margin:0;min-width:0;overflow:visible!important;padding:0 clamp(16px,2vw,32px)}
-body.master-page #master-shell.master-app .topbar .master-topbar-actions{flex:0 1 auto;min-width:0;max-width:50%;overflow:visible;display:flex;align-items:center;justify-content:flex-end}
-body.master-page #master-shell.master-app .topbar #master-refresh{white-space:nowrap;min-width:max-content;flex:none}
-body.master-page #master-shell.master-app .content{width:100%;max-width:100%;min-width:0;margin:0!important;padding:24px clamp(16px,2vw,34px) 56px}
-body.master-page #master-shell.master-app .master-view{max-width:100%;min-width:0}
-body.master-page #master-shell.master-app :is(.master-stats,.master-dashboard-grid,.mc-customer-row,.master-inner-shell){max-width:100%;min-width:0}
-@media(max-width:900px){
- body.master-page #master-shell.master-app>.sidebar{flex-basis:220px!important;width:220px!important;min-width:220px}
- body.master-page #master-shell.master-app>.main{width:calc(100% - 220px)!important}
- body.master-page #master-shell.master-app .topbar .user-chip{display:none}
+/* Master shell v4: grid layout prevents the fixed-menu offset from being applied twice.
+   Overrides app.css desktop margin-left and the prior flex shim. */
+body.master-page{overflow-x:hidden}
+body.master-page #master-shell.master-app{
+ display:grid!important;grid-template-columns:260px minmax(0,1fr)!important;
+ align-items:stretch!important;gap:0!important;
+ width:100%!important;max-width:100%!important;min-width:0!important;
+ margin:0!important;padding:0!important;overflow:visible!important;
 }
-@media(max-width:720px){
- body.master-page #master-shell.master-app>.sidebar{position:fixed!important;top:0;bottom:0;left:0;z-index:105;flex-basis:auto!important;width:min(286px,88vw)!important;min-width:0;max-width:88vw;transform:translateX(-110%)}
- body.master-page #master-shell.master-app.menu-open>.sidebar{transform:translateX(0)}
- body.master-page #master-shell.master-app>.main{flex:1 1 auto!important;width:100%!important}
- body.master-page #master-shell.master-app .topbar{padding:0 12px}
- body.master-page #master-shell.master-app .content{padding:16px 12px 35px}
+body.master-page #master-shell.master-app.hidden{display:none!important}
+body.master-page #master-shell.master-app>.sidebar{
+ grid-column:1!important;grid-row:1!important;
+ position:sticky!important;inset:auto!important;top:0!important;
+ display:flex!important;flex-direction:column!important;
+ width:260px!important;min-width:0!important;max-width:260px!important;
+ height:100dvh!important;max-height:100dvh!important;
+ margin:0!important;padding:12px 11px!important;
+ overflow-x:hidden!important;overflow-y:auto!important;
+ transform:none;box-sizing:border-box;z-index:30;
+}
+body.master-page #master-shell.master-app>.sidebar .brand{
+ flex-shrink:0;min-width:0;gap:8px;font-size:14px;
+}
+body.master-page #master-shell.master-app>.sidebar .master-nav{min-height:0;min-width:0}
+body.master-page #master-shell.master-app>.sidebar .master-nav .nav-btn{
+ min-width:0;max-width:100%;width:100%;gap:8px!important;
+ padding:8px 7px!important;font-size:11.5px!important;white-space:normal;
+ text-align:left;overflow-wrap:break-word;
+}
+body.master-page #master-shell.master-app>.sidebar .master-nav .nav-btn .nav-icon{
+ flex:0 0 18px!important;width:18px!important;font-size:15px;
+}
+body.master-page #master-shell.master-app>.sidebar .master-search-field kbd{display:none}
+body.master-page #master-shell.master-app>.sidebar .master-search-field input{width:100%;min-width:0}
+body.master-page #master-shell.master-app>.sidebar .sidebar-bottom{
+ margin-top:auto;flex-shrink:0;min-width:0;
+}
+body.master-page #master-shell.master-app>.main{
+ grid-column:2!important;grid-row:1!important;
+ display:block!important;flex:auto!important;
+ position:relative;min-width:0!important;max-width:none!important;
+ width:100%!important;margin:0!important;margin-left:0!important;
+ padding:0!important;overflow:visible!important;
+ box-sizing:border-box;
+}
+body.master-page #master-shell.master-app>.main>.topbar{
+ position:sticky;top:0;left:auto;right:auto;
+ box-sizing:border-box;width:100%!important;max-width:100%!important;
+ margin:0!important;min-width:0;overflow:visible!important;
+ padding-inline:clamp(12px,2vw,30px)!important;gap:10px;
+}
+body.master-page #master-shell.master-app>.main>.topbar .page-heading{min-width:0;flex:1}
+body.master-page #master-shell.master-app>.main>.topbar .master-topbar-actions{
+ min-width:0;max-width:none;flex:0 1 auto;display:flex;align-items:center;
+ justify-content:flex-end;flex-wrap:nowrap;gap:7px;
+}
+body.master-page #master-shell.master-app>.main>.topbar #master-refresh{
+ flex-shrink:0;min-width:0;white-space:nowrap;
+}
+body.master-page #master-shell.master-app>.main>.content{
+ max-width:100%!important;width:100%!important;min-width:0;
+ margin:0!important;padding:20px clamp(12px,2vw,28px) 48px!important;
+}
+@media(max-width:1080px) and (min-width:761px){
+ body.master-page #master-shell.master-app{grid-template-columns:225px minmax(0,1fr)!important}
+ body.master-page #master-shell.master-app>.sidebar{width:225px!important;max-width:225px!important}
+ body.master-page #master-shell.master-app>.main>.topbar .user-chip{display:none!important}
+}
+@media(max-width:760px){
+ body.master-page #master-shell.master-app{display:block!important}
+ body.master-page #master-shell.master-app>.sidebar{
+  position:fixed!important;inset:0 auto 0 0!important;top:0!important;
+  width:min(286px,88vw)!important;max-width:88vw!important;
+  transform:translateX(-110%)!important;z-index:105!important;
+  box-shadow:15px 0 45px #0009;
+ }
+ body.master-page #master-shell.master-app.menu-open>.sidebar{transform:translateX(0)!important}
+ body.master-page #master-shell.master-app>.main{
+  display:block!important;width:100%!important;min-width:0!important;
+  margin:0!important;margin-left:0!important;
+ }
+ body.master-page #master-shell.master-app>.main>.topbar{padding-inline:12px!important}
+ body.master-page #master-shell.master-app>.main>.content{padding:14px 12px 32px!important}
 }

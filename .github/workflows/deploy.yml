@@ -72,6 +72,7 @@ jobs:
           node --check public/assets/realtime-client.js
           node tests/realtime-frontend.mjs
           node tests/realtime-automation-kanban.mjs
+          node tests/kanban-files-regression.mjs
           node tests/automation-frontend.mjs
           node tests/automation-pan.mjs
           node --check public/assets/vendor/centrifuge-5.7.4.js

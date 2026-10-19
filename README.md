@@ -609,3 +609,9 @@ A operação possui confirmação adicional, registro de auditoria e teste trans
 Movimentos manuais e ações `action.task` da automação geram eventos `demand.stage_changed` na Outbox transacional. O browser aplica atualizações recebidas pelo Centrifugo. Em caso de reconexão/ressubcrição, retorno à aba ou perda de mensagens em períodos offline, a interface reconcilia com a API, sem depender exclusivamente do estado `connected` do socket. O fallback de verificação passa de 3 minutos para cerca de 30 segundos enquanto o usuário está inativo. A atualização aguarda brevemente a digitação em filtros do Kanban e preserva foco/seleção.
 
 A confirmação de disponibilidade **em produção** ainda depende do serviço de Outbox e Centrifugo ativos na VPS. Validar com `php bin/realtime-worker.php --health` e `php bin/automation-worker.php --health`, conforme suporte da instalação. Os novos testes `tests/realtime-automation-kanban.mjs` e as verificações em `tests/automation-core.php` protegem a emissão do evento após upload final e sua recepção/reconciliação no frontend.
+
+### Correção: exclusão de anexos e pesquisa do Kanban
+
+- `Files::delete` respeita `workspace_id` ao limpar vínculos de comentários, avaliações e anexos, atendendo ao guard do modo multitenant. A auditoria e o evento de remoção continuam transacionais. O Google Drive informa especificamente falhas de permissão e autenticação quando aplicáveis. A exclusão física no Drive continua dependendo da autorização da conta conectada.
+- Ao arrastar um card, mover coluna, clicar em Atualizar ou receber um evento realtime, o Kanban guarda e restaura a pesquisa, serviço, cliente, responsável, prioridade e filtro de atrasados; o card movido permanece visível na coluna de destino se corresponder à pesquisa.
+- Testes: `tests/kanban-files-regression.mjs` e uma regressão de remoção de anexo durante isolamento multiworkspace na suíte `tests/workspace-foundation.php`.

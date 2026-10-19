@@ -12,21 +12,66 @@ final class UserAvatars {
   }
   return null;
  }
+ private const MAX_BYTES=10*1024*1024;
+ private static function version(int $id,array $source): string {
+  $path=self::dir().'/u'.$id.'.rev';
+  $stored=@file_get_contents($path);
+  if(is_string($stored)&&preg_match('/\\A[a-f0-9]{24}\\z/D',trim($stored)))return trim($stored);
+  return (string)filemtime($source[0]).'-'.(string)filesize($source[0]);
+ }
  public static function url(int $id): ?string {
   $a=self::locate($id);
-  return $a?base('avatar.php?id='.$id.'&v='.(string)filemtime($a[0])):null;
+  return $a?base('avatar.php?id='.$id.'&v='.self::version($id,$a)):null;
+ }
+ /**
+  * Atomic publication per user. The new photo replaces the previous image;
+  * other extensions are deleted (also when changing JPEG -> WebP/PNG).
+  * Called with an already validated, staged upload inside the private directory.
+  */
+ private static function publish(int $id,string $temp,string $ext): void {
+  if($id<1||!in_array($ext,self::MIME_EXT,true))throw new InvalidArgumentException('Foto inválida.');
+  $dir=self::dir();
+  $lock=@fopen($dir.'/u'.$id.'.lock','c');
+  if(!$lock){@unlink($temp);fail('Não foi possível proteger a substituição da foto.',500);}
+  try {
+   if(!flock($lock,LOCK_EX))fail('Não foi possível bloquear a foto para substituição.',500);
+   $target=$dir.'/u'.$id.'.'.$ext;
+   if(!@rename($temp,$target))fail('Não foi possível publicar a foto.',500);
+   @chmod($target,0640);
+   foreach(self::MIME_EXT as $otherExt){
+    if($otherExt===$ext)continue;
+    $previous=$dir.'/u'.$id.'.'.$otherExt;
+    if(is_file($previous)&&!@unlink($previous))fail('Nova foto salva, mas não foi possível remover a anterior.',500);
+   }
+   $revision=bin2hex(random_bytes(12));
+   $revFile=$dir.'/u'.$id.'.rev';
+   $revTemp=$dir.'/rev-'.bin2hex(random_bytes(10)).'.tmp';
+   try{
+    if(@file_put_contents($revTemp,$revision,LOCK_EX)!==strlen($revision)||!@rename($revTemp,$revFile))
+     fail('Foto salva, mas não foi possível atualizar a versão em cache.',500);
+    @chmod($revFile,0600);
+   }finally{@unlink($revTemp);}
+   clearstatcache(true,$target);
+  }finally {
+   @unlink($temp);
+   @flock($lock,LOCK_UN);@fclose($lock);
+  }
  }
  public static function upload(?array $file): array {
   Auth::load();
   if(Auth::$origin!=='web'||MasterSupport::isSupport()||Auth::isPreview())fail('Alteração de foto não permitida nesta sessão.',403);
   checkCsrf();
-  if(!is_array($file)||($file['error']??UPLOAD_ERR_NO_FILE)!==UPLOAD_ERR_OK)fail('Selecione uma foto JPEG, PNG ou WebP.',422);
+  $error=(int)($file['error']??UPLOAD_ERR_NO_FILE);
+  if($error===UPLOAD_ERR_INI_SIZE||$error===UPLOAD_ERR_FORM_SIZE)
+   fail('O servidor recusou o tamanho da foto. O limite permitido é de 10 MB.',413);
+  if(!is_array($file)||$error!==UPLOAD_ERR_OK)fail('Selecione uma foto JPEG, PNG ou WebP.',422);
   $size=(int)($file['size']??0);
-  if($size<1||$size>3*1024*1024)fail('A foto deve ter até 3 MB.',413);
+  if($size<1||$size>self::MAX_BYTES)fail('A foto deve ter até 10 MB.',413);
   $tmp=(string)($file['tmp_name']??'');
   if(!is_uploaded_file($tmp))fail('Upload inválido.',422);
   $info=@getimagesize($tmp);
-  if(!$info||($info[0]??0)<16||($info[1]??0)<16||($info[0]??0)>4096||($info[1]??0)>4096)fail('Dimensões de imagem inválidas.',422);
+  if(!$info||($info[0]??0)<16||($info[1]??0)<16||($info[0]??0)>8192||($info[1]??0)>8192||($info[0]*$info[1])>50000000)
+   fail('Dimensões de imagem inválidas.',422);
   $mime=(new finfo(FILEINFO_MIME_TYPE))->file($tmp);
   if(!isset(self::MIME_EXT[$mime])||($info['mime']??'')!==$mime)fail('Imagem inválida.',422);
   $dir=self::dir();
@@ -35,10 +80,7 @@ final class UserAvatars {
   $temp=$dir.'/upload-'.bin2hex(random_bytes(12)).'.tmp';
   if(!move_uploaded_file($tmp,$temp))fail('Não foi possível enviar a foto.',500);
   @chmod($temp,0640);
-  $target=$dir.'/u'.$id.'.'.$ext;
-  if(!@rename($temp,$target)){@unlink($temp);fail('Não foi possível salvar a foto.',500);}
-  foreach(['jpg','png','webp'] as $other)if($other!==$ext)@unlink($dir.'/u'.$id.'.'.$other);
-  clearstatcache(true,$target);
+  self::publish($id,$temp,$ext);
   $url=self::url($id);
   Auth::$user['avatar_url']=$url;
   audit('user',$id,'profile.photo.updated');

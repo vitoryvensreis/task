@@ -257,10 +257,8 @@ try{
    'SELECT id,name,email,role,active FROM users WHERE id=?',[$pendingOwner])),
    'Pending workspace owner must not inherit the original company.');
  // Two-workspace cutover: this is a disposable database, never production.
- $gabId=DB::insert('users',['name'=>'Gabriella CI','email'=>PlatformTenantProvisioning::OWNER_EMAIL,
-   'password_hash'=>'test','role'=>'admin','active'=>1,'created_at'=>now()]);
- DB::insert('workspace_members',['workspace_id'=>$ws,'user_id'=>$gabId,'role'=>'admin',
-   'status'=>'active','joined_at'=>now()]);
+ $gabId=(int)$pendingOwner;
+ testws($gabId>0,'Pending Gabriella candidate missing.');
  $ptp=file_get_contents(ROOT.'/database/migrations/036_platform_tenant_provisioning.sql');
  testws($ptp!==false,'Provisioning DDL missing.');
  foreach(preg_split('/;\\s*(?:\\r?\\n|$)/',$ptp) as $q)

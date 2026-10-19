@@ -20,7 +20,18 @@ final class RealtimeDiagnostics {
   self::guard();
   $realtime=(new Realtime())->health();
   $heartbeat=RealtimeWorkerHealth::read();
-  $stats=EventOutbox::stats(RealtimeOutboxWorker::DEFAULT_MAX_ATTEMPTS);
+  // Operational metrics are tenant-scoped for ordinary workspace admins.
+  // Do not reveal queue volume belonging to any other active company.
+  if(WorkspaceTenantMode::enabled()){
+   $ws=Auth::workspaceId();$maxAttempts=RealtimeOutboxWorker::DEFAULT_MAX_ATTEMPTS;
+   $row=DB::one("SELECT COUNT(*) total,
+    SUM(published_at IS NULL) unpublished,
+    SUM(published_at IS NULL AND attempts<? AND available_at<=UTC_TIMESTAMP()) due,
+    SUM(published_at IS NULL AND attempts>=?) exhausted
+    FROM event_outbox WHERE workspace_id=?",[$maxAttempts,$maxAttempts,$ws])??[];
+   $stats=['unpublished'=>(int)($row['unpublished']??0),
+    'due'=>(int)($row['due']??0),'exhausted'=>(int)($row['exhausted']??0)];
+  }else $stats=EventOutbox::stats(RealtimeOutboxWorker::DEFAULT_MAX_ATTEMPTS);
   $result=RealtimeWorkerHealth::evaluate($heartbeat,$realtime,$stats);
   return [
    'status'=>$result['status'],'enabled'=>$realtime['enabled'],

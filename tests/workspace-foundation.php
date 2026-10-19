@@ -21,6 +21,7 @@ require ROOT.'/app/PlatformTenantProvisioning.php';
 require ROOT.'/app/MasterSupport.php';
 require ROOT.'/app/Notify.php';
 require ROOT.'/app/Auth.php';
+require ROOT.'/app/UserAvatars.php';
 require ROOT.'/app/WorkspaceCatalog.php';
 require ROOT.'/app/WorkspacePreferences.php';
 require ROOT.'/app/WorkspaceRoles.php';

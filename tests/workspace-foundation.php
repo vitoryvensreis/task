@@ -15,6 +15,8 @@ require ROOT.'/app/DB.php';
 require ROOT.'/app/WorkspaceFoundation.php';
 require ROOT.'/app/WorkspaceFoundationGuard.php';
 require ROOT.'/app/WorkspaceContext.php';
+require ROOT.'/app/WorkspaceDatabaseStage1.php';
+require ROOT.'/app/WorkspaceActivation.php';
 require ROOT.'/app/PlatformTenantProvisioning.php';
 require ROOT.'/app/MasterSupport.php';
 require ROOT.'/app/Notify.php';
@@ -254,6 +256,49 @@ try{
  refuses(fn()=>WorkspaceContext::forUser(DB::one(
    'SELECT id,name,email,role,active FROM users WHERE id=?',[$pendingOwner])),
    'Pending workspace owner must not inherit the original company.');
+ // Two-workspace cutover: this is a disposable database, never production.
+ $gabId=DB::insert('users',['name'=>'Gabriella CI','email'=>PlatformTenantProvisioning::OWNER_EMAIL,
+   'password_hash'=>'test','role'=>'admin','active'=>1,'created_at'=>now()]);
+ DB::insert('workspace_members',['workspace_id'=>$ws,'user_id'=>$gabId,'role'=>'admin',
+   'status'=>'active','joined_at'=>now()]);
+ $ptp=file_get_contents(ROOT.'/database/migrations/036_platform_tenant_provisioning.sql');
+ testws($ptp!==false,'Provisioning DDL missing.');
+ foreach(preg_split('/;\\s*(?:\\r?\\n|$)/',$ptp) as $q)
+   if(trim($q)!=='')DB::run($q);
+ DB::run('INSERT INTO platform_tenant_provisioning
+   (source_workspace_id,prospective_owner_id,proposed_name,proposed_slug,
+     initial_config_json,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)',
+   [$ws,$gabId,PlatformTenantProvisioning::NAME,PlatformTenantProvisioning::SLUG,
+    '{}','pending',now(),now()]);
+ testws(WorkspaceDatabaseStage1::apply()['stage']===1,'Stage 1 migration failed.');
+ $cut=WorkspaceActivation::apply();
+ $newWs=(int)$cut['workspace_id'];
+ testws($newWs!==$ws&&WorkspaceTenantMode::enabled(),'Multitenant activation failed.');
+ testws(WorkspaceFoundationGuard::valid(),'Multiworkspace foundation check failed.');
+ testws(WorkspaceActivation::apply()['already_active']===true,'Cutover must be idempotent.');
+ testws(WorkspaceDatabaseStage1::apply()['multiworkspace_active']===true,
+   'Subsequent deployments must accept two workspaces.');
+ $moved=DB::one('SELECT role,workspace_id FROM workspace_members WHERE user_id=?',[$gabId]);
+ testws($moved['role']==='owner'&&(int)$moved['workspace_id']===$newWs,
+   'Gabriella must belong only to her own workspace.');
+ foreach(['clients','demands','invoices','files','projects','payments'] as $table)
+  testws((int)(DB::one('SELECT COUNT(*) n FROM `'.$table.'` WHERE workspace_id=?',[$newWs])['n']??0)===0,
+   'New workspace must start with no historical business data: '.$table);
+ testws((int)(DB::one('SELECT COUNT(*) n FROM stages WHERE workspace_id=?',[$newWs])['n']??0)>0,
+   'Gabriella needs initial Kanban workflow definitions.');
+ testws((int)(DB::one('SELECT COUNT(*) n FROM categories WHERE workspace_id=?',[$newWs])['n']??0)>0,
+   'Gabriella needs initial service category definitions.');
+ $gabUser=DB::one('SELECT id,name,email,role,active FROM users WHERE id=?',[$gabId]);
+ $ctx=WorkspaceContext::forUser($gabUser);
+ testws((int)$ctx['id']===$newWs,'Gabriella login must resolve only her workspace.');
+ Auth::$user=$gabUser;Auth::$actor=$gabUser;Auth::$workspace=$ctx;
+ refuses(fn()=>Auth::client($client),'Gabriella must not access Vitor client.');
+ refuses(fn()=>Auth::demand($demand),'Gabriella must not access Vitor demand.');
+ Auth::$user=null;Auth::$actor=null;Auth::$workspace=null;
+ testws((int)(DB::one('SELECT workspace_id FROM clients WHERE id=?',[$client])['workspace_id']??0)===$ws,
+  'Vitor historical clients cannot move during cutover.');
+ testws((int)(DB::one('SELECT workspace_id FROM invoices WHERE id=?',[$invoice])['workspace_id']??0)===$ws,
+  'Vitor historical finance cannot move during cutover.');
  echo "Workspace schema30 CI OK: owner, memberships, ".count(WorkspaceFoundation::DATA_TABLES).
   " mapped tables, preserved client/task/invoice/file, pending Master, calendar excluded, idempotence, second tenant blocked.\n";
 }catch(Throwable $e){fwrite(STDERR,'Workspace CI failed: '.$e->getMessage()."\n");exit(1);}

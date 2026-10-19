@@ -42,6 +42,25 @@ final class SystemHealth {
   $google=self::googleAccounts();$googleBad=array_values(array_filter($google,static fn($g)=>$g['status']!=='connected'||!empty($g['last_error'])));$gStatus=$googleBad?'warn':'ok';$items[]=self::item('google','Contas Google',$gStatus,count($google).' conta(s) em uso, '.count($googleBad).' com atenção',$google);if($gStatus==='warn'&&$overall==='ok')$overall='warn';  $root=ROOT;$free=@disk_free_space($root);$total=@disk_total_space($root);$pct=($free!==false&&$total)?round(($free/$total)*100,1):null;$diskStatus=$pct!==null&&$pct<10?'error':($pct!==null&&$pct<20?'warn':'ok');$items[]=self::item('disk','Armazenamento da VPS',$diskStatus,$pct===null?'Não foi possível medir':$pct.'% livre',['free'=>$free,'total'=>$total]);if($diskStatus==='error')$overall='error';elseif($diskStatus==='warn'&&$overall==='ok')$overall='warn';
   $openErrors=(int)(DB::one('SELECT COUNT(*) AS n FROM system_errors WHERE resolved_at IS NULL AND created_at>=?',[gmdate('Y-m-d H:i:s',time()-86400*7)])['n']??0);$eStatus=$openErrors>10?'error':($openErrors>0?'warn':'ok');$items[]=self::item('errors','Erros internos',$eStatus,$openErrors.' erro(s) aberto(s) nos últimos 7 dias');if($eStatus==='error')$overall='error';elseif($eStatus==='warn'&&$overall==='ok')$overall='warn';
   $pushBad=(int)(DB::one("SELECT COUNT(*) AS n FROM push_subscriptions WHERE active=1 AND last_error IS NOT NULL AND last_error<>''")['n']??0);$pushAll=(int)(DB::one('SELECT COUNT(*) AS n FROM push_subscriptions WHERE active=1')['n']??0);$pushFailed=(int)(DB::one("SELECT COUNT(*) AS n FROM push_delivery_log WHERE status='failed' AND created_at>=?",[gmdate('Y-m-d H:i:s',time()-86400)])['n']??0);$pStatus=($pushBad||$pushFailed)?'warn':'ok';$items[]=self::item('push','Notificações Push',$pStatus,$pushAll.' dispositivo(s) ativo(s), '.$pushBad.' assinatura(s) com erro, '.$pushFailed.' falha(s) de entrega nas últimas 24h');if($pStatus==='warn'&&$overall==='ok')$overall='warn';
+  // Delivery metrics are aggregate and contain no customer data or credentials.
+  $since=gmdate('Y-m-d H:i:s',time()-86400);
+  $sentMail=(int)(DB::one("SELECT COUNT(*) n FROM mail_queue WHERE status='sent' AND sent_at>=?",[$since])['n']??0);
+  $failedMail=(int)(DB::one("SELECT COUNT(*) n FROM mail_queue WHERE status='failed'")['n']??0);
+  if(DB::one("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='platform_mail_queue'")){
+    $sentMail+=(int)(DB::one("SELECT COUNT(*) n FROM platform_mail_queue WHERE status='sent' AND sent_at>=?",[$since])['n']??0);
+    $failedMail+=(int)(DB::one("SELECT COUNT(*) n FROM platform_mail_queue WHERE status='failed'")['n']??0);
+  }
+  $sentPush=(int)(DB::one("SELECT COUNT(*) n FROM push_delivery_log WHERE status='sent' AND created_at>=?",[$since])['n']??0);
+  $worker=RealtimeWorkerHealth::read();
+  $realtimeStatus=($worker['status']??'')==='ok'?'ok':'warn';
+  $items[]=self::item('delivery','Entregas de notificações','ok',
+    'E-mails enviados em 24h: '.$sentMail.' · Push aceitos pelo provedor: '.$sentPush,
+    ['mail_sent_24h'=>$sentMail,'mail_failed'=>$failedMail,'push_accepted_24h'=>$sentPush,
+      'smtp_configured'=>!empty($smtp['host'])]);
+  $items[]=self::item('realtime','WebSocket / Centrifugo',$realtimeStatus,
+    $realtimeStatus==='ok'?'Worker ativo · heartbeat '.($worker['heartbeat_at']??''):'Worker sem heartbeat recente',
+    ['worker'=>$worker['status']??'missing','last_published_at'=>$worker['last_published_at']??null]);
+  if($realtimeStatus==='warn'&&$overall==='ok')$overall='warn';
   return ['status'=>$overall,'checked_at'=>now(),'items'=>$items];
  }
  public static function logs(array $p=[]): array {

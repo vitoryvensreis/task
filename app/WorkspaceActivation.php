@@ -132,15 +132,18 @@ final class WorkspaceActivation {
       [$gabId,'brand_name','TaskEsc — Gabriella',now()]);
     // Workflow *definitions* are safe to provision. Do not copy business
     // tasks, clients, contracts, file metadata or financial records.
-    DB::run('INSERT INTO stages (workspace_id,name,kind,color,position,active)
-      SELECT ?,name,kind,color,position,active FROM stages WHERE workspace_id=?',
-      [$gabId,$oldId]);
-    DB::run('INSERT INTO categories (workspace_id,name,fields_json,
-      default_amount_cents,default_due_hours,default_revisions,
-      default_priority,default_assigned_to,checklist_json,active)
-      SELECT ?,name,fields_json,default_amount_cents,default_due_hours,
-       default_revisions,default_priority,NULL,checklist_json,active
-       FROM categories WHERE workspace_id=?',[$gabId,$oldId]);
+    WorkspaceJobScope::forWorkspace($gabId,static function()use($oldId):void {
+     $stages=DB::all('SELECT name,kind,color,position,active FROM stages
+       WHERE workspace_id=? ORDER BY position,id',[$oldId]);
+     if(!$stages)throw new RuntimeException('Original Kanban stages missing.');
+     foreach($stages as $stage)DB::insert('stages',$stage);
+     $categories=DB::all('SELECT name,fields_json,default_amount_cents,
+       default_due_hours,default_revisions,default_priority,checklist_json,active
+       FROM categories WHERE workspace_id=? ORDER BY id',[$oldId]);
+     if(!$categories)throw new RuntimeException('Original service categories missing.');
+     foreach($categories as $category)
+      DB::insert('categories',$category+['default_assigned_to'=>null]);
+    });
     DB::run('UPDATE platform_tenant_provisioning SET status=?,activated_workspace_id=?,
       activated_at=?,updated_at=? WHERE id=? AND status=?',
       ['activated',$gabId,now(),now(),(int)$owner['provisioning_id'],'pending']);

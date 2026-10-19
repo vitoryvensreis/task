@@ -300,6 +300,69 @@ try{
   'Vitor historical clients cannot move during cutover.');
  testws((int)(DB::one('SELECT workspace_id FROM invoices WHERE id=?',[$invoice])['workspace_id']??0)===$ws,
   'Vitor historical finance cannot move during cutover.');
+ // Automation fanout must NEVER leak a trigger from one company to the other.
+ require_once ROOT.'/app/Automation.php';
+ require_once ROOT.'/app/AutomationWorker.php';
+ require_once ROOT.'/app/EventOutbox.php';
+ if(!function_exists('json')){function json(mixed $value):string{return json_encode($value,JSON_THROW_ON_ERROR);}}
+ DB::run("CREATE TABLE IF NOT EXISTS automation_workspace_cursors (
+  workspace_id BIGINT UNSIGNED PRIMARY KEY,last_outbox_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  heartbeat_at DATETIME(6) NULL,updated_at DATETIME(6) NOT NULL)");
+ $rule=json(['version'=>1,'nodes'=>[
+  ['id'=>'trigger','type'=>'trigger','config'=>['event'=>'demand.created']],
+  ['id'=>'end','type'=>'end','config'=>[]]],
+  'edges'=>[['from'=>'trigger','to'=>'end','branch'=>'next']]]);
+ $storeRule=static function(int $workId,int $creator)use($rule):int {
+  return WorkspaceJobScope::forWorkspace($workId,static function()use($creator,$rule):int {
+   return DB::insert('automations',['name'=>'Scoped rule','trigger_event'=>'demand.created',
+    'definition_json'=>$rule,'active'=>1,'version'=>1,'created_by'=>$creator,
+    'created_at'=>now(),'updated_at'=>now()]);
+  });
+ };
+ $oldRule=$storeRule($ws,$owner);$newRule=$storeRule($newWs,$gabId);
+ foreach([$ws,$newWs] as $workId)
+  DB::run('INSERT INTO automation_workspace_cursors
+    (workspace_id,last_outbox_id,updated_at) VALUES (?,0,?)',[$workId,now()]);
+ $emit=static function(int $workId,int $taskId):void {
+  WorkspaceJobScope::forWorkspace($workId,static function()use($workId,$taskId):void {
+   EventOutbox::transaction(static function()use($workId,$taskId):void {
+    EventOutbox::enqueue('automation-ci-'.$workId.'-'.$taskId,
+     'demand.created','demand',$taskId,'staff/ws:'.$workId,
+     ['operation_id'=>bin2hex(random_bytes(16))]);
+   });
+  });
+ };
+ $emit($ws,$demand);
+ $gotOld=WorkspaceJobScope::forWorkspace($ws,static fn()=>AutomationWorker::ingestOutbox(50));
+ $gotGabi=WorkspaceJobScope::forWorkspace($newWs,static fn()=>AutomationWorker::ingestOutbox(50));
+ testws($gotOld===1&&$gotGabi===0,'Vitor trigger must never create a Gabriella automation.');
+ testws((int)(DB::one('SELECT COUNT(*) n FROM automation_runs WHERE workspace_id=?',[$newWs])['n']??0)===0,
+  'Gabriella automation queue was contaminated by Vitor.');
+ $st=DB::one('SELECT id FROM stages WHERE workspace_id=? ORDER BY position,id LIMIT 1',[$newWs]);
+ $ca=DB::one('SELECT id FROM categories WHERE workspace_id=? ORDER BY id LIMIT 1',[$newWs]);
+ $gabTask=WorkspaceJobScope::forWorkspace($newWs,static function()use($gabId,$st,$ca):int {
+  $cid=DB::insert('clients',['name'=>'Gabriella isolated CI','created_at'=>now()]);
+  return DB::insert('demands',['client_id'=>$cid,'category_id'=>(int)$ca['id'],
+   'stage_id'=>(int)$st['id'],'title'=>'Gabi private task',
+   'brief'=>'isolated fixture','details_json'=>'{}','due_at'=>now(),
+   'created_by'=>$gabId,'created_at'=>now(),'updated_at'=>now()]);
+ });
+ $emit($newWs,$gabTask);
+ $gotGabi=WorkspaceJobScope::forWorkspace($newWs,static fn()=>AutomationWorker::ingestOutbox(50));
+ $gotOld=WorkspaceJobScope::forWorkspace($ws,static fn()=>AutomationWorker::ingestOutbox(50));
+ testws($gotGabi===1&&$gotOld===0,'Gabriella trigger must never execute Vitor rules.');
+ testws((int)(DB::one('SELECT COUNT(*) n FROM automation_runs WHERE workspace_id=? AND automation_id=?',[$ws,$newRule])['n']??0)===0,
+  'Gabriella rule leaked into Vitor run queue.');
+ testws((int)(DB::one('SELECT COUNT(*) n FROM automation_runs WHERE workspace_id=? AND automation_id=?',[$newWs,$oldRule])['n']??0)===0,
+  'Vitor rule leaked into Gabriella run queue.');
+ // Payment tables are created only after the workspace foundation.
+ require_once ROOT.'/app/PlatformAsaasBilling.php';
+ $asaasSql=file_get_contents(ROOT.'/database/migrations/041_platform_asaas_billing.sql');
+ testws($asaasSql!==false,'Asaas migration missing.');
+ foreach(preg_split('/;\\s*(?:\\r?\\n|$)/',$asaasSql) as $statement)
+  if(trim($statement)!=='')DB::run($statement);
+ testws(PlatformAsaasBilling::ready(),'Asaas billing schema missing.');
+ testws(!PlatformAsaasBilling::enabled(),'Asaas billing must not activate without credentials and Master authorization.');
  echo "Workspace schema30 CI OK: owner, memberships, ".count(WorkspaceFoundation::DATA_TABLES).
   " mapped tables, preserved client/task/invoice/file, pending Master, calendar excluded, idempotence, second tenant blocked.\n";
 }catch(Throwable $e){fwrite(STDERR,'Workspace CI failed: '.$e->getMessage()."\n");exit(1);}

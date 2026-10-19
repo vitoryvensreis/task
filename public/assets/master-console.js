@@ -436,6 +436,33 @@ window.MasterConsole=(()=>{
   };
   const profile=card('Minha conta','Dados exclusivos do seu login Master.');
   const pf=el('form','mc-form'),name=field(pf,'Nome','name',data.me.name),email=field(pf,'E-mail','email',data.me.email);email.disabled=true;
+  const avatarBlock=el('form','ts-avatar-form mc-form');
+  avatarBlock.enctype='multipart/form-data';
+  const avatarPreview=el('div','ts-avatar-preview'),avatarImage=el('img');
+  avatarImage.alt='Foto de perfil';avatarImage.hidden=!data.me.avatar_url;
+  if(data.me.avatar_url)avatarImage.src=data.me.avatar_url;
+  avatarPreview.append(avatarImage);
+  const avatarLabel=el('label','ts-avatar-label','Foto de perfil (JPEG, PNG ou WebP, até 3 MB)');
+  const avatarInput=el('input','input');avatarInput.type='file';avatarInput.name='avatar';
+  avatarInput.accept='image/jpeg,image/png,image/webp';avatarInput.required=true;
+  avatarLabel.append(avatarInput);
+  const avatarBtn=el('button','secondary','Salvar foto');avatarBtn.type='submit';
+  const avatarInfo=el('p','mc-feedback');
+  avatarBlock.append(avatarPreview,avatarLabel,avatarBtn,avatarInfo);
+  avatarBlock.onsubmit=async event=>{
+   event.preventDefault();avatarBtn.disabled=true;
+   try{
+    const response=await fetch(base+'/api.php?action=account.avatar_upload',{
+     method:'POST',body:new FormData(avatarBlock),credentials:'same-origin',
+     headers:{'X-CSRF-Token':csrf}});
+    const json=await response.json().catch(()=>({error:'Resposta inválida'}));
+    if(!response.ok||json.error)throw Error(json.error||'Falha no envio');
+    avatarImage.hidden=false;avatarImage.src=json.avatar_url;avatarInput.value='';
+    avatarInfo.textContent='Foto atualizada.';
+    window.dispatchEvent(new CustomEvent('taskesc:avatar-updated',{detail:json.avatar_url}));
+   }catch(error){avatarInfo.textContent=error.message}finally{avatarBtn.disabled=false}
+  };
+  profile.append(avatarBlock);
   const btn=el('button','primary','Salvar nome');btn.type='submit';pf.append(btn,el('p','mc-feedback'));profile.append(pf);
   pf.onsubmit=async e=>{e.preventDefault();try{await api(base,'master.profile_save',csrf,{name:name.value});status(pf,'Perfil atualizado.')}catch(err){status(pf,err.message,true)}};
   const pw=card('Alterar senha','Use uma senha forte e exclusiva do ADM Master.');

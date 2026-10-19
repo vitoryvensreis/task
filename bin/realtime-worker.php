@@ -34,11 +34,7 @@ try {
     $worker = new RealtimeOutboxWorker([$publisher, 'publish']);
 
     if ($diagnostic) {
-        $operation = 'diagnostic:'.bin2hex(random_bytes(12));
-        $id = EventOutbox::transaction(fn() => EventOutbox::enqueue(
-            $operation, 'realtime.diagnostic', 'system', 1, 'diagnostic',
-            ['kind' => 'worker_publish_test', 'created_at' => gmdate('c')], null
-        ));
+        $id = RealtimeCliProbe::enqueue();
         $deadline = microtime(true) + 10.0;
         do {
             $worker->processBatch($batch);

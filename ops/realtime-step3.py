@@ -112,6 +112,18 @@ def check(identity, deploy_path):
 def diagnostic(identity, deploy_path):
     php, worker = worker_php(deploy_path)
     probe = run_as(identity, [php, str(worker), '--diagnostic', '--once', '--batch=20'], timeout=30)
+    # The CLI sends safe structured error codes to stderr. Preserve the code
+    # instead of masking a tenant-scope error as "worker_probe_empty".
+    if not probe.stdout.strip():
+        for line in reversed(probe.stderr.splitlines()):
+            try:
+                error = json.loads(line.strip())
+            except (ValueError, TypeError):
+                continue
+            code = error.get('code') if isinstance(error, dict) else None
+            if isinstance(code, str) and re.fullmatch(r'[a-z0-9_]{1,80}', code):
+                raise RuntimeError(code)
+        raise RuntimeError('worker_diagnostic_empty')
     data = parse_single_json(probe.stdout)
     safe = {'diagnostic': data.get('diagnostic'), 'event_id': data.get('event_id'), 'attempts': data.get('attempts')}
     print(json.dumps(safe, separators=(',', ':')))

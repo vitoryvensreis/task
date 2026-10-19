@@ -631,3 +631,10 @@ sudo systemctl status taskesc-realtime-worker.service --no-pager
 sudo python3 ops/realtime-step4.py smoke --deploy-path=/caminho/do/taskesc
 ```
 Se o smoke falhar, confira o reverse proxy WebSocket, `/etc/taskesc/realtime.json`, o Centrifugo 6.9.7 e Redis; não marque a funcionalidade como concluída antes de passar o teste autenticado. A API `realtime.health` é exclusiva do ADM autenticado; respostas não incluem tokens ou chaves.
+
+
+### CLI realtime — diagnóstico de publicação em multiworkspace
+
+No modo multiworkspace, todo evento Outbox exige escopo explícito. O diagnóstico do worker agora usa `RealtimeCliProbe::enqueue()` para localizar **somente um workspace existente** e criar um evento sintético `realtime.diagnostic` nesse escopo; não cria workspace, não movimenta tasks e não altera os 339 eventos históricos já esgotados. Um evento publicado via HTTP pela API do Centrifugo é obrigatório para o teste passar. Em caso de falha, o deploy para no passo diagnóstico, em vez de aceitar `worker_probe_empty` como aviso. O helper operacional preserva apenas códigos de erro seguros, sem mostrar secrets.
+
+Se o check mostrar `queue_warning=exhausted_events`, investigar `event_outbox.last_error` por agrupamento antes de reprocessar: não redefinir `attempts` globalmente nem apagar registros do histórico.

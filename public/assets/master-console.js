@@ -442,7 +442,7 @@ window.MasterConsole=(()=>{
   avatarImage.alt='Foto de perfil';avatarImage.hidden=!data.me.avatar_url;
   if(data.me.avatar_url)avatarImage.src=data.me.avatar_url;
   avatarPreview.append(avatarImage);
-  const avatarLabel=el('label','ts-avatar-label','Foto de perfil (JPEG, PNG ou WebP, até 3 MB)');
+  const avatarLabel=el('label','ts-avatar-label','Foto de perfil (JPEG, PNG ou WebP, até 10 MB)');
   const avatarInput=el('input','input');avatarInput.type='file';avatarInput.name='avatar';
   avatarInput.accept='image/jpeg,image/png,image/webp';avatarInput.required=true;
   avatarLabel.append(avatarInput);
@@ -450,7 +450,9 @@ window.MasterConsole=(()=>{
   const avatarInfo=el('p','mc-feedback');
   avatarBlock.append(avatarPreview,avatarLabel,avatarBtn,avatarInfo);
   avatarBlock.onsubmit=async event=>{
-   event.preventDefault();avatarBtn.disabled=true;
+   event.preventDefault();
+   if(avatarInput.files?.[0]?.size>10*1024*1024){avatarInfo.textContent='A foto deve ter até 10 MB.';return;}
+   avatarBtn.disabled=true;
    try{
     const response=await fetch(base+'/api.php?action=account.avatar_upload',{
      method:'POST',body:new FormData(avatarBlock),credentials:'same-origin',

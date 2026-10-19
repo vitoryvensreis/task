@@ -76,7 +76,8 @@
    return Object.entries(tabRoutes).find(([,route])=>route==='master/'+section)?.[0]||'overview';
   };
 
-  if(location.pathname.endsWith('/master.php'))history.replaceState(null,'',base+'/master'+location.search+location.hash);
+  // If master.php is reached as a visible URL, keep it for diagnosis.
+  // Friendly routes must be handled by Apache internally, not masked by replaceState.
   const clear=()=>{dashboard.replaceChildren();workspaces.replaceChildren();admins.replaceChildren();planPanel.replaceChildren();settings.replaceChildren();$('#master-health').replaceChildren();message('#master-panel-message','')};
   function supportCard(w){
    const wrap=el('article','','master-mini');

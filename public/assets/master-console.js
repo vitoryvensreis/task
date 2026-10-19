@@ -54,8 +54,8 @@ window.MasterConsole=(()=>{
      api(base,'master.customers',csrf,null,{q:input.value.trim()}),
      api(base,'master.administrators',csrf),api(base,'master.plans',csrf)]);
     result.replaceChildren();
-    note(result,'Faturamento SaaS ainda não integrado',
-      'O status de pagamentos e o histórico de faturas serão exibidos aqui quando a sincronização Asaas estiver homologada. Não confundir com os recebimentos dos clientes do workspace.');
+    note(result,'Cobranças Asaas da plataforma',
+      'Cada assinatura é vinculada a uma empresa e conciliada por webhook. Os recebimentos SaaS ficam separados do financeiro operacional.');
     const table=el('div','mc-customer-list');
     for(const w of data.customers||[]){
      const staged=!!w.provisioning;
@@ -72,7 +72,7 @@ window.MasterConsole=(()=>{
      const plan=el('div','mc-cell');plan.append(el('small','','Plano'),el('strong','',w.plan_name||'Sem plano'));row.append(plan);
      const team=el('div','mc-cell');team.append(el('small','','Equipe'),el('strong','',fmt(w.team_users)+' membros'));row.append(team);
      const bill=el('div','mc-cell');bill.append(el('small','',staged?'Ambiente':'Assinatura'),
-      el('span','mc-chip',staged?'Não ativado':'Não integrada'));row.append(bill);
+      el('span','mc-chip',staged?'Não ativado':'Consultar'));row.append(bill);
      const actions=el('div','mc-row-actions');
      if(staged){
       const detail=button('Ver preparação',()=>showPendingCustomer(w),'secondary');
@@ -262,12 +262,60 @@ window.MasterConsole=(()=>{
       'WPPConnect e algumas rotinas ainda usam configuração global do ADM Master. A operação independente por empresa só poderá ser habilitada depois do isolamento completo e da homologação.');
     const billing=el('section','mc-detail-pane');
     billing.append(el('h3','','Assinatura e pagamentos'));
-    note(billing,'Asaas ainda não está conciliado',
-     'Sem faturas ou pagamentos SaaS confirmados. O plano cadastrado indica o acesso contratado, não prova que a assinatura foi paga.');
+    const b=d.billing||{},sub=(b.subscriptions||[])[0],payRows=b.payments||[];
+    note(billing,b.enabled?'Asaas habilitado':'Asaas indisponível',
+      b.enabled?'Assinaturas da plataforma, independentes do financeiro desta empresa.':'Configure o Asaas em Integrações para gerar cobranças reais ou de teste.');
     const meta=el('div','mc-profile-stats');
     const billingPlan=el('div');billingPlan.append(el('small','','Plano cadastrado'),el('strong','',d.plan_name||'Sem plano'));
-    const billingState=el('div');billingState.append(el('small','','Situação financeira'),el('strong','','Não integrada'));
+    const billingState=el('div');billingState.append(el('small','','Situação financeira'),el('strong','',sub?.billing_status||'Sem cobrança'));
     meta.append(billingPlan,billingState);billing.append(meta);
+    if(sub){
+     const info=el('p','master-description','Assinatura '+(sub.asaas_subscription_id||'aguardando confirmação')+' · '+money(sub.amount_cents)+' / '+(cycles[sub.cycle]||sub.cycle)+' · '+sub.request_status);
+     billing.append(info);
+     const reload=button('↻ Consultar cobranças no Asaas',async()=>{
+      reload.disabled=true;try{await api(base,'master.asaas_refresh',csrf,{workspace_id:Number(w.id)});await render();}
+      catch(e){status(billing,e.message,true);reload.disabled=false}
+     });
+     billing.append(reload,el('p','mc-feedback'));
+    }else if(b.enabled){
+     const currentPlan=plans.find(p=>Number(p.id)===Number(w.plan_id));
+     if(currentPlan&&currentPlan.code!=='legacy-unlimited'&&Number(currentPlan.price_cents)>=100){
+      const payForm=el('form','mc-form');
+      payForm.append(el('h4','','Criar assinatura recorrente Asaas'));
+      const payer=field(payForm,'Nome completo ou razão social','payer_name',d.workspace.name);payer.required=true;
+      const mail=field(payForm,'E-mail do pagador','payer_email',d.workspace.company_email||d.workspace.owner_email,'email');mail.required=true;
+      const doc=field(payForm,'CPF ou CNPJ do pagador','cpf_cnpj','');doc.required=true;
+      const confirm=field(payForm,'Digite COBRAR para confirmar a assinatura','confirmation','');confirm.required=true;confirm.autocomplete='off';
+      note(payForm,'Valor e recorrência','Será gerada uma assinatura de '+money(currentPlan.price_cents)+' a cada '+(cycles[currentPlan.billing_period]||currentPlan.billing_period)+'. O primeiro vencimento ocorre em dois dias.');
+      const create=el('button','primary','Gerar assinatura Asaas');create.type='submit';payForm.append(create,el('p','mc-feedback'));
+      payForm.onsubmit=async event=>{
+       event.preventDefault();
+       if(!window.confirm('Confirma a geração de uma assinatura de '+money(currentPlan.price_cents)+' com cobranças recorrentes no Asaas?'))return;
+       create.disabled=true;
+       try{await api(base,'master.asaas_start',csrf,{
+        workspace_id:Number(w.id),payer_name:payer.value.trim(),payer_email:mail.value.trim(),
+        cpf_cnpj:doc.value.trim(),confirmation:confirm.value.trim()
+       });await render();}
+       catch(e){status(payForm,e.message,true);create.disabled=false}
+      };
+      billing.append(payForm);
+     }else note(billing,'Plano legado preservado','O plano ilimitado legado não gera cobrança. Atribua um plano pago no ADM Master somente quando houver contratação.');
+    }
+    if(payRows.length){
+     const list=el('div','mc-form');list.append(el('h4','','Cobranças recebidas por webhook ou conciliação'));
+     for(const payment of payRows){
+      const row=el('div','mc-team-row'),info=el('div');
+      info.append(el('strong','',money(payment.amount_cents)+' · '+payment.status),
+       el('span','','Vencimento: '+(payment.due_date||'—')+' · '+payment.asaas_payment_id));
+      row.append(info);
+      if(payment.invoice_url&&/^https:\/\//.test(payment.invoice_url)){
+       const url=el('a','secondary','Abrir fatura');url.href=payment.invoice_url;url.target='_blank';url.rel='noopener noreferrer';
+       row.append(url);
+      }
+      list.append(row);
+     }
+     billing.append(list);
+    }
     body.append(access);
     window.TaskEscMasterTabs.mount(body,[
      {key:'empresa',label:'Empresa',node:company},

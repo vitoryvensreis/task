@@ -38,6 +38,7 @@ final class Chat
             $contacts[]=[
                 'id'=>$id,
                 'name'=>(string)$row['name'],
+                'avatar_url'=>UserAvatars::url($id),
                 'role'=>(string)$row['role'],
                 'last_login_at'=>$row['last_login_at']??null,
                 'thread_id'=>$thread?(int)$thread['id']:null,

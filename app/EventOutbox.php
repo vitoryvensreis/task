@@ -55,10 +55,23 @@ final class EventOutbox
         $hash = hash('sha256', json_encode([$eventType, $entityType, $entityId, $channel, $json, $createdBy], JSON_THROW_ON_ERROR));
         $now = self::utc();
         $available = $availableAt === null ? $now : $availableAt->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s.u');
-        $q = $db->prepare('INSERT INTO event_outbox
-            (event_key,event_hash,event_type,entity_type,entity_id,channel,payload_json,created_by,created_at,available_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id)');
-        $q->execute([$key, $hash, $eventType, $entityType, $entityId, $channel, $json, $createdBy, $now, $available]);
+        $tenant=WorkspaceTenantMode::enabled();
+        $scope=0;
+        if($tenant){
+            $job=WorkspaceJobScope::currentId();
+            $web=(int)(Auth::$workspace['id']??0);
+            if($job>0&&$web>0&&$job!==$web)
+                throw new LogicException('Outbox company context conflict.');
+            $scope=$job>0?$job:$web;
+            if($scope<1)throw new LogicException('Outbox event requires explicit workspace.');
+        }
+        $q=$db->prepare('INSERT INTO event_outbox
+            (event_key,event_hash,event_type,entity_type,entity_id,channel,payload_json,created_by,created_at,available_at'.
+            ($tenant?',workspace_id':'').')
+            VALUES (?,?,?,?,?,?,?,?,?,?'.($tenant?',?':'').') ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id)');
+        $params=[$key, $hash, $eventType, $entityType, $entityId, $channel, $json, $createdBy, $now, $available];
+        if($tenant)$params[]=$scope;
+        $q->execute($params);
         $id = (int)$db->lastInsertId();
         // Current read handles a duplicate committed after this transaction's snapshot.
         $q = $db->prepare('SELECT event_hash FROM event_outbox WHERE id=? FOR UPDATE');

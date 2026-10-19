@@ -21,6 +21,7 @@ $assetVersion=static function(string $file):string {
 <link rel="stylesheet" href="<?=e($basePath)?>/assets/app.css?v=<?=e($assetVersion('app.css'))?>">
 <link rel="stylesheet" href="<?=e($basePath)?>/assets/ux-v3.css?v=<?=e($assetVersion('ux-v3.css'))?>">
 <link rel="stylesheet" href="<?=e($basePath)?>/assets/master-dashboard.css?v=<?=e($assetVersion('master-dashboard.css'))?>">
+<link rel="stylesheet" href="<?=e($basePath)?>/assets/master-ux.css?v=<?=e($assetVersion('master-ux.css'))?>">
 <link rel="stylesheet" href="<?=e($basePath)?>/assets/support-chat.css?v=<?=e($assetVersion('support-chat.css'))?>">
 </head>
 <?php
@@ -58,18 +59,28 @@ $initialTab=$routes[$routeKey]??'overview';
    <span>TaskEsc</span>
   </div>
   <nav class="master-nav" aria-label="Administração da plataforma">
-   <button class="nav-btn" data-master-tab="overview" type="button"><span class="nav-icon">▦</span>Dashboard</button>
-   <button class="nav-btn" data-master-tab="clients" type="button"><span class="nav-icon">♙</span>Clientes (ADMs)</button>
-   <button class="nav-btn" data-master-tab="plans" type="button"><span class="nav-icon">▤</span>Planos de acesso</button>
-   <button class="nav-btn" data-master-tab="whatsapp" type="button"><span class="nav-icon">◉</span>WhatsApp</button>
-   <button class="nav-btn" data-master-tab="health" type="button"><span class="nav-icon">◉</span>Saúde & Logs</button>
-   <button class="nav-btn" data-master-tab="integrations" type="button"><span class="nav-icon">◈</span>Integrações</button>
-   <button class="nav-btn" data-master-tab="personalization" type="button"><span class="nav-icon">◉</span>Personalização</button>
-   <button class="nav-btn" data-master-tab="banner" type="button"><span class="nav-icon">▣</span>Banner Hero</button>
-   <button class="nav-btn" data-master-tab="settings" type="button"><span class="nav-icon">⚙</span>Configurações</button>
+   <div class="master-search"><label for="master-nav-search">ACESSO RÁPIDO</label><div class="master-search-field"><span aria-hidden="true">⌕</span><input id="master-nav-search" type="search" placeholder="Buscar seção…" autocomplete="off" aria-label="Buscar no ADM Master"><kbd>/</kbd></div></div>
+   <div class="master-nav-group"><span class="master-nav-label">VISÃO GERAL</span>
+    <button class="nav-btn" data-master-tab="overview" type="button"><span class="nav-icon">▦</span><span>Dashboard</span></button>
+   </div>
+   <div class="master-nav-group"><span class="master-nav-label">GESTÃO COMERCIAL</span>
+    <button class="nav-btn" data-master-tab="clients" type="button"><span class="nav-icon">♙</span><span>Clientes e equipes</span></button>
+    <button class="nav-btn" data-master-tab="plans" type="button"><span class="nav-icon">▤</span><span>Planos e assinaturas</span></button>
+   </div>
+   <div class="master-nav-group"><span class="master-nav-label">OPERAÇÃO</span>
+    <button class="nav-btn" data-master-tab="integrations" type="button"><span class="nav-icon">◈</span><span>Integrações e Asaas</span></button>
+    <button class="nav-btn" data-master-tab="whatsapp" type="button"><span class="nav-icon">◉</span><span>WhatsApp</span></button>
+    <button class="nav-btn" data-master-tab="health" type="button"><span class="nav-icon">◷</span><span>Saúde e logs</span></button>
+   </div>
+   <div class="master-nav-group"><span class="master-nav-label">APARÊNCIA E CONTA</span>
+    <button class="nav-btn" data-master-tab="personalization" type="button"><span class="nav-icon">✧</span><span>Identidade visual</span></button>
+    <button class="nav-btn" data-master-tab="banner" type="button"><span class="nav-icon">▣</span><span>Banner Hero</span></button>
+    <button class="nav-btn" data-master-tab="settings" type="button"><span class="nav-icon">⚙</span><span>Minha conta</span></button>
+   </div>
+   <div class="master-nav-empty" id="master-nav-empty" hidden>Nenhuma seção encontrada.</div>
   </nav>
   <div class="sidebar-bottom">
-   <div class="master-sync">Plataforma conectada</div>
+   <div class="master-sync"><span class="master-sync-dot"></span> Administração Master</div>
    <button id="master-logout" class="ghost full" type="button">Sair</button>
   </div>
  </aside>
@@ -83,7 +94,7 @@ $initialTab=$routes[$routeKey]??'overview';
    </div>
    <div class="top-actions master-topbar-actions">
     <button id="master-refresh" class="secondary" type="button" title="Atualizar indicadores">↻ Atualizar</button>
-    <div class="user-chip">ADM Master · Plataforma</div>
+    <div class="user-chip"><span class="master-account-avatar">M</span><span>ADM Master</span></div>
    </div>
   </header>
   <div id="master-panel" class="content hidden">

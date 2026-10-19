@@ -33,6 +33,29 @@
   show('#master-shell',true);show('#master-panel',true);
   const workspaces=$('#master-workspaces'),admins=$('#master-administrators'),planPanel=$('#master-plans'),dashboard=$('#master-dashboard'),settings=$('#master-settings'),support=$('#master-support'),shell=$('#master-shell');
   const tabs=[...document.querySelectorAll('[data-master-tab]')];
+  const search=$('#master-nav-search');
+  const filterNav=()=>{
+    const query=(search?.value||'').trim().toLocaleLowerCase('pt-BR');let count=0;
+    for(const group of document.querySelectorAll('.master-nav-group')){
+      let found=0;
+      group.querySelectorAll('[data-master-tab]').forEach(button=>{
+        const visible=!query||button.textContent.toLocaleLowerCase('pt-BR').includes(query);
+        button.hidden=!visible;if(visible){found++;count++}
+      });
+      group.hidden=found===0;
+    }
+    const empty=$('#master-nav-empty');if(empty)empty.hidden=count>0;
+  };
+  search?.addEventListener('input',filterNav);
+  search?.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){search.value='';filterNav();search.blur()}
+    if(e.key==='Enter'){const first=tabs.find(b=>!b.hidden);if(first){e.preventDefault();first.click();search.blur()}}
+  });
+  document.addEventListener('keydown',e=>{
+    if(e.key!=='/'||e.ctrlKey||e.metaKey||e.altKey||e.target.closest('input,select,textarea,[contenteditable]'))return;
+    e.preventDefault();if(window.innerWidth<=720)shell.classList.add('menu-open');
+    search?.focus();
+  });
   const tabRoutes={overview:'master',clients:'master/clientes',plans:'master/planos',health:'master/saude-logs',settings:'master/configuracoes',integrations:'master/integracoes',whatsapp:'master/whatsapp',personalization:'master/personalizacao',banner:'master/banner-hero'};
   const currentTab=()=>{
    const path=location.pathname.replace(/\/+$/,'');
@@ -97,6 +120,16 @@
   async function renderMasterDashboard(){
    const stats=await request('master.dashboard');
    dashboard.append(mk('p','master-description','Acompanhe os indicadores gerais da plataforma. Dados de tarefas e financeiro das empresas só aparecem em uma sessão de suporte autorizada.'));
+   const welcome=mk('section','master-welcome'),text=mk('div');
+   text.append(mk('span','master-eyebrow','ADM MASTER · CONTROLE DA PLATAFORMA'),
+     mk('h3','','Sua operação, em um só lugar.'),
+     mk('p','','Encontre as empresas, assinaturas, integrações e alertas que precisam da sua atenção.'));
+   const shortcuts=mk('div','master-quick-actions');
+   for(const [label,section] of [['Gerenciar clientes','clients'],['Planos e assinaturas','plans'],['Saúde do sistema','health']]){
+     const button=mk('button','master-quick-action',label+' →');button.type='button';
+     button.onclick=()=>draw(section,true).catch(err=>message('#master-panel-message',err.message,true));shortcuts.append(button);
+   }
+   welcome.append(text,shortcuts);dashboard.append(welcome);
    if(!stats.metrics?.billing_enabled){
     const note=mk('div','master-billing-note');
     note.append(mk('span','master-icon','ⓘ'));
@@ -152,6 +185,7 @@
    show('#master-dashboard',tab==='overview');show('#master-integrations',tab==='integrations');show('#master-whatsapp',tab==='whatsapp');show('#master-personalization',tab==='personalization');show('#master-banner',tab==='banner');show('#master-health',tab==='health');show('#master-workspaces',tab==='workspaces');show('#master-administrators',tab==='clients');show('#master-plans',tab==='plans');show('#master-settings',tab==='settings');show('#master-support',tab==='support');
 
    $('#master-panel-title').textContent=({overview:'Dashboard',clients:'Clientes',plans:'Planos de acesso',settings:'Configurações da conta',integrations:'Integrações',whatsapp:'WhatsApp',personalization:'Personalização',banner:'Banner Hero',health:'Saúde & Logs'})[tab];
+   document.title='TaskEsc · '+($('#master-panel-title').textContent||'ADM Master');
    $('#master-page-kicker').textContent=({overview:'VISÃO GERAL · PLATAFORMA',clients:'GESTÃO DE CLIENTES',plans:'ASSINATURAS · PLANOS',settings:'SEGURANÇA · PERFIL MASTER',integrations:'PLATAFORMA · SERVIÇOS',whatsapp:'SESSÃO ÚNICA · ADM MASTER',personalization:'APARÊNCIA · IDENTIDADE VISUAL',banner:'PERSONALIZAÇÃO · EM BREVE',health:'PLATAFORMA · DIAGNÓSTICO'})[tab];
    if(tab==='settings'){await window.MasterConsole.account(settings,csrf,base);return;}
    if(tab==='integrations'){await window.TaskEscMasterSettings.render($('#master-integrations'),csrf,base,'integrations');return;}

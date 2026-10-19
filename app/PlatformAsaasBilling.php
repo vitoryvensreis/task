@@ -1,0 +1,219 @@
+<?php
+declare(strict_types=1);
+/**
+ * Platform-only Asaas billing. Never uses a tenant's finance tables and never
+ * charges the two legacy unlimited accounts automatically.
+ */
+final class PlatformAsaasBilling {
+ private const CYCLES=[
+  'weekly'=>'WEEKLY','biweekly'=>'BIWEEKLY','monthly'=>'MONTHLY',
+  'bimonthly'=>'BIMONTHLY','quarterly'=>'QUARTERLY',
+  'semiannually'=>'SEMIANNUALLY','yearly'=>'YEARLY'
+ ];
+ public static function ready(): bool {
+  return (int)(DB::one("SELECT COUNT(*) n FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE()
+   AND TABLE_NAME IN ('platform_asaas_subscriptions','platform_asaas_payments','platform_asaas_webhook_events')")['n']??0)===3;
+ }
+ public static function env(): string {
+  $env=setting('platform_asaas_env','sandbox');
+  return in_array($env,['sandbox','production'],true)?$env:'sandbox';
+ }
+ public static function enabled(?string $environment=null): bool {
+  $env=$environment??self::env();
+  return in_array($env,['sandbox','production'],true)&&self::ready()&&
+   setting('platform_asaas_enabled_'.$env,'0')==='1'&&
+   setting('platform_asaas_api_key_'.$env,'')!==''&&
+   setting('platform_asaas_webhook_token_'.$env,'')!=='';
+ }
+ public static function webhookUrl(string $env): string {
+  if(!in_array($env,['sandbox','production'],true))return '';
+  return base('asaas-webhook.php').'?environment='.$env;
+ }
+ private static function master(): void {
+  Auth::load();
+  if(Auth::$origin!=='web'||!MasterSupport::isActor()||MasterSupport::isSupport())
+   fail('Disponível somente ao ADM Master.',403);
+ }
+ public static function api(string $method,string $path,?array $data=null,?string $env=null): array {
+  $env=$env??self::env();
+  if(!in_array($env,['sandbox','production'],true)||!preg_match('~\A/v3/[a-zA-Z0-9/_?=&-]+\z/D',$path))
+   throw new InvalidArgumentException('Invalid Asaas API route.');
+  $stored=setting('platform_asaas_api_key_'.$env,'');
+  if($stored==='')throw new RuntimeException('asaas_key_not_configured');
+  $key=secretDecrypt($stored);
+  if(!function_exists('curl_init'))throw new RuntimeException('asaas_curl_unavailable');
+  $root=$env==='production'?'https://api.asaas.com':'https://api-sandbox.asaas.com';
+  $ch=curl_init($root.$path);
+  $headers=['accept: application/json','User-Agent: TaskEsc/1.0','access_token: '.$key];
+  if($data!==null)$headers[]='content-type: application/json';
+  curl_setopt_array($ch,[
+   CURLOPT_RETURNTRANSFER=>true,CURLOPT_FOLLOWLOCATION=>false,
+   CURLOPT_CONNECTTIMEOUT=>8,CURLOPT_TIMEOUT=>35,CURLOPT_HTTPHEADER=>$headers,
+   CURLOPT_CUSTOMREQUEST=>$method,CURLOPT_SSL_VERIFYPEER=>true,
+  ]);
+  if($data!==null)curl_setopt($ch,CURLOPT_POSTFIELDS,json_encode($data,JSON_THROW_ON_ERROR));
+  try{
+   $result=curl_exec($ch);$http=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);
+   if(!is_string($result))throw new RuntimeException('asaas_network_error');
+   if($http<200||$http>=300)throw new RuntimeException('asaas_http_'.$http);
+   $decoded=json_decode($result,true,64,JSON_THROW_ON_ERROR);
+   if(!is_array($decoded))throw new RuntimeException('asaas_invalid_response');
+   return $decoded;
+  }finally{curl_close($ch);}
+ }
+ public static function connection(): array {
+  self::master();
+  $info=self::api('GET','/v3/myAccount/status/');
+  return ['connected'=>true,'environment'=>self::env(),'general_status'=>$info['general']??'unknown'];
+ }
+ public static function status(): array {
+  self::master();
+  $env=self::env();
+  return ['ready'=>self::ready(),'enabled'=>self::enabled($env),
+   'environment'=>$env,'webhook_url'=>self::webhookUrl($env),
+   'total_subscriptions'=>self::ready()?(int)(DB::one('SELECT COUNT(*) n FROM platform_asaas_subscriptions WHERE environment=?',[$env])['n']??0):0];
+ }
+ public static function workspace(int $workspaceId): array {
+  if(!self::ready())return ['enabled'=>false,'subscriptions'=>[],'payments'=>[]];
+  $env=self::env();
+  $items=DB::all('SELECT id,plan_id,environment,asaas_subscription_id,
+    payer_name,payer_email,amount_cents,cycle,due_date,request_status,billing_status,
+    created_at FROM platform_asaas_subscriptions WHERE workspace_id=? AND environment=?
+    ORDER BY id DESC',[$workspaceId,$env]);
+  $payments=[];
+  foreach($items as $item)
+   $payments=array_merge($payments,DB::all('SELECT asaas_payment_id,status,amount_cents,due_date,invoice_url,paid_at
+     FROM platform_asaas_payments WHERE subscription_id=? ORDER BY id DESC LIMIT 25',[(int)$item['id']]));
+  return ['enabled'=>self::enabled($env),'subscriptions'=>$items,'payments'=>$payments];
+ }
+ public static function start(array $input): array {
+  self::master();Auth::rate('asaas-subscription-create',5,3600);
+  $env=self::env();
+  if(!self::enabled($env))fail('Configure e habilite o Asaas no ADM Master antes de cobrar.',409);
+  if(strtoupper(trim((string)($input['confirmation']??'')))!=='COBRAR')
+   fail('Confirme explicitamente COBRAR para gerar a assinatura.',422);
+  $workspace=integer($input['workspace_id']??0,1);
+  $name=trim((string)($input['payer_name']??''));
+  $email=strtolower(trim((string)($input['payer_email']??'')));
+  $taxId=preg_replace('/\D+/','',(string)($input['cpf_cnpj']??''));
+  if(mb_strlen($name)<3||mb_strlen($name)>190||!filter_var($email,FILTER_VALIDATE_EMAIL)||
+    !in_array(strlen($taxId),[11,14],true))fail('Informe nome, e-mail e CPF/CNPJ válidos do pagador.',422);
+  $plan=DB::one('SELECT p.id,p.name,p.code,p.price_cents,p.billing_period
+   FROM workspace_access_plans a JOIN platform_access_plans p ON p.id=a.plan_id
+   JOIN workspaces w ON w.id=a.workspace_id
+   WHERE a.workspace_id=? AND p.active=1 AND w.status IN (\'staged\',\'active\')',[$workspace]);
+  if(!$plan||$plan['code']==='legacy-unlimited'||(int)$plan['price_cents']<100||
+    !isset(self::CYCLES[$plan['billing_period']]))
+   fail('Associe um plano pago com ciclo suportado antes de cobrar. Contas legadas não são cobradas.',409);
+  if(!self::ready())fail('Migração Asaas ainda não aplicada.',503);
+  $orderId=DB::tx(static function()use($workspace,$plan,$env,$name,$email):int {
+   if(DB::one('SELECT id FROM platform_asaas_subscriptions WHERE workspace_id=? AND environment=? FOR UPDATE',[$workspace,$env]))
+    fail('Já existe uma solicitação de cobrança; consulte o histórico antes de tentar outra.',409);
+   return DB::insert('platform_asaas_subscriptions',[
+    'workspace_id'=>$workspace,'plan_id'=>(int)$plan['id'],'environment'=>$env,
+    'payer_name'=>$name,'payer_email'=>$email,'amount_cents'=>(int)$plan['price_cents'],
+    'cycle'=>$plan['billing_period'],'due_date'=>gmdate('Y-m-d',strtotime('+2 days')),
+    'request_status'=>'creating','billing_status'=>'awaiting_payment','created_at'=>now(),'updated_at'=>now()
+   ]);
+  });
+  // Never automatically retry an uncertain payment-provider POST. The order
+  // remains in needs_review until a human checks Asaas to avoid duplication.
+  try{
+   $customer=self::api('POST','/v3/customers',[
+    'name'=>$name,'email'=>$email,'cpfCnpj'=>$taxId,
+    'externalReference'=>'taskesc-'.$env.'-workspace-'.$workspace
+   ],$env);
+   $cid=(string)($customer['id']??'');
+   if(!preg_match('/\Acus_[a-zA-Z0-9]+\z/D',$cid))throw new RuntimeException('asaas_customer_id_invalid');
+   DB::run('UPDATE platform_asaas_subscriptions SET asaas_customer_id=?,updated_at=? WHERE id=?',
+     [$cid,now(),$orderId]);
+   $subscription=self::api('POST','/v3/subscriptions',[
+    'customer'=>$cid,'billingType'=>'UNDEFINED',
+    'value'=>round((int)$plan['price_cents']/100,2),
+    'nextDueDate'=>gmdate('Y-m-d',strtotime('+2 days')),
+    'cycle'=>self::CYCLES[$plan['billing_period']],
+    'description'=>'TaskEsc - '.$plan['name'],
+    'externalReference'=>'taskesc-'.$env.'-subscription-'.$orderId
+   ],$env);
+   $sid=(string)($subscription['id']??'');
+   if(!preg_match('/\Asub_[a-zA-Z0-9]+\z/D',$sid))throw new RuntimeException('asaas_subscription_id_invalid');
+   DB::run('UPDATE platform_asaas_subscriptions SET asaas_subscription_id=?,
+    request_status=?,updated_at=? WHERE id=?',[$sid,'created',now(),$orderId]);
+   return ['created'=>true,'subscription_id'=>$sid,'environment'=>$env,'billing_status'=>'awaiting_payment',
+     'message'=>'Assinatura criada. Pagamento ainda não confirmado; consulte as cobranças para obter o link.'];
+  }catch(Throwable $ex){
+   DB::run('UPDATE platform_asaas_subscriptions SET request_status=?,updated_at=? WHERE id=?',
+     ['needs_review',now(),$orderId]);
+   error_log('TaskEsc Asaas order requires review: order='.$orderId.' reason='.$ex->getMessage());
+   fail('Asaas não confirmou a operação. Verifique a conta antes de repetir para não gerar cobranças duplicadas.',502);
+  }
+ }
+ private static function upsertPayment(array $payment,int $localId,string $env): void {
+  $id=(string)($payment['id']??'');
+  if(!preg_match('/\Apay_[a-zA-Z0-9]+\z/D',$id))return;
+  $status=mb_substr((string)($payment['status']??'PENDING'),0,40);
+  $amount=max(0,(int)round((float)($payment['value']??0)*100));
+  $due=(string)($payment['dueDate']??'');
+  $date=preg_match('/\A\d{4}-\d{2}-\d{2}\z/D',$due)?$due:null;
+  $url=(string)($payment['invoiceUrl']??'');
+  if(!filter_var($url,FILTER_VALIDATE_URL)||parse_url($url,PHP_URL_SCHEME)!=='https')$url='';
+  $paid=in_array($status,['CONFIRMED','RECEIVED','RECEIVED_IN_CASH'],true)?now():null;
+  DB::run('INSERT INTO platform_asaas_payments
+    (subscription_id,environment,asaas_payment_id,status,amount_cents,due_date,invoice_url,paid_at,updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?)
+    ON DUPLICATE KEY UPDATE status=VALUES(status),amount_cents=VALUES(amount_cents),
+      due_date=VALUES(due_date),invoice_url=VALUES(invoice_url),
+      paid_at=COALESCE(platform_asaas_payments.paid_at,VALUES(paid_at)),updated_at=VALUES(updated_at)',
+    [$localId,$env,$id,$status,$amount,$date,$url?:null,$paid,now()]);
+  $billing=match($status){
+   'RECEIVED','CONFIRMED','RECEIVED_IN_CASH'=>'paid',
+   'OVERDUE'=>'overdue',
+   'REFUNDED','REFUND_REQUESTED','CHARGEBACK_REQUESTED','CHARGEBACK_DISPUTE'=>'disputed',
+   'DELETED'=>'cancelled',default=>'awaiting_payment'
+  };
+  DB::run('UPDATE platform_asaas_subscriptions SET billing_status=?,updated_at=? WHERE id=?',
+    [$billing,now(),$localId]);
+ }
+ public static function refresh(array $p): array {
+  self::master();Auth::rate('asaas-refresh',12,3600);
+  if(!self::enabled())fail('Asaas não está habilitado.',409);
+  $id=integer($p['workspace_id']??0,1);
+  $order=DB::one('SELECT id,asaas_subscription_id FROM platform_asaas_subscriptions
+    WHERE environment=? AND workspace_id=?',[self::env(),$id]);
+  if(!$order||!$order['asaas_subscription_id'])fail('Assinatura não encontrada.',404);
+  $payments=self::api('GET','/v3/subscriptions/'.$order['asaas_subscription_id'].'/payments',null,self::env());
+  foreach(($payments['data']??[]) as $payment)if(is_array($payment))self::upsertPayment($payment,(int)$order['id'],self::env());
+  return self::workspace($id);
+ }
+ public static function webhook(string $env,string $token,array $payload): array {
+  if(!in_array($env,['sandbox','production'],true)||!self::enabled($env))
+   throw new RuntimeException('asaas_webhook_disabled');
+  $expected=secretDecrypt(setting('platform_asaas_webhook_token_'.$env,''));
+  if($token===''||!hash_equals($expected,$token))throw new RuntimeException('asaas_webhook_unauthorized');
+  $event=(string)($payload['event']??'');$eventId=(string)($payload['id']??'');
+  if(!preg_match('/\Aevt_[a-zA-Z0-9-]+\z/D',$eventId)||
+     !preg_match('/\A(?:PAYMENT|SUBSCRIPTION)_[A-Z_]+\z/D',$event))
+   throw new RuntimeException('asaas_webhook_invalid');
+  $object=str_starts_with($event,'PAYMENT_')?($payload['payment']??null):($payload['subscription']??null);
+  if(!is_array($object))throw new RuntimeException('asaas_webhook_missing_object');
+  $subscriptionId=str_starts_with($event,'PAYMENT_')?(string)($object['subscription']??''):(string)($object['id']??'');
+  if($subscriptionId===''||!preg_match('/\Asub_[A-Za-z0-9]+\z/D',$subscriptionId))
+   return ['accepted'=>true,'ignored'=>'unrelated'];
+  return DB::tx(static function()use($env,$payload,$event,$eventId,$subscriptionId,$object):array {
+   if(DB::one('SELECT 1 FROM platform_asaas_webhook_events WHERE environment=? AND event_id=?',[$env,$eventId]))
+    return ['accepted'=>true,'duplicate'=>true];
+   $row=DB::one('SELECT id FROM platform_asaas_subscriptions WHERE environment=?
+    AND asaas_subscription_id=? FOR UPDATE',[$env,$subscriptionId]);
+   if(!$row)return ['accepted'=>true,'ignored'=>'unknown_subscription'];
+   $id=(int)$row['id'];
+   DB::run('INSERT INTO platform_asaas_webhook_events
+    (environment,event_id,event_type,subscription_id,payload_hash,created_at) VALUES (?,?,?,?,?,?)',
+    [$env,$eventId,$event,$id,hash('sha256',json_encode($payload,JSON_THROW_ON_ERROR)),now()]);
+   if(str_starts_with($event,'PAYMENT_'))self::upsertPayment($object,$id,$env);
+   elseif(in_array($event,['SUBSCRIPTION_INACTIVATED','SUBSCRIPTION_DELETED'],true))
+    DB::run('UPDATE platform_asaas_subscriptions SET request_status=?,updated_at=? WHERE id=?',
+      ['inactive',now(),$id]);
+   return ['accepted'=>true,'idempotent'=>true];
+  });
+ }
+}

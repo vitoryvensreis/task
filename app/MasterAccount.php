@@ -13,7 +13,7 @@ final class MasterAccount {
    FROM platform_master_identities i LEFT JOIN users u ON u.id=i.user_id
    ORDER BY i.verified_at IS NULL,i.email");
   return ['me'=>['id'=>(int)Auth::$actor['id'],'name'=>Auth::$actor['name'],
-    'email'=>Auth::$actor['email'],'twofa_enabled'=>(bool)Auth::$actor['twofa_enabled']],
+    'email'=>Auth::$actor['email'],'avatar_url'=>UserAvatars::url((int)Auth::$actor['id']),'twofa_enabled'=>(bool)Auth::$actor['twofa_enabled']],
     'masters'=>$masters];
  }
  public static function profile(array $p): array {

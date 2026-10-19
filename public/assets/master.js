@@ -30,6 +30,15 @@
   const auth=await request('auth.me');csrf=auth.csrf;
   if(!auth.user?.is_master||!(auth.user.role==='master'||!!auth.user.is_support)){show('#master-auth-surface',true);show('#master-login',true);return}
   const data=await request('master.workspaces');
+  const setMasterAvatar=url=>{
+   const badge=document.querySelector('.master-account-avatar');if(!badge)return;
+   badge.replaceChildren();
+   if(url){const img=document.createElement('img');img.className='ts-avatar-photo';img.src=url;img.alt='Foto de perfil';
+    img.onerror=()=>{badge.textContent='M'};badge.append(img)}
+   else badge.textContent='M';
+  };
+  setMasterAvatar(auth.user.avatar_url);
+  window.addEventListener('taskesc:avatar-updated',event=>setMasterAvatar(event.detail));
   show('#master-shell',true);show('#master-panel',true);
   const workspaces=$('#master-workspaces'),admins=$('#master-administrators'),planPanel=$('#master-plans'),dashboard=$('#master-dashboard'),settings=$('#master-settings'),support=$('#master-support'),shell=$('#master-shell');
   const tabs=[...document.querySelectorAll('[data-master-tab]')];
@@ -67,7 +76,8 @@
    return Object.entries(tabRoutes).find(([,route])=>route==='master/'+section)?.[0]||'overview';
   };
 
-  if(location.pathname.endsWith('/master.php'))history.replaceState(null,'',base+'/master'+location.search+location.hash);
+  // If master.php is reached as a visible URL, keep it for diagnosis.
+  // Friendly routes must be handled by Apache internally, not masked by replaceState.
   const clear=()=>{dashboard.replaceChildren();workspaces.replaceChildren();admins.replaceChildren();planPanel.replaceChildren();settings.replaceChildren();$('#master-health').replaceChildren();message('#master-panel-message','')};
   function supportCard(w){
    const wrap=el('article','','master-mini');

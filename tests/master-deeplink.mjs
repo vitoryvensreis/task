@@ -7,4 +7,6 @@ assert.match(rules,/master\(\?:\/\(\?:[\s\S]*whatsapp[\s\S]*\)\(\?:\/\[\^\.\]\*\
 assert.match(page,/\$relative=preg_replace/,'Page must resolve the primary nested section');
 assert.match(js,/const section=relative\.split\('\/'\)\[0\]/,'Client router must resolve nested paths');
 assert.match(js,/window\.addEventListener\('popstate'/,'Back/forward should keep the current Master page');
+assert.match(rules,/master\.php \[END,QSA\]/,'Deep links must be internal rewrites, not visible redirects');
+assert.doesNotMatch(js,/if\(location\.pathname\.endsWith\('\/master\.php'\)\)history\.replaceState/,'Client must not mask server redirects');
 console.log('Master deep link regression: OK');

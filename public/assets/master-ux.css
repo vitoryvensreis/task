@@ -137,3 +137,6 @@ body.master-page #master-shell.master-app>.main>.content{
  body.master-page #master-shell.master-app>.main>.topbar{padding-inline:12px!important}
  body.master-page #master-shell.master-app>.main>.content{padding:14px 12px 32px!important}
 }
+
+.master-page .ts-avatar-form{gap:12px}
+.master-page .ts-avatar-label{min-width:190px}

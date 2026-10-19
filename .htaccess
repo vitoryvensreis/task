@@ -6,6 +6,6 @@ RewriteEngine On
 RewriteRule ^(?:app|config|database|storage|bin)(?:/|$) - [F,L]
 RewriteRule ^(?:README\.md|\.gitignore|\.env)(?:/|$) - [F,L]
 RewriteRule ^public(?:/|$) - [L]
-RewriteRule ^master(?:/.*)?$ public/master.php [L,QSA]
+RewriteRule ^master(?:/.*)?$ public/master.php [END,QSA]
 RewriteRule ^$ public/ [L]
 RewriteRule ^(.+)$ public/$1 [L]

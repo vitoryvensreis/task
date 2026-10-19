@@ -8,7 +8,7 @@ RewriteRule ^\.well-known/oauth-protected-resource$ .well-known/oauth-protected-
 RewriteRule ^\. - [F,L]
 RewriteRule ^api/v1(?:/.*)?$ api-v1.php [L,QSA]
 RewriteRule ^realtime\.auth$ realtime-auth.php [L,QSA]
-RewriteRule ^master(?:/(?:suporte|clientes|planos|workspaces|configuracoes|integracoes|personalizacao|banner-hero|whatsapp|saude-logs)(?:/[^.]*)?)?/?$ master.php [L,QSA]
+RewriteRule ^master(?:/(?:suporte|clientes|planos|workspaces|configuracoes|integracoes|personalizacao|banner-hero|whatsapp|saude-logs)(?:/[^.]*)?)?/?$ master.php [END,QSA]
 
 # Rotas amigáveis do painel. Arquivos e endpoints físicos continuam sendo servidos normalmente.
 RewriteCond %{REQUEST_FILENAME} !-f

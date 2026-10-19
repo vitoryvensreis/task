@@ -1,4 +1,4 @@
-Options -Indexes
+Options -Indexes -MultiViews
 DirectoryIndex index.php
 RewriteEngine On
 <IfModule mod_mime.c>

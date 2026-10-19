@@ -248,3 +248,11 @@
 .master-page .ts-support-panel .ts-text,.master-page .ts-support-panel .ts-bubble,
 .master-page .ts-support-panel .ts-send,.master-page .ts-support-panel .ts-icon-button{border-radius:5px!important}
 @media(max-width:720px){.master-page .ts-support-fab{width:49px;height:49px;right:12px;bottom:12px;border-radius:6px!important}}
+
+/* Wide message bubbles: preserve natural short messages, use space for long ones. */
+.ts-support-panel .ts-bubble{max-width:min(92%,790px);min-width:min(145px,48%);width:max-content;overflow-wrap:anywhere}
+.ts-support-panel .ts-bubble-text{white-space:pre-wrap;overflow-wrap:anywhere}
+.ts-support-panel.ts-master-popup .ts-bubble{max-width:94%;min-width:min(175px,45%)}
+@media(max-width:720px){
+ .ts-support-panel .ts-bubble,.ts-support-panel.ts-master-popup .ts-bubble{max-width:94%;min-width:min(135px,42%)}
+}

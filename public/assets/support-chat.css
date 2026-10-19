@@ -348,3 +348,17 @@
  }
  .ts-support-panel .ts-bubble-meta{min-width:0;flex-wrap:wrap;gap:4px 8px}
 }
+
+/* Support desk width reduced a further 20%: 826 -> 661px on desktop. */
+.ts-support-panel.ts-master-popup{
+ width:min(661px,calc(100vw - 32px))!important;
+ max-width:calc(100vw - 32px)!important;
+}
+.ts-support-panel.ts-master-popup .ts-layout{
+ grid-template-columns:minmax(185px,33%) minmax(0,1fr)!important;
+}
+.ts-support-panel .ts-avatar-photo{display:block;width:100%;height:100%;object-fit:cover;border-radius:inherit}
+@media(max-width:720px){
+ .ts-support-panel.ts-master-popup{width:calc(100vw - 16px)!important;max-width:calc(100vw - 16px)!important}
+ .ts-support-panel.ts-master-popup .ts-layout{display:block!important}
+}

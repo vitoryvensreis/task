@@ -36,6 +36,7 @@ final class Auth {
   }
   if(!self::$user&&$effective){self::$user=$effective;self::$user['is_preview']=0;}
   if(self::$user&&self::$workspace){self::$user['workspace_id']=self::$workspace['id'];self::$user['workspace_role']=self::$workspace['role'];}
+  if(self::$user)self::$user['avatar_url']=UserAvatars::url((int)self::$user['id']);
   if($required&&!self::$user)fail('Entre para continuar.',401);return self::$user;
  }
  public static function workspaceId(): int {self::load();if(!self::$workspace){if(WorkspaceContext::legacyCiFixture())return 0;fail('Workspace indisponível.',403);}if((int)self::$workspace['id']<1&&!WorkspaceContext::legacyCiFixture())fail('Selecione um workspace no modo suporte.',403);return (int)self::$workspace['id'];}
@@ -144,7 +145,7 @@ final class Auth {
   DB::update('users',(int)$u['id'],['twofa_enabled'=>0,'twofa_secret'=>null,'twofa_recovery_json'=>null]);self::$user['twofa_enabled']=0;audit('user',(int)$u['id'],'2fa.disabled');return ['saved'=>true];
  }
  public static function profile(): array {
-  self::load();$u=DB::one('SELECT id,name,email,role,email_notifications,twofa_enabled,last_login_at FROM users WHERE id=? AND active=1',[self::$user['id']]);if(!$u)fail('Usuário não encontrado.',404);return $u;
+  self::load();$u=DB::one('SELECT id,name,email,role,email_notifications,twofa_enabled,last_login_at FROM users WHERE id=? AND active=1',[self::$user['id']]);if(!$u)fail('Usuário não encontrado.',404);$u['avatar_url']=UserAvatars::url((int)$u['id']);return $u;
  }
  public static function profileSave(array $p): array {
   self::load();if(MasterSupport::isSupport())fail('Credenciais do proprietário não podem ser alteradas em suporte.',403);$u=DB::one('SELECT * FROM users WHERE id=? AND active=1',[self::$user['id']]);if(!$u)fail('Usuário não encontrado.',404);

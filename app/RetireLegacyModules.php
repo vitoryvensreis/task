@@ -3,8 +3,13 @@ declare(strict_types=1);
 /** Explicit, irreversible retirement after checksum-verified database backup. */
 final class RetireLegacyModules {
  public static function apply(): array {
-  if(PHP_SAPI!=='cli'||DB::conn()->inTransaction()||WorkspaceTenantMode::enabled())
-   throw new RuntimeException('Legacy module retirement requires isolated CLI before multi-tenant activation.');
+  if(PHP_SAPI!=='cli'||DB::conn()->inTransaction())
+   throw new RuntimeException('Module cleanup requires isolated CLI.');
+  if(WorkspaceTenantMode::enabled()){
+   if((string)(DB::one("SELECT value FROM settings WHERE `key`='modules_retired_v1'")['value']??'')!=='done')
+    throw new RuntimeException('Legacy modules were not retired.');
+   return ['assistant_removed'=>true,'agenda_removed'=>true,'already_retired'=>true];
+  }
   $schema=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??0);
   if($schema!==30)throw new RuntimeException('Schema 30 required.');
   if((int)(DB::one('SELECT COUNT(*) n FROM workspaces')['n']??0)!==1)

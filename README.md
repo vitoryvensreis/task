@@ -615,3 +615,19 @@ A confirmação de disponibilidade **em produção** ainda depende do serviço d
 - `Files::delete` respeita `workspace_id` ao limpar vínculos de comentários, avaliações e anexos, atendendo ao guard do modo multitenant. A auditoria e o evento de remoção continuam transacionais. O Google Drive informa especificamente falhas de permissão e autenticação quando aplicáveis. A exclusão física no Drive continua dependendo da autorização da conta conectada.
 - Ao arrastar um card, mover coluna, clicar em Atualizar ou receber um evento realtime, o Kanban guarda e restaura a pesquisa, serviço, cliente, responsável, prioridade e filtro de atrasados; o card movido permanece visível na coluna de destino se corresponder à pesquisa.
 - Testes: `tests/kanban-files-regression.mjs` e uma regressão de remoção de anexo durante isolamento multiworkspace na suíte `tests/workspace-foundation.php`.
+
+
+### Diagnóstico real do Kanban WebSocket
+
+O cliente agora autentica por `/realtime-auth.php` (arquivo PHP direto), evitando depender do rewrite `/realtime.auth` que pode ser interceptado por front proxy. O indicador lateral mostra o estado REAL da conexão e da assinatura do canal: só diz **WebSocket ativo** quando Centrifugo confirmou a assinatura necessária. Um refresh HTTP nunca é representado como WebSocket.
+
+**ADM:** clique no indicador à esquerda para obter diagnóstico sem expor credenciais: configuração, Redis, Centrifugo API, heartbeat do worker, Outbox pendente/esgotada, estados dos canais no browser, e botão **Testar ida e volta**. Esse teste registra `realtime.diagnostic` na mesma Outbox transacional e espera sua publicação no canal `kanban/ws:{workspace}` (ou `kanban/global` em modo legado); se não chegar, informa se o worker publicou ou se o evento ainda está pendente. O teste não altera tasks.
+
+Em produção, também execute:
+```bash
+cd /caminho/do/taskesc
+php bin/realtime-worker.php --health
+sudo systemctl status taskesc-realtime-worker.service --no-pager
+sudo python3 ops/realtime-step4.py smoke --deploy-path=/caminho/do/taskesc
+```
+Se o smoke falhar, confira o reverse proxy WebSocket, `/etc/taskesc/realtime.json`, o Centrifugo 6.9.7 e Redis; não marque a funcionalidade como concluída antes de passar o teste autenticado. A API `realtime.health` é exclusiva do ADM autenticado; respostas não incluem tokens ou chaves.

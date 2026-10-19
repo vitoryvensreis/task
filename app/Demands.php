@@ -7,7 +7,7 @@ final class Demands {
  private static function responsible(int $userId,int $clientId): int {
   if($userId<1)fail('Selecione um responsável para a task.',422);
   if(!self::ci())WorkspaceCatalog::requireUser($userId,true);$user=DB::one("SELECT id,role FROM users WHERE id=? AND active=1 AND role IN ('admin','staff')",[$userId]);if(!$user)fail('Responsável inválido.',422);
-  if($user['role']==='staff'&&!DB::one('SELECT client_id FROM user_clients WHERE user_id=? AND client_id=?'.self::wsWhere(),self::wsArgs([$userId,$clientId])))fail('O responsável da equipe precisa estar vinculado a este cliente.',422);
+  if($user['role']==='staff'&&!Auth::staffAllClients($userId)&&!DB::one('SELECT client_id FROM user_clients WHERE user_id=? AND client_id=?'.self::wsWhere(),self::wsArgs([$userId,$clientId])))fail('O responsável da equipe precisa estar vinculado a este cliente.',422);
   return (int)$user['id'];
  }
  public static function list(array $p): array {

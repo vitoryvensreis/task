@@ -2290,7 +2290,7 @@
     const draw=async(tab='google')=>{
       state.tab=tab;
       container.innerHTML='<section class="panel"><div class="panel-sub">Carregando configurações da empresa…</div></section>';
-      const tabs='<div class="settings-tabs" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px">'+
+      const tabs='<div class="settings-tabs company-settings-tabs" role="tablist" aria-label="Seções de configurações">'+
         [['google','Meu Google Drive'],['team','Minha equipe'],['roles','Funções'],['account','Minha conta']].map(([id,name])=>
         '<button type="button" class="'+(tab===id?'primary':'secondary')+'" data-company-tab="'+id+'">'+name+'</button>').join('')+'</div>';
       if(tab==='account'){await renderAccountSettings();container.insertAdjacentHTML('afterbegin',tabs);}
@@ -2303,9 +2303,9 @@
       }else if(tab==='roles'){
         const result=await api('company.roles');
         const editable=result.roles||[],capabilities=result.catalog||{};
-        const list=editable.map(role=>'<div class="panel" style="margin:8px 0;padding:14px"><b>'+esc(role.name)+'</b><div class="panel-sub">'+esc(role.description||'Sem descrição')+' · '+Number(role.member_count)+' membro(s) · '+(Number(role.active)?'Ativa':'Inativa')+'</div><button class="secondary" type="button" data-edit-company-role="'+Number(role.id)+'">Editar função</button></div>').join('');
+        const list=editable.map(role=>'<div class="panel company-role-card"><b>'+esc(role.name)+'</b><div class="panel-sub">'+esc(role.description||'Sem descrição')+' · '+Number(role.member_count)+' membro(s) · '+(Number(role.active)?'Ativa':'Inativa')+'</div><button class="secondary" type="button" data-edit-company-role="'+Number(role.id)+'">Editar função</button></div>').join('');
         const checkboxes=Object.entries(capabilities).map(([ability,label])=>'<label style="display:flex;align-items:center;gap:10px;padding:8px"><input type="checkbox" name="permission" value="'+esc(ability)+'"> '+esc(label)+'</label>').join('');
-        container.innerHTML=tabs+'<div class="panel" style="margin-bottom:14px"><h3>Funções da equipe</h3><div class="panel-sub">Crie funções próprias, como Designer, Editor ou Social Media, e escolha somente as permissões permitidas para membros da equipe. Administradores e clientes continuam com perfis próprios.</div>'+ (list||'<p class="panel-sub">Nenhuma função personalizada ainda. Crie sua primeira função abaixo.</p>')+'</div><section class="panel"><h3 id="company-role-editor-title">Nova função</h3><form id="company-role-form" class="settings-form"><input type="hidden" name="id" value="0"><div class="form-grid"><label class="field">Nome da função<input class="input" name="name" maxlength="80" required placeholder="Ex.: Designer"></label><label class="field">Descrição<input class="input" name="description" maxlength="255" placeholder="Responsável pelas artes"></label></div><h4 style="margin:14px 0 8px">Permissões</h4><div class="form-grid" style="gap:3px">'+checkboxes+'</div><label class="field" style="margin-top:14px">Situação<select name="active" class="input"><option value="1">Ativa</option><option value="0">Inativa</option></select></label><div class="form-actions"><button type="submit" class="primary">Salvar função</button><button type="button" id="company-role-new" class="secondary">Limpar formulário</button></div></form></section>';
+        container.innerHTML=tabs+'<div class="panel company-role-intro"><h3>Funções da equipe</h3><div class="panel-sub">Crie funções próprias, como Designer, Editor ou Social Media, e escolha somente as permissões permitidas para membros da equipe. Administradores e clientes continuam com perfis próprios.</div>'+ (list||'<p class="panel-sub">Nenhuma função personalizada ainda. Crie sua primeira função abaixo.</p>')+'</div><section class="panel company-role-editor"><h3 id="company-role-editor-title">Nova função</h3><form id="company-role-form" class="settings-form"><input type="hidden" name="id" value="0"><div class="form-grid"><label class="field">Nome da função<input class="input" name="name" maxlength="80" required placeholder="Ex.: Designer"></label><label class="field">Descrição<input class="input" name="description" maxlength="255" placeholder="Responsável pelas artes"></label></div><h4 style="margin:14px 0 8px">Permissões</h4><div class="form-grid" style="gap:3px">'+checkboxes+'</div><label class="field" style="margin-top:14px">Situação<select name="active" class="input"><option value="1">Ativa</option><option value="0">Inativa</option></select></label><div class="form-actions"><button type="submit" class="primary">Salvar função</button><button type="button" id="company-role-new" class="secondary">Limpar formulário</button></div></form></section>';
         const roleForm=$('#company-role-form');
         const clearRole=()=>{roleForm.reset();roleForm.querySelector('[name="id"]').value='0';$('#company-role-editor-title').textContent='Nova função'};
         $('#company-role-new').onclick=clearRole;
@@ -2330,8 +2330,8 @@
         const [users,roleData,teamInfo]=await Promise.all([api('users.list'),api('company.roles'),api('team.summary')]);
         const team=users.filter(u=>['admin','staff'].includes(u.role));
         const teamQuota=teamInfo.team_limit===null?'Equipe ilimitada':'Equipe '+Number(teamInfo.team_used)+' de '+Number(teamInfo.team_limit)+' usuários (plano '+esc(teamInfo.plan||'')+')';
-        const rows=team.map(u=>'<tr><td>'+esc(u.name)+'</td><td>'+esc(u.email)+'</td><td>'+esc(u.role==='admin'?'Administrador':'Equipe')+'</td><td>'+esc(Number(u.active)?'Ativo':'Inativo')+'</td><td><button type="button" class="secondary" data-team-edit="'+Number(u.id)+'">Editar</button></td></tr>').join('');
-        container.innerHTML=tabs+'<section class="panel"><div class="panel-head"><div><h3>Equipe deste workspace</h3><div class="panel-sub">Somente usuários vinculados à sua empresa. · '+teamQuota+'</div></div><button class="primary" type="button" id="company-new-member">+ Adicionar membro</button><div style="overflow:auto;margin-top:14px"><table class="table"><thead><tr><th>Nome</th><th>E-mail</th><th>Função</th><th>Situação</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div><form id="company-member-form" class="settings-form hidden" style="margin-top:18px"><h3 id="company-member-title">Novo membro</h3><input type="hidden" name="id" value="0"><div class="form-grid"><label class="field">Nome<input class="input" name="name" required maxlength="150"></label><label class="field">E-mail<input class="input" type="email" name="email" required maxlength="190"></label><label class="field">WhatsApp (com DDD)<input class="input" name="whatsapp_phone" required maxlength="20" placeholder="5585999999999"></label><label class="field">Perfil<select class="input" name="role"><option value="staff">Equipe</option><option value="admin">Administrador (legado)</option></select></label><label class="field">Senha <small id="company-member-password-info">(obrigatória ao criar)</small><input class="input" name="password" type="password" minlength="10" autocomplete="new-password"></label><label class="field">Status<select class="input" name="active"><option value="1">Ativo</option><option value="0">Inativo</option></select></label></div><div class="form-actions"><button type="submit" class="primary">Salvar membro</button><button type="button" class="secondary" id="company-member-cancel">Cancelar</button></div></form></section>';
+        const rows=team.map(u=>'<tr><td><strong>'+esc(u.name)+'</strong></td><td>'+esc(u.email)+'</td><td>'+esc(u.role==='admin'?'Administrador':'Equipe')+'</td><td><span class="company-scope-badge">'+esc(u.role==='admin'?'Acesso administrativo':Number(u.staff_all_clients)?'Todas as tasks':u.clients?.length===1?((S.meta.clients||[]).find(c=>Number(c.id)===Number(u.clients[0].client_id))?.name||'1 cliente'):u.clients?.length?u.clients.length+' clientes':'Sem clientes')+'</span></td><td><span class="company-status '+(Number(u.active)?'online':'offline')+'">'+(Number(u.active)?'Ativo':'Inativo')+'</span></td><td><button type="button" class="secondary" data-team-edit="'+Number(u.id)+'">Editar</button></td></tr>').join('');
+        container.innerHTML=tabs+'<section class="panel company-team-panel"><div class="panel-head"><div><h3>Equipe deste workspace</h3><div class="panel-sub">Somente usuários vinculados à sua empresa. · '+teamQuota+'</div></div><button class="primary" type="button" id="company-new-member">+ Adicionar membro</button></div><div class="company-team-table"><table class="table"><thead><tr><th>Nome</th><th>E-mail</th><th>Função</th><th>Acesso às tasks</th><th>Situação</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div><form id="company-member-form" class="settings-form hidden company-member-form"><h3 id="company-member-title">Novo membro</h3><input type="hidden" name="id" value="0"><div class="form-grid"><label class="field">Nome<input class="input" name="name" required maxlength="150"></label><label class="field">E-mail<input class="input" type="email" name="email" required maxlength="190"></label><label class="field">WhatsApp (com DDD)<input class="input" name="whatsapp_phone" required maxlength="20" placeholder="5585999999999"></label><label class="field">Perfil<select class="input" name="role"><option value="staff">Equipe</option><option value="admin">Administrador (legado)</option></select></label><label class="field">Senha <small id="company-member-password-info">(obrigatória ao criar)</small><input class="input" name="password" type="password" minlength="10" autocomplete="new-password"></label><label class="field">Status<select class="input" name="active"><option value="1">Ativo</option><option value="0">Inativo</option></select></label></div><div class="form-actions"><button type="submit" class="primary">Salvar membro</button><button type="button" class="secondary" id="company-member-cancel">Cancelar</button></div></form></section>';
         const roleOptions=(roleData.roles||[]).filter(role=>Number(role.active)===1).map(role=>'<option value="'+Number(role.id)+'">'+esc(role.name)+'</option>').join('');
 
         const pending=(teamInfo.invites||[]).map(item=>'<div class="team-invite-row"><div><strong>'+esc(item.name)+'</strong><div class="panel-sub">'+esc(item.email)+' · Expira: '+esc(item.expires_at)+(item.custom_role_name?' · '+esc(item.custom_role_name):'')+'</div></div>'+(teamInfo.can_invite?'<button type="button" class="secondary" data-team-revoke="'+Number(item.id)+'">Revogar</button>':'')+'</div>').join('');
@@ -2358,11 +2358,54 @@
         const toggleCustomRole=()=>{roleContainer.classList.toggle('hidden',staffRole.value!=='staff');if(staffRole.value!=='staff')roleContainer.querySelector('select').value='0'};
         staffRole.addEventListener('change',toggleCustomRole);
         const form=$('#company-member-form');
-        const open=(u)=>{form.reset();staffRole.querySelector('[value="admin"]').disabled=!u||u?.role!=='admin';form.classList.remove('hidden');form.querySelector('[name="id"]').value=u?.id||0;form.querySelector('[name="name"]').value=u?.name||'';form.querySelector('[name="email"]').value=u?.email||'';form.querySelector('[name="whatsapp_phone"]').value=u?.whatsapp_phone||'';form.querySelector('[name="role"]').value=u?.role||'staff';form.querySelector('[name="custom_role_id"]').value=String(u?.custom_role_id||0);toggleCustomRole();form.querySelector('[name="active"]').value=String(u?.active??1);form.querySelector('[name="password"]').required=!u;$('#company-member-title').textContent=u?'Editar membro':'Novo membro';$('#company-member-password-info').textContent=u?'(deixe em branco para manter)':'(obrigatória ao criar)';form.scrollIntoView({behavior:'smooth',block:'center'});};
+        const scopeField=document.createElement('div');scopeField.className='field span2 company-member-scope';
+        scopeField.innerHTML='<label>Visibilidade das tasks<select class="input" name="task_visibility"><option value="all">Todas as tasks de todos os clientes</option><option value="client">Somente tasks de um cliente específico</option></select></label><label class="field company-scope-client hidden">Cliente permitido<select class="input" name="access_client_id"><option value="">Selecione o cliente</option>'+(S.meta.clients||[]).map(c=>'<option value="'+Number(c.id)+'">'+esc(c.name)+'</option>').join('')+'</select></label><small class="field-help">A visibilidade é aplicada no servidor: Kanban, listas, detalhes e API.</small>';
+        form.querySelector('.form-grid').append(scopeField);
+        const accessMode=form.querySelector('[name="task_visibility"]'),clientChooser=form.querySelector('[name="access_client_id"]');
+        const updateAccess=()=>{const staff=staffRole.value==='staff',one=accessMode.value==='client';scopeField.classList.toggle('hidden',!staff);scopeField.querySelector('.company-scope-client').classList.toggle('hidden',!staff||!one);clientChooser.required=staff&&one;};
+        accessMode.addEventListener('change',updateAccess);staffRole.addEventListener('change',updateAccess);
+        const open=(u)=>{
+          form.reset();staffRole.querySelector('[value="admin"]').disabled=!u||u?.role!=='admin';
+          form.querySelector('[name="id"]').value=u?.id||0;
+          form.querySelector('[name="name"]').value=u?.name||'';
+          form.querySelector('[name="email"]').value=u?.email||'';
+          form.querySelector('[name="whatsapp_phone"]').value=u?.whatsapp_phone||'';
+          staffRole.value=u?.role||'staff';
+          form.querySelector('[name="custom_role_id"]').value=String(u?.custom_role_id||0);
+          form.querySelector('[name="active"]').value=String(u?.active??1);
+          form.querySelector('[name="password"]').required=!u;
+          accessMode.value=u&&u.role==='staff'&&!Number(u.staff_all_clients)?'client':'all';
+          clientChooser.value=String(u?.clients?.[0]?.client_id||'');
+          toggleCustomRole();updateAccess();
+          $('#company-member-title').textContent=u?'Editar membro':'Novo membro';
+          $('#company-member-password-info').textContent=u?'(deixe em branco para manter)':'(obrigatória ao criar)';
+          const host=$('#modal-root');
+          host.innerHTML='<div class="modal-backdrop company-user-overlay"><div class="modal company-user-dialog" role="dialog" aria-modal="true" aria-labelledby="company-member-title"><div class="company-user-dialog-content"></div></div></div>';
+          host.querySelector('.company-user-dialog-content').append(form);
+          form.classList.remove('hidden');form.querySelector('[name="name"]').focus();
+          host.querySelector('.modal-backdrop').addEventListener('click',event=>{if(event.target.classList.contains('modal-backdrop'))closeModal()});
+        };
         $('#company-new-member').onclick=()=>open(null);
         document.querySelectorAll('[data-team-edit]').forEach(b=>b.onclick=()=>{const u=team.find(x=>Number(x.id)===Number(b.dataset.teamEdit));if(u)open(u)});
-        $('#company-member-cancel').onclick=()=>form.classList.add('hidden');
-        form.onsubmit=async e=>{e.preventDefault();const btn=form.querySelector('button[type="submit"]');btn.disabled=true;try{const data=Object.fromEntries(new FormData(form));const old=team.find(x=>Number(x.id)===Number(data.id));data.clients=old?.clients||[];data.email_notifications=old?.email_notifications??1;data.whatsapp_phone=data.whatsapp_phone.trim();if(data.role!=='staff')data.custom_role_id='0';if(!data.password)delete data.password;await api('users.save',data,'POST');toast('Membro salvo.');S.meta=await api('meta');await draw('team')}catch(err){toast(err.message,true);btn.disabled=false}};
+        $('#company-member-cancel').onclick=closeModal;
+        form.onsubmit=async event=>{
+          event.preventDefault();
+          const button=form.querySelector('[type="submit"]');button.disabled=true;
+          try{
+            const data=Object.fromEntries(new FormData(form));
+            const old=team.find(user=>Number(user.id)===Number(data.id));
+            data.email_notifications=old?.email_notifications??1;
+            data.whatsapp_phone=data.whatsapp_phone.trim();
+            data.staff_all_clients=data.role==='staff'&&data.task_visibility==='all'?1:0;
+            data.clients=data.role==='staff'&&data.task_visibility==='client'?[{client_id:Number(data.access_client_id),can_approve:1,can_finance:0}]:old?.clients||[];
+            if(data.role==='staff'&&data.task_visibility==='client'&&!Number(data.access_client_id))throw new Error('Selecione o cliente autorizado.');
+            if(data.role!=='staff')data.custom_role_id='0';
+            delete data.task_visibility;delete data.access_client_id;
+            if(!data.password)delete data.password;
+            await api('users.save',data,'POST');
+            toast('Membro salvo com sucesso.');closeModal();S.meta=await api('meta');await draw('team');
+          }catch(error){toast(error.message,true);button.disabled=false}
+        };
       }
       document.querySelectorAll('[data-company-tab]').forEach(b=>b.onclick=()=>draw(b.dataset.companyTab).catch(e=>toast(e.message,true)));
     };

@@ -458,7 +458,7 @@
     try{
       syncRealtimeChannels();
       const filters=captureKanbanFilters(),refreshPages=['dashboard','kanban','demands','finance','reports'];
-      if(refreshPages.includes(S.page)){await refresh();restoreKanbanFilters(filters)}
+      if(refreshPages.includes(S.page)){if(S.page==='kanban')await stableRender(refresh);else await refresh();restoreKanbanFilters(filters)}
       const modal=$('[data-demand-modal]'),modalId=Number(modal?.dataset?.demandModal||0),modalMode=String(modal?.dataset?.demandMode||'');
       const modalEvent=modalId?events.filter(x=>x.demandId===modalId).at(-1):null;
       if(modalEvent){
@@ -904,12 +904,13 @@
       const notificationOpen=$('#notification-popover')&&!$('#notification-popover').classList.contains('hidden');
       if(!S.user||document.visibilityState==='hidden'||$('#modal-root').innerHTML.trim()||notificationOpen)return;
       refreshNotificationBadge();refreshChatBadge();
-      if(userIsInteracting())return;
+      // Idle focused Kanban search should not freeze HTTP fallback forever.
+      if(S.page==='kanban'?realtimeEditing():userIsInteracting())return;
       const connected=window.TaskEscRealtime?.status?.()==='connected';
       if(connected&&Date.now()-lastFullRefresh<30000)return;
       if(['dashboard','kanban','demands','finance','reports','logs'].includes(S.page)){
         lastFullRefresh=Date.now();
-        try{await refresh();realtimeIndicator();
+        try{if(S.page==='kanban')await stableRender(refresh);else await refresh();realtimeIndicator();
         }catch(e){console.debug?.('[TaskEsc refresh] fallback',e)}
       }
     },30000);

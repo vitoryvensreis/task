@@ -2374,7 +2374,11 @@
           form.querySelector('[name="custom_role_id"]').value=String(u?.custom_role_id||0);
           form.querySelector('[name="active"]').value=String(u?.active??1);
           form.querySelector('[name="password"]').required=!u;
-          accessMode.value=u&&u.role==='staff'&&!Number(u.staff_all_clients)?'client':'all';
+          accessMode.querySelector('[value="linked"]')?.remove();
+          if(u?.role==='staff'&&!Number(u.staff_all_clients)&&(u?.clients||[]).length>1){
+            const keep=document.createElement('option');keep.value='linked';keep.textContent='Manter acesso aos '+u.clients.length+' clientes atuais';accessMode.append(keep);
+          }
+          accessMode.value=u?.role==='staff'&&!Number(u.staff_all_clients)?(u.clients?.length>1?'linked':'client'):'all';
           clientChooser.value=String(u?.clients?.[0]?.client_id||'');
           toggleCustomRole();updateAccess();
           $('#company-member-title').textContent=u?'Editar membro':'Novo membro';

@@ -2330,7 +2330,7 @@
         const [users,roleData,teamInfo]=await Promise.all([api('users.list'),api('company.roles'),api('team.summary')]);
         const team=users.filter(u=>['admin','staff'].includes(u.role));
         const teamQuota=teamInfo.team_limit===null?'Equipe ilimitada':'Equipe '+Number(teamInfo.team_used)+' de '+Number(teamInfo.team_limit)+' usuários (plano '+esc(teamInfo.plan||'')+')';
-        const rows=team.map(u=>'<tr><td><strong>'+esc(u.name)+'</strong></td><td>'+esc(u.email)+'</td><td>'+esc(u.role==='admin'?'Administrador':'Equipe')+'</td><td><span class="company-scope-badge">'+esc(u.role==='admin'?'Acesso administrativo':Number(u.staff_all_clients)?'Todas as tasks':u.clients?.length===1?((S.meta.clients||[]).find(c=>Number(c.id)===Number(u.clients[0].client_id))?.name||'1 cliente'):u.clients?.length?u.clients.length+' clientes':'Sem clientes')+'</span></td><td><span class="company-status '+(Number(u.active)?'online':'offline')+'">'+(Number(u.active)?'Ativo':'Inativo')+'</span></td><td><button type="button" class="secondary" data-team-edit="'+Number(u.id)+'">Editar</button></td></tr>').join('');
+        const rows=team.map(u=>'<tr><td><strong>'+esc(u.name)+'</strong></td><td>'+esc(u.email)+'</td><td>'+esc(u.role==='admin'?'Administrador':'Equipe')+'</td><td><span class="company-scope-badge">'+esc(u.role==='admin'?'Acesso administrativo':Number(u.staff_all_clients)?'Todas as tasks':u.clients?.length===1?((S.meta.clients||[]).find(c=>Number(c.id)===Number(u.clients[0].client_id))?.name||'1 cliente'):u.clients?.length?u.clients.length+' clientes':'Sem clientes')+'</span></td><td><span class="company-status '+(Number(u.active)?'online':'offline')+'">'+(Number(u.active)?'Ativo':'Inativo')+'</span></td><td><div class="company-member-actions"><button type="button" class="secondary" data-team-edit="'+Number(u.id)+'">Editar</button>'+(u.role==='staff'?'<button type="button" class="danger company-member-delete" data-team-delete="'+Number(u.id)+'">Excluir</button>':'')+'</div></td></tr>').join('');
         container.innerHTML=tabs+'<section class="panel company-team-panel"><div class="panel-head"><div><h3>Equipe deste workspace</h3><div class="panel-sub">Somente usuários vinculados à sua empresa. · '+teamQuota+'</div></div><button class="primary" type="button" id="company-new-member">+ Adicionar membro</button></div><div class="company-team-table"><table class="table"><thead><tr><th>Nome</th><th>E-mail</th><th>Função</th><th>Acesso às tasks</th><th>Situação</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div><form id="company-member-form" class="settings-form hidden company-member-form"><h3 id="company-member-title">Novo membro</h3><input type="hidden" name="id" value="0"><div class="form-grid"><label class="field">Nome<input class="input" name="name" required maxlength="150"></label><label class="field">E-mail<input class="input" type="email" name="email" required maxlength="190"></label><label class="field">WhatsApp (com DDD)<input class="input" name="whatsapp_phone" required maxlength="20" placeholder="5585999999999"></label><label class="field">Perfil<select class="input" name="role"><option value="staff">Equipe</option><option value="admin">Administrador (legado)</option></select></label><label class="field">Senha <small id="company-member-password-info">(obrigatória ao criar)</small><input class="input" name="password" type="password" minlength="10" autocomplete="new-password"></label><label class="field">Status<select class="input" name="active"><option value="1">Ativo</option><option value="0">Inativo</option></select></label></div><div class="form-actions"><button type="submit" class="primary">Salvar membro</button><button type="button" class="secondary" id="company-member-cancel">Cancelar</button></div></form></section>';
         const roleOptions=(roleData.roles||[]).filter(role=>Number(role.active)===1).map(role=>'<option value="'+Number(role.id)+'">'+esc(role.name)+'</option>').join('');
 
@@ -2391,6 +2391,48 @@
         };
         $('#company-new-member').onclick=()=>open(null);
         document.querySelectorAll('[data-team-edit]').forEach(b=>b.onclick=()=>{const u=team.find(x=>Number(x.id)===Number(b.dataset.teamEdit));if(u)open(u)});
+        document.querySelectorAll('[data-team-delete]').forEach(button=>button.onclick=async()=>{
+          const user=team.find(item=>Number(item.id)===Number(button.dataset.teamDelete));
+          if(!user||user.role!=='staff')return;
+          button.disabled=true;
+          try{
+            const preview=await api('team.member_delete_preview',{id:Number(user.id)},'GET');
+            const impact=preview.impact||{};
+            const details=[
+              ['Tasks para o administrador',impact.tasks||0],
+              ['Responsabilidades padrão',impact.default_responsibilities||0],
+              ['Automações transferidas',impact.automations||0],
+              ['Regras financeiras transferidas',impact.expense_rules||0]
+            ];
+            $('#modal-root').innerHTML=`<div class="modal-backdrop company-user-overlay"><div class="modal company-user-dialog company-member-delete-dialog" role="dialog" aria-modal="true" aria-labelledby="company-member-delete-title"><div class="company-user-dialog-content">
+              <div class="modal-head"><div><span class="eyebrow">EXCLUSÃO DE MEMBRO</span><h3 id="company-member-delete-title">Excluir ${esc(user.name)}?</h3></div><button type="button" class="close" data-close aria-label="Fechar">×</button></div>
+              <p class="panel-sub">O membro perderá o acesso ao TaskEsc. Suas tasks e responsabilidades operacionais serão transferidas ao administrador. Comentários, arquivos, autoria histórica e conversas não serão apagados.</p>
+              <div class="company-member-transfer-grid">${details.map(([label,count])=>`<div><b>${Number(count)}</b><span>${esc(label)}</span></div>`).join('')}</div>
+              ${preview.can_delete?'':`<div class="danger-box">${esc(preview.block_reason||'Exclusão indisponível.')}</div>`}
+              <form id="company-member-delete-form" class="settings-form">
+                <label class="field">Digite <b>EXCLUIR</b> para confirmar<input class="input" name="confirmation" autocomplete="off" placeholder="EXCLUIR" ${preview.can_delete?'required':'disabled'}></label>
+                <div class="form-actions"><button type="button" class="secondary" data-close>Cancelar</button><button type="submit" class="danger" id="confirm-company-member-delete" disabled>Excluir membro</button></div>
+              </form>
+             </div></div></div>`;
+            document.querySelectorAll('#modal-root [data-close]').forEach(x=>x.onclick=closeModal);
+            const form=$('#company-member-delete-form'),input=form.querySelector('[name="confirmation"]'),save=$('#confirm-company-member-delete');
+            input.addEventListener('input',()=>save.disabled=!preview.can_delete||input.value!=='EXCLUIR');
+            form.onsubmit=async event=>{
+              event.preventDefault();
+              if(!preview.can_delete||input.value!=='EXCLUIR')return;
+              save.disabled=true;save.textContent='Excluindo…';
+              try{
+                const result=await api('team.member_delete',{id:Number(user.id),confirmation:input.value},'POST');
+                closeModal();S.meta=await api('meta');await draw('team');
+                toast('Membro excluído. '+Number(result.impact?.tasks||0)+' task(s) transferida(s) ao administrador.');
+              }catch(error){toast(error.message,true);save.disabled=false;save.textContent='Excluir membro'}
+            };
+            $('#modal-root .modal-backdrop').addEventListener('click',event=>{if(event.target.classList.contains('modal-backdrop'))closeModal()});
+            input.disabled?save.focus():input.focus();
+          }catch(error){toast(error.message,true)}
+          finally{button.disabled=false}
+        });
+
         $('#company-member-cancel').onclick=closeModal;
         form.onsubmit=async event=>{
           event.preventDefault();

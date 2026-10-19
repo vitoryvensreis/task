@@ -25,6 +25,8 @@ require ROOT.'/app/UserAvatars.php';
 require ROOT.'/app/WorkspaceCatalog.php';
 require ROOT.'/app/WorkspacePreferences.php';
 require ROOT.'/app/WorkspaceRoles.php';
+require ROOT.'/app/WorkspaceTeams.php';
+require ROOT.'/app/WorkspaceMemberRemoval.php';
 require ROOT.'/app/PlatformPlans.php';
 require ROOT.'/app/SupportDesk.php';
 require ROOT.'/app/Catalog.php';
@@ -170,6 +172,40 @@ try{
  DB::tx(fn()=>WorkspaceContext::syncUser($fresh,$ws,'staff',true,true));
  testws((string)DB::one('SELECT status FROM workspace_members WHERE user_id=? AND workspace_id=?',
   [$fresh,$ws])['status']==='active','Explicitly reactivating a disabled user should restore access.');
+
+ // Member deletion is a transactional access revocation, not destruction of history.
+ WorkspaceTeams::migrate();
+ $removable=DB::tx(function()use($ws):int {
+  $id=DB::insert('users',['name'=>'Removed staff fixture','email'=>'removed-staff-fixture@ci.invalid',
+   'whatsapp_phone'=>'5585911111111','password_hash'=>'test','role'=>'staff','active'=>1,'created_at'=>now()]);
+  WorkspaceContext::syncUser($id,$ws,'staff',true);
+  return $id;
+ });
+ $savedComment=DB::insert('comments',['workspace_id'=>$ws,'demand_id'=>$demand,'author_id'=>$removable,
+  'body'=>'Historic message must survive member removal','internal'=>0,'created_at'=>now()]);
+ DB::run('UPDATE demands SET assigned_to=? WHERE id=? AND workspace_id=?',[$removable,$demand,$ws]);
+ DB::run('UPDATE categories SET default_assigned_to=? WHERE id=? AND workspace_id=?',[$removable,1,$ws]);
+ $preview=WorkspaceMemberRemoval::preview(['id'=>$removable]);
+ testws($preview['can_delete']===true&&(int)$preview['impact']['tasks']===1,
+  'Member removal preview must report the transferred task.');
+ refuses(fn()=>WorkspaceMemberRemoval::delete(['id'=>$removable]),'A confirmation word is mandatory.');
+ refuses(fn()=>WorkspaceMemberRemoval::delete(['id'=>$owner,'confirmation'=>'EXCLUIR']),
+  'Workspace owner must never be removable.');
+ $removed=WorkspaceMemberRemoval::delete(['id'=>$removable,'confirmation'=>'EXCLUIR']);
+ testws($removed['deleted']===true&&(int)$removed['transferred_to']===$owner,'Member removal response is incorrect.');
+ testws((int)(DB::one('SELECT assigned_to FROM demands WHERE id=?',[$demand])['assigned_to']??0)===$owner,
+  'Assigned task was not transferred to workspace owner.');
+ testws((int)(DB::one('SELECT default_assigned_to FROM categories WHERE id=1')['default_assigned_to']??0)===$owner,
+  'Default assignee was not transferred to workspace owner.');
+ testws(!DB::one('SELECT 1 FROM workspace_members WHERE user_id=?',[$removable]),
+  'Deleted staff must no longer be a workspace member.');
+ testws((int)(DB::one('SELECT active FROM users WHERE id=?',[$removable])['active']??1)===0,
+  'Deleted staff login must be disabled.');
+ testws((int)(DB::one('SELECT author_id FROM comments WHERE id=?',[$savedComment])['author_id']??0)===$removable,
+  'Member removal must not falsify historic comment authorship.');
+ refuses(fn()=>WorkspaceContext::forUser(DB::one('SELECT id,email,role,active FROM users WHERE id=?',[$removable])),
+  'Removed staff must not be allowed back into workspace.');
+
 
 
  // B9: Master may authenticate only after explicit verification; no tenant

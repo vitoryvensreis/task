@@ -39,6 +39,13 @@ function integer(mixed $v,int $min=0,int $max=1000000000):int {
 }
 
 function now():string {return gmdate('Y-m-d H:i:s');}
+function audit(string $entity,int $id,string $action,mixed $before=null,mixed $after=null):void {
+ $ws=(int)(Auth::$workspace['id']??0);
+ DB::insert('audit_log',['workspace_id'=>$ws,'user_id'=>(int)(Auth::$user['id']??0)?:null,
+  'entity'=>$entity,'entity_id'=>$id,'action'=>$action,
+  'before_json'=>$before===null?null:json($before),'after_json'=>$after===null?null:json($after),
+  'origin'=>'web','created_at'=>now()]);
+}
 function setting(string $key,string $default=''):string {
  return (string)(DB::one('SELECT value FROM settings WHERE `key`=?',[$key])['value']??$default);
 }

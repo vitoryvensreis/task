@@ -382,10 +382,20 @@
     if(realtimeSeen.size>500)for(const [k,t] of realtimeSeen)if(nowMs-t>120000)realtimeSeen.delete(k);
     return true;
   }
+  let notificationRealtimeTimer=0;
   window.addEventListener('taskesc:realtime-publication',event=>{
     const publication=event?.detail?.data;
     if(publication&&String(publication.event_type||'').startsWith('chat.')){handleChatRealtime(publication);return}
     if(publication&&String(publication.event_type||'').startsWith('wpp.')){handleWppRealtime(publication);return}
+    if(publication?.event_type==='notification.created'){
+      clearTimeout(notificationRealtimeTimer);
+      notificationRealtimeTimer=setTimeout(()=>{
+        notificationRealtimeTimer=0;refreshNotificationBadge();
+        const panel=$('#notification-popover');
+        if(panel&&!panel.classList.contains('hidden')){closeNotifications();openNotifications()}
+      },140);
+      return;
+    }
     const data=realtimePayload(event);if(!data||!rememberRealtimeEvent(data))return;
     realtimePending.set(data.demandId,data);scheduleRealtimeRefresh();
   });
@@ -752,7 +762,7 @@
 
   async function squarePngFromLogo(file,size,maskable=false){try{const bitmap=await createImageBitmap(file),canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');canvas.width=size;canvas.height=size;ctx.fillStyle='#050607';ctx.fillRect(0,0,size,size);const pad=Math.round(size*(maskable?.19:.11)),max=size-pad*2,scale=Math.min(max/bitmap.width,max/bitmap.height),w=Math.max(1,Math.round(bitmap.width*scale)),h=Math.max(1,Math.round(bitmap.height*scale));ctx.drawImage(bitmap,Math.round((size-w)/2),Math.round((size-h)/2),w,h);bitmap.close?.();return await new Promise(resolve=>canvas.toBlob(resolve,'image/png',.96))}catch(_){return null}}
   async function uploadLogoFile(file){const fd=new FormData();fd.append('logo',file);const icons=await Promise.all([[180,false,'icon_180'],[192,false,'icon_192'],[512,false,'icon_512'],[512,true,'icon_maskable_512']].map(async ([size,mask,key])=>[key,await squarePngFromLogo(file,size,mask)]));for(const [key,blob] of icons)if(blob)fd.append(key,blob,key+'.png');const r=await fetch(appPath('api.php')+'?action=settings.logo_upload',{method:'POST',headers:{'Accept':'application/json',...(S.csrf?{'X-CSRF-Token':S.csrf}:{})},body:fd}),j=await r.json().catch(()=>({error:'Resposta inválida do servidor.'}));if(!r.ok||j.error)throw new Error(j.error||'Não foi possível enviar a logo.');return j}
-  function showLogin(){document.dispatchEvent(new Event('taskesc:logout'));closeNotifications();closeAdminChat();automationEditorState=null;automationCatalogCache=null;automationListCache=[];document.body.classList.remove('admin-chat-enabled');$('#admin-chat-root')?.classList.add('hidden');S.user=null;window.TaskEscRealtime?.setCsrf?.('');realtimeOwnedChannels.clear();realtimePending.clear();realtimeSeen.clear();S.chatPeerId=0;S.chatContacts=[];S.chatUnread=0;if(realtimeTimer)clearTimeout(realtimeTimer);realtimeTimer=0;if(S.timer)clearInterval(S.timer);S.timer=null;$('#app').classList.add('hidden');$('#login').classList.remove('hidden');$('#login-form').reset();$('#login-form').classList.remove('hidden');$('#twofa-form')?.classList.add('hidden');$('#twofa-form')?.reset();$('#login-error').textContent='';if($('#twofa-error'))$('#twofa-error').textContent='';}
+  function showLogin(){document.dispatchEvent(new Event('taskesc:logout'));closeNotifications();closeAdminChat();automationEditorState=null;automationCatalogCache=null;automationListCache=[];document.body.classList.remove('admin-chat-enabled');$('#admin-chat-root')?.classList.add('hidden');S.user=null;window.TaskEscRealtime?.setCsrf?.('');realtimeOwnedChannels.clear();realtimePending.clear();realtimeSeen.clear();S.chatPeerId=0;S.chatContacts=[];S.chatUnread=0;if(realtimeTimer)clearTimeout(realtimeTimer);realtimeTimer=0;if(S.timer)clearInterval(S.timer);S.timer=null;if(notificationRealtimeTimer)clearTimeout(notificationRealtimeTimer);notificationRealtimeTimer=0;$('#app').classList.add('hidden');$('#login').classList.remove('hidden');$('#login-form').reset();$('#login-form').classList.remove('hidden');$('#twofa-form')?.classList.add('hidden');$('#twofa-form')?.reset();$('#login-error').textContent='';if($('#twofa-error'))$('#twofa-error').textContent='';}
   function showApp(){
     const requestedChatPeer=adminChatEnabled()?Number(new URLSearchParams(location.search).get('chat')||0):0;
     S.user=S.meta.user;document.dispatchEvent(new Event('taskesc:login'));window.TaskEscRealtime?.setCsrf?.(S.csrf);syncRealtimeChannels();$('#login').classList.add('hidden');$('#app').classList.remove('hidden');applyBranding();
@@ -767,7 +777,24 @@
     });
     const flash=sessionStorage.getItem('taskesc-flash');if(flash){sessionStorage.removeItem('taskesc-flash');setTimeout(()=>toast(flash),350)}
   }
-  function startAutoRefresh(){if(S.timer)clearInterval(S.timer);S.timer=setInterval(async()=>{const notificationOpen=$('#notification-popover')&&!$('#notification-popover').classList.contains('hidden');if(!S.user||document.visibilityState==='hidden'||$('#modal-root').innerHTML.trim()||notificationOpen)return;refreshNotificationBadge();refreshChatBadge();if(userIsInteracting())return;if(['dashboard','kanban','demands','agenda','finance','reports','logs'].includes(S.page)){await refresh();const i=$('#sync-indicator');if(i)i.innerHTML='<i></i> Atualizado às '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:S.meta.timezone||'America/Fortaleza'})}},30000)}
+  function startAutoRefresh(){
+    if(S.timer)clearInterval(S.timer);
+    let lastFullRefresh=Date.now();
+    S.timer=setInterval(async()=>{
+      const notificationOpen=$('#notification-popover')&&!$('#notification-popover').classList.contains('hidden');
+      if(!S.user||document.visibilityState==='hidden'||$('#modal-root').innerHTML.trim()||notificationOpen)return;
+      refreshNotificationBadge();refreshChatBadge();
+      if(userIsInteracting())return;
+      const connected=window.TaskEscRealtime?.status?.()==='connected';
+      if(connected&&Date.now()-lastFullRefresh<180000)return;
+      if(['dashboard','kanban','demands','finance','reports','logs'].includes(S.page)){
+        lastFullRefresh=Date.now();
+        try{await refresh();const i=$('#sync-indicator');
+          if(i)i.innerHTML='<i></i> '+(connected?'Tempo real · ':'Atualizado às ')+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:S.meta.timezone||'America/Fortaleza'});
+        }catch(e){console.debug?.('[TaskEsc refresh] fallback',e)}
+      }
+    },30000);
+  }
   async function refreshNotificationBadge(){
     if(!S.user||S.user.is_preview)return;try{const rows=await api('notifications'),unread=rows.filter(x=>!Number(x.seen)).length,b=$('#notification-badge');if(b){b.textContent=unread>99?'99+':String(unread);b.classList.toggle('hidden',unread===0);$('#notifications-btn')?.classList.toggle('has-unread',unread>0)}const appUnread=unread+(adminChatEnabled()?Number(S.chatUnread||0):0);try{if(appUnread>0&&navigator.setAppBadge)await navigator.setAppBadge(appUnread);else if(navigator.clearAppBadge)await navigator.clearAppBadge()}catch{}}catch{}
   }

@@ -25,13 +25,18 @@ final class Notify {
     throw new LogicException('Cross-workspace notification rejected.');
   }
   if($key&&DB::one('SELECT id FROM notifications WHERE dedupe_key=?'.(WorkspaceTenantMode::enabled()?' AND workspace_id=?':''),WorkspaceTenantMode::enabled()?[$key,(int)(Auth::$workspace['id']??WorkspaceJobScope::currentId())]:[$key]))return null;
-  $notificationId=DB::insert('notifications',['user_id'=>$id,'title'=>mb_substr($title,0,190),'body'=>$body,'demand_id'=>$demand,'dedupe_key'=>$key,'created_at'=>now()]);
+  $notificationId=DB::tx(static function()use($id,$title,$body,$demand,$key):int {
+   $nid=DB::insert('notifications',['user_id'=>$id,'title'=>mb_substr($title,0,190),'body'=>$body,'demand_id'=>$demand,'dedupe_key'=>$key,'created_at'=>now()]);
+   EventOutbox::enqueue('notification:'.$nid,'notification.created','notification',$nid,'user:'.$id,
+     ['notification_id'=>$nid,'change'=>'unread'],null);
+   return $nid;
+  });
   if($push){
    $multi=WorkspaceTenantMode::enabled();
    $scope=(int)(Auth::$workspace['id']??WorkspaceJobScope::currentId());
    $unread=(int)(DB::one('SELECT COUNT(*) AS n FROM notifications WHERE user_id=? AND seen=0'.($multi?' AND workspace_id=?':''),
      $multi?[$id,$scope]:[$id])['n']??0);
-   Push::notifyUser($id,[
+   try{Push::notifyUser($id,[
     'notification_id'=>$notificationId,
     'title'=>$title,
     'body'=>$body,
@@ -40,7 +45,7 @@ final class Notify {
     'tag'=>'taskesc-notification-'.$notificationId,
     'scope'=>'task_responsible',
     'badge_count'=>$unread
-   ]);
+   ]);}catch(Throwable $e){error_log('TaskEsc push unavailable: '.get_class($e));}
   }
   if(!$u['email_notifications'])return null;
   $email=strtolower(trim((string)$u['email']));

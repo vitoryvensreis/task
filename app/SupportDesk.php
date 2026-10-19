@@ -45,7 +45,7 @@ final class SupportDesk {
     AND wm.status='active' AND u.active=1 AND u.role='admin'";
   if(!$multi){$where.=" AND w.slug=?";$args[] = WorkspaceFoundation::SLUG;}
   if(!$actor['master']){$where.=" AND u.id=?";$args[]=$actor['id'];}
-  return DB::all("SELECT w.id AS workspace_id,w.name AS workspace_name,u.id AS tenant_user_id,
+  $threads=DB::all("SELECT w.id AS workspace_id,w.name AS workspace_name,u.id AS tenant_user_id,
      u.name AS tenant_name,u.email AS tenant_email,
      (SELECT m.body FROM workspace_support_messages m WHERE m.workspace_id=w.id
         AND m.tenant_user_id=u.id ORDER BY m.id DESC LIMIT 1) AS last_body,
@@ -54,6 +54,8 @@ final class SupportDesk {
     FROM workspaces w JOIN workspace_members wm ON wm.workspace_id=w.id
     JOIN users u ON u.id=wm.user_id $where
     ORDER BY last_at DESC,u.name",$args);
+  foreach($threads as &$thread)$thread['avatar_url']=UserAvatars::url((int)$thread['tenant_user_id']);
+  unset($thread);return $threads;
  }
 
  private static function messagesFor(array $target): array {
@@ -66,6 +68,7 @@ final class SupportDesk {
   $rows=array_reverse($rows);
   foreach($rows as &$row){
    $row['image_url']=$row['file_mime']?base('support-image.php?id='.(int)$row['id']):null;
+   $row['sender_avatar_url']=UserAvatars::url((int)$row['sender_user_id']);
    unset($row['file_mime']);
   }
   unset($row);

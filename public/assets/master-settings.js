@@ -98,7 +98,9 @@ window.TaskEscMasterSettings=(()=>{
   field(fw,'URL pública HTTPS','public_url',w.public_url||'');
   field(fw,'Sessão','session',w.session||'taskesc');
   field(fw,'Segredo WPPConnect','secret','','password',w.secret_set?'Configurado — deixe vazio para manter':'Informe o segredo');
-  submit(fw,'master.settings_save','whatsapp',base,csrf);wpp.append(fw);
+  submit(fw,'master.settings_save','whatsapp',base,csrf);
+  const advanced=el('details','ms-wpp-advanced');
+  advanced.append(el('summary','','Configurações avançadas · WPPConnect'),fw);wpp.append(advanced);
   const google=card(grid,'Integração Google OAuth','Credenciais globais do Google Drive.');
   const fgAuth=el('form','ms-form');field(fgAuth,'Google Client ID','google_client_id',d.google_client_id||'');
   field(fgAuth,'Google Client Secret','google_client_secret','','password',d.google_secret_set?'Configurado — deixe vazio para manter':'Não configurado');
@@ -135,46 +137,130 @@ window.TaskEscMasterSettings=(()=>{
   note(asaasCard,'Recebimentos protegidos','Ativação exige chave válida, token de webhook e conta de produção aprovada. Cobranças reais só são emitidas com confirmação no ADM Master.');
   const drive=card(grid,'Google Drive','Arquivos do sistema são enviados apenas pelas contas Google autorizadas de cada workspace.');
   note(drive,'Acesso isolado por empresa','Cada administrador conecta as próprias contas Google no workspace. O ADM Master gerencia somente as credenciais globais OAuth aqui.');
-  const wppTools=el('div','mc-integration-tools');
-  wpp.append(wppTools);
-  const state=el('div','mc-feedback');wppTools.append(state);
-  const statusBtn=el('button','secondary','Verificar sessão');statusBtn.type='button';
-  const startBtn=el('button','secondary','Iniciar / Reconectar');startBtn.type='button';
-  const qrBtn=el('button','secondary','Exibir QR Code');qrBtn.type='button';
-  const closeBtn=el('button','secondary','Fechar sessão');closeBtn.type='button';
-  const disconnectBtn=el('button','secondary','Desconectar número');disconnectBtn.type='button';
-  const tools=el('div','mc-actions');tools.append(statusBtn,startBtn,qrBtn,closeBtn,disconnectBtn);wppTools.append(tools);
-  const qrHolder=el('div','mc-qr');wppTools.append(qrHolder);
+  const wppTools=el('div','mc-integration-tools ms-wpp-console');
+  wpp.prepend(wppTools);
+  const cardStatus=el('div','ms-wpp-status');
+  const stateDot=el('span','ms-wpp-dot ms-wpp-unknown');stateDot.setAttribute('aria-hidden','true');
+  const statusText=el('strong','','Consultando sessão…');
+  const statusDescription=el('p','','Identificando o número conectado ao WhatsApp único da plataforma.');
+  const statusCopy=el('div','ms-wpp-status-copy');statusCopy.append(statusText,statusDescription);
+  const stateTime=el('small','ms-wpp-last-update','Aguardando');
+  cardStatus.append(stateDot,statusCopy,stateTime);
+  wppTools.append(cardStatus);
+  const state=el('div','mc-feedback ms-wpp-feedback');
+  state.setAttribute('role','status');state.setAttribute('aria-live','polite');wppTools.append(state);
+  const statusBtn=el('button','secondary','↻ Atualizar status');statusBtn.type='button';
+  const startBtn=el('button','primary','Conectar / Reconectar');startBtn.type='button';
+  const qrBtn=el('button','secondary','Gerar QR Code');qrBtn.type='button';
+  const closeBtn=el('button','secondary','Encerrar sessão');closeBtn.type='button';
+  const disconnectBtn=el('button','secondary danger','Desconectar número');disconnectBtn.type='button';
+  const toolActions=el('div','mc-actions ms-wpp-actions');
+  toolActions.append(statusBtn,startBtn,qrBtn,closeBtn,disconnectBtn);
+  wppTools.append(toolActions);
+  const qrHolder=el('div','mc-qr ms-wpp-qr');qrHolder.setAttribute('aria-live','polite');
+  wppTools.append(qrHolder);
   const wppRequest=async(action,p=null)=>{
    const isPost=p!==null;
    const response=await fetch(base+'/api.php?action='+action,{
     method:isPost?'POST':'GET',credentials:'same-origin',cache:'no-store',
     headers:{Accept:'application/json',...(isPost?{'Content-Type':'application/json','X-CSRF-Token':csrf}:{})},
     ...(isPost?{body:JSON.stringify(p)}:{})});
-   const out=await response.json().catch(()=>({error:'Resposta inválida'}));
-   if(!response.ok||out.error)throw Error(out.error||'Erro na integração');return out;
+   const out=await response.json().catch(()=>({error:'Resposta inválida do servidor.'}));
+   if(!response.ok||out.error)throw Error(out.error||'Não foi possível consultar o WhatsApp.');
+   return out;
   };
-  const runWpp=async fn=>{state.textContent='Consultando conexão…';try{await fn()}catch(error){state.textContent=error.message}};
-  statusBtn.onclick=()=>runWpp(async()=>{const d=await wppRequest('master.wpp_status');
-   state.textContent=d.connected?'WhatsApp conectado'+(d.phone?' · +'+d.phone:'')+'.':d.message||'WhatsApp desconectado.';});
-  startBtn.onclick=()=>runWpp(async()=>{await wppRequest('master.wpp_start',{});state.textContent='Sessão iniciada. Clique em Exibir QR Code se necessário.'});
-  qrBtn.onclick=()=>runWpp(async()=>{const d=await wppRequest('master.wpp_qr');qrHolder.replaceChildren();
-   const url=d.qrcode;
-   if(typeof url==='string'&&url.startsWith('data:image/png;base64,')){
-    const image=el('img');image.src=url;image.alt='QR Code WhatsApp';qrHolder.append(image);
-   }else state.textContent='Sessão: '+String(d.status||'Aguardando QR Code');
+  let currentSession=null,busy=false,polling=false;
+  const available=()=>!!(currentSession&&currentSession.provider_up);
+  const updateButtons=()=>{
+   const connected=!!currentSession?.connected;
+   const isConfigured=!!currentSession?.configured;
+   statusBtn.disabled=busy;
+   startBtn.disabled=busy||!isConfigured||!available()||connected;
+   qrBtn.disabled=busy||!isConfigured||!available()||connected;
+   closeBtn.disabled=busy||!available()||!connected;
+   disconnectBtn.disabled=busy||!available()||!connected;
+   startBtn.textContent=connected?'WhatsApp conectado':'Conectar / Reconectar';
+  };
+  const showStatus=d=>{
+   currentSession=d;
+   const connected=!!d.connected,online=!!d.provider_up,configured=!!d.configured;
+   stateDot.className='ms-wpp-dot '+(connected?'ms-wpp-online':online?'ms-wpp-idle':'ms-wpp-offline');
+   statusText.textContent=connected?'WhatsApp conectado':!configured?'Configuração pendente':
+     online?'Sessão desconectada':'Provedor indisponível';
+   statusDescription.textContent='Sessão: '+(d.session||w.session||'taskesc')+
+     (connected?(d.phone?' · Telefone: +'+d.phone:' · Telefone não informado'):
+      ' · '+(d.message||'Sem sessão ativa'));
+   stateTime.textContent='Verificado às '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+   if(connected)qrHolder.replaceChildren();
+   updateButtons();
+  };
+  const refreshStatus=async(silent=false)=>{
+   if(polling||busy)return;
+   polling=true;if(!silent)state.textContent='Verificando a conexão…';
+   try{
+    const d=await wppRequest('master.wpp_status');
+    showStatus(d);
+    if(!silent)state.textContent=d.connected?'Conexão confirmada.':
+      'Aguardando uma conexão. Use Conectar / Reconectar para iniciar.';
+   }catch(error){
+    currentSession={configured:!!w.configured,provider_up:false,connected:false,session:w.session};
+    showStatus(currentSession);
+    if(!silent)state.textContent='Não foi possível verificar a sessão: '+error.message;
+   }finally{polling=false}
+  };
+  const runWpp=async fn=>{
+   if(busy)return;
+   busy=true;updateButtons();
+   state.textContent='Processando solicitação…';
+   try{await fn()}
+   catch(error){state.textContent=error.message}
+   finally{busy=false;updateButtons()}
+  };
+  statusBtn.onclick=()=>refreshStatus();
+  startBtn.onclick=()=>runWpp(async()=>{
+   await wppRequest('master.wpp_start',{});
+   state.textContent='Solicitação enviada. Se o telefone não estiver conectado, gere um QR Code.';
+   await refreshStatus(true);
+  });
+  qrBtn.onclick=()=>runWpp(async()=>{
+   const d=await wppRequest('master.wpp_qr');qrHolder.replaceChildren();
+   const source=d.qrcode;
+   if(typeof source==='string'&&source.startsWith('data:image/png;base64,')){
+    const title=el('strong','','Escaneie com o WhatsApp do celular');
+    const image=el('img');image.src=source;image.alt='QR Code temporário para vincular a sessão WhatsApp';
+    const help=el('p','','WhatsApp → Aparelhos conectados → Conectar aparelho. O QR Code é temporário.');
+    qrHolder.append(title,image,help);
+    state.textContent='QR Code disponível. Depois de escanear, clique em Atualizar status.';
+   }else{
+    state.textContent=d.ready?'Aguardando a imagem do QR Code do provedor.':
+      'QR Code ainda não disponível. Inicie a sessão e tente novamente.';
+   }
   });
   const confirmMaster=async(action,label)=>{
-   const password=window.prompt('Digite a senha do ADM Master para '+label+':');
+   const password=window.prompt('Digite sua senha do ADM Master para '+label+':');
    if(password===null||password==='')return;
-   if(!window.confirm('Confirma '+label+' da sessão WhatsApp compartilhada?'))return;
+   if(!window.confirm('Confirma '+label+' da única sessão de WhatsApp da plataforma?'))return;
    await runWpp(async()=>{
-     await wppRequest(action,{master_password:password});
-     qrHolder.replaceChildren();state.textContent='Operação confirmada: '+label+'.';
+    await wppRequest(action,{master_password:password});
+    qrHolder.replaceChildren();
+    state.textContent='Operação concluída: '+label+'.';
+    currentSession={configured:true,provider_up:true,connected:false,session:w.session};
+    showStatus(currentSession);
    });
+   await refreshStatus(true);
   };
-  closeBtn.onclick=()=>confirmMaster('master.wpp_close','fechar (mantendo a autenticação salva)');
-  disconnectBtn.onclick=()=>confirmMaster('master.wpp_disconnect','desconectar (apaga dados de autenticação)');
+  closeBtn.onclick=()=>confirmMaster('master.wpp_close','encerrar mantendo autenticação');
+  disconnectBtn.onclick=()=>confirmMaster('master.wpp_disconnect','desvincular o telefone e apagar a autenticação');
+  // Poll only while this Master panel exists and is visible; no parallel
+  // polling and no background traffic when the tab is closed/hidden.
+  if(mode==='whatsapp'){
+   queueMicrotask(()=>refreshStatus(true));
+   const refreshTimer=setInterval(()=>{
+    if(!wpp.isConnected){clearInterval(refreshTimer);return}
+    if(document.visibilityState!=='visible'||!wpp.getClientRects().length)return;
+    refreshStatus(true);
+   },30000);
+  }
   const testForm=el('form','ms-form mc-wpp-test');
   field(testForm,'Enviar teste para telefone (com DDI)','phone','','tel','5585999999999');
   field(testForm,'Mensagem de teste','message','TaskEsc · teste de integração WhatsApp');

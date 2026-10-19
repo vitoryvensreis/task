@@ -147,3 +147,35 @@ body.landing-page,body.plans-page{
 @media(prefers-reduced-motion:reduce){
  .master-page *,.landing-page *,.plans-page *{scroll-behavior:auto!important}
 }
+/* The single global WhatsApp session has a first-class, readable control. */
+.master-page .ms-wpp-console{border-top:0;margin-top:0;padding-top:0;gap:13px}
+.master-page .ms-wpp-status{
+ display:flex;align-items:center;gap:15px;padding:18px;
+ border:1px solid #355066;background:#142330;border-radius:9px;min-width:0
+}
+.master-page .ms-wpp-dot{width:11px;height:11px;border-radius:50%;flex:0 0 11px}
+.master-page .ms-wpp-online{background:#67c59f;box-shadow:0 0 0 5px #67c59f1e}
+.master-page .ms-wpp-idle{background:#d7a979;box-shadow:0 0 0 5px #d7a9791f}
+.master-page .ms-wpp-offline,.master-page .ms-wpp-unknown{background:#bd8591}
+.master-page .ms-wpp-status-copy{min-width:0;flex:1}
+.master-page .ms-wpp-status-copy strong{display:block;font-size:16px;color:#f1f6fa;margin-bottom:5px}
+.master-page .ms-wpp-status-copy p{font-size:12px;line-height:1.6;color:#acbfcd;margin:0;overflow-wrap:anywhere}
+.master-page .ms-wpp-last-update{white-space:nowrap;color:#879eaf;font-size:10px}
+.master-page .ms-wpp-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.master-page .ms-wpp-actions button{min-height:39px;border-radius:6px;padding:8px 12px;font-size:12px}
+.master-page .ms-wpp-actions .danger{border-color:#8a5963;color:#e6b7c2;background:#261a22}
+.master-page .ms-wpp-actions .danger:hover{background:#452530}
+.master-page .ms-wpp-feedback{font-size:12px;color:#c0d0dc;min-height:19px}
+.master-page .ms-wpp-qr:empty{display:none}
+.master-page .ms-wpp-qr:not(:empty){background:#0e1822;border:1px dashed #3b5770;border-radius:10px;padding:20px;display:grid;justify-items:start;gap:12px}
+.master-page .ms-wpp-qr img{background:white;border-radius:7px;max-width:270px;max-height:270px}
+.master-page .ms-wpp-qr p{font-size:11px;color:#acc0cd;margin:0}
+.master-page .ms-wpp-advanced{border:1px solid #2b3b49;border-radius:9px;padding:0 16px;margin-top:16px;background:#0e151d}
+.master-page .ms-wpp-advanced summary{cursor:pointer;font-size:12px;font-weight:700;color:#adbfce;padding:15px 0}
+.master-page .ms-wpp-advanced[open] summary{border-bottom:1px solid #2a3945;margin-bottom:14px}
+.master-page .ms-wpp-advanced .ms-form{padding-bottom:16px}
+@media(max-width:660px){
+ .master-page .ms-wpp-status{align-items:flex-start;flex-wrap:wrap}
+ .master-page .ms-wpp-last-update{margin-left:26px}
+ .master-page .ms-wpp-actions button{width:100%}
+}

@@ -9,6 +9,9 @@ assert(code.includes("basePath + '/realtime-auth.php'"),'Browser authentication 
 assert(!code.includes("basePath + '/realtime.auth'"),'Do not use rewrite-dependent realtime auth route');
 assert(app.includes('WebSocket offline · HTTP')&&app.includes('WebSocket ativo'),'Realtime indicator must expose actual WebSocket state');
 assert(!app.includes("'<i></i> Tempo real · '"),'HTTP polling must never impersonate WebSocket');
+assert(app.includes("if(S.page==='kanban'?realtimeEditing():userIsInteracting())return;"),'Idle Kanban search focus must not block polling');
+assert(app.includes("if(S.page==='kanban')await stableRender(refresh);else await refresh();"),'HTTP fallback must preserve Kanban search focus and scroll');
+
 assert(api.includes("'realtime.health'=>")&&api.includes("'realtime.probe'=>"),'Admin diagnostics routes must exist');
 assert(auth.includes('Auth::admin()')&&auth.includes('EventOutbox::transaction'),'Probe must be admin-only and use transactional Outbox');
 assert(auth.includes('FROM event_outbox WHERE workspace_id=?'),'Tenant admins must not see other workspaces queue volume');

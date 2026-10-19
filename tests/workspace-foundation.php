@@ -132,6 +132,26 @@ try{
  testws(count(Demands::list(['include_closed'=>1]))===1,
   'Original task must remain visible in the original workspace.');
 
+ // Staff client scope: enforce in SQL and record reads, never grant finance.
+ $restrictedClient=DB::insert('clients',['name'=>'Staff restricted fixture','workspace_id'=>$ws,'created_at'=>now()]);
+ DB::insert('user_clients',['user_id'=>$staff,'client_id'=>$client,'workspace_id'=>$ws,'can_approve'=>1,'can_finance'=>0]);
+ $_SESSION=['user_id'=>$staff];Auth::$user=null;Auth::$actor=null;Auth::$workspace=null;Auth::$origin='web';
+ testws(Auth::load()['role']==='staff','Test user did not become staff.');
+ testws(!Auth::staffAllClients(),'Staff must default to client-scoped visibility.');
+ testws((int)Auth::client($client)['id']===$client,'Staff client link was not honored.');
+ refuses(fn()=>Auth::client($restrictedClient),'Scoped staff must not see another client.');
+ DB::run('UPDATE users SET staff_all_clients=1 WHERE id=?',[$staff]);
+ testws(Auth::staffAllClients(),'Staff global task scope did not activate.');
+ testws((int)Auth::client($restrictedClient)['id']===$restrictedClient,'Global staff must see active workspace clients.');
+ [$taskScope,$taskArgs]=Auth::demandFilter('d');
+ testws(!str_contains($taskScope,'user_clients')&&$taskArgs===[$ws],'Global task filter must stay workspace-scoped.');
+ [$financeScope,$financeArgs]=Auth::clientFilter('client_id',true);
+ testws(str_contains($financeScope,'can_finance=1')&&count($financeArgs)===2,'Global tasks must not grant financial access.');
+ DB::run('UPDATE users SET staff_all_clients=0 WHERE id=?',[$staff]);
+ DB::run('DELETE FROM user_clients WHERE user_id=? AND client_id=?',[$staff,$client]);
+ $_SESSION=['user_id'=>$owner];Auth::$user=null;Auth::$actor=null;Auth::$workspace=null;Auth::$origin='web';
+ DB::run('DELETE FROM clients WHERE id=?',[$restrictedClient]);
+
  refuses(fn()=>WorkspaceContext::syncUser($staff,$ws,'staff',true),'Out-of-transaction membership must fail.');
  $fresh=DB::tx(function()use($ws):int {
   $id=DB::insert('users',['name'=>'New staff','email'=>'new-staff@ci.invalid',

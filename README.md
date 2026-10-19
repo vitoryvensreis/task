@@ -585,3 +585,13 @@ Há uma implementação de operações administrativas privadas do WhatsApp com 
 ### TaskEsc AI — agenda e grupos
 
 Em grupos, somente o ADM TaskEsc autenticado e confirmado como participante pode invocar o assistente escrevendo **Task** ou **TaskEsc** como palavra isolada, ou marcando a conta oficial. Mensagens comuns não acionam a IA. Consultas de agenda no grupo mostram apenas compromissos públicos. No privado, o ADM pode listar calendários, compromissos, horários ocupados e detalhes; com a flag privada independente `ai_whatsapp.agenda_control_enabled=true`, também pode propor criação, edição e cancelamento, sempre sujeitos a código de confirmação em uma segunda mensagem. Eventos Google são sincronizados pelo cron existente após a transação. Veja [regras e testes](docs/taskesc-ai-agenda-groups.md).
+
+### Equipe: acesso às tasks por cliente
+
+Em **Configurações > Minha equipe > Adicionar membro**, o cadastro abre um modal. A função de equipe permite escolher entre **todas as tasks de todos os clientes do workspace** ou **tasks de um cliente específico**. O servidor faz o mesmo filtro na listagem, nos detalhes, nas APIs e na escolha de responsáveis. Acesso global às tasks não libera financeiro ou permissões administrativas.
+
+O campo `users.staff_all_clients` é adicionado de maneira não destrutiva por `Migrations::run()` (veja `database/migrations/031_staff_all_clients.sql`); contas existentes começam com zero e mantêm os vínculos anteriores.
+
+### Contas técnicas Realtime Smoke
+
+O comando `php bin/cleanup-realtime-smoke.php` faz apenas diagnóstico. Após backup do banco, `php bin/cleanup-realtime-smoke.php --apply` remove exclusivamente usuários com nome exato **Realtime Smoke**, papel Equipe, e e-mail técnico do padrão `realtime-smoke-<hex>@taskesc.invalid`. Usuários com referências em tabelas de negócio/auditoria não são removidos. O deploy executa o comando **após o backup e as migrações**; bloqueios são registrados sem comprometer a publicação das demais melhorias. Não apague dados de produção para forçar a limpeza.

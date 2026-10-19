@@ -12,6 +12,8 @@ final class Migrations {
   static $ran=false;if($ran)return;$ran=true;
   try{$version=(int)(DB::one("SELECT value FROM settings WHERE `key`='schema_version'")['value']??1);}catch(Throwable){return;}
   if($version===20)throw new RuntimeException('Schema 20 pertence ao SaaS removido; restaure a base 19 antes de atualizar.');
+  // Isolated additive change: independent of retired SaaS / historical version numbers.
+  self::column('users','staff_all_clients','ALTER TABLE users ADD COLUMN staff_all_clients TINYINT(1) NOT NULL DEFAULT 0 AFTER role');
   if($version<2){
    self::column('demands','deleted_at','ALTER TABLE demands ADD COLUMN deleted_at DATETIME NULL AFTER updated_at');
    self::column('demands','drive_folder_id','ALTER TABLE demands ADD COLUMN drive_folder_id VARCHAR(255) NULL AFTER deleted_at');

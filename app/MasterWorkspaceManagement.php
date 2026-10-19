@@ -28,8 +28,10 @@ final class MasterWorkspaceManagement {
 
  public static function directoryDetails(): array {
   self::guard();
-  return ['billing_enabled'=>false,
-    'billing_message'=>'Cobranças e pagamentos SaaS ainda não estão integrados ao Asaas.',
+  return ['billing_enabled'=>PlatformAsaasBilling::enabled(),
+    'billing_message'=>PlatformAsaasBilling::enabled()
+       ?'Cobranças SaaS conciliadas via Asaas no ADM Master.'
+       :'Ative o Asaas em Integrações para emitir assinaturas e conciliar os pagamentos.',
     'workspaces'=>DB::all('SELECT id,name,slug,status,owner_user_id FROM workspaces ORDER BY name')];
  }
 
@@ -65,8 +67,7 @@ final class MasterWorkspaceManagement {
    'team_limit_override'=>$planEffective['team_limit_override']??null,
    'plan_name'=>$plan['name']??'Não atribuído',
    'integrations'=>WorkspaceIntegrationStatus::forMaster($id),
-   'billing'=>['enabled'=>false,'invoices'=>[],'payments'=>[],
-     'status'=>'not_integrated']
+   'billing'=>PlatformAsaasBilling::workspace($id)
   ];
  }
 

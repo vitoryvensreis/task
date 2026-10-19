@@ -131,22 +131,6 @@ jobs:
             echo "::warning::Resposta não contém a aba de Planos ou não carregou."
           fi
 
-      - name: Diagnóstico temporário de upload 10 MB no proxy (sem autenticação)
-        if: github.event_name == 'pull_request'
-        run: |
-          set -e
-          truncate -s 10490880 /tmp/taskesc-avatar-probe.bin
-          STATUS="$(curl --silent --show-error --max-time 45 \
-            -H 'Content-Type: application/octet-stream' \
-            -X POST --data-binary @/tmp/taskesc-avatar-probe.bin \
-            -o /tmp/taskesc-avatar-probe-response.txt -w '%{http_code}' \
-            'https://task.escotilhaprodutora.com/api.php?action=account.avatar_upload' || true)"
-          echo "HTTP proxy com POST de 10MB + overhead: ${STATUS:-indisponível}"
-          if [ "$STATUS" = "413" ]; then
-            echo "::warning::Proxy ou PHP recusando 10MB. Verificar client_max_body_size e post_max_size em produção."
-          fi
-          rm -f /tmp/taskesc-avatar-probe.bin /tmp/taskesc-avatar-probe-response.txt
-
       - name: Gerar ZIP completo
         run: |
           set -e

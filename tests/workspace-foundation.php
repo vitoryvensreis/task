@@ -32,6 +32,11 @@ require ROOT.'/app/SupportDesk.php';
 require ROOT.'/app/Catalog.php';
 require ROOT.'/app/Demands.php';
 function fail(string $message,int $status=422,array $details=[]):never {throw new RuntimeException($message,$status);}
+function integer(mixed $v,int $min=0,int $max=1000000000):int {
+ if(filter_var($v,FILTER_VALIDATE_INT)===false||(int)$v<$min||(int)$v>$max)
+  fail('Invalid test integer',422);
+ return (int)$v;
+}
 
 function now():string {return gmdate('Y-m-d H:i:s');}
 function setting(string $key,string $default=''):string {

@@ -4,6 +4,16 @@ require dirname(__DIR__).'/app/bootstrap.php';
 $requestedPath=(string)(parse_url($_SERVER['REQUEST_URI']??'/',PHP_URL_PATH)??'/');
 $entryPath=rtrim((string)(parse_url((string)config('base_url',''),PHP_URL_PATH)??''),'/');
 if($entryPath==='/')$entryPath='';
+// Some VPS front proxies send every friendly URL to index.php before Apache
+// .htaccess can dispatch it. Keep Master routes server-side and preserve the URL.
+// The Master page independently validates the session and account role.
+$sitePath=substr($requestedPath,strlen($entryPath));
+if($sitePath===''||$sitePath[0]!=='/')$sitePath='/';
+if(preg_match('~\\A/master(?:/(?:suporte|clientes|planos|workspaces|configuracoes|integracoes|personalizacao|banner-hero|whatsapp|saude-logs)(?:/[^.]*)?)?/?\\z~D',$sitePath)===1){
+ require __DIR__.'/master.php';
+ exit;
+}
+
 if(in_array($requestedPath,[$entryPath.'/', $entryPath.'/index.php'],true)){
  // A sessão autenticada nunca volta à landing por navegação direta.
  // A verificação usa o usuário ativo do backend, não apenas a presença de cookie.

@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-require dirname(__DIR__).'/app/bootstrap.php';
+require_once dirname(__DIR__).'/app/bootstrap.php';
 $basePath=(string)(parse_url((string)config('base_url',''),PHP_URL_PATH)??'');
 $basePath='/'.trim($basePath,'/');if($basePath==='/')$basePath='';
 $token=trim((string)($_GET['activate']??''));

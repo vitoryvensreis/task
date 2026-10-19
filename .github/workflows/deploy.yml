@@ -101,6 +101,35 @@ jobs:
           }
           NODE
 
+      - name: Diagnosticar deep link público Master (somente leitura)
+        run: |
+          set -u
+          URL="https://task.escotilhaprodutora.com/master/planos"
+          echo "Verificando rota: $URL"
+          curl --silent --show-error --max-time 18 --max-redirs 6 \
+            -A 'TaskEsc-Route-Diagnostics/1.0' \
+            -D /tmp/master-route-headers.txt \
+            -o /tmp/master-route-body.html -L \
+            -w 'Status final: %{http_code}; redirects: %{num_redirects}; URL final: %{url_effective}\\n' \
+            "$URL" || true
+          grep -Ei '^HTTP/|^location:' /tmp/master-route-headers.txt || true
+          echo "Título retornado:"
+          grep -Eio '<title[^>]*>[^<]*</title>|data-initial-tab="[^"]+"' /tmp/master-route-body.html | head -5 || true
+          echo "Tamanho da resposta: $(wc -c </tmp/master-route-body.html) bytes"
+          echo "Início da resposta (página pública, sem autenticação):"
+          head -c 480 /tmp/master-route-body.html | tr '\n' ' ' || true
+          echo
+          for path in /master /master.php /public/master.php; do
+            curl --silent --show-error --max-time 12 --max-redirs 4 -L -o /dev/null \
+              -w "Teste $path HTTP=%{http_code} redirects=%{num_redirects} url=%{url_effective}\\n" \
+              "https://task.escotilhaprodutora.com$path" || true
+          done
+          if grep -q 'data-initial-tab="plans"' /tmp/master-route-body.html; then
+            echo "A resposta contém a aba correta de Planos."
+          else
+            echo "::warning::Resposta não contém a aba de Planos ou não carregou."
+          fi
+
       - name: Gerar ZIP completo
         run: |
           set -e

@@ -34,11 +34,11 @@ button,a.link{display:block;text-align:center;margin-top:19px;width:100%;padding
 .notice{border-left:3px solid #e08968;padding:9px 12px;background:#32241f;color:#f4d0bc}
 .success{border-left-color:#49bc95;background:#173a32;color:#d2f9e9}
 small{color:#8fa3b3}
-</style></head><body><main>
+</style><link rel="stylesheet" href="<?= $e($base.'/assets/taskesc-theme.css') ?>?v=1"></head><body class="invite-page"><main>
 <h1>Convite para equipe</h1>
 <?php if($saved): ?>
 <p class="notice success">Conta ativada! Entre no TaskEsc usando o e-mail convidado e a senha escolhida.</p>
-<a class="link" href="<?= $e($base.'/') ?>">Acessar TaskEsc</a>
+<a class="link" href="<?= $e($base.'/dashboard') ?>">Acessar TaskEsc</a>
 <?php elseif(!$valid): ?>
 <p class="notice">O endereço do convite é inválido. Solicite um novo convite ao administrador da sua empresa.</p>
 <?php else: ?>

@@ -54,6 +54,7 @@ jobs:
           set -e
           node --check public/assets/app.js
           node tests/master-deeplink.mjs
+          node tests/theme-master-whatsapp.mjs
           node tests/sales-landing.mjs
           node tests/marketing-realtime.mjs
           node --check public/assets/landing-kanban.js

@@ -220,7 +220,7 @@ window.TaskEscMasterSettings=(()=>{
   startBtn.onclick=()=>runWpp(async()=>{
    await wppRequest('master.wpp_start',{});
    state.textContent='Solicitação enviada. Se o telefone não estiver conectado, gere um QR Code.';
-   await refreshStatus(true);
+   setTimeout(()=>{if(wpp.isConnected)refreshStatus(true)},1200);
   });
   qrBtn.onclick=()=>runWpp(async()=>{
    const d=await wppRequest('master.wpp_qr');qrHolder.replaceChildren();
@@ -247,7 +247,7 @@ window.TaskEscMasterSettings=(()=>{
     currentSession={configured:true,provider_up:true,connected:false,session:w.session};
     showStatus(currentSession);
    });
-   await refreshStatus(true);
+   setTimeout(()=>{if(wpp.isConnected)refreshStatus(true)},1200);
   };
   closeBtn.onclick=()=>confirmMaster('master.wpp_close','encerrar mantendo autenticação');
   disconnectBtn.onclick=()=>confirmMaster('master.wpp_disconnect','desvincular o telefone e apagar a autenticação');

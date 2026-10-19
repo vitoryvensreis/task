@@ -179,3 +179,17 @@ body.landing-page,body.plans-page{
  .master-page .ms-wpp-last-update{margin-left:26px}
  .master-page .ms-wpp-actions button{width:100%}
 }
+
+/* Standalone invitation and installation utilities. */
+body.invite-page,body.install-page{color:var(--te-text);background:var(--te-bg);font-family:Inter,ui-sans-serif,system-ui,sans-serif}
+.invite-page main,.install-page main.box{background:var(--te-surface);border:1px solid var(--te-stroke);border-radius:9px;box-shadow:none}
+.invite-page h1,.install-page h1{color:#eef4f8;letter-spacing:-.04em}
+.invite-page p,.install-page p{color:#9eb0be}
+.invite-page label,.install-page label{color:#c2cfdb}
+.invite-page input,.install-page input{background:#131f2a;border-color:#35495a;color:#edf4f8;border-radius:6px}
+.invite-page button,.invite-page a.link,.install-page button{background:#3c6483;color:#f4f8fa;border-radius:6px;border:1px solid #5d819f}
+.invite-page button:hover,.invite-page a.link:hover,.install-page button:hover{background:#517b9b}
+.invite-page .notice{background:#352823;border-color:#b99773;color:#e6d4c5}
+.invite-page .notice.success{background:#152f29;border-color:#67ae96;color:#c7e9da}
+.install-page .box{max-width:680px}
+.install-page .msg{border:1px solid var(--te-stroke)}

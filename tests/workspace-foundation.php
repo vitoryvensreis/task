@@ -269,6 +269,9 @@ try{
    [$ws,$gabId,PlatformTenantProvisioning::NAME,PlatformTenantProvisioning::SLUG,
     '{}','pending',now(),now()]);
  testws(WorkspaceDatabaseStage1::apply()['stage']===1,'Stage 1 migration failed.');
+ // The production cutover is a fresh CLI invocation with no web actor.
+ Auth::$user=null;Auth::$actor=null;Auth::$workspace=null;
+ testws(WorkspaceJobScope::currentId()===0,'Test cutover must not inherit a workspace job.');
  $cut=WorkspaceActivation::apply();
  $newWs=(int)$cut['workspace_id'];
  testws($newWs!==$ws&&WorkspaceTenantMode::enabled(),'Multitenant activation failed.');

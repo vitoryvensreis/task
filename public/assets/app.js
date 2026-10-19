@@ -387,7 +387,7 @@
     const publication=event?.detail?.data;
     if(publication&&String(publication.event_type||'').startsWith('chat.')){handleChatRealtime(publication);return}
     if(publication&&String(publication.event_type||'').startsWith('wpp.')){handleWppRealtime(publication);return}
-    if(publication?.event_type==='notification.created'){
+    if(publication?.event_type==='notification.created'||publication?.event_type==='support.message'){
       clearTimeout(notificationRealtimeTimer);
       notificationRealtimeTimer=setTimeout(()=>{
         notificationRealtimeTimer=0;refreshNotificationBadge();

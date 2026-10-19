@@ -139,7 +139,12 @@ final class AutomationActions
                     $q=DB::run('INSERT IGNORE INTO notifications (workspace_id,user_id,title,body,demand_id,dedupe_key,created_at) VALUES (?,?,?,?,?,?,?)',
                       [WorkspaceJobScope::currentId(),...$args]);
                 else $q=DB::run('INSERT IGNORE INTO notifications (user_id,title,body,demand_id,dedupe_key,created_at) VALUES (?,?,?,?,?,?)',$args);
-                if($q->rowCount())$new[]=$uid;
+                if($q->rowCount()){
+                    $nid=(int)DB::conn()->lastInsertId();
+                    EventOutbox::enqueue('notification:'.$nid,'notification.created','notification',$nid,'user:'.$uid,
+                      ['notification_id'=>$nid,'change'=>'unread'],null);
+                    $new[]=$uid;
+                }
             }
             self::record($stepId,$users?['notified'=>count($new),'users'=>count($users)]:['skipped'=>true,'reason'=>'no_push_recipients']);return $new;
         });

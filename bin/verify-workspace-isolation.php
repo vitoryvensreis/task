@@ -45,7 +45,8 @@ try{
   if(!$denied)throw new RuntimeException('Cross-workspace read allowed: '.$type);
  }
  $plan=PlatformPlans::workspacePlan((int)$second['id']);
- if(($plan['team_limit']??'bad')!==null||($plan['name']??'')!=='Legado ilimitado')
+ if(!array_key_exists('team_limit',$plan)||$plan['team_limit']!==null||
+    ($plan['features']['tasks']??false)!==true)
   throw new RuntimeException('Legacy unlimited plan was not assigned.');
  echo json(['verified'=>true,'workspaces'=>2,'original_data_preserved'=>true,
     'gabriella_business_empty'=>true,'cross_company_reads_denied'=>true,

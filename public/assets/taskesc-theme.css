@@ -193,3 +193,6 @@ body.invite-page,body.install-page{color:var(--te-text);background:var(--te-bg);
 .invite-page .notice.success{background:#152f29;border-color:#67ae96;color:#c7e9da}
 .install-page .box{max-width:680px}
 .install-page .msg{border:1px solid var(--te-stroke)}
+
+/* Public branding uses the same real TaskEsc mark as the application. */
+.landing-page .logo-mark.logo-image{display:block;flex:0 0 34px;width:34px;height:34px;object-fit:contain;background:#101923;border:1px solid #344b5e;border-radius:7px;padding:4px;box-shadow:none}

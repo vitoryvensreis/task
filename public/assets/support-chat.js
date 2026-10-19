@@ -10,6 +10,11 @@
  const threadKey=t=>t?String(t.workspace_id)+':'+String(t.tenant_user_id):'';
  const isMaster=()=>Boolean(user&&(user.role==='master'||user.is_support));
  const userId=()=>Number(user?.support_master_id||user?.id||0);
+ const setAvatar=(node,url,initial)=>{
+  node.replaceChildren();
+  if(url){const img=el('img','ts-avatar-photo');img.src=url;img.alt='Foto de perfil';img.loading='lazy';img.onerror=()=>{node.textContent=initial};node.append(img)}
+  else node.textContent=initial;
+ };
  const escTime=t=>{if(!t)return '';const d=new Date(t.replace(' ','T')+'Z');return Number.isNaN(d.valueOf())?'':d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})};
  const escDateTime=t=>{
   if(!t)return '';
@@ -56,7 +61,7 @@
   if(!filtered.length){list.append(el('p','ts-muted',q?'Nenhum administrador encontrado.':'Nenhum atendimento disponível.'));return}
   for(const t of filtered){
    const item=el('button','ts-thread'+(threadKey(t)===threadKey(selected)?' active':''));item.type='button';
-   const icon=el('div','ts-thread-avatar',(t.tenant_name||'A').trim().charAt(0).toUpperCase());
+   const icon=el('div','ts-thread-avatar');setAvatar(icon,t.avatar_url,(t.tenant_name||'A').trim().charAt(0).toUpperCase());
    const info=el('div','ts-thread-info'),name=el('strong','',isMaster()?t.tenant_name:'ADM Master');
    const time=el('time','',t.last_at?escTime(t.last_at):'');
    const top=el('div','ts-thread-top');top.append(name,time);info.append(top);
@@ -72,7 +77,7 @@
   const title=$('.ts-peer',root),subtitle=$('.ts-peer-sub',root),avatar=$('.ts-peer-avatar',root);
   title.textContent=selected?(isMaster()?selected.tenant_name:'Equipe de suporte TaskEsc'):'Selecione um atendimento';
   subtitle.textContent=selected?(isMaster()?selected.workspace_name+' · '+selected.tenant_email:'Conversa privada com o ADM Master'):'';
-  avatar.textContent=selected?(isMaster()?selected.tenant_name.trim().charAt(0).toUpperCase():'T'):'?';
+  setAvatar(avatar,selected?(isMaster()?selected.avatar_url:user?.avatar_url):null,selected?(isMaster()?selected.tenant_name.trim().charAt(0).toUpperCase():'T'):'?');
   $('.ts-composer',root).hidden=!selected;
  }
  async function loadThreads(){
@@ -161,6 +166,17 @@
   }
   return box;
  }
+ async function syncExistingPush(){
+  // Existing push permission/subscription is reused; never request permission without a user gesture.
+  if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window)||Notification.permission!=='granted')return;
+  try{
+   const status=await request('push.status');if(!status.public_key)return;
+   const ready=await navigator.serviceWorker.ready;
+   const subscription=await ready.pushManager.getSubscription();if(!subscription)return;
+   const keys=subscription.toJSON().keys||{};
+   await request('push.subscribe',new URLSearchParams({endpoint:subscription.endpoint,p256dh:keys.p256dh||'',auth:keys.auth||''}));
+  }catch(e){console.warn('TaskEsc support push sync failed',e)}
+ }
  async function requestPush(){
   if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window)){
    feedback('Este navegador não oferece notificações push.',true);return;
@@ -203,9 +219,8 @@
   const header=el('header','ts-header');
   const heading=el('div');heading.append(el('h2','','Central de atendimento'),el('small','','Suporte privado · TaskEsc'));
   const tools=el('div','ts-header-tools');
-  const push=el('button','ts-enable-push','Ativar notificações');push.type='button';push.onclick=requestPush;
   const close=el('button','ts-close','×');close.type='button';close.setAttribute('aria-label','Fechar suporte');close.onclick=closePanel;
-  tools.append(push,close);header.append(heading,tools);root.append(header);
+  tools.append(close);header.append(heading,tools);root.append(header);
   const content=el('div','ts-layout'),left=el('aside','ts-left'),right=el('section','ts-right');
   const leftHead=el('div','ts-left-head');leftHead.append(el('strong','','Conversas'),el('span','ts-connection','Sincronização ativa'));left.append(leftHead);
   const search=el('input','ts-search');search.type='search';search.placeholder='Buscar por nome ou e-mail';search.setAttribute('aria-label','Buscar administrador');
@@ -306,6 +321,7 @@
    }
    user=auth.user;csrf=auth.csrf;
    if(!root)createWidget();
+   syncExistingPush().catch(()=>{});
    fab.hidden=opened;
    if(user.role==='master')masterSocket().catch(()=>{});
    if(isMaster()){updateUnread().catch(()=>{});setInterval(()=>{if(user&&!opened)updateUnread().catch(()=>{})},30000)}

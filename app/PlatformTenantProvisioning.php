@@ -18,7 +18,11 @@ final class PlatformTenantProvisioning {
  public static function provision(): array {
   if(PHP_SAPI!=='cli')throw new RuntimeException('Provisioning is CLI-only.');
   if(DB::conn()->inTransaction())throw new RuntimeException('Provisioning DDL cannot run inside a transaction.');
-  if(WorkspaceTenantMode::enabled())throw new RuntimeException('Staged provisioning cannot run after multiworkspace activation.');
+  if(WorkspaceTenantMode::enabled()){
+   $row=DB::one('SELECT w.id,w.owner_user_id FROM workspaces w WHERE w.slug=?',[self::SLUG]);
+   if(!$row||!WorkspaceFoundationGuard::valid())throw new RuntimeException('Activated Gabriella workspace invalid.');
+   return ['activated'=>true,'workspace_id'=>(int)$row['id'],'real_workspace_created'=>true];
+  }
   if(!WorkspaceFoundationGuard::valid())throw new RuntimeException('Existing workspace schema is not valid.');
   $lock='taskesc-gabriella-'.(string)(DB::one('SELECT SHA1(DATABASE()) h')['h']??'');
   if((int)(DB::one('SELECT GET_LOCK(?,10) acquired',[$lock])['acquired']??0)!==1)

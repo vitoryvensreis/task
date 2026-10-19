@@ -24,6 +24,10 @@ final class WorkspaceDatabaseStage1 {
  }
 
  public static function apply(): array {
+  if(WorkspaceTenantMode::enabled()){
+   if(!WorkspaceFoundationGuard::valid())throw new RuntimeException('Multiworkspace schema invalid.');
+   return ['stage'=>self::VERSION,'multiworkspace_active'=>true,'legacy_default_removed'=>true];
+  }
   if(DB::conn()->inTransaction())throw new LogicException('DDL cannot be run inside a transaction.');
   $lock='taskesc-wsdb1-'.(string)(DB::one('SELECT SHA1(DATABASE()) h')['h']??'');
   if((int)(DB::one('SELECT GET_LOCK(?,10) acquired',[$lock])['acquired']??0)!==1)

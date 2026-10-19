@@ -70,7 +70,14 @@ final class WorkspaceFoundation {
   $ws=DB::one('SELECT id,owner_user_id,status FROM workspaces WHERE slug=?',[self::SLUG]);
   if(!$ws||(int)($ws['owner_user_id']??0)!==(int)($owner['id']??0)||$ws['status']!==self::STATUS)
    $issues[]='workspace_owner_mismatch';
-  if((int)(DB::one('SELECT COUNT(*) n FROM workspaces')['n']??0)!==1)$issues[]='unexpected_extra_workspace';
+  $multi=WorkspaceTenantMode::enabled();
+  $total=(int)(DB::one('SELECT COUNT(*) n FROM workspaces')['n']??0);
+  if($multi){
+   if($total!==2)$issues[]='unexpected_workspace_count';
+   $second=DB::one('SELECT w.owner_user_id,u.email,w.status FROM workspaces w JOIN users u ON u.id=w.owner_user_id WHERE w.slug=?',[PlatformTenantProvisioning::SLUG]);
+   if(!$second||strtolower((string)$second['email'])!==PlatformTenantProvisioning::OWNER_EMAIL||$second['status']!=='active')
+    $issues[]='second_workspace_invalid';
+  }elseif($total!==1)$issues[]='unexpected_extra_workspace';
   $member=$ws&&$owner?DB::one('SELECT role,status FROM workspace_members WHERE workspace_id=? AND user_id=?',
    [(int)$ws['id'],(int)$owner['id']]):null;
   if(!$member||$member['role']!=='owner'||$member['status']!=='active')$issues[]='owner_membership_missing';
@@ -88,10 +95,11 @@ final class WorkspaceFoundation {
     $issues[]='invalid_workspace_column_'.$table;continue;
    }
    if(!self::expectedIndex($table,$key))$issues[]='invalid_workspace_index_'.$table;
-   if($ws&&(int)$column['COLUMN_DEFAULT']!==(int)$ws['id'])$issues[]='incorrect_workspace_default_'.$table;
+   if($ws&&($multi?($column['COLUMN_DEFAULT']!==null):
+    ((int)$column['COLUMN_DEFAULT']!==(int)$ws['id'])))$issues[]='incorrect_workspace_default_'.$table;
    if($checkRows&&$ws&&
-      (int)(DB::one('SELECT COUNT(*) n FROM `'.$table.'` WHERE workspace_id<>?',
-       [(int)$ws['id']])['n']??0)!==0)
+      (int)(DB::one('SELECT COUNT(*) n FROM `'.$table.'` WHERE workspace_id'.($multi?' NOT IN (SELECT id FROM workspaces)':'<>?'),
+       $multi?[]:[(int)$ws['id']])['n']??0)!==0)
     $issues[]='foreign_workspace_rows_'.$table;
   }
   if($checkRows&&$ws){

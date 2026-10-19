@@ -48,10 +48,10 @@ final class RealtimeAuth
         $ws=$multi?Auth::workspaceId():0;
         $channels = ['user:'.(int)$user['id']];
         if (in_array(($user['role'] ?? ''), ['admin','staff'], true)) {
-            $channels[] = $multi?'staff/ws:'.$ws:'staff/global';
+            $channels[] = $multi?'staff/ws-'.$ws:'staff/global';
         }
         if (($user['role'] ?? '') === 'admin') {
-            $channels[] = $multi?'kanban/ws:'.$ws:'kanban/global';
+            $channels[] = $multi?'kanban/ws-'.$ws:'kanban/global';
             if(!$multi||MasterSupport::isSupport())$channels[] = 'wpp/global';
             return array_values(array_unique($channels));
         }
@@ -66,7 +66,7 @@ final class RealtimeAuth
     public function authorizeChannel(string $channel, array $user): void
     {
         $multi=WorkspaceTenantMode::enabled();
-        if ($multi && preg_match('/^(kanban|staff)\/ws:([1-9][0-9]*)$/D',$channel,$m)) {
+        if ($multi && preg_match('/^(kanban|staff)\/ws-([1-9][0-9]*)$/D',$channel,$m)) {
             if ((int)$m[2]!==Auth::workspaceId()||Auth::isPreview()||
                 !in_array((string)$user['role'],$m[1]==='kanban'?['admin']:['admin','staff'],true))
                 fail('Canal de outro workspace não permitido.',403);

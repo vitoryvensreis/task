@@ -14,7 +14,7 @@ final class RealtimeDiagnostics {
   return ['user_id'=>(int)Auth::$actor['id'],'workspace_id'=>Auth::workspaceId()];
  }
  private static function channel(int $ws): string {
-  return WorkspaceTenantMode::enabled()?'kanban/ws:'.$ws:'kanban/global';
+  return WorkspaceTenantMode::enabled()?'kanban/ws-'.$ws:'kanban/global';
  }
  public static function health(): array {
   self::guard();

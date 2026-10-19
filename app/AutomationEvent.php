@@ -28,7 +28,7 @@ final class AutomationEvent
             $eventType,
             $entityType,
             $entityId,
-            WorkspaceTenantMode::enabled()?'staff/ws:'.(int)Auth::workspaceId():'staff/global',
+            WorkspaceTenantMode::enabled()?'staff/ws-'.(int)Auth::workspaceId():'staff/global',
             $safe,
             $actorId
         );

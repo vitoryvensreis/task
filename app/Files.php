@@ -147,20 +147,40 @@ final class Files {
  }
 
  public static function delete(array $p): array {
-  Auth::staff();$id=integer($p['file_id']??0,1);$f=DB::one('SELECT * FROM files WHERE id=?'.self::where(),self::args([$id]));if(!$f)fail('Anexo não encontrado.',404);$d=Auth::demand((int)$f['demand_id'],true);
-  if(($f['storage_provider']??'local')==='drive'&&!empty($f['drive_file_id'])&&!empty($f['drive_account_id'])){
+  Auth::staff();$id=integer($p['file_id']??0,1);
+  $f=DB::one('SELECT * FROM files WHERE id=?'.self::where(),self::args([$id]));
+  if(!$f)fail('Anexo não encontrado.',404);
+  $d=Auth::demand((int)$f['demand_id'],true);
+  $isDrive=($f['storage_provider']??'local')==='drive';
+  // Somente por opção explícita: remove a referência, mantendo o arquivo no Drive.
+  $keepDrive=$isDrive&&((int)($p['keep_drive']??0)===1);
+  if(!$keepDrive&&$isDrive&&!empty($f['drive_file_id'])&&!empty($f['drive_account_id'])){
    try{Google::deleteDriveFile((int)$f['drive_account_id'],(string)$f['drive_file_id']);}
    catch(AppError $e){
-    if((int)($e->details['google_status']??0)===403)
-     fail('O Google Drive recusou a exclusão deste arquivo. Confira as permissões de edição da conta conectada.',409);
-    if((int)($e->details['google_status']??0)===401)
-     fail('O acesso ao Google Drive expirou. Reconecte a conta antes de excluir este arquivo.',409);
+    $googleStatus=(int)($e->details['google_status']??0);
+    $requiresReconnect=$googleStatus===401||Google::refreshErrorCategory($e)==='reconnect'||preg_match('/expired or revoked|token.*expir|revogad/i',$e->getMessage());
+    if($requiresReconnect)fail('O acesso ao Google Drive expirou ou foi revogado. Reconecte a conta em Configurações > Meu Google Drive para apagar também no Drive, ou remova somente o registro no TaskEsc.',409,['requires_google_reconnect'=>true,'can_keep_drive'=>true]);
+    if($googleStatus===403)fail('O Google Drive recusou a exclusão. Confirme a conta e as permissões de edição, ou remova somente o registro no TaskEsc.',409,['can_keep_drive'=>true]);
+    throw $e;
+   }catch(RuntimeException $e){
+    if(str_contains(mb_strtolower($e->getMessage()),'desconectad'))fail('A conta Google está desconectada. Reconecte-a em Configurações > Meu Google Drive ou remova somente o registro no TaskEsc.',409,['requires_google_reconnect'=>true,'can_keep_drive'=>true]);
     throw $e;
    }
+  }elseif(($f['storage_provider']??'local')==='local'&&!empty($f['disk_name'])){
+   $path=ROOT.'/storage/uploads/'.basename((string)$f['disk_name']);
+   if(is_file($path)&&!@unlink($path))throw new RuntimeException('Não foi possível remover o arquivo local.');
   }
-  elseif(($f['storage_provider']??'local')==='local'&&!empty($f['disk_name'])){$path=ROOT.'/storage/uploads/'.basename((string)$f['disk_name']);if(is_file($path)&&!@unlink($path))throw new RuntimeException('Não foi possível remover o arquivo local.');}
-  return DB::tx(function() use($id,$f,$d): array {
-   $current=DB::one('SELECT id,demand_id FROM files WHERE id=?'.self::where().' FOR UPDATE',self::args([$id]));if(!$current)return ['deleted'=>true,'id'=>$id];if((int)$current['demand_id']!==(int)$d['id'])fail('O anexo mudou de task durante a exclusão.',409);DB::run('UPDATE comments SET version_id=NULL WHERE version_id=?'.self::where(),self::args([$id]));DB::run('DELETE FROM reviews WHERE file_id=?'.self::where(),self::args([$id]));DB::run('DELETE FROM files WHERE id=?'.self::where(),self::args([$id]));audit('demand',(int)$d['id'],'file.deleted',$f,['file_id'=>$id,'storage'=>$f['storage_provider']??'local']);if(!empty($f['shared']))Notify::demand($d,'Arquivo removido',$f['label']??$f['original_name']??$d['title']);DemandRealtime::emit('demand.file_deleted',$d,['change'=>'file.deleted','file_id'=>$id,'version_no'=>$f['version_no']??null,'shared'=>(int)($f['shared']??0)],(int)Auth::$user['id'],[],empty($f['shared'])?'staff':'all');return ['deleted'=>true,'id'=>$id];
+  return DB::tx(function() use($id,$f,$d,$keepDrive): array {
+   $current=DB::one('SELECT id,demand_id FROM files WHERE id=?'.self::where().' FOR UPDATE',self::args([$id]));
+   if(!$current)return ['deleted'=>true,'id'=>$id,'drive_preserved'=>$keepDrive];
+   if((int)$current['demand_id']!==(int)$d['id'])fail('O anexo mudou de task durante a exclusão.',409);
+   DB::run('UPDATE comments SET version_id=NULL WHERE version_id=?'.self::where(),self::args([$id]));
+   DB::run('DELETE FROM reviews WHERE file_id=?'.self::where(),self::args([$id]));
+   DB::run('DELETE FROM files WHERE id=?'.self::where(),self::args([$id]));
+   audit('demand',(int)$d['id'],'file.deleted',$f,['file_id'=>$id,'storage'=>$f['storage_provider']??'local','drive_preserved'=>$keepDrive]);
+   if(!empty($f['shared']))Notify::demand($d,$keepDrive?'Vínculo do arquivo removido':'Arquivo removido',$f['label']??$f['original_name']??$d['title']);
+   DemandRealtime::emit('demand.file_deleted',$d,['change'=>'file.deleted','file_id'=>$id,'version_no'=>$f['version_no']??null,'shared'=>(int)($f['shared']??0),'drive_preserved'=>$keepDrive],(int)Auth::$user['id'],[],empty($f['shared'])?'staff':'all');
+   return ['deleted'=>true,'id'=>$id,'drive_preserved'=>$keepDrive];
   });
  }
 

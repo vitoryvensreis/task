@@ -73,6 +73,7 @@ jobs:
           node tests/realtime-frontend.mjs
           node tests/realtime-automation-kanban.mjs
           node tests/realtime-diagnostics.mjs
+          node tests/notifications-workspace.mjs
           node tests/kanban-files-regression.mjs
           node tests/automation-frontend.mjs
           node tests/automation-pan.mjs

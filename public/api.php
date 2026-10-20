@@ -260,8 +260,8 @@ try {
   'google.accounts'=>Google::accounts(),
   'google.connect'=>Google::connect($p),
   'google.disconnect'=>Google::disconnect($p),
-  'notifications'=>Auth::isPreview()?[]:DB::all('SELECT * FROM notifications WHERE user_id=? ORDER BY id DESC LIMIT 50',[Auth::$user['id']]),
-  'notifications.seen'=>DB::run('UPDATE notifications SET seen=1 WHERE user_id=?',[Auth::$user['id']])&&['saved'=>true],
+  'notifications'=>($_SERVER['REQUEST_METHOD']??'GET')==='GET'?NotificationInbox::list():fail('Método não permitido.',405),
+  'notifications.seen'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?NotificationInbox::markAllSeen():fail('Método não permitido.',405),
   default=>fail('Ação não encontrada.',404),
  };
  if($action==='report.csv'){$csv=Reports::csv($p);header('Content-Type: text/csv; charset=utf-8');header('Content-Disposition: attachment; filename="taskesc-'.$p['type'].'-'.gmdate('Ymd-His').'.csv"');echo "\xEF\xBB\xBF".$csv;exit;}

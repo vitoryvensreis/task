@@ -352,6 +352,42 @@ try{
  testws(WorkspaceActivation::apply()['already_active']===true,'Cutover must be idempotent.');
  testws(WorkspaceDatabaseStage1::apply()['multiworkspace_active']===true,
    'Subsequent deployments must accept two workspaces.');
+ // Notifications belong to a user AND workspace; marking as read must not
+ // write another company's rows even if a user id appears in both test fixtures.
+ require_once ROOT.'/app/NotificationInbox.php';
+ $noteForVitor=WorkspaceJobScope::forWorkspace($ws,static fn():int=>DB::insert('notifications',[
+  'user_id'=>$owner,'title'=>'Vitor inbox test','body'=>'Scope check',
+  'seen'=>0,'created_at'=>now()]));
+ $noteForOther=WorkspaceJobScope::forWorkspace($newWs,static fn():int=>DB::insert('notifications',[
+  'user_id'=>$owner,'title'=>'Foreign inbox fixture','body'=>'Must not be marked',
+  'seen'=>0,'created_at'=>now()]));
+ $identity=DB::one('SELECT id,email,role,active FROM users WHERE id=?',[$owner]);
+ Auth::$user=$identity;Auth::$actor=$identity;
+ Auth::$workspace=WorkspaceContext::forUser($identity);
+ Auth::$previewClientId=null;Auth::$origin='web';
+ $inbox=NotificationInbox::list();
+ testws(in_array($noteForVitor,array_map('intval',array_column($inbox,'id')),true),
+  'Current workspace notification must be visible.');
+ testws(!in_array($noteForOther,array_map('intval',array_column($inbox,'id')),true),
+  'Another workspace notification must not be visible.');
+ refuses(fn()=>DB::run('UPDATE notifications SET seen=1 WHERE user_id=?',[$owner]),
+  'Original unscoped mark-as-read SQL must be blocked by tenant guard.');
+ $mark=NotificationInbox::markAllSeen();
+ testws($mark['saved']===true&&(int)$mark['updated']>=1,
+  'Marking as seen must succeed within authenticated workspace.');
+ testws((int)DB::one('SELECT seen FROM notifications WHERE id=?',[$noteForVitor])['seen']===1,
+  'Current workspace notification was not marked.');
+ testws((int)DB::one('SELECT seen FROM notifications WHERE id=?',[$noteForOther])['seen']===0,
+  'Mark-as-seen changed another workspace notification.');
+ $replay=NotificationInbox::markAllSeen();
+ testws($replay['saved']===true&&(int)$replay['updated']===0,
+  'Mark-as-seen must be idempotent.');
+ Auth::$previewClientId=$client;
+ testws(NotificationInbox::list()===[],'Preview must not expose the real inbox.');
+ refuses(fn()=>NotificationInbox::markAllSeen(),'Read-only preview must not mark notifications.');
+ Auth::$previewClientId=null;
+ Auth::$user=null;Auth::$actor=null;Auth::$workspace=null;
+
  // A CLI publication smoke must not fail with "explicit workspace required":
  // it selects one existing workspace for a harmless synthetic system event.
  require_once ROOT.'/app/RealtimeCliProbe.php';

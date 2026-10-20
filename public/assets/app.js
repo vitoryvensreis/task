@@ -932,7 +932,17 @@
       panel.innerHTML=`<div class="notification-popover-head"><div><span class="eyebrow">ATUALIZAÇÕES</span><b>Notificações</b><small>${unread?unread+' não lida(s)':'Tudo em dia'}</small></div></div><div class="notification-list">${visible.map(n=>`<button class="notification-item ${Number(n.seen)?'':'unread'}" data-notification-demand="${Number(n.demand_id||0)}"><span class="notification-dot"></span><span><b>${esc(n.title||'Atualização')}</b><small>${esc(n.body||'')}</small><em>${time(n.created_at)}</em></span></button>`).join('')||'<div class="empty slim">Você não tem notificações.</div>'}</div>${rows.some(n=>!Number(n.seen))?'<div class="notification-popover-foot"><button class="ghost full" id="mark-notifications-seen">Marcar todas como lidas</button></div>':''}`;paintIcons();
       
       panel.querySelectorAll('[data-notification-demand]').forEach(b=>b.addEventListener('click',async()=>{const id=Number(b.dataset.notificationDemand);try{await api('notifications.seen',{},'POST')}catch{}closeNotifications();refreshNotificationBadge();if(id)openDemand(id)}));
-      panel.querySelector('#mark-notifications-seen')?.addEventListener('click',async()=>{try{await api('notifications.seen',{},'POST');toast('Notificações marcadas como lidas');closeNotifications();refreshNotificationBadge()}catch(x){toast(x.message,true)}});
+      panel.querySelector('#mark-notifications-seen')?.addEventListener('click',async event=>{
+        const button=event.currentTarget;if(button.disabled)return;
+        button.disabled=true;button.textContent='Marcando como lidas…';
+        try{
+          await api('notifications.seen',{},'POST');
+          toast('Notificações marcadas como lidas');
+          closeNotifications();
+          await refreshNotificationBadge();
+          await openNotifications();
+        }catch(x){button.disabled=false;button.textContent='Marcar todas como lidas';toast(x.message,true)}
+      });
     }catch(x){panel.innerHTML=`<div class="notification-popover-head"><div><b>Notificações</b><small>Não foi possível carregar agora.</small></div></div>`;toast(x.message,true);paintIcons()}
   }
   function closeMobileNav(){document.querySelector('.sidebar')?.classList.remove('open');document.body.classList.remove('nav-open')}

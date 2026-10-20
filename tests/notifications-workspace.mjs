@@ -1,0 +1,18 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const read=p=>fs.readFileSync(new URL(p,import.meta.url),'utf8');
+const api=read('../public/api.php');
+const service=read('../app/NotificationInbox.php');
+const frontend=read('../public/assets/app.js');
+const test=read('../tests/workspace-foundation.php');
+assert(api.includes("NotificationInbox::list()"),'Notification list must use workspace-aware service');
+assert(api.includes("NotificationInbox::markAllSeen()"),'Mark-all-seen must use workspace-aware service');
+assert(!api.includes("DB::run('UPDATE notifications SET seen=1 WHERE user_id=?'"),'Unscoped SQL must not exist in public API');
+assert(service.includes("Auth::workspaceId()"),'Workspace scope must come from server identity');
+assert(service.includes("AND workspace_id=?"),'Read and update must restrict workspace');
+assert(service.includes("AND seen=0"),'Marking must be idempotent');
+assert(service.includes("Auth::isPreview()"),'Preview must never mutate notifications');
+assert(frontend.includes("button.textContent='Marcando como lidas…'"),'Disable UI during request');
+assert(frontend.includes("await refreshNotificationBadge()")&&frontend.includes("await openNotifications()"),'Update list and unread badge');
+assert(test.includes("'Mark-as-seen changed another workspace notification.'"),'Integration regression must protect cross-workspace data');
+console.log('Notification inbox workspace isolation + frontend read-state tests OK');

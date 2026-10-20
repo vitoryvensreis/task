@@ -642,3 +642,8 @@ Se o check mostrar `queue_warning=exhausted_events`, investigar `event_outbox.la
 
 ### Correção da namespace realtime do Kanban
 Centrifugo considera `:` um delimitador de **namespace**. Como `kanban/ws:ID` e `staff/ws:ID` solicitavam namespaces inexistentes, em modo multiworkspace agora usamos `kanban/ws-ID` e `staff/ws-ID`, sem `:`. O canal é sempre validado pelo backend e permanece restrito ao workspace. O diagnóstico CLI publica diretamente no mesmo canal do Kanban, falhando quando a entrega for rejeitada. Erros seguros como `centrifugo_api_102` são exibidos no log sem publicar secrets. Não alterar os eventos históricos da Outbox sem avaliação individual.
+
+
+### Notificações — marcar todas como lidas no modo multiworkspace
+
+A API das notificações usa `NotificationInbox`: tanto a listagem `notifications` quanto o comando POST `notifications.seen` recebem `user_id` e, quando o isolamento empresarial está ativo, `workspace_id` diretamente da sessão autenticada. A operação atualiza somente `seen=0`, preserva as notificações existentes e não altera outras empresas. A visualização de cliente permanece somente leitura. O popup mantém o contador sincronizado e recarrega a lista após sucesso; durante o envio desativa o botão. Regressões em `tests/workspace-foundation.php` e `tests/notifications-workspace.mjs`; nenhuma migração necessária.

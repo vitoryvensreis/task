@@ -14,7 +14,7 @@ for(const statement of [
 ]){
   assert(php.includes(statement+"'."+ "self::where(),self::args([$id])"),'Missing workspace-safe mutation: '+statement);
 }
-assert(php.includes("google_status")&&php.includes("permissões de edição"),'Explicit Google permission error should be returned to user');
+assert(php.includes('google_status')&&php.includes('permissões da conta original'),'Google permission errors must identify the original file account');
 const details=js.slice(js.indexOf('function detailHtml(d){'),js.indexOf('function fileCardHtml(f){'));
 assert(details.includes('id="copy-final-link"')&&details.includes('id="open-final-folder"'),'Copy/open actions must target the final-delivery folder');
 assert(details.indexOf('id="open-final-folder"')<details.indexOf('const jobActions='),'Final folder buttons must belong to Entrega final');

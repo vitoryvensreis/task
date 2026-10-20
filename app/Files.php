@@ -154,16 +154,23 @@ final class Files {
   $isDrive=($f['storage_provider']??'local')==='drive';
   // Somente por opção explícita: remove a referência, mantendo o arquivo no Drive.
   $keepDrive=$isDrive&&((int)($p['keep_drive']??0)===1);
+  // A conta de um anexo histórico pode ser DIFERENTE da conta Drive padrão atual.
+  $account=($isDrive&&!empty($f['drive_account_id']))?DB::one('SELECT id,email,user_id,status FROM google_accounts WHERE id=?'.self::where(),self::args([(int)$f['drive_account_id']])):null;
+  $accountId=(int)($account['id']??0);
+  $accountEmail=(string)($account['email']??'');
+  $accountOwner=(int)($account['user_id']??0)===(int)Auth::$user['id']&&(Auth::$user['role']??'')==='admin';
+  $accountLabel=$accountEmail!==''?' (conta original: '.$accountEmail.')':'';
+  $reconnectDetails=['requires_google_reconnect'=>true,'can_keep_drive'=>true,'drive_account_id'=>$accountOwner?$accountId:0,'drive_account_email'=>$accountEmail,'can_reconnect_account'=>$accountOwner];
   if(!$keepDrive&&$isDrive&&!empty($f['drive_file_id'])&&!empty($f['drive_account_id'])){
    try{Google::deleteDriveFile((int)$f['drive_account_id'],(string)$f['drive_file_id']);}
    catch(AppError $e){
     $googleStatus=(int)($e->details['google_status']??0);
     $requiresReconnect=$googleStatus===401||Google::refreshErrorCategory($e)==='reconnect'||preg_match('/expired or revoked|token.*expir|revogad/i',$e->getMessage());
-    if($requiresReconnect)fail('O acesso ao Google Drive expirou ou foi revogado. Reconecte a conta em Configurações > Meu Google Drive para apagar também no Drive, ou remova somente o registro no TaskEsc.',409,['requires_google_reconnect'=>true,'can_keep_drive'=>true]);
-    if($googleStatus===403)fail('O Google Drive recusou a exclusão. Confirme a conta e as permissões de edição, ou remova somente o registro no TaskEsc.',409,['can_keep_drive'=>true]);
+    if($requiresReconnect)fail('O acesso ao Google Drive deste anexo expirou ou foi revogado'.$accountLabel.'. Reconecte a conta original para excluir também no Drive; uma outra conta Google conectada não autoriza a exclusão deste arquivo.',409,$reconnectDetails);
+    if($googleStatus===403)fail('O Google Drive recusou a exclusão'.$accountLabel.'. Confira as permissões da conta original; o registro pode ser removido do TaskEsc separadamente.',409,['can_keep_drive'=>true,'drive_account_email'=>$accountEmail]);
     throw $e;
    }catch(RuntimeException $e){
-    if(str_contains(mb_strtolower($e->getMessage()),'desconectad'))fail('A conta Google está desconectada. Reconecte-a em Configurações > Meu Google Drive ou remova somente o registro no TaskEsc.',409,['requires_google_reconnect'=>true,'can_keep_drive'=>true]);
+    if(str_contains(mb_strtolower($e->getMessage()),'desconectad'))fail('A conta Google usada por este anexo está desconectada'.$accountLabel.'. Reconecte a conta original ou remova apenas o registro no TaskEsc.',409,$reconnectDetails);
     throw $e;
    }
   }elseif(($f['storage_provider']??'local')==='local'&&!empty($f['disk_name'])){

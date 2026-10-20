@@ -40,11 +40,17 @@ final class Google {
   Auth::admin();
   if(!config('google_client_id')||!config('google_client_secret'))fail('Configure Client ID e Client Secret nas integrações.');
   $purpose='drive';$returnTo=enumv($p['return_to']??'settings',['clients','settings'],'retorno');
+  // Reautoriza a conta original vinculada ao arquivo; nunca altera a identidade silenciosamente.
+  $reconnectId=(int)($p['account_id']??0);$reconnectAccount=null;
+  if($reconnectId>0){
+   $reconnectAccount=DB::one('SELECT id,email,google_sub FROM google_accounts WHERE id=? AND user_id=?'.(WorkspaceContext::legacyCiFixture()?'':' AND workspace_id=?'),WorkspaceContext::legacyCiFixture()?[$reconnectId,(int)Auth::$user['id']]:[$reconnectId,(int)Auth::$user['id'],Auth::workspaceId()]);
+   if(!$reconnectAccount||empty($reconnectAccount['google_sub']))fail('Esta conta Google pertence a outro usuário ou não está disponível. Peça ao proprietário original para reconectá-la.',403);
+  }
   $state=bin2hex(random_bytes(24));$verifier=bin2hex(random_bytes(32));
-  $_SESSION['google_state']=['state'=>$state,'verifier'=>$verifier,'expires'=>time()+600,'user_id'=>Auth::$user['id'],'workspace_id'=>Auth::workspaceId(),'purpose'=>$purpose,'return_to'=>$returnTo];
+  $_SESSION['google_state']=['state'=>$state,'verifier'=>$verifier,'expires'=>time()+600,'user_id'=>Auth::$user['id'],'workspace_id'=>Auth::workspaceId(),'purpose'=>$purpose,'return_to'=>$returnTo,'account_id'=>$reconnectId];
   $scopes=['openid','email'];
   $scopes[]=self::DRIVE_SCOPE;
-  $params=['client_id'=>config('google_client_id'),'redirect_uri'=>base('google-callback.php'),'response_type'=>'code','scope'=>implode(' ',$scopes),'access_type'=>'offline','prompt'=>'consent select_account','include_granted_scopes'=>'true','state'=>$state,'code_challenge'=>rtrim(strtr(base64_encode(hash('sha256',$verifier,true)),'+/','-_'),'='),'code_challenge_method'=>'S256'];
+  $params=['client_id'=>config('google_client_id'),'redirect_uri'=>base('google-callback.php'),'response_type'=>'code','scope'=>implode(' ',$scopes),'access_type'=>'offline','prompt'=>'consent select_account','include_granted_scopes'=>'true','state'=>$state,'code_challenge'=>rtrim(strtr(base64_encode(hash('sha256',$verifier,true)),'+/','-_'),'='),'code_challenge_method'=>'S256'];if($reconnectAccount)$params['login_hint']=(string)$reconnectAccount['email'];
   return ['url'=>'https://accounts.google.com/o/oauth2/v2/auth?'.http_build_query($params),'purpose'=>$purpose];
  }
 
@@ -56,6 +62,8 @@ final class Google {
   $tokens=self::http('https://oauth2.googleapis.com/token','POST',['code'=>required($q,'code'),'client_id'=>config('google_client_id'),'client_secret'=>config('google_client_secret'),'redirect_uri'=>base('google-callback.php'),'grant_type'=>'authorization_code','code_verifier'=>$s['verifier']],null,[],true);
   $info=self::http('https://www.googleapis.com/oauth2/v3/userinfo','GET',null,$tokens['access_token']);
   $old=DB::one('SELECT * FROM google_accounts WHERE user_id=? AND google_sub=?'.(WorkspaceContext::legacyCiFixture()?'':' AND workspace_id=?'),WorkspaceContext::legacyCiFixture()?[Auth::$user['id'],$info['sub']]:[Auth::$user['id'],$info['sub'],Auth::workspaceId()]);
+  if((int)($s['account_id']??0)>0&&(!$old||(int)$old['id']!==(int)$s['account_id']))
+   fail('Você autorizou uma conta Google diferente da conta original deste arquivo. Refaça a conexão escolhendo o mesmo e-mail para preservar o vínculo com os anexos.',409);
   $refresh=$tokens['refresh_token']??($old&&!empty($old['refresh_token'])?secretDecrypt($old['refresh_token']):'');
   if(!$refresh)fail('O Google não forneceu acesso offline. Revogue a conexão anterior e conecte novamente.');
   $scopes=self::liveScopes((string)$tokens['access_token'],(string)($tokens['scope']??''));

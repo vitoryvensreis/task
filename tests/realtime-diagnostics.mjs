@@ -8,7 +8,7 @@ const auth=fs.readFileSync(new URL('../app/RealtimeDiagnostics.php',import.meta.
 const api=fs.readFileSync(new URL('../public/api.php',import.meta.url),'utf8');
 assert(code.includes("basePath + '/realtime-auth.php'"),'Browser authentication must bypass friendly rewrite URL');
 assert(!code.includes("basePath + '/realtime.auth'"),'Do not use rewrite-dependent realtime auth route');
-assert(app.includes('WebSocket offline · HTTP')&&app.includes('WebSocket ativo'),'Realtime indicator must expose actual WebSocket state');
+assert(app.includes('WebSocket offline · HTTP')&&app.includes("const label=live?'Sistema Online':"),'Realtime indicator must display Sistema Online only when the WebSocket connection and authorized channel are active');
 assert(!app.includes("'<i></i> Tempo real · '"),'HTTP polling must never impersonate WebSocket');
 assert(app.includes("if(S.page==='kanban'?realtimeEditing():userIsInteracting())return;"),'Idle Kanban search focus must not block polling');
 assert(app.includes("if(S.page==='kanban')await stableRender(refresh);else await refresh();"),'HTTP fallback must preserve Kanban search focus and scroll');

@@ -376,7 +376,7 @@
       ?channels.some(ch=>ch.startsWith('kanban/'))
       :channels.some(ch=>ch.startsWith('client:'));
     const live=state.connection==='connected'&&authorizedChannel;
-    const label=live?'WebSocket ativo':state.connection==='connected'?'WebSocket sem canal':['starting','connecting'].includes(state.connection)?'WebSocket conectando':'WebSocket offline · HTTP';
+    const label=live?'Sistema Online':state.connection==='connected'?'WebSocket sem canal':['starting','connecting'].includes(state.connection)?'WebSocket conectando':'WebSocket offline · HTTP';
     i.classList.toggle('offline',!live);
     i.dataset.realtimeStatus=live?'connected':state.connection;
     i.innerHTML='<i></i> '+label;

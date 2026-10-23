@@ -2423,3 +2423,29 @@ button.compact-row{cursor:pointer}.compact-row:hover{border-color:#3a4854}.compa
 .sync-indicator[data-realtime-status="connected"]{color:#9bdac2}
 .sync-indicator[data-realtime-status="connected"] i{background:#45b891}
 .sync-indicator:not([data-realtime-status="connected"]) i{background:#d0a46d}
+
+/* Notification inbox: long file names wrap; only vertical scrolling is allowed. */
+.notification-popover .notification-list{
+  min-width:0;
+  max-width:100%;
+  overflow-x:hidden;
+  overflow-y:auto;
+}
+.notification-popover .notification-item{
+  min-width:0;
+  max-width:100%;
+  grid-template-columns:10px minmax(0,1fr);
+  white-space:normal;
+}
+.notification-popover .notification-item>span:last-child{
+  min-width:0;
+  max-width:100%;
+}
+.notification-popover .notification-item :is(b,small,em){
+  display:block;
+  min-width:0;
+  max-width:100%;
+  overflow-wrap:anywhere;
+  word-break:break-word;
+  white-space:normal;
+}

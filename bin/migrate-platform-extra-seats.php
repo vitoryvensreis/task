@@ -25,7 +25,8 @@ try{
   throw new RuntimeException('Expected schema 30');
  foreach([
   ['platform_access_plans','extra_user_price_cents','ALTER TABLE platform_access_plans ADD COLUMN extra_user_price_cents BIGINT UNSIGNED NOT NULL DEFAULT 0 AFTER price_cents'],
-  ['workspace_access_plans','extra_seats','ALTER TABLE workspace_access_plans ADD COLUMN extra_seats INT UNSIGNED NOT NULL DEFAULT 0 AFTER plan_id']
+  ['workspace_access_plans','extra_seats','ALTER TABLE workspace_access_plans ADD COLUMN extra_seats INT UNSIGNED NOT NULL DEFAULT 0 AFTER plan_id'],
+  ['platform_access_plans','allow_extra_seats','ALTER TABLE platform_access_plans ADD COLUMN allow_extra_seats TINYINT(1) NOT NULL DEFAULT 1 AFTER extra_user_price_cents']
  ] as [$table,$column,$query]){
   if(!DB::one('SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?',[$table,$column]))

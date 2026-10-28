@@ -33,10 +33,10 @@ final class PlatformAsaasCredentials {
    return 'Chave de ambiente incorreto: selecione Produção para uma chave de produção e Sandbox para uma chave de testes (HTTP 401).';
   if(str_contains($code,'invalid_access_token_format'))
    return 'Formato de chave Asaas inválido. Copie a chave completa da conta de produção, sem espaços (HTTP 401).';
-  if(str_contains($code,'invalid_access_token')||str_contains($code,'asaas_http_401'))
-   return 'A API do Asaas recusou a chave (HTTP 401). Confira se está ativa, completa e pertence à conta selecionada.';
   if(str_contains($code,'access_token_not_found'))
    return 'Asaas não recebeu o cabeçalho de autenticação. Verifique possíveis bloqueios no proxy (HTTP 401).';
+  if(str_contains($code,'invalid_access_token')||str_contains($code,'asaas_http_401'))
+   return 'A API do Asaas recusou a chave (HTTP 401). Confira se está ativa, completa e pertence à conta selecionada.';
   if(str_contains($code,'asaas_http_403'))
    return 'O Asaas bloqueou o acesso (HTTP 403). Confira a lista de IPs autorizados da chave e as restrições de segurança da conta.';
   if(str_contains($code,'asaas_http_404'))

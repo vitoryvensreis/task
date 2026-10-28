@@ -84,7 +84,8 @@ final class PlatformAsaasBilling {
   foreach($items as $item)
    $payments=array_merge($payments,DB::all('SELECT asaas_payment_id,status,amount_cents,due_date,invoice_url,paid_at
      FROM platform_asaas_payments WHERE subscription_id=? ORDER BY id DESC LIMIT 25',[(int)$item['id']]));
-  return ['enabled'=>self::enabled($env),'subscriptions'=>$items,'payments'=>$payments];
+  return ['enabled'=>self::enabled($env),'subscriptions'=>$items,'payments'=>$payments,
+   'access'=>PlatformBillingAccess::state($workspaceId)];
  }
  public static function start(array $input): array {
   self::master();Auth::rate('asaas-subscription-create',5,3600);
@@ -161,8 +162,19 @@ final class PlatformAsaasBilling {
   DB::run('INSERT INTO platform_asaas_payments
     (subscription_id,environment,asaas_payment_id,status,amount_cents,due_date,invoice_url,paid_at,updated_at)
     VALUES (?,?,?,?,?,?,?,?,?)
-    ON DUPLICATE KEY UPDATE status=VALUES(status),amount_cents=VALUES(amount_cents),
-      due_date=VALUES(due_date),invoice_url=VALUES(invoice_url),
+    ON DUPLICATE KEY UPDATE
+      status=CASE
+       WHEN status IN ('REFUNDED','REFUND_REQUESTED','CHARGEBACK_REQUESTED','CHARGEBACK_DISPUTE')
+        THEN status
+       WHEN VALUES(status) IN ('REFUNDED','REFUND_REQUESTED','CHARGEBACK_REQUESTED','CHARGEBACK_DISPUTE')
+        THEN VALUES(status)
+       WHEN status IN ('CONFIRMED','RECEIVED','RECEIVED_IN_CASH')
+          AND VALUES(status) IN ('PENDING','OVERDUE','CONFIRMED')
+        THEN status
+       ELSE VALUES(status) END,
+      amount_cents=VALUES(amount_cents),
+      due_date=COALESCE(VALUES(due_date),due_date),
+      invoice_url=COALESCE(NULLIF(VALUES(invoice_url),''),invoice_url),
       paid_at=COALESCE(platform_asaas_payments.paid_at,VALUES(paid_at)),updated_at=VALUES(updated_at)',
     [$localId,$env,$id,$status,$amount,$date,$url?:null,$paid,now()]);
   // A cobrança nova pode ser futura; um webhook antigo nunca deve sobrescrever o
@@ -195,6 +207,7 @@ final class PlatformAsaasBilling {
   if(!$order||!$order['asaas_subscription_id'])fail('Assinatura não encontrada.',404);
   $payments=self::api('GET','/v3/subscriptions/'.$order['asaas_subscription_id'].'/payments',null,self::env());
   foreach(($payments['data']??[]) as $payment)if(is_array($payment))self::upsertPayment($payment,(int)$order['id'],self::env());
+  self::recomputeBilling((int)$order['id']);
   return self::workspace($id);
  }
  public static function toggle(array $p): array {

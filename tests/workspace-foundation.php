@@ -520,6 +520,7 @@ try{
   'Vitor rule leaked into Gabriella run queue.');
  // Payment tables are created only after the workspace foundation.
  require_once ROOT.'/app/PlatformAsaasBilling.php';
+ require_once ROOT.'/app/SelfServiceCheckout.php';
  $asaasSql=file_get_contents(ROOT.'/database/migrations/041_platform_asaas_billing.sql');
  testws($asaasSql!==false,'Asaas migration missing.');
  foreach(preg_split('/;\\s*(?:\\r?\\n|$)/',$asaasSql) as $statement)

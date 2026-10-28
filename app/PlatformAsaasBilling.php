@@ -288,9 +288,15 @@ final class PlatformAsaasBilling {
   }finally{DB::one("SELECT RELEASE_LOCK('taskesc-asaas-reconcile') AS released");}
   return ['status'=>$failed?'partial':'ok','checked'=>$checked,'failed'=>$failed];
  }
- public static function updateSeats(array $p): array {
-  self::master();Auth::rate('asaas-seats-update',10,3600);
-  $workspace=integer($p['workspace_id']??0,1);
+ public static function updateSeats(array $p,bool $customer=false): array {
+  if($customer){
+   Auth::admin();
+   if(Auth::$origin!=='web'||MasterSupport::isSupport()||
+      (string)(Auth::$workspace['role']??'')!=='owner')
+    fail('Somente o proprietário ADM pode contratar vagas adicionais.',403);
+  }else self::master();
+  Auth::rate('asaas-seats-update',10,3600);
+  $workspace=$customer?Auth::workspaceId():integer($p['workspace_id']??0,1);
   $requested=integer($p['extra_seats']??0,0,100000);
   if(strtoupper(trim((string)($p['confirmation']??'')))!=='ATUALIZAR')
    fail('Confirme ATUALIZAR para modificar o valor da recorrência.',422);
@@ -317,6 +323,7 @@ final class PlatformAsaasBilling {
    if($current===$requested)return ['updated'=>false,'extra_seats'=>$current,'total_cents'=>$total];
    $subscription=DB::one("SELECT id,environment,asaas_subscription_id,request_status,amount_cents
     FROM platform_asaas_subscriptions WHERE workspace_id=? AND environment='production' LIMIT 1",[$workspace]);
+   if($customer&&!$subscription)fail('A assinatura precisa estar ativa em produção para comprar vagas adicionais.',409);
    if($subscription){
     if(!in_array($subscription['request_status'],['created','inactive'],true)||
        !$subscription['asaas_subscription_id'])

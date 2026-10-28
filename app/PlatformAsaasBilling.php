@@ -77,7 +77,8 @@ final class PlatformAsaasBilling {
  }
  public static function connection(): array {
   self::master();
-  $info=self::api('GET','/v3/myAccount/status/');
+  try{$info=self::api('GET','/v3/myAccount/status/');}
+  catch(Throwable $e){fail(PlatformAsaasCredentials::diagnosticMessage($e),502);}
   return ['connected'=>true,'environment'=>self::env(),'general_status'=>$info['general']??'unknown'];
  }
  public static function status(): array {

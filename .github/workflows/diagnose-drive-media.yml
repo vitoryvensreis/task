@@ -88,7 +88,34 @@ jobs:
                 echo " metadata_http=".$meta['http']." metadata_reason=".$meta['reason']." metadata_message=".$meta['message']."\n";
                 echo " media_http=".$media['http']." media_reason=".$media['reason']." media_message=".$media['message']." media_mime=".$media['ctype']." valid_png=".($media['png_header']?'yes':'no')." curl_error=".$media['curl_error']."\n";
               }catch(Throwable $e){
-                echo " token_or_transport_exception=".get_class($e)."\n";
+                echo " token_or_transport_exception=".get_class($e);
+                if($e instanceof AppError)echo " oauth_error=".($e->details['oauth_error']??'unknown')." oauth_http=".($e->details['google_status']??0)." refresh_category=".Google::refreshErrorCategory($e);
+                echo "\n";
+              }
+            }
+          }
+          $accounts=DB::all("SELECT id,user_id,workspace_id,status,drive_enabled,scopes,google_sub,expires_at FROM google_accounts ORDER BY id LIMIT 20");
+          $orig=$accounts[0]??null;
+          echo "accounts_count=".count($accounts)."\n";
+          foreach($accounts as $a){
+            $n=DB::one("SELECT COUNT(*) n FROM files WHERE drive_account_id=?",[(int)$a['id']]);
+            echo " account_id=".$a['id']." user_id=".$a['user_id']." workspace=".$a['workspace_id']." status=".$a['status']." file_count=".($n['n']??0)." expiry_in_past=".(strtotime($a['expires_at'].' UTC')<time()?'yes':'no')." same_google_identity_as_1=".(($orig&&$a['google_sub']===$orig['google_sub'])?'yes':'no')."\n";
+          }
+          $sample=DB::one("SELECT drive_file_id,workspace_id,drive_account_id FROM files WHERE original_name LIKE '%03 (1).png%' AND storage_provider='drive' ORDER BY id DESC LIMIT 1");
+          if($sample){
+            echo "cross_account_check_for_pat03:\n";
+            foreach($accounts as $a){
+              if((int)$a['workspace_id']!==(int)$sample['workspace_id'])continue;
+              try{
+                Auth::$workspace=['id'=>(int)$a['workspace_id']];
+                $token=Google::token((int)$a['id']);
+                $url='https://www.googleapis.com/drive/v3/files/'.rawurlencode((string)$sample['drive_file_id']);
+                $m=$fetch($url.'?alt=media&supportsAllDrives=true',$token,true);
+                echo " account_id=".$a['id']." media_http=".$m['http']." valid_png=".($m['png_header']?'yes':'no')." error_reason=".$m['reason']."\n";
+              }catch(Throwable $e){
+                echo " account_id=".$a['id']." exception=".get_class($e);
+                if($e instanceof AppError)echo " oauth_error=".($e->details['oauth_error']??'unknown');
+                echo "\n";
               }
             }
           }

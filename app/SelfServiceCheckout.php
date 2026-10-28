@@ -69,7 +69,7 @@ final class SelfServiceCheckout {
       'token_expires_at'=>gmdate('Y-m-d H:i:s',time()+172800),
       'status'=>'awaiting_email','created_at'=>now(),'updated_at'=>now()
     ]);
-    $verifyUrl=base('contratar.php?token='.$token);
+    $verifyUrl=base('contratar?token='.$token);
     DB::insert('platform_mail_queue',[
       'recipient'=>$email,'subject'=>'TaskEsc — confirme sua contratação',
       'body'=>"Confirme seu e-mail para continuar a assinatura do TaskEsc:\n".$verifyUrl.

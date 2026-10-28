@@ -441,7 +441,7 @@ window.MasterConsole=(()=>{
    for(const [id,label] of Object.entries(cycles)){
     const o=el('option','',label);o.value=id;o.selected=(plan?.billing_period||'monthly')===id;cycle.append(o);
    }cycleLabel.append(el('span','','Recorrência'),cycle);form.append(cycleLabel);
-   const limit=field(form,'Limite de usuários da equipe','team_limit',plan?.team_limit??2,'number');limit.min='1';limit.required=true;
+   const limit=field(form,'Membros da equipe incluídos além do proprietário ADM','team_limit',plan?.team_limit??0,'number');limit.min='0';limit.required=true;
    const feats=typeof plan?.features_json==='string'?JSON.parse(plan.features_json):plan?.features_json||{tasks:true,automations:true,contacts:true};
    const options=el('div','mc-plan-options');
    const checkbox=(label,key,checked)=>{
@@ -461,7 +461,7 @@ window.MasterConsole=(()=>{
      await api(base,'master.plan_save',csrf,{
       id:Number(plan?.id||0),name:name.value.trim(),
       price_cents:cents(price),extra_user_price_cents:cents(extraPrice),billing_period:cycle.value,
-      team_limit:Number(limit.value||2),unlimited_team:unlimited.checked?1:0,
+      team_limit:Number(limit.value||0),unlimited_team:unlimited.checked?1:0,
       public_visible:data.public_visible?1:0,active:data.active?1:0,features:f});
      close();await refresh();
     }catch(err){status(form,err.message,true);save.disabled=false}

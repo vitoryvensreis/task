@@ -94,6 +94,18 @@ final class SelfServiceCheckout {
    $paid=DB::one("SELECT status,invoice_url FROM platform_asaas_payments
     WHERE subscription_id=? ORDER BY id DESC LIMIT 1",[(int)$subscription['id']]);
    $invoice=(string)($paid['invoice_url']??'');
+   if(!$invoice&&$subscription['asaas_subscription_id']&&
+      $subscription['request_status']==='created'){
+    Auth::rate('checkout-invoice-read',8,900);
+    try{
+     $response=PlatformAsaasBilling::api('GET','/v3/subscriptions/'.$subscription['asaas_subscription_id'].'/payments?limit=10&offset=0',null,'production');
+     foreach(($response['data']??[]) as $payment){
+      if(!is_array($payment))continue;
+      $url=(string)($payment['invoiceUrl']??'');
+      if(str_starts_with($url,'https://')){$invoice=$url;break;}
+     }
+    }catch(Throwable $e){error_log('TaskEsc invoice lookup failed: '.get_class($e));}
+   }
   }
   return ['status'=>$row['status'],'plan'=>$row['plan_name'],
    'amount_cents'=>PlatformPlans::amount((int)$row['price_cents'],(int)$row['extra_user_price_cents'],(int)$row['extra_seats']),

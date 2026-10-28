@@ -48,7 +48,7 @@ footer{padding-top:44px;color:#7e8997;font-size:13px}
 .sales .honeypot{position:absolute!important;left:-9999px!important;opacity:0!important}
 @media(max-width:650px){.sales form{grid-template-columns:1fr}.sales{padding:20px}.sales label{grid-column:1/-1}}
 
-</style><link rel="stylesheet" href="<?=e(base('assets/taskesc-theme.css'))?>?v=<?= (int)filemtime(__DIR__.'/assets/taskesc-theme.css') ?>"></head><body class="plans-page"><main>
+</style><link rel="stylesheet" href="<?=e(base('assets/taskesc-theme.css'))?>?v=<?= (int)filemtime(ROOT.'/public/assets/taskesc-theme.css') ?>"></head><body class="plans-page"><main>
 <header><strong>TaskEsc <span style="color:#9fa9b6">/ Planos</span></strong><a href="<?=e(base('dashboard'))?>">Entrar na plataforma</a></header>
 <h1>Planos para diferentes equipes.</h1>
 <p class="lead">Escolha a estrutura que combina com a sua operação. Os módulos e os limites de equipe variam conforme o plano.</p>

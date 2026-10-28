@@ -34,9 +34,13 @@ final class PlatformAsaasBilling {
   if(Auth::$origin!=='web'||!MasterSupport::isActor()||MasterSupport::isSupport())
    fail('Disponível somente ao ADM Master.',403);
  }
+ private static function validApiRoute(string $path): bool {
+  // Delimitadores iguais (~): valida somente o caminho relativo da API v3.
+  return preg_match('~\\A/v3/[a-zA-Z0-9/_?=&-]+\\z~D',$path)===1;
+ }
  public static function api(string $method,string $path,?array $data=null,?string $env=null,?string $keyOverride=null): array {
   $env=$env??self::env();
-  if(!in_array($env,['sandbox','production'],true)||!preg_match('~\\A/v3/[a-zA-Z0-9/_?=&-]+\\z/D',$path))
+  if(!in_array($env,['sandbox','production'],true)||!self::validApiRoute($path))
    throw new InvalidArgumentException('Invalid Asaas API route.');
   $stored=setting('platform_asaas_api_key_'.$env,'');
   if($keyOverride===null&&$stored==='')throw new RuntimeException('asaas_key_not_configured');

@@ -159,7 +159,7 @@ final class PlatformAsaasBilling {
   $url=(string)($payment['invoiceUrl']??'');
   if(!filter_var($url,FILTER_VALIDATE_URL)||parse_url($url,PHP_URL_SCHEME)!=='https')$url='';
   $paid=in_array($status,['CONFIRMED','RECEIVED','RECEIVED_IN_CASH'],true)?now():null;
-  DB::run('INSERT INTO platform_asaas_payments
+  DB::run("INSERT INTO platform_asaas_payments
     (subscription_id,environment,asaas_payment_id,status,amount_cents,due_date,invoice_url,paid_at,updated_at)
     VALUES (?,?,?,?,?,?,?,?,?)
     ON DUPLICATE KEY UPDATE
@@ -175,7 +175,7 @@ final class PlatformAsaasBilling {
       amount_cents=VALUES(amount_cents),
       due_date=COALESCE(VALUES(due_date),due_date),
       invoice_url=COALESCE(NULLIF(VALUES(invoice_url),''),invoice_url),
-      paid_at=COALESCE(platform_asaas_payments.paid_at,VALUES(paid_at)),updated_at=VALUES(updated_at)',
+      paid_at=COALESCE(platform_asaas_payments.paid_at,VALUES(paid_at)),updated_at=VALUES(updated_at)",
     [$localId,$env,$id,$status,$amount,$date,$url?:null,$paid,now()]);
   // A cobrança nova pode ser futura; um webhook antigo nunca deve sobrescrever o
   // estado financeiro da competência mais recente que já venceu.

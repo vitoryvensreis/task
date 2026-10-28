@@ -3,6 +3,7 @@ final class ApiV1 {
  public static function handle(string $method,string $path,array $p): mixed {
   Auth::load();if(Auth::$origin!=='api')fail('Use um token Bearer da API do TaskEsc.',401);
   $method=strtoupper($method);$write=in_array($method,['POST','PUT','PATCH','DELETE'],true);Auth::scope($write?'api.write':'api.read');
+  if($write)PlatformBillingAccess::guardMutation('api-v1.'.$path,$method);
   $parts=array_values(array_filter(explode('/',trim($path,'/')),'strlen'));
   if((Auth::$user['role']??'')==='staff'){
    if(in_array($parts[0]??'', ['tasks','kanban'],true)){

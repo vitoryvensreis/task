@@ -544,9 +544,40 @@ try{
  DB::run('INSERT INTO workspace_members(workspace_id,user_id,role,status,joined_at)
   VALUES (?,?,?,?,?)',[$third,$extraOwner,'owner','inactive',now()]);
  testws(WorkspaceFoundationGuard::valid(),'Adding pending third workspace broke existing tenant guard.');
- DB::run('UPDATE workspaces SET status=? WHERE id=?',['active',$third]);
- DB::run('UPDATE users SET active=1 WHERE id=?',[$extraOwner]);
- DB::run('UPDATE workspace_members SET status=? WHERE user_id=?',['active',$extraOwner]);
+ $ciPlan=DB::insert('platform_access_plans',[
+  'name'=>'Solo de teste','code'=>'solo-ci-2026','price_cents'=>1990,
+  'extra_user_price_cents'=>1590,'allow_extra_seats'=>1,'billing_period'=>'monthly',
+  'features_json'=>json(['tasks'=>true,'automations'=>true,'contacts'=>true]),
+  'team_limit'=>0,'public_visible'=>1,'active'=>1,'created_at'=>now(),'updated_at'=>now()
+ ]);
+ DB::run('INSERT INTO workspace_access_plans(workspace_id,plan_id,extra_seats,assigned_at)
+  VALUES (?,?,0,?)',[$third,$ciPlan,now()]);
+ $subscription=DB::insert('platform_asaas_subscriptions',[
+  'workspace_id'=>$third,'plan_id'=>$ciPlan,'environment'=>'production',
+  'asaas_subscription_id'=>'sub_ciTest2026','payer_name'=>'Checkout CI',
+  'payer_email'=>'ci-new-account-2026@example.invalid','amount_cents'=>1990,
+  'cycle'=>'monthly','due_date'=>gmdate('Y-m-d',strtotime('+1 day')),
+  'request_status'=>'created','billing_status'=>'awaiting_payment',
+  'created_at'=>now(),'updated_at'=>now()
+ ]);
+ DB::insert('platform_checkout_orders',[
+  'user_id'=>$extraOwner,'workspace_id'=>$third,'plan_id'=>$ciPlan,
+  'extra_seats'=>0,'verify_hash'=>hash('sha256',str_repeat('a',64)),
+  'token_expires_at'=>gmdate('Y-m-d H:i:s',time()+86400),
+  'verified_at'=>now(),'status'=>'awaiting_payment',
+  'created_at'=>now(),'updated_at'=>now()
+ ]);
+ testws((int)(DB::one('SELECT active FROM users WHERE id=?',[$extraOwner])['active']??1)===0,
+  'Unpaid checkout owner cannot be active.');
+ DB::tx(static function()use($subscription):void {
+  SelfServiceCheckout::activatePaid($subscription,['status'=>'RECEIVED','value'=>19.90]);
+ });
+ testws((int)(DB::one('SELECT active FROM users WHERE id=?',[$extraOwner])['active']??0)===1,
+  'Paid checkout did not activate its owner.');
+ testws((int)(DB::one('SELECT COUNT(*) n FROM stages WHERE workspace_id=?',[$third])['n']??0)>0,
+  'Paid checkout did not initialize its own Kanban stages.');
+ testws((int)(DB::one('SELECT COUNT(*) n FROM clients WHERE workspace_id=?',[$third])['n']??0)===0,
+  'Checkout illegally copied clients to the new company.');
  testws(WorkspaceContext::forUser(['id'=>$extraOwner,'email'=>'ci-new-account-2026@example.invalid',
   'active'=>1,'role'=>'admin'])['id']===$third,
   'Paid third workspace owner cannot resolve its isolated company.');

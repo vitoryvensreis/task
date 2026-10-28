@@ -35,4 +35,11 @@ assert(demands.includes("Auth::canEditDemand($old)")&&demands.includes("$d['can_
 assert(roles.includes('Auth::canEditDemand(Auth::demand($id))'),'Custom staff roles must permit task-specific owner/assignee edits');
 assert(js.includes("canEdit=!preview&&!!d.can_edit"),'Edit action must use task-specific server permission');
 assert(js.includes("media?.addEventListener('error'"),'Broken media should show actionable feedback instead of a blank black preview');
+const api=read('../public/api.php');
+assert(js.includes('data-disconnect-google')&&js.includes('data-reconnect-google'),'Each Google account must show disconnect or reconnect controls');
+assert(js.includes("api('google.disconnect',{id},'POST')"),'Disconnect must call POST endpoint');
+assert(js.includes('Os arquivos existentes no Google Drive não serão apagados.'),'Confirmation must explain that the Drive files remain intact');
+assert(api.includes("'google.disconnect'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?Google::disconnect($p):fail('Método não permitido.',405)"),'Google disconnect must reject GET requests');
+assert(google.includes("public static function disconnect(array $p)")&&google.includes("'status'=>'disconnected','access_token'=>'','refresh_token'=>''"),'Disconnect must clear tokens without destroying persisted file references');
+assert(!google.slice(google.indexOf('public static function disconnect('),google.indexOf('public static function driveAccountId(',google.indexOf('public static function disconnect('))).includes('deleteDriveFile'),'Disconnect must not delete remote files');
 console.log('Drive previews and creator/assignee task-edit contracts OK');

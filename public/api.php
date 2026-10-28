@@ -145,7 +145,7 @@ try {
  if($action==='preview.stop'){checkCsrf();out(Auth::previewStop());}
  if(($_SERVER['REQUEST_METHOD']??'GET')!=='GET'&&Auth::$origin!=='api'){checkCsrf();Auth::guardPreviewWrite();}
  WorkspaceRoles::requireForAction($action,$p);
- if(in_array($action,['system.health','system.logs','system.error_resolve'],true))fail('Disponível somente no ADM Master.',403);
+ if(in_array($action,['system.health','system.logs','system.error_resolve','realtime.health','realtime.probe','realtime.probe_status'],true))fail('Diagnósticos técnicos disponíveis somente no painel do ADM Master.',403);
  if(str_starts_with($action,'wpp.')||str_starts_with($action,'tokens.'))MasterSupport::requirePlatformSettings();
  if(str_starts_with($action,'demands.')||str_starts_with($action,'services.')||str_starts_with($action,'templates.'))PlatformPlans::requireModule('tasks');
  if(str_starts_with($action,'automation.'))PlatformPlans::requireModule('automations');
@@ -185,9 +185,6 @@ try {
   'whatsapp_contacts.list'=>WhatsappContacts::list($p),
   'whatsapp_contacts.save'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?WhatsappContacts::save($p):fail('Método não permitido.',405),
   'whatsapp_contacts.delete'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?WhatsappContacts::delete($p):fail('Método não permitido.',405),
-  'realtime.health'=>($_SERVER['REQUEST_METHOD']??'GET')==='GET'?RealtimeDiagnostics::health():fail('Método não permitido.',405),
-  'realtime.probe'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?RealtimeDiagnostics::probe():fail('Método não permitido.',405),
-  'realtime.probe_status'=>($_SERVER['REQUEST_METHOD']??'GET')==='GET'?RealtimeDiagnostics::probeStatus($p):fail('Método não permitido.',405),
   'demands.stage'=>Demands::stage($p),
   'demands.reorder'=>Demands::reorder($p),
   'demands.bulk'=>Demands::bulk($p),
@@ -259,7 +256,7 @@ try {
   'company.drive_default'=>Google::companyDefaultDrive(($_SERVER['REQUEST_METHOD']??'GET')==='GET'?null:$p),
   'google.accounts'=>Google::accounts(),
   'google.connect'=>Google::connect($p),
-  'google.disconnect'=>Google::disconnect($p),
+  'google.disconnect'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?Google::disconnect($p):fail('Método não permitido.',405),
   'notifications'=>($_SERVER['REQUEST_METHOD']??'GET')==='GET'?NotificationInbox::list():fail('Método não permitido.',405),
   'notifications.seen'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?NotificationInbox::markAllSeen():fail('Método não permitido.',405),
   default=>fail('Ação não encontrada.',404),

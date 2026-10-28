@@ -80,6 +80,15 @@ final class WorkspaceFoundation {
       WHERE slug NOT IN (?,?) AND status NOT IN ('active','pending_payment') LIMIT 1",
       [self::SLUG,PlatformTenantProvisioning::SLUG]);
    if($unexpected)$issues[]='unknown_workspace_status';
+   $invalid=DB::one("SELECT w.id FROM workspaces w
+     LEFT JOIN users u ON u.id=w.owner_user_id
+     LEFT JOIN workspace_members wm ON wm.workspace_id=w.id AND wm.user_id=w.owner_user_id
+     WHERE w.slug NOT IN (?,?) AND
+      (u.id IS NULL OR u.role<>'admin' OR wm.role<>'owner' OR
+       (w.status='active' AND (u.active<>1 OR wm.status<>'active')) OR
+       (w.status='pending_payment' AND (u.active<>0 OR wm.status<>'inactive')))
+     LIMIT 1",[self::SLUG,PlatformTenantProvisioning::SLUG]);
+   if($invalid)$issues[]='customer_owner_integrity';
    $second=DB::one('SELECT w.owner_user_id,u.email,w.status FROM workspaces w JOIN users u ON u.id=w.owner_user_id WHERE w.slug=?',[PlatformTenantProvisioning::SLUG]);
    if(!$second||strtolower((string)$second['email'])!==PlatformTenantProvisioning::OWNER_EMAIL||$second['status']!=='active')
     $issues[]='second_workspace_invalid';

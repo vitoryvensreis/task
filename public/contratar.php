@@ -83,7 +83,7 @@ const $=id=>document.getElementById(id);
 const money=c=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(c)/100);
 const message=(text,error=false)=>{const el=$('message');el.classList.remove('hidden');el.classList.toggle('error',error);el.textContent=text;};
 async function request(action,p={},method='POST'){
-const url='<?=e(base('api.php'))?>?action='+encodeURIComponent(action);
+const url='<?=e(base('api.php'))?>?action='+encodeURIComponent(action)+(method==='GET'?'&'+new URLSearchParams(p).toString():'');
 const response=await fetch(url,{method,credentials:'same-origin',headers:{'Accept':'application/json','Content-Type':'application/json','X-CSRF-Token':csrf},...(method==='POST'?{body:JSON.stringify(p)}:{})});
 const data=await response.json().catch(()=>({}));
 if(!response.ok)throw Error(data.error||data.message||'Não foi possível concluir a operação.');
@@ -118,7 +118,7 @@ if(token){
  const status=$('checkout-status'),confirm=$('confirm-email'),form=$('payment-form'),link=$('payment-link'),done=$('login-after-paid');
  async function refresh(){
   try{
-   const r=await request('checkout.status',{token});
+   const r=await request('checkout.status',{token},'GET');
    status.textContent='Plano: '+r.plan+' · '+money(r.amount_cents)+' por período · '+({
     awaiting_email:'Confirme seu e-mail',verified:'E-mail confirmado',creating:'Solicitando assinatura',
     awaiting_payment:'Aguardando pagamento',active:'Pagamento confirmado — acesso liberado',needs_review:'Em análise pelo suporte'

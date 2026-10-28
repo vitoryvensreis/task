@@ -365,7 +365,7 @@ final class Google {
     $parts=explode(':',$line,2);
     if(count($parts)===2){
      $key=strtolower(trim($parts[0]));$value=trim($parts[1]);
-     if(in_array($key,['content-length','content-range'],true)&&preg_match('/^[0-9\/ *-]+$/D',$value))$upstreamHeaders[$key]=$value;
+     if(($key==='content-length'&&ctype_digit($value))||($key==='content-range'&&preg_match('/^bytes [0-9]+-[0-9]+\/(?:[0-9]+|\*)$/D',$value)))$upstreamHeaders[$key]=$value;
     }
     return strlen($line);
    },

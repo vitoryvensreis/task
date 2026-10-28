@@ -28,10 +28,10 @@ final class PasswordRecovery {
   $data=(int)$user['id'].'.'.(time()+1800).'.'.bin2hex(random_bytes(12));
   $token=$data.'.'.self::signature($data,(string)$user['password_hash']);
   self::queue($email,'TaskEsc — redefinição de senha',
-   "Foi solicitada a redefinição da senha da sua conta TaskEsc.\\n\\n".
-   "O link é válido por 30 minutos:\\n".
+   "Foi solicitada a redefinição da senha da sua conta TaskEsc.\n\n".
+   "O link é válido por 30 minutos:\n".
    base('redefinir-senha.php?token='.rawurlencode($token)).
-   "\\n\\nSe você não solicitou, ignore esta mensagem. A autenticação de dois fatores continua obrigatória quando ativada.");
+   "\n\nSe você não solicitou, ignore esta mensagem. A autenticação de dois fatores continua obrigatória quando ativada.");
   return $generic;
  }
  public static function reset(array $p): array {

@@ -38,6 +38,7 @@ final class Demands {
    if(Auth::$user['role']==='staff')unset($d['amount_cents']);
    elseif(!Auth::isPreview()&&!DB::one('SELECT client_id FROM user_clients WHERE user_id=? AND client_id=? AND can_finance=1'.self::wsWhere(),self::wsArgs([Auth::$user['id'],$d['client_id']])))unset($d['amount_cents']);
   }
+  $d['can_edit']=Auth::canEditDemand($d);
   return $d;
  }
 
@@ -76,13 +77,13 @@ final class Demands {
  public static function save(array $p): array {
   return DB::tx(function() use($p): array {
    $id=(int)($p['id']??0);$old=$id?Auth::demand($id,true):null;$role=Auth::$user['role'];
-   if($old)Auth::requireAbility('tasks.edit');else Auth::requireAbility('tasks.create');
+   if($old){if(!Auth::canEditDemand($old))fail('Somente quem criou, o responsável ou um usuário autorizado pode editar esta task.',403);}else Auth::requireAbility('tasks.create');
    if($old&&integer($p['version']??0,1)!==(int)$old['version'])fail('A task foi alterada. Atualize antes de salvar.',409);
 
    $client=integer($p['client_id']??($old['client_id']??0),1);$clientRow=Auth::client($client);
    if($old&&$client!==(int)$old['client_id'])fail('O cliente de uma task existente não pode ser trocado.');
    $category=integer($p['category_id']??($old['category_id']??0),1);$categoryRow=DB::one('SELECT * FROM categories WHERE id=? AND active=1'.self::wsWhere(),self::wsArgs([$category]));if(!$categoryRow)fail('Categoria inválida.');
-   $assignedSource=array_key_exists('assigned_to',$p)?(int)$p['assigned_to']:(int)($old['assigned_to']??0);if(!$old&&!$assignedSource)$assignedSource=(int)($categoryRow['default_assigned_to']??0);if($role==='client'&&$old)$assignedSource=(int)($old['assigned_to']??0);$assigned=self::responsible($assignedSource,$client);
+   $assignedSource=array_key_exists('assigned_to',$p)?(int)$p['assigned_to']:(int)($old['assigned_to']??0);if(!$old&&!$assignedSource)$assignedSource=(int)($categoryRow['default_assigned_to']??0);if($role==='client'&&$old&&(int)($old['created_by']??0)!==(int)Auth::$user['id'])$assignedSource=(int)($old['assigned_to']??0);$assigned=self::responsible($assignedSource,$client);
    $project=$old['project_id']??null;if(isset($p['project_id']))$project=!empty($p['project_id'])?(int)$p['project_id']:null;if($project&&!DB::one('SELECT id FROM projects WHERE id=? AND client_id=?'.self::wsWhere(),self::wsArgs([$project,$client])))fail('Projeto de outro cliente.');
 
    $dueInput=trim((string)($p['due_at']??($old['due_at']??'')));if($dueInput===''&&!$old)$dueInput=businessDeadline(max(1,(int)($categoryRow['default_due_hours']??24)))->format('Y-m-d\\TH:i');if($dueInput==='')fail('Informe a data de entrega.');$due=timestamp($dueInput);if(!$due)fail('Informe a data de entrega.');validateDelivery($due,$old['due_at']??null);

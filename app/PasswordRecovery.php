@@ -22,9 +22,10 @@ final class PasswordRecovery {
   if(!filter_var($email,FILTER_VALIDATE_EMAIL)||strlen($email)>190)
    fail('Informe um endereço de e-mail válido.',422);
   $generic=['received'=>true,'message'=>'Se esse e-mail estiver cadastrado, você receberá um link de recuperação.'];
+  // The same quota applies whether the address exists or not.
+  Auth::rate('forgot-password-email-'.hash('sha256',$email),3,3600);
   $user=DB::one('SELECT id,email,password_hash FROM users WHERE email=? AND active=1',[$email]);
   if(!$user)return $generic;
-  Auth::rate('forgot-password-email-'.hash('sha256',$email),3,3600);
   $data=(int)$user['id'].'.'.(time()+1800).'.'.bin2hex(random_bytes(12));
   $token=$data.'.'.self::signature($data,(string)$user['password_hash']);
   self::queue($email,'TaskEsc — redefinição de senha',

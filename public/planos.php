@@ -67,42 +67,13 @@ footer{padding-top:44px;color:#7e8997;font-size:13px}
  <?php if($plan['team_limit']!==null&&(int)$plan['allow_extra_seats']===1&&(int)$plan['extra_user_price_cents']>0): ?>
  <p class="meta">Vaga adicional ADM/equipe: R$ <?=e(number_format((int)$plan['extra_user_price_cents']/100,2,',','.'))?> / <?=e($cycleLabels[$plan['billing_period']]??$plan['billing_period'])?></p>
  <?php endif; ?>
- <a class="request" data-plan-select="<?= (int)$plan['id'] ?>" href="#contratar">Solicitar contratação</a>
+ <a class="request" href="<?=e(base('contratar.php?plan_id='.(int)$plan['id']))?>">Contratar plano</a>
  <?php foreach($features as $key=>$label)if(!empty($enabled[$key])): ?>
   <div class="feature">✓ <?=e($label)?></div>
  <?php endif; ?>
 </article>
 <?php endforeach; ?>
 </section><?php else: ?><div class="empty">Ainda não existem planos de acesso públicos disponíveis.</div><?php endif; ?>
-<?php if($plans): ?>
-<section class="sales" id="contratar">
- <h2>Solicitar acesso ao TaskEsc</h2>
- <p class="intro">Informe seus dados para nossa equipe confirmar o plano e a contratação. O envio deste formulário não cria assinatura, cobrança ou acesso automaticamente.</p>
- <form id="sales-form">
-  <label>Plano escolhido
-   <select name="plan_id" required>
-    <?php foreach($plans as $plan):if($plan['code']==='legacy-unlimited')continue; ?>
-    <option value="<?= (int)$plan['id'] ?>"><?=e($plan['name'])?> · R$ <?=e(number_format((int)$plan['price_cents']/100,2,',','.'))?> / <?=e($cycleLabels[$plan['billing_period']]??$plan['billing_period'])?></option>
-    <?php endforeach; ?>
-   </select>
-  </label>
-  <label>Vagas extras para ADM/equipe
-   <input name="extra_seats" type="number" min="0" max="100" step="1" value="0" required>
-  </label>
-  <p class="intro" id="sales-total" aria-live="polite"></p>
-  <label>Seu nome<input name="name" maxlength="120" autocomplete="name" required></label>
-  <label>Empresa (opcional)<input name="company" maxlength="140" autocomplete="organization"></label>
-  <label>E-mail de contato<input name="email" type="email" maxlength="190" autocomplete="email" required></label>
-  <label class="full">WhatsApp / telefone<input name="phone" type="tel" maxlength="25" autocomplete="tel" required placeholder="(85) 99999-9999"></label>
-  <label class="honeypot" aria-hidden="true">Site<input name="website" tabindex="-1" autocomplete="off"></label>
-  <label class="consent"><input type="checkbox" name="privacy_consent" value="1" required> Concordo em receber contato sobre a contratação e li a <a href="<?=e(base('privacidade'))?>" target="_blank" rel="noopener noreferrer">Política de Privacidade</a>.</label>
-  <div class="actions"><button type="submit">Solicitar contato comercial</button><p class="feedback" id="sales-feedback" aria-live="polite"></p></div>
- </form>
-</section>
-<?php endif; ?>
-<footer>TaskEsc é um produto da Escotilha Produtora. <a href="<?=e(base('privacidade'))?>">Privacidade</a> · <a href="<?=e(base('termos-de-uso'))?>">Termos de Uso</a>. Assinaturas são criadas após confirmação comercial.</footer>
-<script type="application/json" id="sales-pricing"><?=json(array_map(static fn($p)=>[
- 'id'=>(int)$p['id'],'base'=>(int)$p['price_cents'],
- 'seat'=>(int)$p['extra_user_price_cents'],'allow'=>(int)$p['allow_extra_seats'],'period'=>(string)$p['billing_period']],$plans))?></script>
-<script defer src="<?=e(base('assets/plans-sales.js'))?>?v=2"></script>
+<footer>TaskEsc é um produto da Escotilha Produtora. <a href="<?=e(base('privacidade'))?>">Privacidade</a> · <a href="<?=e(base('termos-de-uso'))?>">Termos de Uso</a>. Após criar a conta e confirmar seu e-mail, você pode concluir o pagamento no Asaas.</footer>
+
 </main></body></html>

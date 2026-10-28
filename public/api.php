@@ -160,6 +160,7 @@ try {
  if(str_starts_with($action,'whatsapp_contacts.'))PlatformPlans::requireModule('contacts');
  $result=match($action){
   'billing.status'=>PlatformBillingAccess::current(),
+  'billing.seats_purchase'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?PlatformAsaasBilling::updateSeats($p,true):fail('Método não permitido.',405),
   'account.get'=>Auth::profile(),
   'account.save'=>Auth::profileSave($p),
   'account.password'=>Auth::passwordChange($p),

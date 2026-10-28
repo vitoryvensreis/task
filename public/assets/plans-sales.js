@@ -7,7 +7,7 @@
  const fmt=c=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(c/100);
  const renderPrice=()=>{
   const plan=pricing.find(x=>Number(x.id)===Number(select.value));if(!plan)return;
-  const supports=Number(plan.seat)>0;
+  const supports=Number(plan.allow)===1&&Number(plan.seat)>0;
   qty.disabled=!supports;qty.max=supports?'100':'0';if(!supports)qty.value='0';
   const n=Math.max(0,Math.min(100,Number(qty.value)||0));
   preview.textContent='Estimativa: '+fmt(Number(plan.base)+n*Number(plan.seat))+' por '+plan.period+

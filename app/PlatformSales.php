@@ -27,9 +27,9 @@ final class PlatformSales {
   $recipients=DB::all("SELECT DISTINCT email FROM platform_master_identities
      WHERE status='verified' AND email<>'' LIMIT 10");
   if(!$recipients)fail('Canal comercial temporariamente indisponível.',503);
-  $text="Nova solicitação comercial TaskEsc\\nPlano: {$plan['name']} (ID {$plan['id']})\\n".
-    "Contato: $name\\nEmpresa: ".($company?:'Não informada')."\\nE-mail: $email\\nTelefone: $phone\\n".
-    "Recebido em UTC: ".now()."\\n\\nResponder ao contato e validar contratação no ADM Master. Nenhuma cobrança foi iniciada.";
+  $text="Nova solicitação comercial TaskEsc\nPlano: {$plan['name']} (ID {$plan['id']})\n".
+    "Contato: $name\nEmpresa: ".($company?:'Não informada')."\nE-mail: $email\nTelefone: $phone\n".
+    "Recebido em UTC: ".now()."\n\nResponder ao contato e validar contratação no ADM Master. Nenhuma cobrança foi iniciada.";
   DB::tx(static function()use($recipients,$text):void {
    foreach($recipients as $recipient){
     $to=strtolower(trim((string)$recipient['email']));

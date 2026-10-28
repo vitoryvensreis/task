@@ -8,6 +8,10 @@ try {
  if(str_contains(strtolower($_SERVER['CONTENT_TYPE']??''),'application/json')&&$raw!==''){$body=json_decode($raw,true,512,JSON_THROW_ON_ERROR);if(!is_array($body))fail('JSON inválido.');}
  $p=[...$_GET,...$_POST,...$body];unset($p['action']);
  if($action==='plans.public'){installed();out(PlatformPlans::publicList());}
+ if($action==='sales.request'){
+  if(($_SERVER['REQUEST_METHOD']??'GET')!=='POST')fail('Método não permitido.',405);
+  installed();out(PlatformSales::request($p));
+ }
  if($action==='master.activate'){
   if(($_SERVER['REQUEST_METHOD']??'GET')!=='POST')fail('Método não permitido.',405);
   installed();out(MasterSupport::activate($p));
@@ -20,7 +24,7 @@ try {
   if(($_SERVER['REQUEST_METHOD']??'GET')!=='POST')fail('Método não permitido.',405);
   out(UserAvatars::upload($_FILES['avatar']??null));
  }
- if(in_array($action,['master.support_unread','master.support_seen','master.wpp_status','master.wpp_start','master.wpp_qr','master.wpp_test','master.wpp_close','master.wpp_disconnect','master.customers','master.workspace_members','master.workspace_profile_save','master.workspace_limit_save','master.admin_access','master.audit','master.account','master.profile_save','master.password_save','master.twofa_setup','master.twofa_enable','master.twofa_disable','master.invite_additional','master.asaas','master.asaas_save','master.asaas_test','master.asaas_status','master.asaas_workspace','master.asaas_start','master.asaas_refresh','master.health','master.logs','master.error_resolve','master.settings','master.settings_save','master.brand_upload','master.workspaces','master.dashboard','master.administrators','master.reset_2fa','master.plans','master.plan_save','master.plan_assign','master.start','master.stop','master.invite'],true)){
+ if(in_array($action,['master.support_unread','master.support_seen','master.wpp_status','master.wpp_start','master.wpp_qr','master.wpp_test','master.wpp_close','master.wpp_disconnect','master.customers','master.workspace_members','master.workspace_profile_save','master.workspace_limit_save','master.admin_access','master.audit','master.account','master.profile_save','master.password_save','master.twofa_setup','master.twofa_enable','master.twofa_disable','master.invite_additional','master.asaas','master.asaas_save','master.asaas_test','master.asaas_status','master.asaas_workspace','master.asaas_start','master.asaas_refresh','master.asaas_toggle','master.health','master.logs','master.error_resolve','master.settings','master.settings_save','master.brand_upload','master.workspaces','master.dashboard','master.administrators','master.reset_2fa','master.plans','master.plan_save','master.plan_assign','master.start','master.stop','master.invite'],true)){
   if(($_SERVER['REQUEST_METHOD']??'GET')!=='GET')checkCsrf();
   Auth::load();
    if($action==='master.support_unread'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET'){
@@ -80,6 +84,7 @@ try {
   }
   if($action==='master.asaas_start'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST')out(PlatformAsaasBilling::start($p));
   if($action==='master.asaas_refresh'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST')out(PlatformAsaasBilling::refresh($p));
+  if($action==='master.asaas_toggle'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST')out(PlatformAsaasBilling::toggle($p));
   if(in_array($action,['master.health','master.logs','master.error_resolve'],true)){
    if(!MasterSupport::isActor()||Auth::$origin!=='web')fail('ADM Master obrigatório.',403);
    if($action==='master.health'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET')out(SystemHealth::health());
@@ -145,12 +150,15 @@ try {
  if($action==='preview.stop'){checkCsrf();out(Auth::previewStop());}
  if(($_SERVER['REQUEST_METHOD']??'GET')!=='GET'&&Auth::$origin!=='api'){checkCsrf();Auth::guardPreviewWrite();}
  WorkspaceRoles::requireForAction($action,$p);
+ PlatformBillingAccess::guardMutation($action,(string)($_SERVER['REQUEST_METHOD']??'GET'));
+
  if(in_array($action,['system.health','system.logs','system.error_resolve','realtime.health','realtime.probe','realtime.probe_status'],true))fail('Diagnósticos técnicos disponíveis somente no painel do ADM Master.',403);
  if(str_starts_with($action,'wpp.')||str_starts_with($action,'tokens.'))MasterSupport::requirePlatformSettings();
  if(str_starts_with($action,'demands.')||str_starts_with($action,'services.')||str_starts_with($action,'templates.'))PlatformPlans::requireModule('tasks');
  if(str_starts_with($action,'automation.'))PlatformPlans::requireModule('automations');
  if(str_starts_with($action,'whatsapp_contacts.'))PlatformPlans::requireModule('contacts');
  $result=match($action){
+  'billing.status'=>PlatformBillingAccess::current(),
   'account.get'=>Auth::profile(),
   'account.save'=>Auth::profileSave($p),
   'account.password'=>Auth::passwordChange($p),

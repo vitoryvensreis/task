@@ -277,6 +277,19 @@ window.MasterConsole=(()=>{
       catch(e){status(billing,e.message,true);reload.disabled=false}
      });
      billing.append(reload,el('p','mc-feedback'));
+     if(sub.asaas_subscription_id&&['created','inactive'].includes(sub.request_status)){
+      const paused=sub.request_status==='inactive';
+      const verb=paused?'RETOMAR':'PAUSAR',caption=paused?'Retomar cobrança recorrente':'Pausar recorrência';
+      const control=button(caption,async()=>{
+       const confirmation=window.prompt('Confirme digitando '+verb+'. '+(paused?'O Asaas criará a próxima cobrança com vencimento em 2 dias.':'Nenhuma nova cobrança será gerada enquanto a assinatura estiver pausada.'));
+       if(confirmation!==verb)return;
+       control.disabled=true;
+       try{await api(base,'master.asaas_toggle',csrf,{workspace_id:Number(w.id),operation:paused?'resume':'pause',confirmation});await render()}
+       catch(e){status(billing,e.message,true);control.disabled=false}
+      },'secondary');
+      billing.append(control);
+     }
+
     }else if(b.enabled){
      const currentPlan=plans.find(p=>Number(p.id)===Number(w.plan_id));
      if(currentPlan&&currentPlan.code!=='legacy-unlimited'&&Number(currentPlan.price_cents)>=100){

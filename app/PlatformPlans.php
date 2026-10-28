@@ -70,6 +70,12 @@ final class PlatformPlans {
      fail('O plano legado deve manter todos os módulos ativos.',409);
    }
    if($old){
+    if(PlatformAsaasBilling::ready()&&
+       ((int)$old['price_cents']!==(int)$row['price_cents']||
+        $old['billing_period']!==$row['billing_period'])&&
+       DB::one("SELECT id FROM platform_asaas_subscriptions
+         WHERE plan_id=? AND environment='production' AND request_status IN ('created','inactive') LIMIT 1",[$id]))
+     fail('Há assinatura Asaas ativa ou pausada neste plano. Faça a alteração comercial no Asaas antes de modificar o preço ou o ciclo.',409);
     $assigned=DB::all('SELECT workspace_id FROM workspace_access_plans WHERE plan_id=?',[$id]);
     if($assigned&&$row['active']!==1)fail('Não é possível desativar um plano atribuído a algum workspace.',409);
     if($row['team_limit']!==null)foreach($assigned as $a){
@@ -103,6 +109,10 @@ final class PlatformPlans {
       ($ws['slug']!==WorkspaceFoundation::SLUG||
        (int)(DB::one('SELECT COUNT(*) n FROM workspaces')['n']??0)!==1)))
     fail('Workspace indisponível para atribuição de plano.',403);
+   if(PlatformAsaasBilling::ready()&&DB::one("SELECT id FROM platform_asaas_subscriptions
+      WHERE workspace_id=? AND plan_id<>? AND environment='production'
+      AND request_status IN ('created','inactive') LIMIT 1",[$workspaceId,$planId]))
+    fail('Esta empresa possui uma assinatura Asaas em outro plano. Ajuste a recorrência no Master antes de trocar o plano.',409);
    $plan=DB::one('SELECT id,active,team_limit FROM platform_access_plans WHERE id=?',[$planId]);
    if(!$plan||(int)$plan['active']!==1)fail('Plano inativo ou não encontrado.',404);
    $override=DB::one("SELECT value FROM workspace_settings

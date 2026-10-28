@@ -24,6 +24,8 @@ final class WorkspaceJobRunner {
     $result['cycles']+=$one['cycles'];
    }
   }
+  // Global billing reconciliation runs once, not once per tenant.
+  $result['saas_billing']=PlatformAsaasBilling::reconcile();
   $result['mail']=Notify::flush();
   return $result;
  }

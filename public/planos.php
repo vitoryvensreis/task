@@ -28,6 +28,25 @@ h1{font-size:clamp(36px,5vw,64px);letter-spacing:-.05em;line-height:1.07;margin:
 .period{font-size:14px;color:#b5becb;font-weight:400}.feature{padding:11px 0;border-bottom:1px solid #292f38;color:#e8edf5}
 .meta{color:#afb6c1;margin-top:20px}.empty{margin-top:45px;padding:40px;background:#15191f;border:1px solid #333943;border-radius:14px}
 footer{padding-top:44px;color:#7e8997;font-size:13px}
+.sales{margin-top:55px;border:1px solid #36414d;background:#111821;padding:28px;border-radius:20px}
+.sales h2{font-size:28px;letter-spacing:-.03em;margin:0 0 8px}
+.sales .intro{color:#aeb9c8;font-size:14px;line-height:1.6;max-width:720px}
+.sales form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:26px}
+.sales label{font-size:13px;color:#dbe5ee;display:flex;flex-direction:column;gap:7px}
+.sales label input,.sales label select{width:100%;padding:12px 14px;color:#fff;background:#0c131a;border:1px solid #465366;border-radius:9px;font:inherit}
+.sales label.full,.sales .consent,.sales .actions{grid-column:1/-1}
+.sales .consent{flex-direction:row;align-items:flex-start;color:#b4c0cd}
+.sales .consent input{width:auto;margin-top:4px}
+.sales a{text-decoration:underline;text-underline-offset:3px;color:#a8d1ed}
+.sales .actions{display:flex;flex-direction:column;gap:10px}
+.sales button,.card .request{display:inline-flex;justify-content:center;align-items:center;border:0;border-radius:9px;background:#345f82;color:#fff;padding:13px 18px;font-weight:700;cursor:pointer}
+.sales button{align-self:start}
+.sales button:disabled{opacity:.55;cursor:wait}
+.sales .feedback{min-height:22px;color:#cbd8e8}
+.sales .feedback.error{color:#ffb3ac}
+.sales .honeypot{position:absolute!important;left:-9999px!important;opacity:0!important}
+@media(max-width:650px){.sales form{grid-template-columns:1fr}.sales{padding:20px}.sales label{grid-column:1/-1}}
+
 </style><link rel="stylesheet" href="<?=e(base('assets/taskesc-theme.css'))?>?v=<?= (int)filemtime(__DIR__.'/assets/taskesc-theme.css') ?>"></head><body class="plans-page"><main>
 <header><strong>TaskEsc <span style="color:#9fa9b6">/ Planos</span></strong><a href="<?=e(base('dashboard'))?>">Entrar na plataforma</a></header>
 <h1>Planos para diferentes equipes.</h1>
@@ -39,13 +58,37 @@ footer{padding-top:44px;color:#7e8997;font-size:13px}
 ?>
 <article class="card">
  <h2 class="name"><?=e($plan['name'])?></h2>
- <div class="price">R$ <?=e($price)?> <span class="period">/ <?=$plan['billing_period']==='yearly'?'ano':'mês'?></span></div>
+ <div class="price">R$ <?=e($price)?> <span class="period">/ <?=e($cycleLabels[$plan['billing_period']]??$plan['billing_period'])?></span></div>
  <p class="meta"><?= $plan['team_limit']===null?'Equipe ilimitada':'Até '.(int)$plan['team_limit'].' usuário(s) de equipe' ?></p>
+ <a class="request" data-plan-select="<?= (int)$plan['id'] ?>" href="#contratar">Solicitar contratação</a>
  <?php foreach($features as $key=>$label)if(!empty($enabled[$key])): ?>
   <div class="feature">✓ <?=e($label)?></div>
  <?php endif; ?>
 </article>
 <?php endforeach; ?>
 </section><?php else: ?><div class="empty">Ainda não existem planos de acesso públicos disponíveis.</div><?php endif; ?>
-<footer>Catálogo informativo. A contratação e a cobrança de assinaturas não estão habilitadas nesta etapa.</footer>
+<?php if($plans): ?>
+<section class="sales" id="contratar">
+ <h2>Solicitar acesso ao TaskEsc</h2>
+ <p class="intro">Informe seus dados para nossa equipe confirmar o plano e a contratação. O envio deste formulário não cria assinatura, cobrança ou acesso automaticamente.</p>
+ <form id="sales-form">
+  <label>Plano escolhido
+   <select name="plan_id" required>
+    <?php foreach($plans as $plan):if($plan['code']==='legacy-unlimited')continue; ?>
+    <option value="<?= (int)$plan['id'] ?>"><?=e($plan['name'])?> · R$ <?=e(number_format((int)$plan['price_cents']/100,2,',','.'))?> / <?=e($cycleLabels[$plan['billing_period']]??$plan['billing_period'])?></option>
+    <?php endforeach; ?>
+   </select>
+  </label>
+  <label>Seu nome<input name="name" maxlength="120" autocomplete="name" required></label>
+  <label>Empresa (opcional)<input name="company" maxlength="140" autocomplete="organization"></label>
+  <label>E-mail de contato<input name="email" type="email" maxlength="190" autocomplete="email" required></label>
+  <label class="full">WhatsApp / telefone<input name="phone" type="tel" maxlength="25" autocomplete="tel" required placeholder="(85) 99999-9999"></label>
+  <label class="honeypot" aria-hidden="true">Site<input name="website" tabindex="-1" autocomplete="off"></label>
+  <label class="consent"><input type="checkbox" name="privacy_consent" value="1" required> Concordo em receber contato sobre a contratação e li a <a href="<?=e(base('privacidade'))?>" target="_blank" rel="noopener noreferrer">Política de Privacidade</a>.</label>
+  <div class="actions"><button type="submit">Solicitar contato comercial</button><p class="feedback" id="sales-feedback" aria-live="polite"></p></div>
+ </form>
+</section>
+<?php endif; ?>
+<footer>TaskEsc é um produto da Escotilha Produtora. <a href="<?=e(base('privacidade'))?>">Privacidade</a> · <a href="<?=e(base('termos-de-uso'))?>">Termos de Uso</a>. Assinaturas são criadas após confirmação comercial.</footer>
+<script defer src="<?=e(base('assets/plans-sales.js'))?>?v=1"></script>
 </main></body></html>

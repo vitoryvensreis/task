@@ -84,7 +84,8 @@ final class PlatformAsaasBilling {
   foreach($items as $item)
    $payments=array_merge($payments,DB::all('SELECT asaas_payment_id,status,amount_cents,due_date,invoice_url,paid_at
      FROM platform_asaas_payments WHERE subscription_id=? ORDER BY id DESC LIMIT 25',[(int)$item['id']]));
-  return ['enabled'=>self::enabled($env),'subscriptions'=>$items,'payments'=>$payments];
+  return ['enabled'=>self::enabled($env),'subscriptions'=>$items,'payments'=>$payments,
+   'access'=>PlatformBillingAccess::state($workspaceId)];
  }
  public static function start(array $input): array {
   self::master();Auth::rate('asaas-subscription-create',5,3600);
@@ -158,19 +159,43 @@ final class PlatformAsaasBilling {
   $url=(string)($payment['invoiceUrl']??'');
   if(!filter_var($url,FILTER_VALIDATE_URL)||parse_url($url,PHP_URL_SCHEME)!=='https')$url='';
   $paid=in_array($status,['CONFIRMED','RECEIVED','RECEIVED_IN_CASH'],true)?now():null;
-  DB::run('INSERT INTO platform_asaas_payments
+  DB::run("INSERT INTO platform_asaas_payments
     (subscription_id,environment,asaas_payment_id,status,amount_cents,due_date,invoice_url,paid_at,updated_at)
     VALUES (?,?,?,?,?,?,?,?,?)
-    ON DUPLICATE KEY UPDATE status=VALUES(status),amount_cents=VALUES(amount_cents),
-      due_date=VALUES(due_date),invoice_url=VALUES(invoice_url),
-      paid_at=COALESCE(platform_asaas_payments.paid_at,VALUES(paid_at)),updated_at=VALUES(updated_at)',
+    ON DUPLICATE KEY UPDATE
+      status=CASE
+       WHEN status IN ('REFUNDED','REFUND_REQUESTED','CHARGEBACK_REQUESTED','CHARGEBACK_DISPUTE')
+        THEN status
+       WHEN VALUES(status) IN ('REFUNDED','REFUND_REQUESTED','CHARGEBACK_REQUESTED','CHARGEBACK_DISPUTE')
+        THEN VALUES(status)
+       WHEN status IN ('CONFIRMED','RECEIVED','RECEIVED_IN_CASH')
+          AND VALUES(status) IN ('PENDING','OVERDUE','CONFIRMED')
+        THEN status
+       ELSE VALUES(status) END,
+      amount_cents=VALUES(amount_cents),
+      due_date=COALESCE(VALUES(due_date),due_date),
+      invoice_url=COALESCE(NULLIF(VALUES(invoice_url),''),invoice_url),
+      paid_at=COALESCE(platform_asaas_payments.paid_at,VALUES(paid_at)),updated_at=VALUES(updated_at)",
     [$localId,$env,$id,$status,$amount,$date,$url?:null,$paid,now()]);
+  // A cobrança nova pode ser futura; um webhook antigo nunca deve sobrescrever o
+  // estado financeiro da competência mais recente que já venceu.
+  self::recomputeBilling($localId);
+ }
+ private static function recomputeBilling(int $localId): void {
+  $subscription=DB::one('SELECT request_status FROM platform_asaas_subscriptions WHERE id=?',[$localId]);
+  if(!$subscription)return;
+  $invoice=DB::one("SELECT status FROM platform_asaas_payments
+     WHERE subscription_id=? AND due_date<=UTC_DATE()
+     ORDER BY due_date DESC,id DESC LIMIT 1",[$localId]);
+  $status=(string)($invoice['status']??'PENDING');
   $billing=match($status){
    'RECEIVED','CONFIRMED','RECEIVED_IN_CASH'=>'paid',
    'OVERDUE'=>'overdue',
    'REFUNDED','REFUND_REQUESTED','CHARGEBACK_REQUESTED','CHARGEBACK_DISPUTE'=>'disputed',
    'DELETED'=>'cancelled',default=>'awaiting_payment'
   };
+  if($subscription['request_status']==='inactive')$billing='paused';
+  if($subscription['request_status']==='cancelled')$billing='cancelled';
   DB::run('UPDATE platform_asaas_subscriptions SET billing_status=?,updated_at=? WHERE id=?',
     [$billing,now(),$localId]);
  }
@@ -181,9 +206,86 @@ final class PlatformAsaasBilling {
   $order=DB::one('SELECT id,asaas_subscription_id FROM platform_asaas_subscriptions
     WHERE environment=? AND workspace_id=?',[self::env(),$id]);
   if(!$order||!$order['asaas_subscription_id'])fail('Assinatura não encontrada.',404);
-  $payments=self::api('GET','/v3/subscriptions/'.$order['asaas_subscription_id'].'/payments',null,self::env());
-  foreach(($payments['data']??[]) as $payment)if(is_array($payment))self::upsertPayment($payment,(int)$order['id'],self::env());
+  self::syncPayments((int)$order['id'],(string)$order['asaas_subscription_id'],self::env());
   return self::workspace($id);
+ }
+ private static function syncPayments(int $localId,string $subscriptionId,string $environment): int {
+  $count=0;
+  // Asaas paginates payments. A single default page can miss the current
+  // invoice and accidentally leave the wrong access state.
+  for($offset=0;$offset<2000;$offset+=100){
+   $page=self::api('GET','/v3/subscriptions/'.$subscriptionId.'/payments?limit=100&offset='.$offset,null,$environment);
+   $entries=$page['data']??[];
+   if(!is_array($entries))throw new RuntimeException('asaas_payments_invalid');
+   foreach($entries as $payment)if(is_array($payment)){self::upsertPayment($payment,$localId,$environment);$count++;}
+   if(empty($page['hasMore']))break;
+  }
+  self::recomputeBilling($localId);
+  return $count;
+ }
+ /** Recovery sync: webhooks remain primary. Process a small rotating batch only
+  * every few hours, never on every request or every tenant's cron.
+  */
+ public static function reconcile(): array {
+  if(!self::enabled('production'))return ['status'=>'disabled','checked'=>0];
+  $last=strtotime(setting('platform_asaas_reconcile_last',''))?:0;
+  if(time()-$last<14400)return ['status'=>'scheduled','checked'=>0];
+  $lock=DB::one("SELECT GET_LOCK('taskesc-asaas-reconcile',0) AS acquired");
+  if((int)($lock['acquired']??0)!==1)return ['status'=>'busy','checked'=>0];
+  $checked=0;$failed=0;
+  try{
+   $cursor=max(0,(int)setting('platform_asaas_reconcile_cursor','0'));
+   $rows=DB::all("SELECT id,asaas_subscription_id FROM platform_asaas_subscriptions
+    WHERE environment='production' AND request_status='created'
+    AND asaas_subscription_id IS NOT NULL AND id>?
+    ORDER BY id LIMIT 20",[$cursor]);
+   if(!$rows){$cursor=0;}
+   foreach($rows as $row){
+    try{
+     self::syncPayments((int)$row['id'],(string)$row['asaas_subscription_id'],'production');
+     $checked++;
+    }catch(Throwable $e){
+     $failed++;error_log('Asaas reconciliation error for subscription row '.(int)$row['id'].': '.get_class($e));
+    }
+    $cursor=(int)$row['id'];
+   }
+   foreach(['platform_asaas_reconcile_cursor'=>(string)$cursor,
+             'platform_asaas_reconcile_last'=>now()] as $key=>$value){
+    DB::run('INSERT INTO settings (`key`,value) VALUES (?,?)
+      ON DUPLICATE KEY UPDATE value=VALUES(value)',[$key,$value]);
+   }
+  }finally{DB::one("SELECT RELEASE_LOCK('taskesc-asaas-reconcile') AS released");}
+  return ['status'=>$failed?'partial':'ok','checked'=>$checked,'failed'=>$failed];
+ }
+ public static function toggle(array $p): array {
+  self::master();Auth::rate('asaas-recurring-toggle',8,3600);
+  $workspace=integer($p['workspace_id']??0,1);
+  $operation=enumv($p['operation']??'',['pause','resume'],'ação de assinatura');
+  $confirmation=$operation==='pause'?'PAUSAR':'RETOMAR';
+  if(strtoupper(trim((string)($p['confirmation']??'')))!==$confirmation)
+   fail('Digite '.$confirmation.' para confirmar a alteração da assinatura.',422);
+  $env=self::env();
+  if(!self::enabled($env))fail('Configure o Asaas antes de alterar cobranças.',409);
+  $row=DB::one('SELECT id,asaas_subscription_id,request_status FROM platform_asaas_subscriptions
+    WHERE environment=? AND workspace_id=?',[$env,$workspace]);
+  if(!$row||!preg_match('/\\Asub_[A-Za-z0-9]+\\z/D',(string)($row['asaas_subscription_id']??'')))
+   fail('Assinatura inexistente ou ainda não confirmada no Asaas.',409);
+  $active=$row['request_status']==='created';
+  if(($operation==='pause'&&!$active)||($operation==='resume'&&$active))
+   fail('A assinatura já está neste estado.',409);
+  $body=$operation==='pause'?['status'=>'INACTIVE']:
+    ['status'=>'ACTIVE','nextDueDate'=>gmdate('Y-m-d',strtotime('+2 days'))];
+  // Somente uma ação explícita do Master escreve no provedor.
+  self::api('PUT','/v3/subscriptions/'.$row['asaas_subscription_id'],$body,$env);
+  DB::tx(static function()use($row,$operation,$workspace,$env):void{
+   DB::run('UPDATE platform_asaas_subscriptions
+    SET request_status=?,billing_status=?,updated_at=? WHERE id=?',
+    [$operation==='pause'?'inactive':'created',
+     $operation==='pause'?'paused':'awaiting_payment',now(),(int)$row['id']]);
+   audit('platform',0,'master.asaas.'.$operation,null,
+    ['workspace_id'=>$workspace,'environment'=>$env,'subscription_row_id'=>(int)$row['id']]);
+  });
+  return self::workspace($workspace);
  }
  public static function webhook(string $env,string $token,array $payload): array {
   if(!in_array($env,['sandbox','production'],true)||!self::enabled($env))
@@ -210,9 +312,15 @@ final class PlatformAsaasBilling {
     (environment,event_id,event_type,subscription_id,payload_hash,created_at) VALUES (?,?,?,?,?,?)',
     [$env,$eventId,$event,$id,hash('sha256',json_encode($payload,JSON_THROW_ON_ERROR)),now()]);
    if(str_starts_with($event,'PAYMENT_'))self::upsertPayment($object,$id,$env);
-   elseif(in_array($event,['SUBSCRIPTION_INACTIVATED','SUBSCRIPTION_DELETED'],true))
+   elseif(in_array($event,['SUBSCRIPTION_INACTIVATED','SUBSCRIPTION_DELETED'],true)){
     DB::run('UPDATE platform_asaas_subscriptions SET request_status=?,updated_at=? WHERE id=?',
-      ['inactive',now(),$id]);
+      [$event==='SUBSCRIPTION_DELETED'?'cancelled':'inactive',now(),$id]);
+    self::recomputeBilling($id);
+   } elseif($event==='SUBSCRIPTION_ACTIVATED'){
+    DB::run('UPDATE platform_asaas_subscriptions SET request_status=?,updated_at=? WHERE id=?',
+      ['created',now(),$id]);
+    self::recomputeBilling($id);
+   }
    return ['accepted'=>true,'idempotent'=>true];
   });
  }

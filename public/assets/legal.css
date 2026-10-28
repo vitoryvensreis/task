@@ -1,0 +1,35 @@
+/* Páginas institucionais TaskEsc · Escotilha Produtora */
+.legal-page{min-height:100vh;color:#edf2f7;background:#080b10}
+.legal-page .site-header{position:relative;z-index:1}
+.legal-page .site-bg{position:absolute;height:650px}
+.legal-skip{position:absolute;top:-80px;left:12px;padding:12px 16px;background:#e7edf5;color:#101820;border-radius:8px;z-index:100}
+.legal-skip:focus{top:12px}
+.legal-page .legal-shell{padding-top:64px;padding-bottom:104px}
+.legal-heading{max-width:850px;padding-bottom:54px;border-bottom:1px solid #ffffff1f}
+.legal-kicker{font-size:11px;line-height:1.5;letter-spacing:.16em;color:#9bb6cf;font-weight:800}
+.legal-heading h1{font-family:Manrope,system-ui,sans-serif;font-size:clamp(2.4rem,5vw,4.6rem);line-height:1.11;letter-spacing:-.055em;margin:15px 0 18px;font-weight:800}
+.legal-heading>p{font-size:clamp(1rem,1.7vw,1.15rem);color:#afb9c8;line-height:1.75;margin:0;max-width:740px}
+.legal-date{margin-top:22px;color:#8e9dac;font-size:13px}
+.legal-columns{display:grid;grid-template-columns:240px minmax(0,1fr);gap:68px;padding-top:48px}
+.legal-sidebar{position:sticky;align-self:start;top:26px;padding:22px 18px;border:1px solid #ffffff17;border-radius:16px;background:#111820}
+.legal-sidebar strong{display:block;font:700 12px Manrope,system-ui,sans-serif;color:#e4eaf0;letter-spacing:.03em;margin:0 0 13px 9px}
+.legal-sidebar a{display:block;padding:9px 10px;color:#abb8c7;border-radius:8px;font-size:12.5px;line-height:1.5;transition:background .15s,color .15s}
+.legal-sidebar a:hover,.legal-sidebar a:focus-visible{background:#233445;color:#fff}
+.legal-document{max-width:785px;min-width:0}
+.legal-document section{scroll-margin-top:32px;padding:0 0 29px;margin:0 0 34px;border-bottom:1px solid #ffffff12}
+.legal-document section:last-child{border-bottom:0;margin-bottom:0;padding-bottom:0}
+.legal-document h2{font-family:Manrope,system-ui,sans-serif;line-height:1.34;font-size:clamp(1.1rem,2vw,1.45rem);font-weight:800;letter-spacing:-.022em;color:#f0f3f7;margin:0 0 18px}
+.legal-document p,.legal-document li{font-size:15px;line-height:1.85;color:#bbc5d1}
+.legal-document p{margin:0 0 16px}.legal-document p:last-child{margin-bottom:0}
+.legal-document ul{padding-left:22px;margin:0 0 17px}
+.legal-document li{margin-bottom:9px}
+.legal-document strong{color:#ebf2f8;font-weight:700}
+.legal-document a{color:#9ec9ef;text-decoration:underline;text-underline-offset:3px}
+.legal-document a:hover{color:#fff}
+.legal-document code{font-size:.9em;background:#22303e;color:#d7eafa;border-radius:5px;padding:3px 5px;overflow-wrap:anywhere}
+.legal-footer{border-top:1px solid #ffffff1d}
+.legal-footer .footer-row p strong{color:#e8edf4}
+.legal-page a:focus-visible{outline:2px solid #b5ddff;outline-offset:4px}
+@media(max-width:900px){.legal-columns{grid-template-columns:1fr;gap:32px}.legal-sidebar{position:static;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 6px}.legal-sidebar strong{grid-column:1/-1}.legal-page .legal-shell{padding-top:44px}}
+@media(max-width:640px){.legal-page .site-header{height:auto;min-height:70px}.legal-page .site-header nav{display:none}.legal-page .legal-shell{padding-top:34px;padding-bottom:60px}.legal-heading{padding-bottom:32px}.legal-columns{padding-top:28px}.legal-sidebar{padding:14px;gap:0}.legal-sidebar a{font-size:12px;padding:8px}.legal-document p,.legal-document li{font-size:14px;line-height:1.8}.legal-footer .footer-row{gap:18px}}
+@media(prefers-reduced-motion:reduce){.legal-sidebar a{transition:none}}

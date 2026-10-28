@@ -10,6 +10,9 @@ RewriteRule ^api/v1(?:/.*)?$ api-v1.php [L,QSA]
 RewriteRule ^realtime\.auth$ realtime-auth.php [L,QSA]
 RewriteRule ^master(?:/(?:suporte|clientes|planos|workspaces|configuracoes|integracoes|personalizacao|banner-hero|whatsapp|saude-logs)(?:/[^.]*)?)?/?$ master.php [END,QSA]
 
+# Páginas institucionais públicas (sem sessão, necessárias ao OAuth Google).
+RewriteRule ^(?:privacidade|termos-de-uso)/?$ index.php [L,QSA]
+
 # Rotas amigáveis do painel. Arquivos e endpoints físicos continuam sendo servidos normalmente.
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d

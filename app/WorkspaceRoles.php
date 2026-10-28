@@ -25,7 +25,10 @@ final class WorkspaceRoles {
   Auth::load();
   if((Auth::$user['role']??'')!=='staff')return;
   if($action==='demands.save'){
-   Auth::requireAbility((int)($data['id']??0)>0?'tasks.edit':'tasks.create');return;
+   $id=(int)($data['id']??0);
+   if($id>0){if(!Auth::canEditDemand(Auth::demand($id)))fail('Somente quem criou, o responsável ou um usuário autorizado pode editar esta task.',403);}
+   else Auth::requireAbility('tasks.create');
+   return;
   }
   $map=[
    'dashboard'=>'dashboard.view',

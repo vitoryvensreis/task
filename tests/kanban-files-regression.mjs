@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import assert from 'node:assert/strict';
 const read=p=>fs.readFileSync(new URL(p,import.meta.url),'utf8');
 const js=read('../public/assets/app.js'),php=read('../app/Files.php'),demands=read('../app/Demands.php'),google=read('../app/Google.php');
+const auth=read('../app/Auth.php'),roles=read('../app/WorkspaceRoles.php'),download=read('../public/download.php');
 const board=js.slice(js.indexOf('async function renderKanban(){'),js.indexOf('function stageModal(',js.indexOf('async function renderKanban(){')));
 assert(board.includes('const filtersBeforeRender=captureKanbanFilters()'),'Kanban must capture current search and selectors prior to replacing DOM');
 assert(board.includes('restoreKanbanFilters(filtersBeforeRender)'),'Kanban must restore filters after DOM is rebuilt');
@@ -25,3 +26,13 @@ assert(js.includes("account_id:Number(x.details.drive_account_id)")&&php.include
 assert(php.includes('Google::refreshErrorCategory')&&php.includes('requires_google_reconnect'),'Revoked Drive token must produce a safe reconnect path');
 assert(php.includes('drive_preserved')&&js.includes('keep_drive:1')&&js.includes('O arquivo continuará armazenado'),'TaskEsc-only removal must ask for explicit confirmation');
 console.log('Kanban search, Entrega final folder actions and original Drive account reconnection contract OK');
+
+assert(google.includes('CURLOPT_FOLLOWLOCATION=>true'),'Drive file previews/downloads must follow Google redirects');
+assert(google.includes('if(!$sent)$sendHeaders()'),'Drive streaming must send only verified media response headers');
+assert(download.includes("Auth::can('tasks.read')")&&download.includes('Auth::canEditDemand($d)'),'Task readers or owner/assignee must be able to preview files without upload role');
+assert(auth.includes('function canEditDemand(array $d)')&&auth.includes("($d['created_by']??0)")&&auth.includes("($d['assigned_to']??0)"),'Creator and assignee must have task-specific edit policy');
+assert(demands.includes("Auth::canEditDemand($old)")&&demands.includes("$d['can_edit']=Auth::canEditDemand($d)"),'Task save and API responses must use the same authorization policy');
+assert(roles.includes('Auth::canEditDemand(Auth::demand($id))'),'Custom staff roles must permit task-specific owner/assignee edits');
+assert(js.includes("canEdit=!preview&&!!d.can_edit"),'Edit action must use task-specific server permission');
+assert(js.includes("media?.addEventListener('error'"),'Broken media should show actionable feedback instead of a blank black preview');
+console.log('Drive previews and creator/assignee task-edit contracts OK');

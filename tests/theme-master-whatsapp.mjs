@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 const asset=(p)=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
-const pages=['public/index.php','public/master.php','public/landing.php','public/planos.php','public/convite.php','public/install.php'];
+const pages=['public/index.php','public/master.php','public/landing.php','app/Views/public-planos.php','public/convite.php','public/install.php'];
 for(const path of pages){
  assert.match(asset(path),/taskesc-theme\.css/,path+' does not load shared identity');
 }
+assert.match(asset('public/planos.php'),/base\('planos'\)/,
+ 'Old plan script must redirect to the friendly route without loading a second view');
 const css=asset('public/assets/taskesc-theme.css');
 for(const name of ['--te-bg','--te-primary','.landing-page','.master-page','.plans-page','.invite-page','.install-page']){
  assert.ok(css.includes(name),'Visual token or surface missing: '+name);

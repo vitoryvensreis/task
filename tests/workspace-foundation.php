@@ -526,6 +526,32 @@ try{
   if(trim($statement)!=='')DB::run($statement);
  testws(PlatformAsaasBilling::ready(),'Asaas billing schema missing.');
  testws(!PlatformAsaasBilling::enabled(),'Asaas billing must not activate without credentials and Master authorization.');
+ // Apenas um teste descartável e sem cobrança: o terceiro workspace começa
+ // pendente e não pode autenticar antes de ser liberado.
+ $checkoutDdl=(string)file_get_contents(ROOT.'/database/migrations/044_platform_checkout.sql');
+ testws($checkoutDdl!=='','Checkout migration missing.');
+ foreach(preg_split('/;\\s*(?:\\r?\\n|$)/',$checkoutDdl) as $statement)
+  if(trim($statement)!=='')DB::run($statement);
+ $extraOwner=DB::insert('users',[
+  'name'=>'Checkout CI','email'=>'ci-new-account-2026@example.invalid',
+  'password_hash'=>password_hash('Example-CI-2026-Secure',PASSWORD_DEFAULT),
+  'role'=>'admin','active'=>0,'created_at'=>now()
+ ]);
+ $third=DB::insert('workspaces',[
+  'slug'=>'ci-third-workspace','name'=>'Empresa nova CI',
+  'owner_user_id'=>$extraOwner,'status'=>'pending_payment','created_at'=>now(),'updated_at'=>now()
+ ]);
+ DB::run('INSERT INTO workspace_members(workspace_id,user_id,role,status,joined_at)
+  VALUES (?,?,?,?,?)',[$third,$extraOwner,'owner','inactive',now()]);
+ testws(WorkspaceFoundationGuard::valid(),'Adding pending third workspace broke existing tenant guard.');
+ DB::run('UPDATE workspaces SET status=? WHERE id=?',['active',$third]);
+ DB::run('UPDATE users SET active=1 WHERE id=?',[$extraOwner]);
+ DB::run('UPDATE workspace_members SET status=? WHERE user_id=?',['active',$extraOwner]);
+ testws(WorkspaceContext::forUser(['id'=>$extraOwner,'email'=>'ci-new-account-2026@example.invalid',
+  'active'=>1,'role'=>'admin'])['id']===$third,
+  'Paid third workspace owner cannot resolve its isolated company.');
+ testws(WorkspaceFoundationGuard::valid(),'Third workspace broke the platform guard.');
+
  echo "Workspace schema30 CI OK: owner, memberships, ".count(WorkspaceFoundation::DATA_TABLES).
   " mapped tables, preserved client/task/invoice/file, pending Master, calendar excluded, idempotence, second tenant blocked.\n";
 }catch(Throwable $e){fwrite(STDERR,'Workspace CI failed: '.$e->getMessage()."\n");exit(1);}

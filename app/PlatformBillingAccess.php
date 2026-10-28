@@ -35,6 +35,7 @@ final class PlatformBillingAccess {
   $status=(string)($latest['status']??'PENDING');
   $code='awaiting_payment';$allowed=true;
   if($row['request_status']==='inactive'){$code='paused';$allowed=false;}
+  elseif($row['request_status']==='cancelled'){$code='cancelled';$allowed=false;}
   elseif($row['request_status']==='needs_review'){$code='needs_review';$allowed=false;}
   elseif(in_array($status,self::DISPUTED,true)){$code='disputed';$allowed=false;}
   elseif(in_array($status,self::PAID,true)){$code='active';}

@@ -195,6 +195,7 @@ final class PlatformAsaasBilling {
    'DELETED'=>'cancelled',default=>'awaiting_payment'
   };
   if($subscription['request_status']==='inactive')$billing='paused';
+  if($subscription['request_status']==='cancelled')$billing='cancelled';
   DB::run('UPDATE platform_asaas_subscriptions SET billing_status=?,updated_at=? WHERE id=?',
     [$billing,now(),$localId]);
  }
@@ -313,7 +314,7 @@ final class PlatformAsaasBilling {
    if(str_starts_with($event,'PAYMENT_'))self::upsertPayment($object,$id,$env);
    elseif(in_array($event,['SUBSCRIPTION_INACTIVATED','SUBSCRIPTION_DELETED'],true)){
     DB::run('UPDATE platform_asaas_subscriptions SET request_status=?,updated_at=? WHERE id=?',
-      ['inactive',now(),$id]);
+      [$event==='SUBSCRIPTION_DELETED'?'cancelled':'inactive',now(),$id]);
     self::recomputeBilling($id);
    } elseif($event==='SUBSCRIPTION_ACTIVATED'){
     DB::run('UPDATE platform_asaas_subscriptions SET request_status=?,updated_at=? WHERE id=?',

@@ -8,6 +8,15 @@ try {
  if(str_contains(strtolower($_SERVER['CONTENT_TYPE']??''),'application/json')&&$raw!==''){$body=json_decode($raw,true,512,JSON_THROW_ON_ERROR);if(!is_array($body))fail('JSON inválido.');}
  $p=[...$_GET,...$_POST,...$body];unset($p['action']);
  if($action==='plans.public'){installed();out(PlatformPlans::publicList());}
+ if(in_array($action,['checkout.register','checkout.verify','checkout.pay','checkout.status'],true)){
+  installed();
+  if($action==='checkout.status'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET')
+   out(SelfServiceCheckout::status($p));
+  if(($_SERVER['REQUEST_METHOD']??'GET')!=='POST')fail('Método não permitido.',405);
+  if($action==='checkout.register')out(SelfServiceCheckout::register($p));
+  if($action==='checkout.verify')out(SelfServiceCheckout::verify($p));
+  if($action==='checkout.pay')out(SelfServiceCheckout::pay($p));
+ }
  if($action==='sales.request'){
   if(($_SERVER['REQUEST_METHOD']??'GET')!=='POST')fail('Método não permitido.',405);
   installed();out(PlatformSales::request($p));
@@ -160,7 +169,10 @@ try {
  if(str_starts_with($action,'whatsapp_contacts.'))PlatformPlans::requireModule('contacts');
  $result=match($action){
   'billing.status'=>PlatformBillingAccess::current(),
-  'billing.seats_purchase'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?PlatformAsaasBilling::updateSeats($p,true):fail('Método não permitido.',405),
+  'billing.seats_purchase'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?SubscriptionChanges::purchase($p):fail('Método não permitido.',405),
+  'billing.catalog'=>SubscriptionChanges::catalog(),
+  'billing.quote'=>SubscriptionChanges::quote($p),
+  'billing.purchase'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?SubscriptionChanges::purchase($p):fail('Método não permitido.',405),
   'account.get'=>Auth::profile(),
   'account.save'=>Auth::profileSave($p),
   'account.password'=>Auth::passwordChange($p),

@@ -8,6 +8,10 @@ try {
  if(str_contains(strtolower($_SERVER['CONTENT_TYPE']??''),'application/json')&&$raw!==''){$body=json_decode($raw,true,512,JSON_THROW_ON_ERROR);if(!is_array($body))fail('JSON inválido.');}
  $p=[...$_GET,...$_POST,...$body];unset($p['action']);
  if($action==='plans.public'){installed();out(PlatformPlans::publicList());}
+ if($action==='sales.request'){
+  if(($_SERVER['REQUEST_METHOD']??'GET')!=='POST')fail('Método não permitido.',405);
+  installed();out(PlatformSales::request($p));
+ }
  if($action==='master.activate'){
   if(($_SERVER['REQUEST_METHOD']??'GET')!=='POST')fail('Método não permitido.',405);
   installed();out(MasterSupport::activate($p));

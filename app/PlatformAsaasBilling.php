@@ -34,28 +34,42 @@ final class PlatformAsaasBilling {
   if(Auth::$origin!=='web'||!MasterSupport::isActor()||MasterSupport::isSupport())
    fail('Disponível somente ao ADM Master.',403);
  }
- public static function api(string $method,string $path,?array $data=null,?string $env=null): array {
+ public static function api(string $method,string $path,?array $data=null,?string $env=null,?string $keyOverride=null): array {
   $env=$env??self::env();
-  if(!in_array($env,['sandbox','production'],true)||!preg_match('~\A/v3/[a-zA-Z0-9/_?=&-]+\z/D',$path))
+  if(!in_array($env,['sandbox','production'],true)||!preg_match('~\\A/v3/[a-zA-Z0-9/_?=&-]+\\z/D',$path))
    throw new InvalidArgumentException('Invalid Asaas API route.');
   $stored=setting('platform_asaas_api_key_'.$env,'');
-  if($stored==='')throw new RuntimeException('asaas_key_not_configured');
-  $key=secretDecrypt($stored);
+  if($keyOverride===null&&$stored==='')throw new RuntimeException('asaas_key_not_configured');
+  $key=$keyOverride??secretDecrypt($stored);
   if(!function_exists('curl_init'))throw new RuntimeException('asaas_curl_unavailable');
   $root=$env==='production'?'https://api.asaas.com':'https://api-sandbox.asaas.com';
   $ch=curl_init($root.$path);
-  $headers=['accept: application/json','User-Agent: TaskEsc/1.0','access_token: '.$key];
-  if($data!==null)$headers[]='content-type: application/json';
+  $headers=['Accept: application/json','User-Agent: TaskEsc/1.0','access_token: '.$key];
+  if($data!==null)$headers[]='Content-Type: application/json';
   curl_setopt_array($ch,[
    CURLOPT_RETURNTRANSFER=>true,CURLOPT_FOLLOWLOCATION=>false,
    CURLOPT_CONNECTTIMEOUT=>8,CURLOPT_TIMEOUT=>35,CURLOPT_HTTPHEADER=>$headers,
    CURLOPT_CUSTOMREQUEST=>$method,CURLOPT_SSL_VERIFYPEER=>true,
+   CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS,
   ]);
   if($data!==null)curl_setopt($ch,CURLOPT_POSTFIELDS,json_encode($data,JSON_THROW_ON_ERROR));
   try{
-   $result=curl_exec($ch);$http=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);
-   if(!is_string($result))throw new RuntimeException('asaas_network_error');
-   if($http<200||$http>=300)throw new RuntimeException('asaas_http_'.$http);
+   $result=curl_exec($ch);
+   $http=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);
+   if(!is_string($result)){
+    $reason=curl_errno($ch);
+    throw new RuntimeException('asaas_transport_'.(int)$reason);
+   }
+   if($http<200||$http>=300){
+    // Only approved error *codes* are used; never include the remote body,
+    // request headers or access token in user-facing errors / application logs.
+    $decoded=json_decode($result,true);
+    $code=(string)($decoded['errors'][0]['code']??'');
+    $known=['invalid_environment','invalid_access_token','invalid_access_token_format',
+      'access_token_not_found','ip_not_allowed','invalid_ip','invalid_request'];
+    $reason=in_array($code,$known,true)?'_'.$code:'';
+    throw new RuntimeException('asaas_http_'.$http.$reason);
+   }
    $decoded=json_decode($result,true,64,JSON_THROW_ON_ERROR);
    if(!is_array($decoded))throw new RuntimeException('asaas_invalid_response');
    return $decoded;

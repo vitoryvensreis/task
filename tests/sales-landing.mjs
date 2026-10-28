@@ -11,7 +11,7 @@ const legal=readFileSync(new URL('../public/legal.php',import.meta.url),'utf8');
 const publicRoutes=readFileSync(new URL('../public/.htaccess',import.meta.url),'utf8');
 const styles=readFileSync(new URL('../public/assets/legal.css',import.meta.url),'utf8');
 for(const route of ['privacidade','termos-de-uso']){
- assert.ok(file.includes("'"+route+"'"),route+' must be routed by index.php even behind reverse proxies');
+ assert.ok(file.includes("'/"+route+"'"),route+' must be routed by index.php even behind reverse proxies');
  assert.ok(publicRoutes.includes(route),route+' must be handled by Apache');
  assert.ok(landing.includes('/'+route),route+' must be linked from the public landing');
  assert.ok(legal.includes('/'+route),route+' must be linked from legal pages');

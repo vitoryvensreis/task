@@ -57,7 +57,13 @@ final class PasswordRecovery {
    DB::run('INSERT INTO settings (`key`,value) VALUES (?,?)
     ON DUPLICATE KEY UPDATE value=VALUES(value)',
     ['auth.password_reset.'.$id,(string)microtime(true)]);
-   DB::run('UPDATE api_tokens SET revoked=1 WHERE user_id=?',[$id]);
+   $member=DB::one('SELECT workspace_id FROM workspace_members WHERE user_id=? LIMIT 1',[$id]);
+   if($member){
+    $workspaceId=(int)$member['workspace_id'];
+    WorkspaceJobScope::forWorkspace($workspaceId,static function()use($id,$workspaceId):void {
+     DB::run('UPDATE api_tokens SET revoked=1 WHERE user_id=? AND workspace_id=?',[$id,$workspaceId]);
+    });
+   }
    self::queue((string)$user['email'],'TaskEsc — senha alterada',
     "Sua senha do TaskEsc foi alterada. Se você não reconhece esta ação, procure o suporte da plataforma.");
   });

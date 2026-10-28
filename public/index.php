@@ -14,6 +14,13 @@ if(preg_match('~\\A/master(?:/(?:suporte|clientes|planos|workspaces|configuracoe
  exit;
 }
 
+// Páginas institucionais públicas, inclusive para a verificação de marca OAuth.
+if(in_array(rtrim($sitePath,'/'),['/privacidade','/termos-de-uso'],true)){
+ $legalPage=trim($sitePath,'/');
+ require __DIR__.'/legal.php';
+ exit;
+}
+
 if(in_array($requestedPath,[$entryPath.'/', $entryPath.'/index.php'],true)){
  // A sessão autenticada nunca volta à landing por navegação direta.
  // A verificação usa o usuário ativo do backend, não apenas a presença de cookie.

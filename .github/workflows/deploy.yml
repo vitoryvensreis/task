@@ -43,6 +43,7 @@ jobs:
       - name: Validar isolamento e fallback realtime
         run: |
           set -e
+          php tests/asaas-route.php
           php tests/realtime.php
           php tests/automation-contract.php
           php tests/avatar-replacement.php

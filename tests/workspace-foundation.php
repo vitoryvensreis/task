@@ -284,6 +284,7 @@ try{
   if(trim($sql)!=='')DB::run($sql);
  // A base descartável deve ter as mesmas colunas que a migração aditiva 042.
  DB::run('ALTER TABLE platform_access_plans ADD COLUMN extra_user_price_cents BIGINT UNSIGNED NOT NULL DEFAULT 0 AFTER price_cents');
+ DB::run('ALTER TABLE platform_access_plans ADD COLUMN allow_extra_seats TINYINT(1) NOT NULL DEFAULT 1 AFTER extra_user_price_cents');
  DB::run('ALTER TABLE workspace_access_plans ADD COLUMN extra_seats INT UNSIGNED NOT NULL DEFAULT 0 AFTER plan_id');
  DB::run("INSERT INTO platform_access_plans (name,code,price_cents,billing_period,features_json,team_limit,public_visible,active,created_at,updated_at)
   VALUES ('Legado ilimitado','legacy-unlimited',0,'monthly',?,NULL,0,1,?,?)",
@@ -292,6 +293,7 @@ try{
  DB::run('INSERT INTO workspace_access_plans(workspace_id,plan_id,assigned_at) VALUES(?,?,?)',[$ws,$planId,now()]);
  DB::run("INSERT INTO settings (`key`,value) VALUES('platform_access_v1','1')");
  testws(PlatformPlans::workspacePlan($ws)['team_limit']===null,'Legacy plan was not unlimited.');
+ testws((int)PlatformPlans::workspacePlan($ws)['allow_extra_seats']===1,'Existing plan must preserve extra seats setting during migration.');
  testws(PlatformPlans::publicList()===[],'Private legacy plan must not appear publicly.');
  // Support messaging is tenant-user isolated. Only essential DDL/scope checks.
  $supportDdl=file_get_contents(ROOT.'/database/migrations/032_support_desk.sql');

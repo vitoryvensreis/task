@@ -41,5 +41,5 @@ assert(js.includes("api('google.disconnect',{id},'POST')"),'Disconnect must call
 assert(js.includes('Os arquivos existentes no Google Drive não serão apagados.'),'Confirmation must explain that the Drive files remain intact');
 assert(api.includes("'google.disconnect'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?Google::disconnect($p):fail('Método não permitido.',405)"),'Google disconnect must reject GET requests');
 assert(google.includes("public static function disconnect(array $p)")&&google.includes("'status'=>'disconnected','access_token'=>'','refresh_token'=>''"),'Disconnect must clear tokens without destroying persisted file references');
-assert(!google.slice(google.indexOf('public static function disconnect('),google.indexOf('private static function',google.indexOf('public static function disconnect('))).includes('deleteDriveFile'),'Disconnect must not delete remote files');
+assert(!google.slice(google.indexOf('public static function disconnect('),google.indexOf('public static function driveAccountId(',google.indexOf('public static function disconnect('))).includes('deleteDriveFile'),'Disconnect must not delete remote files');
 console.log('Drive previews and creator/assignee task-edit contracts OK');

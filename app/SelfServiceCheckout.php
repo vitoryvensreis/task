@@ -96,8 +96,8 @@ final class SelfServiceCheckout {
    $invoice=(string)($paid['invoice_url']??'');
    if(!$invoice&&$subscription['asaas_subscription_id']&&
       $subscription['request_status']==='created'){
-    Auth::rate('checkout-invoice-read',8,900);
     try{
+     Auth::rate('checkout-invoice-read',8,900);
      $response=PlatformAsaasBilling::api('GET','/v3/subscriptions/'.$subscription['asaas_subscription_id'].'/payments?limit=10&offset=0',null,'production');
      foreach(($response['data']??[]) as $payment){
       if(!is_array($payment))continue;

@@ -49,7 +49,7 @@ final class PlatformPlans {
   $name=required($p,'name',120);
   // O slug único é calculado no servidor.
   $features=self::features($p['features']??[]);
-  $limit=!empty($p['unlimited_team'])?null:integer($p['team_limit']??0,1,100000);
+  $limit=!empty($p['unlimited_team'])?null:integer($p['team_limit']??0,0,100000);
   if($limit===null&&(int)($p['extra_user_price_cents']??0)>0)
    fail('Um plano com equipe ilimitada não pode cobrar por vaga adicional.',422);
   $row=[

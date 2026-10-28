@@ -53,7 +53,9 @@ final class PlatformBillingAccess {
  }
  public static function current(): array {
   Auth::admin();
-  return self::state(Auth::workspaceId());
+  $state=self::state(Auth::workspaceId());
+  $state['can_purchase_seats']=(string)(Auth::$workspace['role']??'')==='owner';
+  return $state;
  }
  public static function guardMutation(string $action,string $method): void {
   if($method==='GET'||WorkspaceContext::legacyCiFixture()||MasterSupport::isSupport())return;

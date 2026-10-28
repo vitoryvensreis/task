@@ -85,6 +85,7 @@ try {
   if($action==='master.asaas_start'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST')out(PlatformAsaasBilling::start($p));
   if($action==='master.asaas_refresh'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST')out(PlatformAsaasBilling::refresh($p));
   if($action==='master.asaas_toggle'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST')out(PlatformAsaasBilling::toggle($p));
+  if($action==='master.asaas_seats'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST')out(PlatformAsaasBilling::updateSeats($p));
   if(in_array($action,['master.health','master.logs','master.error_resolve'],true)){
    if(!MasterSupport::isActor()||Auth::$origin!=='web')fail('ADM Master obrigatório.',403);
    if($action==='master.health'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET')out(SystemHealth::health());

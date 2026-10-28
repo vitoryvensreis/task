@@ -370,80 +370,19 @@
   }
   function realtimeIndicator(){
     const i=$('#sync-indicator');if(!i)return;
-    const state=window.TaskEscRealtime?.health?.()||{connection:'unavailable',channels:[],error:''};
+    const state=window.TaskEscRealtime?.health?.()||{connection:'unavailable',channels:[]};
     const channels=Array.isArray(state.channels)?state.channels:[];
     const authorizedChannel=S.user?.role==='admin'
       ?channels.some(ch=>ch.startsWith('kanban/'))
       :channels.some(ch=>ch.startsWith('client:'));
     const live=state.connection==='connected'&&authorizedChannel;
-    const label=live?'Sistema Online':state.connection==='connected'?'WebSocket sem canal':['starting','connecting'].includes(state.connection)?'WebSocket conectando':'WebSocket offline · HTTP';
     i.classList.toggle('offline',!live);
-    i.dataset.realtimeStatus=live?'connected':state.connection;
-    i.innerHTML='<i></i> '+label;
-    i.title=S.user?.role==='admin'?'Clique para testar a conexão realtime':'Status da conexão realtime';
-    if(S.user?.role==='admin'){
-      i.setAttribute('role','button');i.setAttribute('tabindex','0');
-      i.onclick=showRealtimeDiagnostics;
-      i.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();showRealtimeDiagnostics()}};
-    }else{
-      i.removeAttribute('role');i.removeAttribute('tabindex');i.onclick=null;i.onkeydown=null;
-    }
-  }
-  async function showRealtimeDiagnostics(){
-    if(S.user?.role!=='admin')return;
-    const client=window.TaskEscRealtime?.health?.()||{connection:'unavailable',channels:[],error:'sdk_missing'};
-    const channels=client.channels||[];
-    $('#modal-root').innerHTML=`<div class="modal-backdrop"><div class="modal compact" role="dialog" aria-modal="true" aria-labelledby="rt-diagnostic-title">
-      <div class="modal-head"><div><h3 id="rt-diagnostic-title">Diagnóstico WebSocket</h3><div class="help">Kanban / Centrifugo / Outbox</div></div><button class="close" data-rt-close type="button">×</button></div>
-      <div class="field-help" id="rt-diagnostic-browser">Navegador: ${esc(client.connection)} · ${Number(channels.length)} canais assinados${client.error?' · '+esc(client.error):''}</div>
-      <div class="panel-sub" id="rt-diagnostic-server">Consultando servidor...</div>
-      <div class="panel-sub" id="rt-diagnostic-probe" aria-live="polite">Use o teste para verificar se uma publicação chega de volta a este navegador.</div>
-      <div class="form-actions"><button type="button" class="secondary" id="rt-diagnostic-refresh">Atualizar status</button><button type="button" class="primary" id="rt-diagnostic-test">Testar ida e volta</button></div>
-    </div></div>`;
-    const close=()=>closeModal();
-    $('#modal-root [data-rt-close]').onclick=close;
-    const refresh=async()=>{
-      const panel=$('#rt-diagnostic-server');if(!panel)return;
-      try{
-        const v=await api('realtime.health');
-        if(!panel.isConnected)return;
-        panel.textContent='Servidor: '+String(v.status)+' | Redis: '+String(v.redis)+' | Centrifugo: '+String(v.centrifugo)+' | Worker: '+String(v.worker)+' | Outbox pendentes: '+Number(v.queue_unpublished||0)+' (vencidos: '+Number(v.queue_due||0)+', esgotados: '+Number(v.queue_exhausted||0)+')';
-      }catch(error){if(panel.isConnected)panel.textContent='Falha ao consultar o servidor: '+error.message}
-      const b=window.TaskEscRealtime?.health?.()||{connection:'unavailable',channels:[],error:'sdk_missing'};
-      const browser=$('#rt-diagnostic-browser');if(browser)browser.textContent='Navegador: '+b.connection+' | Canais ativos: '+(b.channels||[]).join(', ')+' | Último erro: '+(b.error||'nenhum');
-      realtimeIndicator();
-    };
-    $('#rt-diagnostic-refresh').onclick=refresh;
-    $('#rt-diagnostic-test').onclick=async()=>{
-      const result=$('#rt-diagnostic-probe'),button=$('#rt-diagnostic-test');
-      if(!result||!button)return;
-      button.disabled=true;result.textContent='Gerando evento de teste na Outbox...';
-      const received=new Set();
-      const handler=event=>{
-        const v=event?.detail?.data;
-        if(v?.event_type==='realtime.diagnostic'&&/^[a-f0-9]{32}$/.test(String(v.payload?.probe_id||'')))received.add(v.payload.probe_id);
-      };
-      window.addEventListener('taskesc:realtime-publication',handler);
-      try{
-        const v=await api('realtime.probe',{},'POST');
-        if(!result.isConnected)return;
-        result.textContent='Evento #'+Number(v.id)+' na fila. Aguardando confirmação no navegador...';
-        let arrived=received.has(v.probe_id);
-        for(let count=0;count<12&&!arrived;count++){
-          await new Promise(resolve=>setTimeout(resolve,1000));
-          arrived=received.has(v.probe_id);
-        }
-        if(!result.isConnected)return;
-        if(arrived)result.textContent='WebSocket funcionando! Evento recebido neste navegador.';
-        else {
-          const check=await api('realtime.probe_status',{id:Number(v.id)});
-          result.textContent=check.published?'O worker publicou, mas este navegador não recebeu. Confira o proxy WSS, a conexão e a assinatura do canal.':'Evento ainda não publicado. Verifique o worker realtime e a fila Outbox.'+(check.last_error?' Código: '+check.last_error:'');
-        }
-        await refresh();
-      }catch(error){if(result.isConnected)result.textContent='Teste interrompido: '+error.message}
-      finally{window.removeEventListener('taskesc:realtime-publication',handler);if(button.isConnected)button.disabled=false}
-    };
-    await refresh();
+    i.dataset.realtimeStatus=live?'connected':'unavailable';
+    i.innerHTML='<i></i> '+(live?'Sistema Online':'Conexão instável');
+    i.title='Status de conexão do TaskEsc';
+    // Estado visual apenas. Diagnósticos, filas e infraestrutura pertencem ao ADM Master.
+    i.removeAttribute('role');i.removeAttribute('tabindex');
+    i.onclick=null;i.onkeydown=null;
   }
   function scheduleRealtimeRefresh(delay=180){
     if(realtimeTimer)clearTimeout(realtimeTimer);
@@ -2466,10 +2405,27 @@
       if(tab==='account'){await renderAccountSettings();container.insertAdjacentHTML('afterbegin',tabs);}
       else if(tab==='google'){
         const [accounts,defaultDrive]=await Promise.all([api('google.accounts'),api('company.drive_default',{},'GET')]);
-        const list=accounts.map(a=>'<div class="panel" style="display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap;margin:8px 0"><div><b>'+esc(a.email)+'</b><div class="panel-sub">'+esc(a.status)+(a.drive_ready?' · Drive autorizado':' · Reconexão necessária')+'</div></div><button type="button" class="secondary" data-own-google="'+Number(a.id)+'" '+(!a.drive_ready?'disabled':'')+'>'+(Number(defaultDrive.account_id)===Number(a.id)?'Drive padrão':'Usar como padrão')+'</button></div>').join('');
+        const list=accounts.map(a=>{
+          const id=Number(a.id),isDefault=Number(defaultDrive.account_id)===id,ready=a.status==='connected'&&!!a.drive_ready;
+          const status=ready?'Drive autorizado':a.status==='disconnected'?'Conta desconectada':'Reconexão necessária';
+          const primaryAction=ready
+            ?`<button type="button" class="secondary" data-own-google="${id}" ${isDefault?'disabled':''}>${isDefault?'Drive padrão':'Usar como padrão'}</button>`
+            :`<button type="button" class="secondary" data-reconnect-google="${id}">Reconectar</button>`;
+          const disconnectAction=a.status==='disconnected'?'':`<button type="button" class="danger ghost-danger" data-disconnect-google="${id}" aria-label="Desconectar conta ${esc(a.email)}">Desconectar</button>`;
+          return `<div class="panel" style="display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap;margin:8px 0"><div><b>${esc(a.email)}</b><div class="panel-sub">${esc(status)}</div></div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${primaryAction}${disconnectAction}</div></div>`;
+        }).join('');
         container.innerHTML=tabs+'<section class="panel"><div class="panel-head"><div><h3>Minhas contas Google</h3><div class="panel-sub">Só aparecem contas conectadas por você. Envie arquivos apenas usando um Drive autorizado.</div></div></div><button class="primary" type="button" id="company-connect-drive">+ Conectar Google Drive</button>'+ (list||'<div class="empty slim">Nenhuma conta Google Drive conectada.</div>')+'</section>';
         $('#company-connect-drive').onclick=async()=>{try{const res=await api('google.connect',{purpose:'drive',return_to:'settings'});location.href=res.url}catch(e){toast(e.message,true)}};
         document.querySelectorAll('[data-own-google]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{await api('company.drive_default',{account_id:Number(b.dataset.ownGoogle)},'POST');toast('Google Drive atualizado.');await draw('google')}catch(e){toast(e.message,true);b.disabled=false}});
+        document.querySelectorAll('[data-reconnect-google]').forEach(b=>b.onclick=async()=>{
+          b.disabled=true;
+          try{const res=await api('google.connect',{purpose:'drive',return_to:'settings',account_id:Number(b.dataset.reconnectGoogle)});location.href=res.url}
+          catch(e){toast(e.message,true);b.disabled=false}
+        });
+        document.querySelectorAll('[data-disconnect-google]').forEach(b=>b.onclick=()=>{
+          const a=accounts.find(item=>Number(item.id)===Number(b.dataset.disconnectGoogle));
+          if(a)disconnectGoogle(Number(a.id),String(a.email),()=>draw('google'));
+        });
       }else if(tab==='roles'){
         const result=await api('company.roles');
         const editable=result.roles||[],capabilities=result.catalog||{};
@@ -2629,7 +2585,15 @@
   }
 
   async function renderSettings(){if(S.user.role!=='admin')return renderAccountSettings();return renderCompanySettings();}
-  function disconnectGoogle(id){$('#modal-root').innerHTML=`<div class="modal-backdrop"><div class="modal compact"><div class="modal-head"><h3>Desconectar conta Google?</h3><button class="close" data-close><span class="icon-slot"><i data-lucide="x" class="ui-icon" aria-hidden="true"></i><span class="icon-fallback" aria-hidden="true">×</span></span></button></div><div class="danger-box">Agendas desta conta deixarão de sincronizar. Arquivos do Drive vinculados a ela podem ficar indisponíveis até reconectar.</div><div class="form-actions"><button class="ghost" data-close>Cancelar</button><button class="danger" id="confirm-google-disconnect">Desconectar</button></div></div></div>`;$$('[data-close]').forEach(x=>x.onclick=closeModal);$('#confirm-google-disconnect').onclick=async()=>{try{await api('google.disconnect',{id},'POST');closeModal();stableRender(renderSettings)}catch(x){toast(x.message,true)}}}
+  function disconnectGoogle(id,email,onSuccess){
+    $('#modal-root').innerHTML=`<div class="modal-backdrop"><div class="modal compact" role="dialog" aria-modal="true" aria-labelledby="disconnect-google-title"><div class="modal-head"><h3 id="disconnect-google-title">Desconectar conta Google?</h3><button type="button" class="close" data-close aria-label="Fechar">×</button></div><p><strong>${esc(email)}</strong></p><div class="danger-box">Esta conta deixará de enviar e abrir arquivos pelo TaskEsc até você reconectá-la. Se ela for o Drive padrão, será necessário escolher outro. Os arquivos existentes no Google Drive não serão apagados.</div><div class="form-actions"><button type="button" class="ghost" data-close>Cancelar</button><button type="button" class="danger" id="confirm-google-disconnect">Desconectar conta</button></div></div></div>`;
+    $$('[data-close]').forEach(x=>x.onclick=closeModal);
+    $('#confirm-google-disconnect').onclick=async()=>{
+      const button=$('#confirm-google-disconnect');button.disabled=true;
+      try{await api('google.disconnect',{id},'POST');closeModal();toast('Conta Google desconectada. Os arquivos no Drive foram preservados.');if(onSuccess)await onSuccess();else await stableRender(renderSettings)}
+      catch(error){toast(error.message,true);button.disabled=false}
+    };
+  }
   function userModal(u={}){
     const links=new Map((u.clients||[]).map(link=>[Number(link.client_id),link]));
     const clientRows=(S.meta.clients||[]).map(c=>{const link=links.get(Number(c.id))||{};return `<div class="user-client-link" data-client-name="${esc(c.name)}"><label class="check user-client-main"><input type="checkbox" data-user-client value="${c.id}" ${link.client_id?'checked':''}> <span>${esc(c.name)}</span></label><div class="user-client-perms" data-user-client-perms="${c.id}"><label class="check"><input type="checkbox" data-user-client-approve="${c.id}" ${!u.id||link.can_approve?'checked':''}> Aprovar versões</label><label class="check"><input type="checkbox" data-user-client-finance="${c.id}" ${link.can_finance?'checked':''}> Ver financeiro</label></div></div>`}).join('');

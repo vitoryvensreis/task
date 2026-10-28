@@ -9,6 +9,7 @@ final class WorkspaceAutomationWorker {
   $out=[];
   foreach($rows as $row){
    $id=(int)$row['id'];
+   if(!PlatformBillingAccess::state($id)['write_allowed']){$out[$id]=['status'=>'paused_by_billing'];continue;}
    $out[$id]=WorkspaceJobScope::forWorkspace($id,static fn()=>AutomationWorker::tick($events,$runs));
   }
   return ['mode'=>'per_workspace','results'=>$out];
@@ -18,6 +19,7 @@ final class WorkspaceAutomationWorker {
   $out=[];$healthy=true;
   foreach(DB::all("SELECT id FROM workspaces WHERE status IN ('staged','active') ORDER BY id") as $row){
    $id=(int)$row['id'];
+   if(!PlatformBillingAccess::state($id)['write_allowed']){$out[$id]=['status'=>'paused_by_billing'];continue;}
    $out[$id]=WorkspaceJobScope::forWorkspace($id,static fn()=>AutomationWorker::health());
    if(($out[$id]['status']??'')!=='ok')$healthy=false;
   }

@@ -17,7 +17,7 @@ final class PlatformBillingAccess {
   $normal=['code'=>'not_managed','write_allowed'=>true,'invoice_url'=>null,'due_date'=>null];
   if($workspaceId<1||!PlatformAsaasBilling::ready())return $normal;
   $row=DB::one("SELECT s.id,s.request_status,s.billing_status,s.due_date,s.asaas_subscription_id,
-      p.code AS plan_code,p.price_cents AS base_price_cents,p.extra_user_price_cents,p.team_limit,p.billing_period,a.extra_seats
+      p.code AS plan_code,p.price_cents AS base_price_cents,p.extra_user_price_cents,p.allow_extra_seats,p.team_limit,p.billing_period,a.extra_seats
     FROM platform_asaas_subscriptions s
     JOIN workspace_access_plans a ON a.workspace_id=s.workspace_id AND a.plan_id=s.plan_id
     JOIN platform_access_plans p ON p.id=a.plan_id AND p.active=1
@@ -48,13 +48,15 @@ final class PlatformBillingAccess {
     'due_date'=>$due?:null,'grace_days'=>self::GRACE_DAYS,
    'extra_seats'=>(int)$row['extra_seats'],'base_price_cents'=>(int)$row['base_price_cents'],
    'extra_user_price_cents'=>(int)$row['extra_user_price_cents'],
+   'allow_extra_seats'=>(int)$row['allow_extra_seats'],
    'base_team_limit'=>$row['team_limit']===null?null:(int)$row['team_limit'],
    'billing_period'=>(string)$row['billing_period']];
  }
  public static function current(): array {
   Auth::admin();
   $state=self::state(Auth::workspaceId());
-  $state['can_purchase_seats']=(string)(Auth::$workspace['role']??'')==='owner';
+  $state['can_purchase_seats']=(string)(Auth::$workspace['role']??'')==='owner'&&
+   (int)($state['allow_extra_seats']??0)===1;
   return $state;
  }
  public static function guardMutation(string $action,string $method): void {

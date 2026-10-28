@@ -165,12 +165,24 @@ final class PlatformAsaasBilling {
       due_date=VALUES(due_date),invoice_url=VALUES(invoice_url),
       paid_at=COALESCE(platform_asaas_payments.paid_at,VALUES(paid_at)),updated_at=VALUES(updated_at)',
     [$localId,$env,$id,$status,$amount,$date,$url?:null,$paid,now()]);
+  // A cobrança nova pode ser futura; um webhook antigo nunca deve sobrescrever o
+  // estado financeiro da competência mais recente que já venceu.
+  self::recomputeBilling($localId);
+ }
+ private static function recomputeBilling(int $localId): void {
+  $subscription=DB::one('SELECT request_status FROM platform_asaas_subscriptions WHERE id=?',[$localId]);
+  if(!$subscription)return;
+  $invoice=DB::one("SELECT status FROM platform_asaas_payments
+     WHERE subscription_id=? AND due_date<=UTC_DATE()
+     ORDER BY due_date DESC,id DESC LIMIT 1",[$localId]);
+  $status=(string)($invoice['status']??'PENDING');
   $billing=match($status){
    'RECEIVED','CONFIRMED','RECEIVED_IN_CASH'=>'paid',
    'OVERDUE'=>'overdue',
    'REFUNDED','REFUND_REQUESTED','CHARGEBACK_REQUESTED','CHARGEBACK_DISPUTE'=>'disputed',
    'DELETED'=>'cancelled',default=>'awaiting_payment'
   };
+  if($subscription['request_status']==='inactive')$billing='paused';
   DB::run('UPDATE platform_asaas_subscriptions SET billing_status=?,updated_at=? WHERE id=?',
     [$billing,now(),$localId]);
  }
@@ -184,6 +196,36 @@ final class PlatformAsaasBilling {
   $payments=self::api('GET','/v3/subscriptions/'.$order['asaas_subscription_id'].'/payments',null,self::env());
   foreach(($payments['data']??[]) as $payment)if(is_array($payment))self::upsertPayment($payment,(int)$order['id'],self::env());
   return self::workspace($id);
+ }
+ public static function toggle(array $p): array {
+  self::master();Auth::rate('asaas-recurring-toggle',8,3600);
+  $workspace=integer($p['workspace_id']??0,1);
+  $operation=enumv($p['operation']??'',['pause','resume'],'ação de assinatura');
+  $confirmation=$operation==='pause'?'PAUSAR':'RETOMAR';
+  if(strtoupper(trim((string)($p['confirmation']??'')))!==$confirmation)
+   fail('Digite '.$confirmation.' para confirmar a alteração da assinatura.',422);
+  $env=self::env();
+  if(!self::enabled($env))fail('Configure o Asaas antes de alterar cobranças.',409);
+  $row=DB::one('SELECT id,asaas_subscription_id,request_status FROM platform_asaas_subscriptions
+    WHERE environment=? AND workspace_id=?',[$env,$workspace]);
+  if(!$row||!preg_match('/\\Asub_[A-Za-z0-9]+\\z/D',(string)($row['asaas_subscription_id']??'')))
+   fail('Assinatura inexistente ou ainda não confirmada no Asaas.',409);
+  $active=$row['request_status']==='created';
+  if(($operation==='pause'&&!$active)||($operation==='resume'&&$active))
+   fail('A assinatura já está neste estado.',409);
+  $body=$operation==='pause'?['status'=>'INACTIVE']:
+    ['status'=>'ACTIVE','nextDueDate'=>gmdate('Y-m-d',strtotime('+2 days'))];
+  // Somente uma ação explícita do Master escreve no provedor.
+  self::api('PUT','/v3/subscriptions/'.$row['asaas_subscription_id'],$body,$env);
+  DB::tx(static function()use($row,$operation,$workspace,$env):void{
+   DB::run('UPDATE platform_asaas_subscriptions
+    SET request_status=?,billing_status=?,updated_at=? WHERE id=?',
+    [$operation==='pause'?'inactive':'created',
+     $operation==='pause'?'paused':'awaiting_payment',now(),(int)$row['id']]);
+   audit('platform',0,'master.asaas.'.$operation,null,
+    ['workspace_id'=>$workspace,'environment'=>$env,'subscription_row_id'=>(int)$row['id']]);
+  });
+  return self::workspace($workspace);
  }
  public static function webhook(string $env,string $token,array $payload): array {
   if(!in_array($env,['sandbox','production'],true)||!self::enabled($env))
@@ -210,9 +252,15 @@ final class PlatformAsaasBilling {
     (environment,event_id,event_type,subscription_id,payload_hash,created_at) VALUES (?,?,?,?,?,?)',
     [$env,$eventId,$event,$id,hash('sha256',json_encode($payload,JSON_THROW_ON_ERROR)),now()]);
    if(str_starts_with($event,'PAYMENT_'))self::upsertPayment($object,$id,$env);
-   elseif(in_array($event,['SUBSCRIPTION_INACTIVATED','SUBSCRIPTION_DELETED'],true))
+   elseif(in_array($event,['SUBSCRIPTION_INACTIVATED','SUBSCRIPTION_DELETED'],true)){
     DB::run('UPDATE platform_asaas_subscriptions SET request_status=?,updated_at=? WHERE id=?',
       ['inactive',now(),$id]);
+    self::recomputeBilling($id);
+   } elseif($event==='SUBSCRIPTION_ACTIVATED'){
+    DB::run('UPDATE platform_asaas_subscriptions SET request_status=?,updated_at=? WHERE id=?',
+      ['created',now(),$id]);
+    self::recomputeBilling($id);
+   }
    return ['accepted'=>true,'idempotent'=>true];
   });
  }

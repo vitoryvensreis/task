@@ -2406,6 +2406,51 @@
         const brl=c=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(c||0)/100);
         try{
           const data=await api('billing.catalog');
+          if(data.can_start){
+            const plans=(data.plans||[]).filter(p=>Number(p.price_cents)>0);
+            container.innerHTML=tabs+'<section class="panel"><h3>Contratar primeiro plano</h3>'+
+              '<p class="panel-sub">Você já possui conta no TaskEsc. Selecione o plano, informe o CPF/CNPJ para cobrança e confirme. A mudança do plano ocorre apenas após o pagamento.</p>'+
+              '<form class="settings-form" id="initial-subscription-form"><div class="form-grid"><label class="field">Plano<select class="input" name="plan_id" required>'+
+              plans.map(p=>'<option value="'+Number(p.id)+'">'+esc(p.name)+' — '+brl(p.price_cents)+' / '+esc(p.billing_period)+'</option>').join('')+'</select></label>'+
+              '<label class="field">Vagas extras<input class="input" name="extra_seats" min="0" max="100" step="1" type="number" value="0" required></label></div>'+
+              '<p class="panel-sub" id="first-sub-price"></p>'+
+              '<label class="field">CPF / CNPJ do pagador<input class="input" name="cpf_cnpj" maxlength="20" required></label>'+
+              '<label class="field">Digite COMPRAR<input class="input" name="confirmation" required autocomplete="off"></label>'+
+              '<button type="submit" class="primary">Criar cobrança no Asaas</button></form></section>';
+            const form=$('#initial-subscription-form');
+            const plan=form.querySelector('[name=plan_id]'),extras=form.querySelector('[name=extra_seats]'),price=$('#first-sub-price');
+            const chosen=new URLSearchParams(location.search).get('plano');
+            if(plans.some(p=>String(p.id)===chosen))plan.value=chosen;
+            const update=()=>{
+              const p=plans.find(x=>Number(x.id)===Number(plan.value));if(!p)return;
+              const enabled=Number(p.allow_extra_seats)===1&&Number(p.extra_user_price_cents)>0;
+              extras.disabled=!enabled;if(!enabled)extras.value='0';
+              price.textContent='Primeira assinatura: '+brl(Number(p.price_cents)+Number(extras.value||0)*Number(p.extra_user_price_cents))+
+                ' / '+p.billing_period+'. Clientes ilimitados. Acesso liberado após pagamento.';
+            };
+            plan.onchange=update;extras.onchange=update;update();
+            form.onsubmit=async e=>{
+              e.preventDefault();
+              if(!confirm('Deseja gerar a primeira assinatura Asaas? A cobrança não estará paga até você quitá-la.'))return;
+              const btn=form.querySelector('[type=submit]');btn.disabled=true;
+              try{await api('billing.start_existing',{
+                plan_id:Number(plan.value),extra_seats:Number(extras.value),
+                cpf_cnpj:form.querySelector('[name=cpf_cnpj]').value,
+                confirmation:form.querySelector('[name=confirmation]').value},'POST');
+                toast('Assinatura criada. Abra a cobrança abaixo para concluir o pagamento.');
+                await draw('subscriptions');
+              }catch(err){toast(err.message,true);btn.disabled=false}
+            };
+          }else if(data.awaiting_first_payment){
+            const pending=data.pending||{};
+            container.innerHTML=tabs+'<section class="panel"><h3>Primeira assinatura aguardando pagamento</h3>'+
+              '<p class="panel-sub">Situação: '+esc(pending.status||'aguardando')+'. O plano só mudará depois da confirmação do Asaas.</p>'+
+              (String(pending.invoice_url||'').startsWith('https://')?'<a class="primary" href="'+esc(pending.invoice_url)+'" target="_blank" rel="noopener noreferrer">Abrir cobrança Asaas</a>':
+              '<p class="panel-sub">A primeira cobrança ainda está sendo disponibilizada pelo Asaas.</p>')+
+              '<p><button type="button" id="refresh-first-sub" class="secondary">Atualizar situação</button></p></section>';
+            $('#refresh-first-sub').onclick=()=>draw('subscriptions');
+          }else{
+
           const options=(data.plans||[]).filter(p=>p.billing_period===data.billing_period)
             .map(p=>'<option value="'+Number(p.id)+'">'+esc(p.name)+' — '+brl(p.price_cents)+'</option>').join('');
           const pending=data.pending&&['awaiting_payment','creating','paid','applying','needs_review'].includes(data.pending.status)
@@ -2450,6 +2495,7 @@
               await draw('subscriptions');
             }catch(err){toast(err.message,true);btn.disabled=false}
           };
+          }
         }catch(e){container.innerHTML=tabs+'<section class="panel"><h3>Assinaturas</h3><p class="panel-sub">'+esc(e.message||'Esta área é exclusiva do proprietário ADM com assinatura de produção.')+'</p></section>';}
       }
       else if(tab==='account'){await renderAccountSettings();container.insertAdjacentHTML('afterbegin',tabs);}

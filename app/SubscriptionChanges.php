@@ -153,6 +153,30 @@ final class SubscriptionChanges {
    return ['accepted'=>true,'upgrade_payment'=>true];
   });
  }
+ public static function reconcilePayments(): array {
+  if(!PlatformAsaasBilling::enabled('production'))return ['checked'=>0,'confirmed'=>0];
+  $rows=DB::all("SELECT id,asaas_payment_id,amount_due_cents FROM platform_subscription_changes
+    WHERE status='awaiting_payment' AND asaas_payment_id IS NOT NULL ORDER BY id LIMIT 12");
+  $confirmed=0;
+  foreach($rows as $row){
+   try{
+    $payment=PlatformAsaasBilling::api('GET','/v3/payments/'.$row['asaas_payment_id'],null,'production');
+    if((string)($payment['id']??'')!==(string)$row['asaas_payment_id']||
+       (int)round((float)($payment['value']??0)*100)<(int)$row['amount_due_cents']||
+       !in_array((string)($payment['status']??''),['CONFIRMED','RECEIVED','RECEIVED_IN_CASH'],true))continue;
+    DB::tx(static function()use($row):void {
+     $locked=DB::one('SELECT status FROM platform_subscription_changes WHERE id=? FOR UPDATE',[(int)$row['id']]);
+     if($locked&&$locked['status']==='awaiting_payment')
+      DB::run('UPDATE platform_subscription_changes SET status=?,paid_at=?,updated_at=? WHERE id=?',
+       ['paid',now(),now(),(int)$row['id']]);
+    });
+    $confirmed++;
+   }catch(Throwable $e){
+    error_log('TaskEsc upgrade reconciliation error row='.(int)$row['id'].' class='.get_class($e));
+   }
+  }
+  return ['checked'=>count($rows),'confirmed'=>$confirmed];
+ }
  public static function applyPaid(): array {
   if(!PlatformAsaasBilling::enabled('production'))return ['checked'=>0];
   $rows=DB::all("SELECT id,workspace_id FROM platform_subscription_changes

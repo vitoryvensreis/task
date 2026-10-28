@@ -205,10 +205,56 @@ final class PlatformAsaasBilling {
   $order=DB::one('SELECT id,asaas_subscription_id FROM platform_asaas_subscriptions
     WHERE environment=? AND workspace_id=?',[self::env(),$id]);
   if(!$order||!$order['asaas_subscription_id'])fail('Assinatura não encontrada.',404);
-  $payments=self::api('GET','/v3/subscriptions/'.$order['asaas_subscription_id'].'/payments',null,self::env());
-  foreach(($payments['data']??[]) as $payment)if(is_array($payment))self::upsertPayment($payment,(int)$order['id'],self::env());
-  self::recomputeBilling((int)$order['id']);
+  self::syncPayments((int)$order['id'],(string)$order['asaas_subscription_id'],self::env());
   return self::workspace($id);
+ }
+ private static function syncPayments(int $localId,string $subscriptionId,string $environment): int {
+  $count=0;
+  // Asaas paginates payments. A single default page can miss the current
+  // invoice and accidentally leave the wrong access state.
+  for($offset=0;$offset<2000;$offset+=100){
+   $page=self::api('GET','/v3/subscriptions/'.$subscriptionId.'/payments?limit=100&offset='.$offset,null,$environment);
+   $entries=$page['data']??[];
+   if(!is_array($entries))throw new RuntimeException('asaas_payments_invalid');
+   foreach($entries as $payment)if(is_array($payment)){self::upsertPayment($payment,$localId,$environment);$count++;}
+   if(empty($page['hasMore']))break;
+  }
+  self::recomputeBilling($localId);
+  return $count;
+ }
+ /** Recovery sync: webhooks remain primary. Process a small rotating batch only
+  * every few hours, never on every request or every tenant's cron.
+  */
+ public static function reconcile(): array {
+  if(!self::enabled('production'))return ['status'=>'disabled','checked'=>0];
+  $last=strtotime(setting('platform_asaas_reconcile_last',''))?:0;
+  if(time()-$last<14400)return ['status'=>'scheduled','checked'=>0];
+  $lock=DB::one("SELECT GET_LOCK('taskesc-asaas-reconcile',0) AS acquired");
+  if((int)($lock['acquired']??0)!==1)return ['status'=>'busy','checked'=>0];
+  $checked=0;$failed=0;
+  try{
+   $cursor=max(0,(int)setting('platform_asaas_reconcile_cursor','0'));
+   $rows=DB::all("SELECT id,asaas_subscription_id FROM platform_asaas_subscriptions
+    WHERE environment='production' AND request_status='created'
+    AND asaas_subscription_id IS NOT NULL AND id>?
+    ORDER BY id LIMIT 20",[$cursor]);
+   if(!$rows){$cursor=0;}
+   foreach($rows as $row){
+    try{
+     self::syncPayments((int)$row['id'],(string)$row['asaas_subscription_id'],'production');
+     $checked++;
+    }catch(Throwable $e){
+     $failed++;error_log('Asaas reconciliation error for subscription row '.(int)$row['id'].': '.get_class($e));
+    }
+    $cursor=(int)$row['id'];
+   }
+   foreach(['platform_asaas_reconcile_cursor'=>(string)$cursor,
+             'platform_asaas_reconcile_last'=>now()] as $key=>$value){
+    DB::run('INSERT INTO settings (`key`,value) VALUES (?,?)
+      ON DUPLICATE KEY UPDATE value=VALUES(value)',[$key,$value]);
+   }
+  }finally{DB::one("SELECT RELEASE_LOCK('taskesc-asaas-reconcile') AS released");}
+  return ['status'=>$failed?'partial':'ok','checked'=>$checked,'failed'=>$failed];
  }
  public static function toggle(array $p): array {
   self::master();Auth::rate('asaas-recurring-toggle',8,3600);

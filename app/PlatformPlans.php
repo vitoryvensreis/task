@@ -67,7 +67,8 @@ final class PlatformPlans {
    if($id&&!$old)fail('Plano não encontrado.',404);
    $row['code']=$old?(string)$old['code']:self::newCode((string)$row['name']);
    if($old&&$old['code']==='legacy-unlimited'){
-    if($row['code']!=='legacy-unlimited'||$row['team_limit']!==null||$row['active']!==1||$row['public_visible']!==0)
+    if($row['code']!=='legacy-unlimited'||$row['team_limit']!==null||$row['active']!==1||$row['public_visible']!==0||
+       (int)$row['price_cents']!==0||(int)$row['extra_user_price_cents']!==0)
      fail('O plano legado precisa permanecer ilimitado, privado e ativo.',409);
     if(decode((string)$row['features_json'])!==['tasks'=>true,'automations'=>true,'contacts'=>true])
      fail('O plano legado deve manter todos os módulos ativos.',409);

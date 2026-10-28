@@ -89,7 +89,7 @@ final class PlatformPlans {
        WHERE workspace_id=? AND `key`='master.team_limit_override'",[(int)$a['workspace_id']]);
      $value=trim((string)($override['value']??''));
      $seats=(int)(DB::one('SELECT extra_seats FROM workspace_access_plans WHERE workspace_id=?',[(int)$a['workspace_id']])['extra_seats']??0);
-     $limitToCheck=(int)$row['extra_user_price_cents']>0
+     $limitToCheck=(!(int)$row['allow_extra_seats']||(int)$row['extra_user_price_cents']>0)
       ?(int)$row['team_limit']+$seats
       :($value!==''&&ctype_digit($value)?(int)$value:(int)$row['team_limit']);
      $count=(int)(DB::one("SELECT COUNT(*) n FROM workspace_members wm
@@ -128,7 +128,7 @@ final class PlatformPlans {
    $override=DB::one("SELECT value FROM workspace_settings
      WHERE workspace_id=? AND `key`='master.team_limit_override'",[$workspaceId]);
    $value=trim((string)($override['value']??''));
-   $paidExtras=(int)$plan['extra_user_price_cents']>0;
+   $paidExtras=!(int)$plan['allow_extra_seats']||(int)$plan['extra_user_price_cents']>0;
    $seats=(int)(DB::one('SELECT extra_seats FROM workspace_access_plans WHERE workspace_id=?',[$workspaceId])['extra_seats']??0);
    $teamLimit=$plan['team_limit']===null?null:($paidExtras
     ?(int)$plan['team_limit']+$seats
@@ -188,7 +188,7 @@ final class PlatformPlans {
   $override=trim((string)($row['value']??''));
   $plan['team_limit_override']=($override!==''&&ctype_digit($override)&&
     (int)$override>=1&&(int)$override<=100000)?(int)$override:null;
-  if($plan['team_limit']!==null&&(int)$plan['extra_user_price_cents']>0){
+  if($plan['team_limit']!==null&&(!(int)$plan['allow_extra_seats']||(int)$plan['extra_user_price_cents']>0)){
    $plan['team_limit']=(int)$plan['team_limit']+(int)$plan['extra_seats'];
    $plan['team_limit_override']=null;
   }elseif($plan['team_limit_override']!==null)$plan['team_limit']=$plan['team_limit_override'];

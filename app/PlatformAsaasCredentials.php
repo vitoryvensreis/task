@@ -69,6 +69,8 @@ final class PlatformAsaasCredentials {
    return 'Asaas não recebeu o cabeçalho de autenticação. Verifique possíveis bloqueios no proxy (HTTP 401).';
   if(str_contains($code,'invalid_access_token')||str_contains($code,'asaas_http_401'))
    return 'A API do Asaas recusou a chave (HTTP 401). Confira se está ativa, completa e pertence à conta selecionada.';
+  if(str_contains($code,'asaas_http_400')||str_contains($code,'asaas_http_422'))
+   return 'O Asaas rejeitou o formato da consulta (HTTP 400/422). Confira a integração e os parâmetros enviados pelo servidor.';
   if(str_contains($code,'asaas_http_403'))
    return 'O Asaas bloqueou o acesso (HTTP 403). Confira a lista de IPs autorizados da chave e as restrições de segurança da conta.';
   if(str_contains($code,'asaas_http_404'))

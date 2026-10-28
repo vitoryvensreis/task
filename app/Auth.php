@@ -25,7 +25,16 @@ final class Auth {
    $t=DB::one('SELECT * FROM api_tokens WHERE token_hash=? AND revoked=0 AND expires_at>?',[hash('sha256',$m[1]),now()]);
    if(!$t)fail('Token inválido ou expirado.',401);self::$scopes=(string)$t['scopes'];self::$origin='api';$id=$t['user_id'];
   }else{$id=$_SESSION['user_id']??null;}
-  $actor=$id?DB::one('SELECT id,name,email,role,active,email_notifications,weekly_report,twofa_enabled,last_login_at FROM users WHERE id=? AND active=1',[$id]):null;self::$actor=$actor;
+  $actor=$id?DB::one('SELECT id,name,email,role,active,email_notifications,weekly_report,twofa_enabled,last_login_at FROM users WHERE id=? AND active=1',[$id]):null;
+  if($actor&&self::$origin==='web'){
+   $reset=DB::one('SELECT value FROM settings WHERE `key`=?',
+     ['auth.password_reset.'.(int)$actor['id']]);
+   if($reset&&(float)($reset['value']??0)>(float)($_SESSION['login_auth_epoch']??0)){
+    unset($_SESSION['user_id'],$_SESSION['pending_2fa_user_id'],$_SESSION['pending_2fa_until']);
+    $actor=null;
+   }
+  }
+  self::$actor=$actor;
   self::$workspace=$actor?WorkspaceContext::forUser($actor):null;
    $effective=$actor&&self::$workspace?self::principal($actor,self::$workspace):$actor;
    if($actor&&self::$origin==='api'&&MasterSupport::isVerified($actor))fail('ADM Master não pode usar credencial de API.',403);
@@ -113,7 +122,7 @@ final class Auth {
  private static function finalizeLogin(array $u): array {
   $workspace=WorkspaceContext::forUser($u);
   $effective=self::principal($u,$workspace);
-   session_regenerate_id(true);$_SESSION['user_id']=$u['id'];unset($_SESSION['preview_client_id'],$_SESSION['pending_2fa_user_id'],$_SESSION['pending_2fa_until'],$_SESSION['workspace_id'],$_SESSION['workspace_support_id']);$_SESSION['csrf']=bin2hex(random_bytes(24));
+   session_regenerate_id(true);$_SESSION['user_id']=$u['id'];$_SESSION['login_auth_epoch']=microtime(true);unset($_SESSION['preview_client_id'],$_SESSION['pending_2fa_user_id'],$_SESSION['pending_2fa_until'],$_SESSION['workspace_id'],$_SESSION['workspace_support_id']);$_SESSION['csrf']=bin2hex(random_bytes(24));
   DB::update('users',(int)$u['id'],['last_login_at'=>now(),'last_login_ip'=>mb_substr((string)($_SERVER['REMOTE_ADDR']??''),0,45)]);
   unset($u['password_hash'],$u['twofa_secret'],$u['twofa_recovery_json']);self::$actor=$u;self::$workspace=$workspace;self::$user=$effective;self::$user['is_preview']=0;self::$user['workspace_id']=$workspace['id'];self::$user['workspace_role']=$workspace['role'];audit('user',(int)$u['id'],'login',null,['ip'=>$_SERVER['REMOTE_ADDR']??'']);
   return ['user'=>self::$user,'csrf'=>csrf()];

@@ -75,11 +75,14 @@ final class PlatformAsaasCredentials {
     $candidate=$key!==''?$key:secretDecrypt($stored);
     $account=PlatformAsaasBilling::api('GET','/v3/myAccount/status/',null,$env,$candidate);
    }catch(Throwable $e){
-    error_log('TaskEsc Asaas validation failed: '.preg_replace('/[^a-zA-Z0-9_]/','',mb_substr($e->getMessage(),0,90)));
+    error_log('TaskEsc Asaas validation failed: '.(preg_match('/^asaas_(?:http_[0-9]{3}(?:_[a-z_]+)?|transport_[0-9]+|key_not_configured|invalid_response)$/D',$e->getMessage())?$e->getMessage():'unknown'));
     fail(self::diagnosticMessage($e),502);
    }
-   if($env==='production'&&($account['general']??'')!=='APPROVED')
-    fail('Conta Asaas de produção ainda não aprovada. Situação: '.in_array(($account['general']??''),['PENDING','AWAITING_APPROVAL','REJECTED'],true)?$account['general']:'não confirmada',409);
+   if($env==='production'&&($account['general']??'')!=='APPROVED'){
+    $general=(string)($account['general']??'');
+    $safe=in_array($general,['PENDING','AWAITING_APPROVAL','REJECTED'],true)?$general:'não confirmada';
+    fail('Conta Asaas de produção ainda não aprovada. Situação: '.$safe,409);
+   }
   }
   DB::tx(static function()use($env,$label,$key,$token,$enable):void {
    $fields=[

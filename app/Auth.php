@@ -65,6 +65,14 @@ final class Auth {
   if(self::$user['role']==='staff'){$link=DB::one('SELECT client_id FROM user_clients WHERE user_id=? AND client_id=?',[self::$user['id'],$id]);if((!$link&&!self::staffAllClients())||$permission!=='read')fail('Sem acesso ao cliente.',403);return $c;}
   $link=DB::one('SELECT * FROM user_clients WHERE user_id=? AND client_id=?',[self::$user['id'],$id]);if(!$link||($permission==='finance'&&!$link['can_finance'])||($permission==='approve'&&!$link['can_approve']))fail('Sem acesso a este cliente.',403);return $c;
  }
+ /** Criador e responsável podem editar a própria task, sem receber permissão global sobre outras tasks. */
+ public static function canEditDemand(array $d): bool {
+  self::load();if(!self::$user||self::isPreview())return false;
+  if(!WorkspaceContext::legacyCiFixture()&&(int)($d['workspace_id']??0)!==self::workspaceId())return false;
+  if(self::can('tasks.edit'))return true;
+  $id=(int)(self::$user['id']??0);
+  return $id>0&&($id===(int)($d['created_by']??0)||$id===(int)($d['assigned_to']??0));
+ }
  public static function demand(int $id,bool $lock=false): array {self::load();$d=WorkspaceContext::legacyCiFixture()?DB::one('SELECT d.*,s.kind AS stage_kind FROM demands d JOIN stages s ON s.id=d.stage_id WHERE d.id=? AND d.deleted_at IS NULL'.($lock?' FOR UPDATE':''),[$id]):DB::one('SELECT d.*,s.kind AS stage_kind FROM demands d JOIN stages s ON s.id=d.stage_id AND s.workspace_id=d.workspace_id WHERE d.id=? AND d.workspace_id=? AND d.deleted_at IS NULL'.($lock?' FOR UPDATE':''),[$id,self::workspaceId()]);if(!$d)fail('Demanda não encontrada.',404);self::client((int)$d['client_id']);return $d;}
  public static function demandFilter(string $alias='d'): array {
   self::load();$ws=self::workspaceId();

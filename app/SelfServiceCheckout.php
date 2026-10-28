@@ -143,6 +143,8 @@ final class SelfServiceCheckout {
    FROM workspace_access_plans a JOIN platform_access_plans p ON p.id=a.plan_id WHERE a.workspace_id=?',[$ws]);
   if(!$plan||$plan['code']==='legacy-unlimited'||(int)$plan['price_cents']<100)
    fail('Plano pago indisponível.',409);
+  if((int)$plan['extra_seats']>0&&(!(int)$plan['allow_extra_seats']||(int)$plan['extra_user_price_cents']<1))
+   fail('O plano não permite estas vagas adicionais. Solicite suporte para revisar a contratação.',409);
   $amount=PlatformPlans::amount((int)$plan['price_cents'],(int)$plan['extra_user_price_cents'],(int)$plan['extra_seats']);
   $orderId=DB::insert('platform_asaas_subscriptions',[
    'workspace_id'=>$ws,'plan_id'=>(int)$plan['id'],'environment'=>'production',

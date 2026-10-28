@@ -38,10 +38,10 @@ final class SelfServiceCheckout {
   $hash=Auth::password($password);
   $planId=integer($p['plan_id']??0,1);
   $seats=integer($p['extra_seats']??0,0,100);
-  $plan=DB::one("SELECT id,team_limit,allow_extra_seats,extra_user_price_cents
+  $plan=DB::one("SELECT id,price_cents,team_limit,allow_extra_seats,extra_user_price_cents
     FROM platform_access_plans WHERE id=? AND active=1 AND public_visible=1
       AND code<>'legacy-unlimited'",[$planId]);
-  if(!$plan)fail('Plano indisponível.',404);
+  if(!$plan||(int)$plan['price_cents']<100)fail('Plano pago indisponível.',404);
   if($seats>0&&($plan['team_limit']===null||!(int)$plan['allow_extra_seats']||
       (int)$plan['extra_user_price_cents']<1))fail('Este plano não oferece vagas adicionais.',409);
   $token=bin2hex(random_bytes(32));
@@ -141,7 +141,8 @@ final class SelfServiceCheckout {
   $ws=(int)$row['workspace_id'];
   $plan=DB::one('SELECT p.id,p.name,p.code,p.price_cents,p.extra_user_price_cents,p.allow_extra_seats,p.billing_period,a.extra_seats
    FROM workspace_access_plans a JOIN platform_access_plans p ON p.id=a.plan_id WHERE a.workspace_id=?',[$ws]);
-  if(!$plan||$plan['code']==='legacy-unlimited')fail('Plano indisponível.',409);
+  if(!$plan||$plan['code']==='legacy-unlimited'||(int)$plan['price_cents']<100)
+   fail('Plano pago indisponível.',409);
   $amount=PlatformPlans::amount((int)$plan['price_cents'],(int)$plan['extra_user_price_cents'],(int)$plan['extra_seats']);
   $orderId=DB::insert('platform_asaas_subscriptions',[
    'workspace_id'=>$ws,'plan_id'=>(int)$plan['id'],'environment'=>'production',
@@ -214,5 +215,13 @@ final class SelfServiceCheckout {
   });
   DB::run('UPDATE platform_checkout_orders SET status=?,activated_at=?,updated_at=? WHERE id=?',
    ['active',now(),now(),(int)$order['id']]);
+  $owner=DB::one('SELECT email FROM users WHERE id=?',[(int)$order['user_id']]);
+  if($owner&&filter_var((string)$owner['email'],FILTER_VALIDATE_EMAIL))
+   DB::insert('platform_mail_queue',[
+    'recipient'=>(string)$owner['email'],'subject'=>'TaskEsc — seu acesso foi liberado',
+    'body'=>"Seu pagamento foi confirmado. Seu TaskEsc está pronto.\nAcesse: ".base('dashboard').
+      "\n\nEntre com o e-mail e a senha usados no cadastro.",
+    'status'=>'pending','attempts'=>0,'next_attempt'=>now(),'created_at'=>now()
+   ]);
  }
 }

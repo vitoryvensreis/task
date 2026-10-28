@@ -282,6 +282,9 @@ try{
  testws($ddl!==false,'Access-plan migration missing.');
  foreach(preg_split('/;\\s*(?:\\r?\\n|$)/',$ddl) as $sql)
   if(trim($sql)!=='')DB::run($sql);
+ // A base descartável deve ter as mesmas colunas que a migração aditiva 042.
+ DB::run('ALTER TABLE platform_access_plans ADD COLUMN extra_user_price_cents BIGINT UNSIGNED NOT NULL DEFAULT 0 AFTER price_cents');
+ DB::run('ALTER TABLE workspace_access_plans ADD COLUMN extra_seats INT UNSIGNED NOT NULL DEFAULT 0 AFTER plan_id');
  DB::run("INSERT INTO platform_access_plans (name,code,price_cents,billing_period,features_json,team_limit,public_visible,active,created_at,updated_at)
   VALUES ('Legado ilimitado','legacy-unlimited',0,'monthly',?,NULL,0,1,?,?)",
   ['{"tasks":true,"automations":true,"contacts":true}',now(),now()]);

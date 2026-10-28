@@ -495,6 +495,7 @@ jobs:
             php bin/migrate-platform-audit.php --apply "--backup-manifest=$BACKUP_MANIFEST"
             php bin/migrate-platform-asaas.php --apply "--backup-manifest=$BACKUP_MANIFEST"
             php bin/migrate-platform-extra-seats.php --apply "--backup-manifest=$BACKUP_MANIFEST"
+            php bin/migrate-platform-checkout.php --apply "--backup-manifest=$BACKUP_MANIFEST"
             php bin/migrate-workspace-roles.php --apply "--backup-manifest=$BACKUP_MANIFEST"
             php -r 'require "app/bootstrap.php"; echo json(WorkspaceTeams::migrate()).PHP_EOL;'
             php bin/migrate-workspace-db-stage1.php --apply "--backup-manifest=$BACKUP_MANIFEST"

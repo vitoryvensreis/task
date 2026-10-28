@@ -216,11 +216,12 @@ window.MasterConsole=(()=>{
      }catch(error){status(overrideForm,error.message,true)}
      finally{saveLimit.disabled=false}
     };
-    if(Number(d.extra_user_price_cents)>0){
+    if(Number(d.extra_user_price_cents)>0&&(Number(d.allow_extra_seats)===1||Number(d.extra_seats)>0)){
      const extras=el('form','mc-form mc-seats-form');
      extras.append(el('h3','','Adquirir vagas extras de ADM ou equipe'));
      const qty=field(extras,'Quantidade adicional contratada','extra_seats',String(d.extra_seats||0),'number');
-     qty.min='0';qty.max='100000';qty.step='1';qty.required=true;
+     qty.min='0';qty.max=Number(d.allow_extra_seats)===1?'100000':String(Number(d.extra_seats)||0);qty.step='1';qty.required=true;
+     if(Number(d.allow_extra_seats)!==1)note(extras,'Novas vagas bloqueadas pelo plano','Você pode somente reduzir a quantidade já contratada. Para contratar mais, habilite a opção no plano.');
      const selected=plans.find(p=>Number(p.id)===Number(w.plan_id));
      const preview=el('p','master-description');
      const update=()=>{const q=Math.max(0,Number(qty.value)||0);preview.textContent='Plano '+money(selected?.price_cents||0)+' + '+q+' × '+money(d.extra_user_price_cents)+' = '+money(Number(selected?.price_cents||0)+q*Number(d.extra_user_price_cents))+' / '+(cycles[selected?.billing_period]||'período')+'. Total de vagas de equipe: '+(Number(d.plan_team_limit||0)+q)+'.'};
@@ -237,6 +238,9 @@ window.MasterConsole=(()=>{
       catch(err){status(extras,err.message,true);buy.disabled=false}
      };
      plan.append(extras);
+    }else if(Number(d.allow_extra_seats)===0&&d.plan_team_limit!==null){
+     note(plan,'Contratação de vagas adicionais desabilitada',
+       'Este plano utiliza somente as vagas incluídas e não permite contratar mais usuários.');
     }else plan.append(overrideForm);
     const team=el('section','mc-detail-pane');
     team.append(el('h3','','Administradores e equipe'));
@@ -418,7 +422,9 @@ window.MasterConsole=(()=>{
     }
     ul.append(el('span','','✓ '+(p.team_limit===null?'Equipe ilimitada':'Até '+p.team_limit+' membros de equipe')));
      ul.append(el('span','','✓ Clientes ilimitados'));
-     if(p.team_limit!==null&&Number(p.extra_user_price_cents)>0)
+     if(p.team_limit!==null&&Number(p.allow_extra_seats)!==1)
+      ul.append(el('span','','Sem contratação de usuários extras'));
+     else if(p.team_limit!==null&&Number(p.extra_user_price_cents)>0)
       ul.append(el('span','','+ '+money(p.extra_user_price_cents)+' por vaga extra / '+(cycles[p.billing_period]||p.billing_period)));
     item.append(ul,el('small','mc-muted',fmt(p.assigned_workspaces)+' workspace(s) vinculado(s)'));
     item.append(button('Editar plano',()=>editPlan(p,draw,base,csrf),'primary'));
@@ -447,7 +453,16 @@ window.MasterConsole=(()=>{
    const checkbox=(label,key,checked)=>{
     const l=el('label','mc-check'),cb=el('input');cb.type='checkbox';cb.name=key;cb.checked=checked;l.append(cb,el('span','',label));options.append(l);return cb;
    };
-   const unlimited=checkbox('Equipe ilimitada','unlimited',plan?.team_limit===null);unlimited.onchange=()=>limit.disabled=unlimited.checked;limit.disabled=unlimited.checked;
+   const unlimited=checkbox('Equipe ilimitada','unlimited',plan?.team_limit===null);
+   const allowExtra=checkbox('Permitir contratar usuários extras','allow_extra_seats',plan?Number(plan.allow_extra_seats)===1:true);
+   const syncExtras=()=>{
+    limit.disabled=unlimited.checked;
+    allowExtra.disabled=unlimited.checked;
+    if(unlimited.checked)allowExtra.checked=false;
+    extraPrice.closest('label').hidden=unlimited.checked||!allowExtra.checked;
+   };
+   unlimited.onchange=syncExtras;allowExtra.onchange=syncExtras;syncExtras();
+   note(form,'Contratação de vagas adicionais','Se desmarcado, o plano terá apenas as vagas incluídas. Nem o cliente nem o Master poderão adicionar vagas por compra, mesmo que exista preço salvo.');
    for(const [id,label] of [['tasks','Tasks'],['automations','Automações'],['contacts','Contatos']])checkbox(label,id,Boolean(feats[id]));
    checkbox('Disponível publicamente','public_visible',Boolean(Number(plan?.public_visible||0)));
    checkbox('Plano ativo','active',plan?Boolean(Number(plan.active)):true);
@@ -462,6 +477,7 @@ window.MasterConsole=(()=>{
       id:Number(plan?.id||0),name:name.value.trim(),
       price_cents:cents(price),extra_user_price_cents:cents(extraPrice),billing_period:cycle.value,
       team_limit:Number(limit.value||0),unlimited_team:unlimited.checked?1:0,
+      allow_extra_seats:allowExtra.checked&&!unlimited.checked?1:0,
       public_visible:data.public_visible?1:0,active:data.active?1:0,features:f});
      close();await refresh();
     }catch(err){status(form,err.message,true);save.disabled=false}

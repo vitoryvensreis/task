@@ -21,6 +21,20 @@ if(in_array(rtrim($sitePath,'/'),['/privacidade','/termos-de-uso'],true)){
  exit;
 }
 
+// Rotas públicas amigáveis: o front controller resolve a página e carrega
+// apenas sua view, igual à landing e às páginas institucionais.
+$publicPath=rtrim($sitePath,'/');
+if(in_array($publicPath,['/planos','/contratar'],true)){
+ if($sitePath!==$publicPath){
+  $suffix=(string)($_SERVER['QUERY_STRING']??'');
+  header('Location: '.base(ltrim($publicPath,'/')).($suffix!==''?'?'.$suffix:''),true,302);
+  exit;
+ }
+ if($publicPath==='/planos')require dirname(__DIR__).'/app/Views/public-planos.php';
+ else require dirname(__DIR__).'/app/Views/public-contratar.php';
+ exit;
+}
+
 if(in_array($requestedPath,[$entryPath.'/', $entryPath.'/index.php'],true)){
  // A sessão autenticada nunca volta à landing por navegação direta.
  // A verificação usa o usuário ativo do backend, não apenas a presença de cookie.

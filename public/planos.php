@@ -59,7 +59,7 @@ footer{padding-top:44px;color:#7e8997;font-size:13px}
 <article class="card">
  <h2 class="name"><?=e($plan['name'])?></h2>
  <div class="price">R$ <?=e($price)?> <span class="period">/ <?=e($cycleLabels[$plan['billing_period']]??$plan['billing_period'])?></span></div>
- <p class="meta"><?= $plan['team_limit']===null?'Equipe ilimitada':'Até '.(int)$plan['team_limit'].' usuário(s) de equipe' ?></p>
+ <p class="meta"><?= $plan['team_limit']===null?'Equipe ilimitada':((int)$plan['team_limit']===0?'Somente proprietário ADM':'Proprietário ADM + até '.(int)$plan['team_limit'].' pessoa(s) da equipe') ?></p>
  <p class="meta">Clientes ilimitados. Proprietário ADM não ocupa vaga.</p>
  <?php if($plan['team_limit']!==null&&(int)$plan['extra_user_price_cents']>0): ?>
  <p class="meta">Vaga adicional ADM/equipe: R$ <?=e(number_format((int)$plan['extra_user_price_cents']/100,2,',','.'))?> / <?=e($cycleLabels[$plan['billing_period']]??$plan['billing_period'])?></p>

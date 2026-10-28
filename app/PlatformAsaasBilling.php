@@ -130,7 +130,7 @@ final class PlatformAsaasBilling {
   $taxId=preg_replace('/\D+/','',(string)($input['cpf_cnpj']??''));
   if(mb_strlen($name)<3||mb_strlen($name)>190||!filter_var($email,FILTER_VALIDATE_EMAIL)||
     !in_array(strlen($taxId),[11,14],true))fail('Informe nome, e-mail e CPF/CNPJ válidos do pagador.',422);
-  $plan=DB::one('SELECT p.id,p.name,p.code,p.price_cents,p.billing_period
+  $plan=DB::one('SELECT p.id,p.name,p.code,p.price_cents,p.extra_user_price_cents,p.billing_period,a.extra_seats
    FROM workspace_access_plans a JOIN platform_access_plans p ON p.id=a.plan_id
    JOIN workspaces w ON w.id=a.workspace_id
    WHERE a.workspace_id=? AND p.active=1 AND w.status IN (\'staged\',\'active\')',[$workspace]);
@@ -143,7 +143,7 @@ final class PlatformAsaasBilling {
     fail('Já existe uma solicitação de cobrança; consulte o histórico antes de tentar outra.',409);
    return DB::insert('platform_asaas_subscriptions',[
     'workspace_id'=>$workspace,'plan_id'=>(int)$plan['id'],'environment'=>$env,
-    'payer_name'=>$name,'payer_email'=>$email,'amount_cents'=>(int)$plan['price_cents'],
+    'payer_name'=>$name,'payer_email'=>$email,'amount_cents'=>PlatformPlans::amount((int)$plan['price_cents'],(int)$plan['extra_user_price_cents'],(int)$plan['extra_seats']),
     'cycle'=>$plan['billing_period'],'due_date'=>gmdate('Y-m-d',strtotime('+2 days')),
     'request_status'=>'creating','billing_status'=>'awaiting_payment','created_at'=>now(),'updated_at'=>now()
    ]);
@@ -161,7 +161,7 @@ final class PlatformAsaasBilling {
      [$cid,now(),$orderId]);
    $subscription=self::api('POST','/v3/subscriptions',[
     'customer'=>$cid,'billingType'=>'UNDEFINED',
-    'value'=>round((int)$plan['price_cents']/100,2),
+    'value'=>round(PlatformPlans::amount((int)$plan['price_cents'],(int)$plan['extra_user_price_cents'],(int)$plan['extra_seats'])/100,2),
     'nextDueDate'=>gmdate('Y-m-d',strtotime('+2 days')),
     'cycle'=>self::CYCLES[$plan['billing_period']],
     'description'=>'TaskEsc - '.$plan['name'],
@@ -287,6 +287,70 @@ final class PlatformAsaasBilling {
    }
   }finally{DB::one("SELECT RELEASE_LOCK('taskesc-asaas-reconcile') AS released");}
   return ['status'=>$failed?'partial':'ok','checked'=>$checked,'failed'=>$failed];
+ }
+ public static function updateSeats(array $p,bool $customer=false): array {
+  if($customer){
+   Auth::admin();
+   if(Auth::$origin!=='web'||MasterSupport::isSupport()||
+      (string)(Auth::$workspace['role']??'')!=='owner')
+    fail('Somente o proprietário ADM pode contratar vagas adicionais.',403);
+  }else self::master();
+  Auth::rate('asaas-seats-update',10,3600);
+  $workspace=$customer?Auth::workspaceId():integer($p['workspace_id']??0,1);
+  $requested=integer($p['extra_seats']??0,0,100000);
+  if(strtoupper(trim((string)($p['confirmation']??'')))!=='ATUALIZAR')
+   fail('Confirme ATUALIZAR para modificar o valor da recorrência.',422);
+  $lock='taskesc-seats-'.$workspace;
+  if((int)(DB::one('SELECT GET_LOCK(?,0) AS acquired',[$lock])['acquired']??0)!==1)
+   fail('Outra atualização de usuários está em andamento.',409);
+  try{
+   $row=DB::one('SELECT a.workspace_id,a.plan_id,a.extra_seats,p.code,p.name,p.team_limit,p.price_cents,p.extra_user_price_cents,
+    w.owner_user_id FROM workspace_access_plans a
+    JOIN platform_access_plans p ON p.id=a.plan_id AND p.active=1
+    JOIN workspaces w ON w.id=a.workspace_id WHERE a.workspace_id=?',[$workspace]);
+   if(!$row||$row['code']==='legacy-unlimited'||$row['team_limit']===null)
+    fail('A empresa não possui um plano limitado elegível para vagas extras.',409);
+   $price=(int)$row['extra_user_price_cents'];
+   if($requested>0&&$price===0)fail('Defina o preço da vaga adicional no plano antes de vender.',409);
+   $used=(int)(DB::one("SELECT COUNT(*) n FROM workspace_members wm
+    JOIN users u ON u.id=wm.user_id WHERE wm.workspace_id=? AND wm.status='active'
+    AND wm.role IN ('admin','staff') AND u.active=1 AND u.id<>?",
+    [$workspace,(int)$row['owner_user_id']])['n']??0);
+   if($used>(int)$row['team_limit']+$requested)
+    fail('A empresa utiliza mais usuários do que o novo limite. Remova usuários antes de reduzir vagas.',409);
+   $current=(int)$row['extra_seats'];
+   $total=PlatformPlans::amount((int)$row['price_cents'],$price,$requested);
+   if($current===$requested)return ['updated'=>false,'extra_seats'=>$current,'total_cents'=>$total];
+   $subscription=DB::one("SELECT id,environment,asaas_subscription_id,request_status,amount_cents
+    FROM platform_asaas_subscriptions WHERE workspace_id=? AND environment='production' LIMIT 1",[$workspace]);
+   if($customer&&!$subscription)fail('A assinatura precisa estar ativa em produção para comprar vagas adicionais.',409);
+   if($subscription){
+    if(!in_array($subscription['request_status'],['created','inactive'],true)||
+       !$subscription['asaas_subscription_id'])
+     fail('Assinatura em análise. Regularize com o Asaas antes de alterar usuários.',409);
+    if(!self::enabled('production'))fail('Habilite a integração Asaas de produção.',409);
+    $expected=PlatformPlans::amount((int)$row['price_cents'],$price,$current);
+    if((int)$subscription['amount_cents']!==$expected)
+     fail('A mensalidade registrada diverge do plano. Revise a assinatura antes de alterar vagas.',409);
+    $sid=(string)$subscription['asaas_subscription_id'];
+    $remote=self::api('GET','/v3/subscriptions/'.$sid,null,'production');
+    if((int)round((float)($remote['value']??-1)*100)!==$expected)
+     fail('Valor no Asaas diferente do TaskEsc. Faça a conciliação antes de alterar vagas.',409);
+    $updated=self::api('PUT','/v3/subscriptions/'.$sid,
+      ['value'=>round($total/100,2),'updatePendingPayments'=>false],'production');
+    if((int)round((float)($updated['value']??-1)*100)!==$total)
+     fail('Asaas não confirmou o novo valor. Confira a assinatura antes de repetir.',502);
+   }
+   DB::tx(static function()use($workspace,$requested,$subscription,$total,$current):void {
+    DB::run('UPDATE workspace_access_plans SET extra_seats=? WHERE workspace_id=?',[$requested,$workspace]);
+    if($subscription)DB::run('UPDATE platform_asaas_subscriptions SET amount_cents=?,updated_at=? WHERE id=?',
+      [$total,now(),(int)$subscription['id']]);
+    audit('platform',0,'master.asaas.seats_updated',null,
+      ['workspace_id'=>$workspace,'previous_extra_seats'=>$current,'extra_seats'=>$requested,'total_cents'=>$total]);
+   });
+   return ['updated'=>true,'extra_seats'=>$requested,'total_cents'=>$total,
+      'message'=>$subscription?'Nova mensalidade aplicada às próximas cobranças no Asaas.':'Vagas configuradas. Serão incluídas quando a assinatura for criada.'];
+  }finally{DB::one('SELECT RELEASE_LOCK(?) AS released',[$lock]);}
  }
  public static function toggle(array $p): array {
   self::master();Auth::rate('asaas-recurring-toggle',8,3600);

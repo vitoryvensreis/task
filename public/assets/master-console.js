@@ -3,6 +3,8 @@ window.MasterConsole=(()=>{
  const el=(tag,cls='',txt='')=>{const n=document.createElement(tag);if(cls)n.className=cls;if(txt!==null&&txt!==undefined)n.textContent=String(txt);return n};
  const fmt=n=>new Intl.NumberFormat('pt-BR').format(Number(n)||0);
  const money=n=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format((Number(n)||0)/100);
+ const currencyField=(form,label,key,amount)=>{const input=field(form,label,key,money(amount),'text');input.inputMode='numeric';input.autocomplete='off';input.addEventListener('input',()=>{const digits=input.value.replace(/\D/g,'').slice(0,11);input.value=money(Number(digits||0));input.setSelectionRange(input.value.length,input.value.length)});return input};
+ const cents=input=>Number(input.value.replace(/\D/g,'')||0);
  const cycles={daily:'Diário',weekly:'Semanal',biweekly:'Quinzenal',monthly:'Mensal',bimonthly:'Bimestral',quarterly:'Trimestral',semiannually:'Semestral',yearly:'Anual'};
  async function api(base,action,csrf,data=null,query=null){
   const url=base+'/api.php?action='+encodeURIComponent(action)+(query?'&'+new URLSearchParams(query):'');
@@ -185,9 +187,7 @@ window.MasterConsole=(()=>{
     const used=el('div');used.append(el('small','','Usuários adicionais ativos'),el('strong','',fmt(d.team_used)));
     const allowed=el('div');allowed.append(el('small','','Limite atual'),el('strong','',d.team_limit===null?'Ilimitado':fmt(d.team_limit)));
     limits.append(used,allowed);form.append(limits);
-    note(form,'Limite base do plano',
-      'Equipe padrão: '+(d.plan_team_limit===null?'Ilimitada':fmt(d.plan_team_limit))+
-      '. O limite específico desta empresa, quando cadastrado, tem prioridade sobre o plano.');
+    note(form,'Limites de acesso','Clientes ilimitados. Proprietário ADM não ocupa vaga; ADMs adicionais e equipe usam as vagas contratadas.');
     const submit=el('button','primary','Aplicar plano');submit.type='submit';
     form.append(submit,el('p','mc-feedback'));plan.append(form);
     form.onsubmit=async event=>{
@@ -216,7 +216,28 @@ window.MasterConsole=(()=>{
      }catch(error){status(overrideForm,error.message,true)}
      finally{saveLimit.disabled=false}
     };
-    plan.append(overrideForm);
+    if(Number(d.extra_user_price_cents)>0){
+     const extras=el('form','mc-form mc-seats-form');
+     extras.append(el('h3','','Adquirir vagas extras de ADM ou equipe'));
+     const qty=field(extras,'Quantidade adicional contratada','extra_seats',String(d.extra_seats||0),'number');
+     qty.min='0';qty.max='100000';qty.step='1';qty.required=true;
+     const selected=plans.find(p=>Number(p.id)===Number(w.plan_id));
+     const preview=el('p','master-description');
+     const update=()=>{const q=Math.max(0,Number(qty.value)||0);preview.textContent='Plano '+money(selected?.price_cents||0)+' + '+q+' × '+money(d.extra_user_price_cents)+' = '+money(Number(selected?.price_cents||0)+q*Number(d.extra_user_price_cents))+' / '+(cycles[selected?.billing_period]||'período')+'. Total de vagas de equipe: '+(Number(d.plan_team_limit||0)+q)+'.'};
+     qty.addEventListener('input',update);update();
+     const confirm=field(extras,'Digite ATUALIZAR para confirmar o novo valor','confirmation','');
+     confirm.required=true;confirm.autocomplete='off';
+     note(extras,'Assinatura recorrente','O Asaas altera somente cobranças futuras. Cobranças já emitidas não serão modificadas.');
+     const buy=el('button','primary','Atualizar vagas e recorrência');buy.type='submit';
+     extras.append(preview,buy,el('p','mc-feedback'));
+     extras.onsubmit=async event=>{
+      event.preventDefault();if(!window.confirm('Confirma '+preview.textContent+'?'))return;
+      buy.disabled=true;
+      try{await api(base,'master.asaas_seats',csrf,{workspace_id:Number(w.id),extra_seats:Number(qty.value),confirmation:confirm.value});await refresh();await render();}
+      catch(err){status(extras,err.message,true);buy.disabled=false}
+     };
+     plan.append(extras);
+    }else plan.append(overrideForm);
     const team=el('section','mc-detail-pane');
     team.append(el('h3','','Administradores e equipe'));
     note(team,'Um proprietário por workspace',
@@ -299,11 +320,12 @@ window.MasterConsole=(()=>{
       const mail=field(payForm,'E-mail do pagador','payer_email',d.workspace.company_email||d.workspace.owner_email,'email');mail.required=true;
       const doc=field(payForm,'CPF ou CNPJ do pagador','cpf_cnpj','');doc.required=true;
       const confirm=field(payForm,'Digite COBRAR para confirmar a assinatura','confirmation','');confirm.required=true;confirm.autocomplete='off';
-      note(payForm,'Valor e recorrência','Será gerada uma assinatura de '+money(currentPlan.price_cents)+' a cada '+(cycles[currentPlan.billing_period]||currentPlan.billing_period)+'. O primeiro vencimento ocorre em dois dias.');
+      const total=Number(currentPlan.price_cents)+Number(d.extra_seats||0)*Number(currentPlan.extra_user_price_cents||0);
+      note(payForm,'Valor e recorrência','Será gerada assinatura de '+money(total)+' a cada '+(cycles[currentPlan.billing_period]||currentPlan.billing_period)+', com '+Number(d.extra_seats||0)+' vagas extras. Primeiro vencimento em dois dias.');
       const create=el('button','primary','Gerar assinatura Asaas');create.type='submit';payForm.append(create,el('p','mc-feedback'));
       payForm.onsubmit=async event=>{
        event.preventDefault();
-       if(!window.confirm('Confirma a geração de uma assinatura de '+money(currentPlan.price_cents)+' com cobranças recorrentes no Asaas?'))return;
+       if(!window.confirm('Confirma a geração de uma assinatura de '+money(total)+' com cobranças recorrentes no Asaas?'))return;
        create.disabled=true;
        try{await api(base,'master.asaas_start',csrf,{
         workspace_id:Number(w.id),payer_name:payer.value.trim(),payer_email:mail.value.trim(),
@@ -394,7 +416,10 @@ window.MasterConsole=(()=>{
     for(const [k,title] of [['tasks','Gerenciamento de tarefas'],['automations','Automações'],['contacts','Agenda de contatos']]){
       if(feats[k])ul.append(el('span','','✓ '+title));
     }
-    ul.append(el('span','','✓ '+(p.team_limit===null?'Equipe ilimitada':'Até '+p.team_limit+' membros')));
+    ul.append(el('span','','✓ '+(p.team_limit===null?'Equipe ilimitada':'Até '+p.team_limit+' membros de equipe')));
+     ul.append(el('span','','✓ Clientes ilimitados'));
+     if(p.team_limit!==null&&Number(p.extra_user_price_cents)>0)
+      ul.append(el('span','','+ '+money(p.extra_user_price_cents)+' por vaga extra / '+(cycles[p.billing_period]||p.billing_period)));
     item.append(ul,el('small','mc-muted',fmt(p.assigned_workspaces)+' workspace(s) vinculado(s)'));
     item.append(button('Editar plano',()=>editPlan(p,draw,base,csrf),'primary'));
     area.append(item);
@@ -406,15 +431,17 @@ window.MasterConsole=(()=>{
  function editPlan(plan,refresh,base,csrf){
   modal(plan?'Editar plano · '+plan.name:'Criar plano','Personalize valor, recorrência, limites e recursos.',(body,close)=>{
    const form=el('form','mc-form mc-plan-form');
-   const name=field(form,'Nome do plano','name',plan?.name||''),code=field(form,'Identificador único','code',plan?.code||'');
-   name.required=true;code.required=true;code.pattern='[a-z0-9][a-z0-9-]{2,99}';
-   const price=field(form,'Valor por período (R$)','price',(Number(plan?.price_cents||0)/100).toFixed(2),'number');
-   price.min='0';price.step='0.01';price.required=true;
+   const name=field(form,'Nome do plano','name',plan?.name||'');
+   name.required=true;
+   if(plan?.code)note(form,'ID interno automático','Gerado pelo servidor: '+plan.code);
+   const price=currencyField(form,'Valor por período (R$)','price',Number(plan?.price_cents||0));
+   const extraPrice=currencyField(form,'Valor por usuário extra / período (R$)','extra_user_price',Number(plan?.extra_user_price_cents||0));
+   note(form,'Quem ocupa vaga','Clientes ilimitados. O proprietário ADM não ocupa vaga; outros ADMs e membros da equipe ocupam vagas. O valor extra segue a periodicidade do plano.');
    const cycleLabel=el('label','mc-field'),cycle=el('select','select');cycle.name='billing_period';
    for(const [id,label] of Object.entries(cycles)){
     const o=el('option','',label);o.value=id;o.selected=(plan?.billing_period||'monthly')===id;cycle.append(o);
    }cycleLabel.append(el('span','','Recorrência'),cycle);form.append(cycleLabel);
-   const limit=field(form,'Limite de usuários da equipe','team_limit',plan?.team_limit??2,'number');limit.min='1';limit.required=true;
+   const limit=field(form,'Membros da equipe incluídos além do proprietário ADM','team_limit',plan?.team_limit??0,'number');limit.min='0';limit.required=true;
    const feats=typeof plan?.features_json==='string'?JSON.parse(plan.features_json):plan?.features_json||{tasks:true,automations:true,contacts:true};
    const options=el('div','mc-plan-options');
    const checkbox=(label,key,checked)=>{
@@ -432,9 +459,9 @@ window.MasterConsole=(()=>{
     for(const k of ['tasks','automations','contacts'])f[k]=!!data[k];
     try{
      await api(base,'master.plan_save',csrf,{
-      id:Number(plan?.id||0),name:name.value.trim(),code:code.value.trim(),
-      price_cents:Math.round(Number(price.value)*100),billing_period:cycle.value,
-      team_limit:Number(limit.value||2),unlimited_team:unlimited.checked?1:0,
+      id:Number(plan?.id||0),name:name.value.trim(),
+      price_cents:cents(price),extra_user_price_cents:cents(extraPrice),billing_period:cycle.value,
+      team_limit:Number(limit.value||0),unlimited_team:unlimited.checked?1:0,
       public_visible:data.public_visible?1:0,active:data.active?1:0,features:f});
      close();await refresh();
     }catch(err){status(form,err.message,true);save.disabled=false}

@@ -2409,6 +2409,11 @@
         const billingNotice=billing&&billing.code!=='not_managed'
           ?'<div class="panel" style="margin:10px 0 16px;border:1px solid '+(billing.write_allowed?'#42664d':'#955448')+'"><b>Assinatura TaskEsc: '+esc(({active:'Em dia',grace:'Prazo de regularização',paused:'Recorrência pausada',suspended:'Edição suspensa',disputed:'Pagamento em análise',needs_review:'Solicite atendimento',awaiting_payment:'Aguardando pagamento'})[billing.code]||billing.code)+'</b><div class="panel-sub">'+(billing.write_allowed?'Seu ambiente permanece disponível.':'A edição foi temporariamente suspensa. Seus dados continuam disponíveis para consulta.')+'</div>'+(billing.invoice_url?'<a class="secondary" target="_blank" rel="noopener noreferrer" href="'+esc(billing.invoice_url)+'">Abrir cobrança no Asaas</a>':'')+'</div>'
           :'';
+        const extraSeatsPanel=billing?.can_purchase_seats&&Number(billing.extra_user_price_cents)>0&&billing.base_team_limit!==null
+          ?'<section class="panel" style="margin:14px 0"><div class="panel-head"><div><h3>Usuários extras</h3><div class="panel-sub">Clientes ilimitados. O proprietário ADM não ocupa vaga; outros ADMs e equipe ocupam vagas.</div></div></div>'+
+           '<p class="panel-sub">Incluídos: '+Number(billing.base_team_limit)+' · Extras atuais: '+Number(billing.extra_seats||0)+' · Por adicional: '+new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(billing.extra_user_price_cents)/100)+' / '+esc(billing.billing_period)+'</p>'+
+           '<form id="company-seats-form" class="settings-form"><label class="field">Vagas extras contratadas<input class="input" type="number" name="extra_seats" min="0" max="100000" step="1" value="'+Number(billing.extra_seats||0)+'" required></label><p id="company-seats-quote" class="panel-sub"></p><label class="field">Digite ATUALIZAR para confirmar<input class="input" name="confirmation" required autocomplete="off"></label><div class="form-actions"><button class="primary" type="submit">Atualizar vagas e mensalidade</button></div><p class="panel-sub">As próximas cobranças serão atualizadas. As já emitidas permanecem iguais.</p></form></section>'
+          :'';
         const list=accounts.map(a=>{
           const id=Number(a.id),isDefault=Number(defaultDrive.account_id)===id,ready=a.status==='connected'&&!!a.drive_ready;
           const status=ready?'Drive autorizado':a.status==='disconnected'?'Conta desconectada':'Reconexão necessária';
@@ -2418,8 +2423,22 @@
           const disconnectAction=a.status==='disconnected'?'':`<button type="button" class="danger ghost-danger" data-disconnect-google="${id}" aria-label="Desconectar conta ${esc(a.email)}">Desconectar</button>`;
           return `<div class="panel" style="display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap;margin:8px 0"><div><b>${esc(a.email)}</b><div class="panel-sub">${esc(status)}</div></div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${primaryAction}${disconnectAction}</div></div>`;
         }).join('');
-        container.innerHTML=tabs+billingNotice+'<section class="panel"><div class="panel-head"><div><h3>Minhas contas Google</h3><div class="panel-sub">Só aparecem contas conectadas por você. Envie arquivos apenas usando um Drive autorizado.</div></div></div><button class="primary" type="button" id="company-connect-drive">+ Conectar Google Drive</button>'+ (list||'<div class="empty slim">Nenhuma conta Google Drive conectada.</div>')+'</section>';
+        container.innerHTML=tabs+billingNotice+extraSeatsPanel+'<section class="panel"><div class="panel-head"><div><h3>Minhas contas Google</h3><div class="panel-sub">Só aparecem contas conectadas por você. Envie arquivos apenas usando um Drive autorizado.</div></div></div><button class="primary" type="button" id="company-connect-drive">+ Conectar Google Drive</button>'+ (list||'<div class="empty slim">Nenhuma conta Google Drive conectada.</div>')+'</section>';
         $('#company-connect-drive').onclick=async()=>{try{const res=await api('google.connect',{purpose:'drive',return_to:'settings'});location.href=res.url}catch(e){toast(e.message,true)}};
+        const seatForm=$('#company-seats-form');
+        if(seatForm){
+          const input=seatForm.querySelector('[name="extra_seats"]'),quote=$('#company-seats-quote');
+          const formatter=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
+          const calc=()=>{const q=Math.max(0,Number(input.value)||0);quote.textContent='Total recorrente: '+formatter.format((Number(billing.base_price_cents)+q*Number(billing.extra_user_price_cents))/100)+' / '+billing.billing_period+'.'};
+          input.addEventListener('input',calc);calc();
+          seatForm.onsubmit=async e=>{
+            e.preventDefault();if(!confirm('Confirma '+quote.textContent+'? O Asaas atualizará a recorrência futura.'))return;
+            const btn=seatForm.querySelector('[type="submit"]');btn.disabled=true;
+            try{const resp=await api('billing.seats_purchase',{extra_seats:Number(input.value),confirmation:seatForm.querySelector('[name="confirmation"]').value},'POST');toast(resp.message||'Vagas atualizadas.');await draw('google');}
+            catch(err){toast(err.message,true);btn.disabled=false}
+          };
+        }
+
         document.querySelectorAll('[data-own-google]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{await api('company.drive_default',{account_id:Number(b.dataset.ownGoogle)},'POST');toast('Google Drive atualizado.');await draw('google')}catch(e){toast(e.message,true);b.disabled=false}});
         document.querySelectorAll('[data-reconnect-google]').forEach(b=>b.onclick=async()=>{
           b.disabled=true;

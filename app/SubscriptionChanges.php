@@ -60,8 +60,37 @@ final class SubscriptionChanges {
  public static function catalog(): array {
   $workspace=self::owner();
   $state=PlatformBillingAccess::state($workspace);
-  $current=self::snapshot($workspace);
+  $subscription=DB::one('SELECT id,asaas_subscription_id,request_status,plan_id
+    FROM platform_asaas_subscriptions WHERE workspace_id=? AND environment=?',
+    [$workspace,'production']);
   $plans=PlatformPlans::publicList();
+  if(!$subscription){
+   $assigned=PlatformPlans::workspacePlan($workspace);
+   return ['can_start'=>true,'current_plan_id'=>(int)($assigned['id']??0),
+    'current_plan_name'=>$assigned['name']??'Sem assinatura','plans'=>$plans,
+    'pending'=>null];
+  }
+  $initial=DB::one("SELECT id,status FROM platform_subscription_changes
+    WHERE subscription_id=? AND change_type='initial' ORDER BY id DESC LIMIT 1",
+    [(int)$subscription['id']]);
+  if($initial&&$initial['status']!=='applied'){
+   $url=null;
+   if($subscription['asaas_subscription_id']&&$subscription['request_status']==='created'){
+    try{
+     $payments=PlatformAsaasBilling::api('GET',
+      '/v3/subscriptions/'.$subscription['asaas_subscription_id'].'/payments?limit=10&offset=0',null,'production');
+     foreach(($payments['data']??[]) as $payment){
+      if(is_array($payment)&&str_starts_with((string)($payment['invoiceUrl']??''),'https://')){
+       $url=$payment['invoiceUrl'];break;
+      }
+     }
+    }catch(Throwable $e){error_log('Checkout existing invoice lookup: '.get_class($e));}
+   }
+   return ['can_start'=>false,'awaiting_first_payment'=>true,'pending'=>[
+    'status'=>$initial['status'],'invoice_url'=>$url],
+    'plans'=>$plans];
+  }
+  $current=self::snapshot($workspace);
   $pending=DB::one("SELECT id,status,invoice_url,amount_due_cents,target_amount_cents
     FROM platform_subscription_changes WHERE workspace_id=? ORDER BY id DESC LIMIT 1",[$workspace]);
   return ['current_plan_id'=>(int)$current['plan_id'],
@@ -70,6 +99,103 @@ final class SubscriptionChanges {
     'current_amount_cents'=>(int)$current['amount_cents'],
     'billing_period'=>$current['cycle'],'billing_status'=>$state['code'],
     'plans'=>$plans,'pending'=>$pending];
+ }
+ public static function startInitial(array $p): array {
+  $workspace=self::owner();checkCsrf();Auth::rate('initial-paid-plan',3,3600);
+  if(strtoupper(trim((string)($p['confirmation']??'')))!=='COMPRAR')
+   fail('Digite COMPRAR antes de gerar a assinatura.',422);
+  if(!PlatformAsaasBilling::enabled('production'))
+   fail('A contratação automática não está habilitada.',503);
+  $taxId=preg_replace('/\\D/','',(string)($p['cpf_cnpj']??''));
+  if(!in_array(strlen($taxId),[11,14],true))fail('Informe CPF ou CNPJ para cobrança.',422);
+  $planId=integer($p['plan_id']??0,1);$extras=integer($p['extra_seats']??0,0,100);
+  $plan=DB::one("SELECT id,name,code,price_cents,extra_user_price_cents,
+    billing_period,team_limit,allow_extra_seats FROM platform_access_plans
+    WHERE id=? AND active=1 AND public_visible=1",[$planId]);
+  if(!$plan||$plan['code']==='legacy-unlimited'||(int)$plan['price_cents']<100)
+   fail('Selecione um plano público pago.',409);
+  if($extras>0&&($plan['team_limit']===null||!(int)$plan['allow_extra_seats']||
+     (int)$plan['extra_user_price_cents']<1))fail('Vagas adicionais indisponíveis.',409);
+  $used=(int)(DB::one("SELECT COUNT(*) n FROM workspace_members m
+    JOIN users u ON u.id=m.user_id JOIN workspaces w ON w.id=m.workspace_id
+    WHERE m.workspace_id=? AND m.status='active' AND m.role IN ('admin','staff')
+    AND u.active=1 AND m.user_id<>w.owner_user_id",[$workspace])['n']??0);
+  if($plan['team_limit']!==null&&$used>(int)$plan['team_limit']+$extras)
+   fail('O plano escolhido possui menos vagas que a equipe atual.',409);
+  $amount=PlatformPlans::amount((int)$plan['price_cents'],(int)$plan['extra_user_price_cents'],$extras);
+  $cycles=['weekly'=>'WEEKLY','biweekly'=>'BIWEEKLY','monthly'=>'MONTHLY',
+   'bimonthly'=>'BIMONTHLY','quarterly'=>'QUARTERLY','semiannually'=>'SEMIANNUALLY','yearly'=>'YEARLY'];
+  if(!isset($cycles[$plan['billing_period']]))fail('Periodicidade indisponível para contratação.',409);
+  $lock='taskesc-initial-sub-'.$workspace;
+  if((int)(DB::one('SELECT GET_LOCK(?,0) acquired',[$lock])['acquired']??0)!==1)
+   fail('Já existe uma solicitação de assinatura em andamento.',409);
+  try{
+   if(DB::one("SELECT 1 FROM platform_asaas_subscriptions
+    WHERE workspace_id=? AND environment='production'",[$workspace]))
+    fail('Esta empresa já possui uma solicitação Asaas. Consulte Assinaturas.',409);
+   $owner=Auth::$actor;
+   $subId=DB::tx(static function()use($workspace,$owner,$plan,$extras,$amount):int {
+    $id=DB::insert('platform_asaas_subscriptions',[
+     'workspace_id'=>$workspace,'plan_id'=>(int)$plan['id'],
+     'environment'=>'production','payer_name'=>$owner['name'],'payer_email'=>$owner['email'],
+     'amount_cents'=>$amount,'cycle'=>$plan['billing_period'],
+     'due_date'=>gmdate('Y-m-d',strtotime('+1 day')),
+     'request_status'=>'creating','billing_status'=>'awaiting_payment',
+     'created_at'=>now(),'updated_at'=>now()
+    ]);
+    DB::insert('platform_subscription_changes',[
+     'workspace_id'=>$workspace,'subscription_id'=>$id,'requested_by'=>(int)$owner['id'],
+     'change_type'=>'initial','target_plan_id'=>(int)$plan['id'],'target_extra_seats'=>$extras,
+     'old_amount_cents'=>0,'target_amount_cents'=>$amount,'amount_due_cents'=>0,
+     'status'=>'awaiting_payment','created_at'=>now(),'updated_at'=>now()
+    ]);
+    return $id;
+   });
+   try{
+    $customer=PlatformAsaasBilling::api('POST','/v3/customers',[
+     'name'=>$owner['name'],'email'=>$owner['email'],'cpfCnpj'=>$taxId,
+     'externalReference'=>'taskesc-initial-workspace-'.$workspace
+    ],'production');
+    $cid=(string)($customer['id']??'');
+    if(!preg_match('/\\Acus_[A-Za-z0-9]+\\z/D',$cid))throw new RuntimeException('Asaas customer invalid');
+    DB::run('UPDATE platform_asaas_subscriptions SET asaas_customer_id=? WHERE id=?',[$cid,$subId]);
+    $sub=PlatformAsaasBilling::api('POST','/v3/subscriptions',[
+     'customer'=>$cid,'billingType'=>'UNDEFINED','value'=>round($amount/100,2),
+     'cycle'=>$cycles[$plan['billing_period']],
+     'nextDueDate'=>gmdate('Y-m-d',strtotime('+1 day')),
+     'description'=>'TaskEsc - '.$plan['name'],
+     'externalReference'=>'taskesc-initial-'.$subId
+    ],'production');
+    $sid=(string)($sub['id']??'');
+    if(!preg_match('/\\Asub_[A-Za-z0-9]+\\z/D',$sid))
+     throw new RuntimeException('Asaas subscription invalid');
+    DB::run('UPDATE platform_asaas_subscriptions
+     SET asaas_subscription_id=?,request_status=?,updated_at=? WHERE id=?',
+     [$sid,'created',now(),$subId]);
+    return ['created'=>true,'awaiting_payment'=>true,
+     'message'=>'Assinatura criada. O plano será ativado após o pagamento.'];
+   }catch(Throwable $e){
+    DB::run('UPDATE platform_asaas_subscriptions SET request_status=?,updated_at=? WHERE id=?',
+     ['needs_review',now(),$subId]);
+    DB::run('UPDATE platform_subscription_changes SET status=?,updated_at=? WHERE subscription_id=?',
+     ['needs_review',now(),$subId]);
+    error_log('TaskEsc existing checkout needs review: id='.$subId.' class='.get_class($e));
+    fail('A operação exige revisão do Asaas. Não tente criar outra cobrança.',502);
+   }
+  }finally{DB::one('SELECT RELEASE_LOCK(?) released',[$lock]);}
+ }
+ public static function activateInitial(int $subscriptionId,array $payment): void {
+  if(!in_array((string)($payment['status']??''),['CONFIRMED','RECEIVED','RECEIVED_IN_CASH'],true))
+   return;
+  $change=DB::one("SELECT id,workspace_id,target_plan_id,target_extra_seats,target_amount_cents
+    FROM platform_subscription_changes WHERE subscription_id=? AND change_type='initial'
+    AND status='awaiting_payment' FOR UPDATE",[$subscriptionId]);
+  if(!$change||(int)round((float)($payment['value']??0)*100)<(int)$change['target_amount_cents'])
+   return;
+  DB::run('UPDATE workspace_access_plans SET plan_id=?,extra_seats=? WHERE workspace_id=?',
+   [(int)$change['target_plan_id'],(int)$change['target_extra_seats'],(int)$change['workspace_id']]);
+  DB::run('UPDATE platform_subscription_changes SET status=?,paid_at=?,applied_at=?,updated_at=?
+    WHERE id=?',['applied',now(),now(),now(),(int)$change['id']]);
  }
  public static function quote(array $p): array {
   $value=self::evaluate(self::owner(),$p);

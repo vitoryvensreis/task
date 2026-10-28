@@ -250,7 +250,13 @@ final class PlatformAsaasBilling {
    $page=self::api('GET','/v3/subscriptions/'.$subscriptionId.'/payments?limit=100&offset='.$offset,null,$environment);
    $entries=$page['data']??[];
    if(!is_array($entries))throw new RuntimeException('asaas_payments_invalid');
-   foreach($entries as $payment)if(is_array($payment)){self::upsertPayment($payment,$localId,$environment);$count++;}
+   foreach($entries as $payment)if(is_array($payment)){
+    DB::tx(static function()use($payment,$localId,$environment):void {
+     self::upsertPayment($payment,$localId,$environment);
+     if($environment==='production')SelfServiceCheckout::activatePaid($localId,$payment);
+    });
+    $count++;
+   }
    if(empty($page['hasMore']))break;
   }
   self::recomputeBilling($localId);
@@ -399,7 +405,9 @@ final class PlatformAsaasBilling {
   if(!is_array($object))throw new RuntimeException('asaas_webhook_missing_object');
   $subscriptionId=str_starts_with($event,'PAYMENT_')?(string)($object['subscription']??''):(string)($object['id']??'');
   if($subscriptionId===''||!preg_match('/\Asub_[A-Za-z0-9]+\z/D',$subscriptionId))
-   return ['accepted'=>true,'ignored'=>'unrelated'];
+   return str_starts_with($event,'PAYMENT_')
+    ?SubscriptionChanges::webhookPayment($env,$eventId,$event,$object)
+    :['accepted'=>true,'ignored'=>'unrelated'];
   return DB::tx(static function()use($env,$payload,$event,$eventId,$subscriptionId,$object):array {
    if(DB::one('SELECT 1 FROM platform_asaas_webhook_events WHERE environment=? AND event_id=?',[$env,$eventId]))
     return ['accepted'=>true,'duplicate'=>true];
@@ -410,7 +418,10 @@ final class PlatformAsaasBilling {
    DB::run('INSERT INTO platform_asaas_webhook_events
     (environment,event_id,event_type,subscription_id,payload_hash,created_at) VALUES (?,?,?,?,?,?)',
     [$env,$eventId,$event,$id,hash('sha256',json_encode($payload,JSON_THROW_ON_ERROR)),now()]);
-   if(str_starts_with($event,'PAYMENT_'))self::upsertPayment($object,$id,$env);
+   if(str_starts_with($event,'PAYMENT_')){
+    self::upsertPayment($object,$id,$env);
+    if($env==='production')SelfServiceCheckout::activatePaid($id,$object);
+   }
    elseif(in_array($event,['SUBSCRIPTION_INACTIVATED','SUBSCRIPTION_DELETED'],true)){
     DB::run('UPDATE platform_asaas_subscriptions SET request_status=?,updated_at=? WHERE id=?',
       [$event==='SUBSCRIPTION_DELETED'?'cancelled':'inactive',now(),$id]);

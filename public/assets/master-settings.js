@@ -117,7 +117,7 @@ window.TaskEscMasterSettings=(()=>{
   }
   envLabel.append(envSelect);fa.append(envLabel);
   field(fa,'Identificação da conta','account_label',asaas.account_label||'','text','Ex.: TaskEsc plataforma');
-  field(fa,'Chave API Asaas','api_key','','password',asaas.api_key_set?'Cadastrada — deixe vazio para manter':'Cole sua chave privada');
+  const apiKeyInput=field(fa,'Chave API Asaas','api_key','','password',asaas.api_key_set?'Cadastrada — deixe vazio para manter':'Cole sua chave privada');
   const webhookToken=field(fa,'Token de autenticação do webhook','webhook_auth_token','','password',
     asaas.webhook_token_set?'Cadastrado — deixe vazio para manter':'Token de 32 a 255 caracteres, distinto da API Key');
   webhookToken.minLength=32;webhookToken.maxLength=255;
@@ -129,19 +129,20 @@ window.TaskEscMasterSettings=(()=>{
   submit(fa,'master.asaas_save','asaas',base,csrf,()=>render(host,csrf,base,mode));
   const asaasTools=el('div','ms-footer'),check=el('button','secondary','Verificar conexão Asaas');
   const checkStatus=el('p','ms-feedback','');
+  const checkHint=el('p','master-description','Teste a chave salva ou digite uma nova chave no campo acima. O teste não salva nem habilita cobranças.');
   checkStatus.setAttribute('role','status');checkStatus.setAttribute('aria-live','polite');
   check.type='button';check.onclick=async()=>{
    check.disabled=true;checkStatus.textContent='Verificando a conexão com as credenciais salvas…';
    try{
-    const r=await send(base,csrf,'master.asaas_test',{});
-    checkStatus.textContent='Conectado ao Asaas ('+(r.environment==='production'?'produção':'sandbox')+'). Situação cadastral: '+String(r.general_status||'não informada')+'.';
+    const r=await send(base,csrf,'master.asaas_test',{environment:envSelect.value,api_key:apiKeyInput.value.trim()});
+    checkStatus.textContent='Conectado ao Asaas ('+(r.environment==='production'?'produção':'sandbox')+') com '+(r.credential_source==='temporary'?'chave digitada (ainda não salva)':'chave salva')+'. Situação cadastral: '+String(r.general_status||'não informada')+'.';
     checkStatus.style.color='#9de5bb';
    }catch(e){
     checkStatus.textContent='Falha na validação: '+e.message;
     checkStatus.style.color='#ffb1a6';
    }finally{check.disabled=false}
   };
-  asaasTools.append(check,checkStatus);
+  asaasTools.append(check,checkHint,checkStatus);
   asaasCard.append(fa,asaasTools);
   note(asaasCard,'Recebimentos protegidos','Ativação exige chave válida, token de webhook e conta de produção aprovada. Cobranças reais só são emitidas com confirmação no ADM Master.');
   const drive=card(grid,'Google Drive','Arquivos do sistema são enviados apenas pelas contas Google autorizadas de cada workspace.');

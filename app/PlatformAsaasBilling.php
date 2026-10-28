@@ -75,11 +75,23 @@ final class PlatformAsaasBilling {
    return $decoded;
   }finally{curl_close($ch);}
  }
- public static function connection(): array {
+ public static function connection(array $p=[]): array {
   self::master();
-  try{$info=self::api('GET','/v3/myAccount/status/');}
-  catch(Throwable $e){fail(PlatformAsaasCredentials::diagnosticMessage($e),502);}
-  return ['connected'=>true,'environment'=>self::env(),'general_status'=>$info['general']??'unknown'];
+  Auth::rate('master-asaas-connection-test',10,3600);
+  $env=enumv($p['environment']??self::env(),['sandbox','production'],'ambiente');
+  // Opcional: testar a chave digitada em memória, sem substituir a credencial gravada.
+  $provided=trim((string)($p['api_key']??''));
+  if($provided!==''&&(strlen($provided)<12||strlen($provided)>1024||preg_match('/\\s/',$provided)))
+   fail('Formato de chave inválido. Confira se copiou a credencial completa, sem espaços.',422);
+  try{$info=self::api('GET','/v3/myAccount/status/',null,$env,$provided!==''?$provided:null);}
+  catch(Throwable $e){
+   $category=PlatformAsaasCredentials::diagnosticCode($e);
+   error_log('TaskEsc Asaas connection test failed: '.$category.' environment='.$env);
+   fail(PlatformAsaasCredentials::diagnosticMessage($e),502,['code'=>$category]);
+  }
+  return ['connected'=>true,'environment'=>$env,
+   'credential_source'=>$provided!==''?'temporary':'saved',
+   'general_status'=>$info['general']??'unknown'];
  }
  public static function status(): array {
   self::master();

@@ -76,7 +76,7 @@ try {
   if($action==='master.invite_additional'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST')out(MasterAccount::invite($p));
   if($action==='master.asaas'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET')out(PlatformAsaasCredentials::get());
   if($action==='master.asaas_save'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST')out(PlatformAsaasCredentials::save($p));
-  if($action==='master.asaas_test'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST')out(PlatformAsaasBilling::connection());
+  if($action==='master.asaas_test'&&($_SERVER['REQUEST_METHOD']??'GET')==='POST')out(PlatformAsaasBilling::connection($p));
   if($action==='master.asaas_status'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET')out(PlatformAsaasBilling::status());
   if($action==='master.asaas_workspace'&&($_SERVER['REQUEST_METHOD']??'GET')==='GET'){
    Auth::load();if(!MasterSupport::isActor()||MasterSupport::isSupport())fail('ADM Master obrigatório.',403);

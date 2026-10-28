@@ -2405,6 +2405,10 @@
       if(tab==='account'){await renderAccountSettings();container.insertAdjacentHTML('afterbegin',tabs);}
       else if(tab==='google'){
         const [accounts,defaultDrive]=await Promise.all([api('google.accounts'),api('company.drive_default',{},'GET')]);
+        const billing=await api('billing.status').catch(()=>null);
+        const billingNotice=billing&&billing.code!=='not_managed'
+          ?'<div class="panel" style="margin:10px 0 16px;border:1px solid '+(billing.write_allowed?'#42664d':'#955448')+'"><b>Assinatura TaskEsc: '+esc(({active:'Em dia',grace:'Prazo de regularização',paused:'Recorrência pausada',suspended:'Edição suspensa',disputed:'Pagamento em análise',needs_review:'Solicite atendimento',awaiting_payment:'Aguardando pagamento'})[billing.code]||billing.code)+'</b><div class="panel-sub">'+(billing.write_allowed?'Seu ambiente permanece disponível.':'A edição foi temporariamente suspensa. Seus dados continuam disponíveis para consulta.')+'</div>'+(billing.invoice_url?'<a class="secondary" target="_blank" rel="noopener noreferrer" href="'+esc(billing.invoice_url)+'">Abrir cobrança no Asaas</a>':'')+'</div>'
+          :'';
         const list=accounts.map(a=>{
           const id=Number(a.id),isDefault=Number(defaultDrive.account_id)===id,ready=a.status==='connected'&&!!a.drive_ready;
           const status=ready?'Drive autorizado':a.status==='disconnected'?'Conta desconectada':'Reconexão necessária';
@@ -2414,7 +2418,7 @@
           const disconnectAction=a.status==='disconnected'?'':`<button type="button" class="danger ghost-danger" data-disconnect-google="${id}" aria-label="Desconectar conta ${esc(a.email)}">Desconectar</button>`;
           return `<div class="panel" style="display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap;margin:8px 0"><div><b>${esc(a.email)}</b><div class="panel-sub">${esc(status)}</div></div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${primaryAction}${disconnectAction}</div></div>`;
         }).join('');
-        container.innerHTML=tabs+'<section class="panel"><div class="panel-head"><div><h3>Minhas contas Google</h3><div class="panel-sub">Só aparecem contas conectadas por você. Envie arquivos apenas usando um Drive autorizado.</div></div></div><button class="primary" type="button" id="company-connect-drive">+ Conectar Google Drive</button>'+ (list||'<div class="empty slim">Nenhuma conta Google Drive conectada.</div>')+'</section>';
+        container.innerHTML=tabs+billingNotice+'<section class="panel"><div class="panel-head"><div><h3>Minhas contas Google</h3><div class="panel-sub">Só aparecem contas conectadas por você. Envie arquivos apenas usando um Drive autorizado.</div></div></div><button class="primary" type="button" id="company-connect-drive">+ Conectar Google Drive</button>'+ (list||'<div class="empty slim">Nenhuma conta Google Drive conectada.</div>')+'</section>';
         $('#company-connect-drive').onclick=async()=>{try{const res=await api('google.connect',{purpose:'drive',return_to:'settings'});location.href=res.url}catch(e){toast(e.message,true)}};
         document.querySelectorAll('[data-own-google]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{await api('company.drive_default',{account_id:Number(b.dataset.ownGoogle)},'POST');toast('Google Drive atualizado.');await draw('google')}catch(e){toast(e.message,true);b.disabled=false}});
         document.querySelectorAll('[data-reconnect-google]').forEach(b=>b.onclick=async()=>{

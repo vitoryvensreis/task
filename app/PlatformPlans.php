@@ -50,6 +50,8 @@ final class PlatformPlans {
   // O slug único é calculado no servidor.
   $features=self::features($p['features']??[]);
   $limit=!empty($p['unlimited_team'])?null:integer($p['team_limit']??0,1,100000);
+  if($limit===null&&(int)($p['extra_user_price_cents']??0)>0)
+   fail('Um plano com equipe ilimitada não pode cobrar por vaga adicional.',422);
   $row=[
    'name'=>$name,
    'price_cents'=>integer($p['price_cents']??0,0,1000000000),
@@ -84,7 +86,10 @@ final class PlatformPlans {
      $override=DB::one("SELECT value FROM workspace_settings
        WHERE workspace_id=? AND `key`='master.team_limit_override'",[(int)$a['workspace_id']]);
      $value=trim((string)($override['value']??''));
-     $limitToCheck=$value!==''&&ctype_digit($value)?(int)$value:(int)$row['team_limit'];
+     $seats=(int)(DB::one('SELECT extra_seats FROM workspace_access_plans WHERE workspace_id=?',[(int)$a['workspace_id']])['extra_seats']??0);
+     $limitToCheck=(int)$row['extra_user_price_cents']>0
+      ?(int)$row['team_limit']+$seats
+      :($value!==''&&ctype_digit($value)?(int)$value:(int)$row['team_limit']);
      $count=(int)(DB::one("SELECT COUNT(*) n FROM workspace_members wm
        JOIN users u ON u.id=wm.user_id JOIN workspaces w ON w.id=wm.workspace_id
        WHERE wm.workspace_id=? AND wm.role IN ('staff','admin') AND wm.status='active'

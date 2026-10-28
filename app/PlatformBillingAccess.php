@@ -48,16 +48,16 @@ final class PlatformBillingAccess {
     'due_date'=>$due?:null,'grace_days'=>self::GRACE_DAYS];
  }
  public static function current(): array {
-  Auth::load();
+  Auth::admin();
   return self::state(Auth::workspaceId());
  }
  public static function guardMutation(string $action,string $method): void {
   if($method==='GET'||WorkspaceContext::legacyCiFixture()||MasterSupport::isSupport())return;
   // Essential account/security, notification and support operations remain usable.
   if(preg_match('/\\A(?:account\\.|auth\\.|notifications\\.|support\\.|chat\\.|push\\.|billing\\.)/',$action))return;
-  $state=self::current();
+  $state=self::state(Auth::workspaceId());
   if(!$state['write_allowed'])
    fail('Assinatura com acesso de edição suspenso. Regularize o pagamento ou solicite atendimento ao suporte.',402,
-    ['billing'=>$state]);
+    ['billing'=>['code'=>$state['code'],'write_allowed'=>false]]);
  }
 }

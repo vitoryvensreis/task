@@ -333,17 +333,63 @@ final class Google {
  public static function downloadDriveFileToPath(int $account,string $fileId,string $path): void {
   $token=self::token($account);$fh=fopen($path,'wb');if(!$fh)throw new RuntimeException('Não foi possível preparar o arquivo temporário.');
   $ch=curl_init(self::DRIVE.'files/'.rawurlencode($fileId).'?alt=media');
-  curl_setopt_array($ch,[CURLOPT_HTTPHEADER=>['Authorization: Bearer '.$token,'Accept: */*'],CURLOPT_FOLLOWLOCATION=>false,CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>0,CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS,CURLOPT_FILE=>$fh]);
+  curl_setopt_array($ch,[CURLOPT_HTTPHEADER=>['Authorization: Bearer '.$token,'Accept: */*'],CURLOPT_FOLLOWLOCATION=>true,CURLOPT_MAXREDIRS=>5,CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>0,CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS,CURLOPT_FILE=>$fh]);
   $ok=curl_exec($ch);$code=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);$err=curl_error($ch);curl_close($ch);fclose($fh);
   if($ok===false||$code<200||$code>=300){@unlink($path);throw new RuntimeException('Não foi possível baixar um arquivo do Google Drive'.($err?': '.$err:'.'));}
  }
 
  public static function streamDriveFile(int $account,string $fileId,string $mime,string $name,bool $inline=false): never {
-  $token=self::token($account);$url=self::DRIVE.'files/'.rawurlencode($fileId).'?alt=media';$headers=['Authorization: Bearer '.$token,'Accept: */*'];
-  $range=$_SERVER['HTTP_RANGE']??'';if($range&&preg_match('/^bytes=\d*-\d*$/',$range))$headers[]='Range: '.$range;
-  header('Content-Type: '.($mime?:'application/octet-stream'));header('Content-Disposition: '.($inline?'inline':'attachment').'; filename*=UTF-8\'\''.rawurlencode($name));header('Accept-Ranges: bytes');header('X-Content-Type-Options: nosniff');
-  $ch=curl_init($url);curl_setopt_array($ch,[CURLOPT_HTTPHEADER=>$headers,CURLOPT_FOLLOWLOCATION=>false,CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>0,CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS,CURLOPT_HEADERFUNCTION=>function($ch,$line){$len=strlen($line);if(preg_match('#^HTTP/\S+\s+(\d{3})#',$line,$m))http_response_code((int)$m[1]);$p=explode(':',$line,2);if(count($p)===2){$k=strtolower(trim($p[0]));$v=trim($p[1]);if(in_array($k,['content-length','content-range','accept-ranges'],true))header(ucwords($k,'-').': '.$v);}return $len;},CURLOPT_WRITEFUNCTION=>function($ch,$data){echo $data;flush();return strlen($data);}]);
-  $ok=curl_exec($ch);$code=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);$err=curl_error($ch);curl_close($ch);if($ok===false||$code>=400){error_log('Drive stream: '.$err.' HTTP '.$code);if(!headers_sent())http_response_code(502);}exit;
+  $url=self::DRIVE.'files/'.rawurlencode($fileId).'?alt=media';
+  $headers=['Authorization: Bearer '.self::token($account),'Accept: */*'];
+  $range=(string)($_SERVER['HTTP_RANGE']??'');
+  if(preg_match('/^bytes=\d*-\d*$/D',$range))$headers[]='Range: '.$range;
+  if(!preg_match('#^[a-z0-9.+-]+/[a-z0-9.+-]+$#iD',$mime))$mime='application/octet-stream';
+  $status=0;$sent=false;$upstreamHeaders=[];
+  $sendHeaders=function()use(&$sent,&$status,&$upstreamHeaders,$mime,$name,$inline): void {
+   if($sent)return;
+   http_response_code($status===206?206:200);
+   header('Content-Type: '.$mime);
+   header('Content-Disposition: '.($inline?'inline':'attachment')."; filename*=UTF-8''".rawurlencode($name));
+   header('X-Content-Type-Options: nosniff');
+   header('Cache-Control: private, no-store');
+   header('Accept-Ranges: bytes');
+   foreach(['content-length'=>'Content-Length','content-range'=>'Content-Range'] as $key=>$title)if(isset($upstreamHeaders[$key]))header($title.': '.$upstreamHeaders[$key]);
+   $sent=true;
+  };
+  $ch=curl_init($url);
+  $options=[
+   CURLOPT_HTTPHEADER=>$headers,CURLOPT_FOLLOWLOCATION=>true,CURLOPT_MAXREDIRS=>5,
+   CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>0,CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS,
+   CURLOPT_HEADERFUNCTION=>function($ch,$line)use(&$status,&$upstreamHeaders): int {
+    if(preg_match('#^HTTP/\S+\s+(\d{3})#',$line,$match)){$status=(int)$match[1];$upstreamHeaders=[];return strlen($line);}
+    $parts=explode(':',$line,2);
+    if(count($parts)===2){
+     $key=strtolower(trim($parts[0]));$value=trim($parts[1]);
+     if(in_array($key,['content-length','content-range'],true)&&preg_match('/^[0-9\/ *-]+$/D',$value))$upstreamHeaders[$key]=$value;
+    }
+    return strlen($line);
+   },
+   CURLOPT_WRITEFUNCTION=>function($ch,$chunk)use(&$status,$sendHeaders): int {
+    if($status===200||$status===206){$sendHeaders();echo $chunk;flush();}
+    return strlen($chunk);
+   }
+  ];
+  if(defined('CURLOPT_REDIR_PROTOCOLS_STR'))$options[constant('CURLOPT_REDIR_PROTOCOLS_STR')]='https';
+  elseif(defined('CURLOPT_REDIR_PROTOCOLS'))$options[constant('CURLOPT_REDIR_PROTOCOLS')]=CURLPROTO_HTTPS;
+  curl_setopt_array($ch,$options);
+  $ok=curl_exec($ch);$code=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);$error=curl_error($ch);curl_close($ch);
+  if($ok===false||!in_array($code,[200,206],true)){
+   error_log('TaskEsc Drive stream failed HTTP '.$code.' account '.$account.($error!==''?' curl: '.$error:''));
+   if(!$sent){
+    http_response_code(in_array($code,[401,403,404],true)?$code:502);
+    header('Content-Type: text/plain; charset=utf-8');
+    header('Cache-Control: private, no-store');
+    echo 'Não foi possível abrir este anexo no Google Drive. Verifique a conexão e as permissões da conta original.';
+   }
+   exit;
+  }
+  if(!$sent)$sendHeaders();
+  exit;
  }
 
 

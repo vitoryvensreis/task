@@ -60,6 +60,10 @@ footer{padding-top:44px;color:#7e8997;font-size:13px}
  <h2 class="name"><?=e($plan['name'])?></h2>
  <div class="price">R$ <?=e($price)?> <span class="period">/ <?=e($cycleLabels[$plan['billing_period']]??$plan['billing_period'])?></span></div>
  <p class="meta"><?= $plan['team_limit']===null?'Equipe ilimitada':'Até '.(int)$plan['team_limit'].' usuário(s) de equipe' ?></p>
+ <p class="meta">Clientes ilimitados. Proprietário ADM não ocupa vaga.</p>
+ <?php if($plan['team_limit']!==null&&(int)$plan['extra_user_price_cents']>0): ?>
+ <p class="meta">Vaga adicional ADM/equipe: R$ <?=e(number_format((int)$plan['extra_user_price_cents']/100,2,',','.'))?> / <?=e($cycleLabels[$plan['billing_period']]??$plan['billing_period'])?></p>
+ <?php endif; ?>
  <a class="request" data-plan-select="<?= (int)$plan['id'] ?>" href="#contratar">Solicitar contratação</a>
  <?php foreach($features as $key=>$label)if(!empty($enabled[$key])): ?>
   <div class="feature">✓ <?=e($label)?></div>
@@ -79,6 +83,10 @@ footer{padding-top:44px;color:#7e8997;font-size:13px}
     <?php endforeach; ?>
    </select>
   </label>
+  <label>Vagas extras para ADM/equipe
+   <input name="extra_seats" type="number" min="0" max="100" step="1" value="0" required>
+  </label>
+  <p class="intro" id="sales-total" aria-live="polite"></p>
   <label>Seu nome<input name="name" maxlength="120" autocomplete="name" required></label>
   <label>Empresa (opcional)<input name="company" maxlength="140" autocomplete="organization"></label>
   <label>E-mail de contato<input name="email" type="email" maxlength="190" autocomplete="email" required></label>
@@ -90,5 +98,8 @@ footer{padding-top:44px;color:#7e8997;font-size:13px}
 </section>
 <?php endif; ?>
 <footer>TaskEsc é um produto da Escotilha Produtora. <a href="<?=e(base('privacidade'))?>">Privacidade</a> · <a href="<?=e(base('termos-de-uso'))?>">Termos de Uso</a>. Assinaturas são criadas após confirmação comercial.</footer>
-<script defer src="<?=e(base('assets/plans-sales.js'))?>?v=1"></script>
+<script type="application/json" id="sales-pricing"><?=json(array_map(static fn($p)=>[
+ 'id'=>(int)$p['id'],'base'=>(int)$p['price_cents'],
+ 'seat'=>(int)$p['extra_user_price_cents'],'period'=>(string)$p['billing_period']],$plans))?></script>
+<script defer src="<?=e(base('assets/plans-sales.js'))?>?v=2"></script>
 </main></body></html>

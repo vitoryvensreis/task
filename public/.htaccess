@@ -13,6 +13,9 @@ RewriteRule ^master(?:/(?:suporte|clientes|planos|workspaces|configuracoes|integ
 # Páginas institucionais públicas (sem sessão, necessárias ao OAuth Google).
 RewriteRule ^(?:privacidade|termos-de-uso)/?$ index.php [L,QSA]
 
+# Catálogo e contratação, renderizados pelas views do front controller.
+RewriteRule ^(?:planos|contratar)/?$ index.php [L,QSA]
+
 # Rotas amigáveis do painel. Arquivos e endpoints físicos continuam sendo servidos normalmente.
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d

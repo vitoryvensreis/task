@@ -253,7 +253,10 @@ final class PlatformAsaasBilling {
    foreach($entries as $payment)if(is_array($payment)){
     DB::tx(static function()use($payment,$localId,$environment):void {
      self::upsertPayment($payment,$localId,$environment);
-     if($environment==='production')SelfServiceCheckout::activatePaid($localId,$payment);
+     if($environment==='production'){
+      SelfServiceCheckout::activatePaid($localId,$payment);
+      SubscriptionChanges::activateInitial($localId,$payment);
+     }
     });
     $count++;
    }
@@ -420,7 +423,10 @@ final class PlatformAsaasBilling {
     [$env,$eventId,$event,$id,hash('sha256',json_encode($payload,JSON_THROW_ON_ERROR)),now()]);
    if(str_starts_with($event,'PAYMENT_')){
     self::upsertPayment($object,$id,$env);
-    if($env==='production')SelfServiceCheckout::activatePaid($id,$object);
+    if($env==='production'){
+     SelfServiceCheckout::activatePaid($id,$object);
+     SubscriptionChanges::activateInitial($id,$object);
+    }
    }
    elseif(in_array($event,['SUBSCRIPTION_INACTIVATED','SUBSCRIPTION_DELETED'],true)){
     DB::run('UPDATE platform_asaas_subscriptions SET request_status=?,updated_at=? WHERE id=?',

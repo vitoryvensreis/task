@@ -26,9 +26,41 @@ final class PlatformAsaasCredentials {
     :'Configure a chave e o token de webhook e habilite cobranças após verificar a conta Asaas.'
   ];
  }
+ /** Categoria estável e segura, nunca expõe o valor da chave nem o corpo HTTP. */
+ public static function diagnosticCode(Throwable $e): string {
+  $msg=$e->getMessage();
+  if(in_array($msg,['Invalid encrypted token','Cannot decrypt token'],true))
+   return 'asaas_local_decrypt_failed';
+  if($msg==='asaas_curl_unavailable')return 'asaas_local_curl_unavailable';
+  if(preg_match('/\\Aasaas_transport_([0-9]{1,3})\\z/D',$msg,$m))
+   return 'asaas_transport_'.$m[1];
+  if(preg_match('/\\Aasaas_http_(400|401|402|403|404|409|422|429|5[0-9]{2})(?:_([a-z_]+))?\\z/D',$msg,$m)){
+   $allowed=['invalid_environment','invalid_access_token','invalid_access_token_format',
+    'access_token_not_found','ip_not_allowed','invalid_ip','invalid_request'];
+   return 'asaas_http_'.$m[1].(isset($m[2])&&in_array($m[2],$allowed,true)?'_'.$m[2]:'');
+  }
+  if(in_array($msg,['asaas_key_not_configured','asaas_invalid_response'],true))return $msg;
+  if($e instanceof PDOException)return 'asaas_local_database';
+  if($e instanceof JsonException)return 'asaas_response_json_invalid';
+  if($e instanceof InvalidArgumentException)return 'asaas_local_invalid_route';
+  return 'asaas_local_unexpected';
+ }
  /** Mensagens acionáveis, sem resposta bruta da API nem credenciais. */
  public static function diagnosticMessage(Throwable $e): string {
-  $code=$e->getMessage();
+  $code=self::diagnosticCode($e);
+  if($code==='asaas_local_decrypt_failed')
+   return 'A chave Asaas está cadastrada, mas o TaskEsc não consegue descriptografá-la. Isso pode ocorrer se a chave de criptografia do servidor mudou. Informe novamente sua chave Asaas para testar e salvar sem alterar o ambiente.';
+  if($code==='asaas_local_curl_unavailable')
+   return 'A extensão PHP cURL não está disponível no servidor. Habilite cURL no PHP-FPM usado pelo TaskEsc.';
+  if($code==='asaas_local_database')
+   return 'Falha ao acessar as configurações da integração no banco. Consulte o log técnico do servidor.';
+  if($code==='asaas_local_invalid_route')
+   return 'A rota usada pela integração Asaas é inválida. É necessária correção no código.';
+  if($code==='asaas_response_json_invalid')
+   return 'O Asaas retornou um JSON inesperado. Verifique bloqueios de proxy ou mudanças na API.';
+  if($code==='asaas_local_unexpected')
+   return 'Falha interna antes de concluir a consulta ao Asaas. Categoria: asaas_local_unexpected. Verifique os logs do PHP-FPM; o servidor não gravou tokens no diagnóstico.';
+
   if(str_contains($code,'invalid_environment'))
    return 'Chave de ambiente incorreto: selecione Produção para uma chave de produção e Sandbox para uma chave de testes (HTTP 401).';
   if(str_contains($code,'invalid_access_token_format'))

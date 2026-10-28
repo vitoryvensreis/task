@@ -9,6 +9,7 @@ try {
  $plans=[];
 }
 $features=['tasks'=>'Gerenciamento de tarefas','automations'=>'Automações','contacts'=>'Agenda de contatos'];
+$cycleLabels=['weekly'=>'semana','biweekly'=>'quinzena','monthly'=>'mês','bimonthly'=>'bimestre','quarterly'=>'trimestre','semiannually'=>'semestre','yearly'=>'ano'];
 ?><!doctype html>
 <html lang="pt-BR"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">

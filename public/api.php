@@ -171,6 +171,7 @@ try {
   'billing.status'=>PlatformBillingAccess::current(),
   'billing.seats_purchase'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?SubscriptionChanges::purchase($p):fail('Método não permitido.',405),
   'billing.catalog'=>SubscriptionChanges::catalog(),
+  'billing.start_existing'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?SubscriptionChanges::startInitial($p):fail('Método não permitido.',405),
   'billing.quote'=>SubscriptionChanges::quote($p),
   'billing.purchase'=>($_SERVER['REQUEST_METHOD']??'GET')==='POST'?SubscriptionChanges::purchase($p):fail('Método não permitido.',405),
   'account.get'=>Auth::profile(),

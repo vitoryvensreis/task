@@ -64,6 +64,9 @@ final class MasterWorkspaceManagement {
    'members'=>$members,
    'team_used'=>$used,'team_limit'=>$planEffective['team_limit']??null,
    'plan_team_limit'=>$plan['team_limit']??null,
+   'extra_seats'=>$planEffective['extra_seats']??0,
+   'extra_user_price_cents'=>$planEffective['extra_user_price_cents']??0,
+   'total_price_cents'=>$planEffective['total_price_cents']??0,
    'team_limit_override'=>$planEffective['team_limit_override']??null,
    'plan_name'=>$plan['name']??'Não atribuído',
    'integrations'=>WorkspaceIntegrationStatus::forMaster($id),
@@ -113,6 +116,9 @@ final class MasterWorkspaceManagement {
      JOIN platform_access_plans p ON p.id=a.plan_id AND p.active=1 WHERE a.workspace_id=?',
      [$workspaceId]);
    if(!$assigned)fail('Atribua primeiro um plano ativo ao workspace.',409);
+   if((int)(DB::one('SELECT extra_user_price_cents FROM platform_access_plans WHERE id=?',
+      [(int)$assigned['id']])['extra_user_price_cents']??0)>0)
+    fail('Este plano cobra vagas adicionais. Use Adquirir vagas extras para atualizar o valor recorrente.',409);
    $used=(int)(DB::one("SELECT COUNT(*) n FROM workspace_members wm
      JOIN users u ON u.id=wm.user_id WHERE wm.workspace_id=? AND wm.status='active'
      AND wm.role IN ('admin','staff') AND u.active=1 AND u.id<>?",[$workspaceId,(int)$ws['owner_user_id']])['n']??0);

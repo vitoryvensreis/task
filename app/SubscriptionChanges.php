@@ -34,8 +34,8 @@ final class SubscriptionChanges {
   $planId=integer($p['plan_id']??$current['plan_id'],1);
   $seats=integer($p['extra_seats']??$current['extra_seats'],0,100);
   $target=DB::one("SELECT id,name,code,price_cents,extra_user_price_cents,allow_extra_seats,
-    billing_period,team_limit,active FROM platform_access_plans WHERE id=?",[$planId]);
-  if(!$target||(int)$target['active']!==1||$target['code']==='legacy-unlimited'||
+    billing_period,team_limit,active,public_visible FROM platform_access_plans WHERE id=?",[$planId]);
+  if(!$target||(int)$target['active']!==1||(int)$target['public_visible']!==1||$target['code']==='legacy-unlimited'||
      $target['billing_period']!==$current['cycle'])
    fail('Escolha um plano ativo com a mesma periodicidade. Mudanças de ciclo precisam de atendimento.',409);
   if($seats>0&&($target['team_limit']===null||!(int)$target['allow_extra_seats']||
@@ -72,7 +72,12 @@ final class SubscriptionChanges {
     'plans'=>$plans,'pending'=>$pending];
  }
  public static function quote(array $p): array {
-  return self::evaluate(self::owner(),$p);
+  $value=self::evaluate(self::owner(),$p);
+  return ['old_amount_cents'=>$value['old_amount_cents'],
+   'target_amount_cents'=>$value['target_amount_cents'],
+   'difference_cents'=>$value['difference_cents'],
+   'plan_name'=>$value['plan']['name'],'extra_seats'=>$value['extra_seats'],
+   'notice'=>$value['notice']];
  }
  public static function purchase(array $p): array {
   $workspace=self::owner();checkCsrf();Auth::rate('saas-upgrade',4,3600);

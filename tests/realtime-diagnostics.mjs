@@ -8,13 +8,17 @@ const auth=fs.readFileSync(new URL('../app/RealtimeDiagnostics.php',import.meta.
 const api=fs.readFileSync(new URL('../public/api.php',import.meta.url),'utf8');
 assert(code.includes("basePath + '/realtime-auth.php'"),'Browser authentication must bypass friendly rewrite URL');
 assert(!code.includes("basePath + '/realtime.auth'"),'Do not use rewrite-dependent realtime auth route');
-assert(app.includes('WebSocket offline · HTTP')&&app.includes("const label=live?'Sistema Online':"),'Realtime indicator must display Sistema Online only when the WebSocket connection and authorized channel are active');
+assert(app.includes("(live?'Sistema Online':'Conexão instável')")&&app.includes("state.connection==='connected'&&authorizedChannel"),'Realtime indicator must stay a simple status and not impersonate connected state');
+assert(!app.includes('Diagnóstico WebSocket')&&!app.includes('showRealtimeDiagnostics'),'Tenant users and tenant admins must not see technical WebSocket diagnostics');
+assert(app.includes("i.onclick=null;i.onkeydown=null"),'Realtime indicator must not open a diagnostic modal');
 assert(!app.includes("'<i></i> Tempo real · '"),'HTTP polling must never impersonate WebSocket');
 assert(app.includes("if(S.page==='kanban'?realtimeEditing():userIsInteracting())return;"),'Idle Kanban search focus must not block polling');
 assert(app.includes("if(S.page==='kanban')await stableRender(refresh);else await refresh();"),'HTTP fallback must preserve Kanban search focus and scroll');
 
-assert(api.includes("'realtime.health'=>")&&api.includes("'realtime.probe'=>"),'Admin diagnostics routes must exist');
-assert(auth.includes('Auth::admin()')&&auth.includes('EventOutbox::transaction'),'Probe must be admin-only and use transactional Outbox');
+assert(!api.includes("'realtime.health'=>")&&!api.includes("'realtime.probe'=>")&&!api.includes("'realtime.probe_status'=>"),'Legacy tenant diagnostics routes must be removed');
+assert(api.includes("'realtime.health','realtime.probe','realtime.probe_status'],true))fail('Diagnósticos técnicos disponíveis somente no painel do ADM Master.',403)"),'Legacy diagnostic requests must explicitly deny tenant users');
+assert(api.includes("$action==='master.health'")&&api.includes("MasterSupport::isActor()"),'Master health endpoint must remain available with authenticated master guard');
+assert(auth.includes('Auth::admin()')&&auth.includes('EventOutbox::transaction'),'Unrouted legacy probe must remain gated and transactional');
 assert(auth.includes('FROM event_outbox WHERE workspace_id=?'),'Tenant admins must not see other workspaces queue volume');
 assert(auth.includes("WorkspaceTenantMode::enabled()?'kanban/ws-'"),'Probe must use tenant-scoped Kanban channel');
 const realtimeAuth=read('../app/RealtimeAuth.php');
@@ -57,4 +61,4 @@ context.window.TaskEscRealtime.subscribe('client:4');
 assert.equal(fakeSubscriptions.length,2,'Dynamically subscribed channels must work');
 context.window.TaskEscRealtime.unsubscribe('client:4');
 assert(!context.window.TaskEscRealtime.health().channels.includes('client:4'),'Removed channels should not appear active');
-console.log('Realtime diagnosis: direct auth, active channel state, health and admin E2E probe wiring OK');
+console.log('Realtime diagnosis: authenticated realtime works; technical endpoints restricted to ADM Master');

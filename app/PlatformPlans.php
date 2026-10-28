@@ -39,7 +39,7 @@ final class PlatformPlans {
 
  public static function publicList(): array {
   if(!self::ready())return [];
-  return DB::all('SELECT id,name,code,price_cents,extra_user_price_cents,billing_period,features_json,team_limit
+  return DB::all('SELECT id,name,code,price_cents,extra_user_price_cents,allow_extra_seats,billing_period,features_json,team_limit
     FROM platform_access_plans WHERE active=1 AND public_visible=1 ORDER BY price_cents,id');
  }
 
@@ -56,6 +56,7 @@ final class PlatformPlans {
    'name'=>$name,
    'price_cents'=>integer($p['price_cents']??0,0,1000000000),
    'extra_user_price_cents'=>integer($p['extra_user_price_cents']??0,0,1000000000),
+   'allow_extra_seats'=>$limit===null?0:(int)!empty($p['allow_extra_seats']),
    'billing_period'=>enumv($p['billing_period']??'monthly',['daily','weekly','biweekly','monthly','bimonthly','quarterly','semiannually','yearly'],'periodicidade'),
    'features_json'=>json($features),'team_limit'=>$limit,
    'public_visible'=>(int)(bool)($p['public_visible']??0),
@@ -88,7 +89,7 @@ final class PlatformPlans {
        WHERE workspace_id=? AND `key`='master.team_limit_override'",[(int)$a['workspace_id']]);
      $value=trim((string)($override['value']??''));
      $seats=(int)(DB::one('SELECT extra_seats FROM workspace_access_plans WHERE workspace_id=?',[(int)$a['workspace_id']])['extra_seats']??0);
-     $limitToCheck=(int)$row['extra_user_price_cents']>0
+     $limitToCheck=(!(int)$row['allow_extra_seats']||(int)$row['extra_user_price_cents']>0)
       ?(int)$row['team_limit']+$seats
       :($value!==''&&ctype_digit($value)?(int)$value:(int)$row['team_limit']);
      $count=(int)(DB::one("SELECT COUNT(*) n FROM workspace_members wm
@@ -101,7 +102,8 @@ final class PlatformPlans {
    if($old)DB::update('platform_access_plans',$id,$row);
    else $id=DB::insert('platform_access_plans',$row+['created_at'=>now()]);
    self::audit('plan.saved',null,['plan_id'=>$id,'name'=>$row['name'],'features'=>decode($row['features_json']),
-    'team_limit'=>$row['team_limit'],'public_visible'=>$row['public_visible']]);
+    'team_limit'=>$row['team_limit'],'public_visible'=>$row['public_visible'],
+    'allow_extra_seats'=>$row['allow_extra_seats']]);
    return ['saved'=>true,'id'=>$id];
   });
  }
@@ -121,12 +123,12 @@ final class PlatformPlans {
       WHERE workspace_id=? AND plan_id<>? AND environment='production'
       AND request_status IN ('created','inactive') LIMIT 1",[$workspaceId,$planId]))
     fail('Esta empresa possui uma assinatura Asaas em outro plano. Ajuste a recorrência no Master antes de trocar o plano.',409);
-   $plan=DB::one('SELECT id,active,team_limit,extra_user_price_cents FROM platform_access_plans WHERE id=?',[$planId]);
+   $plan=DB::one('SELECT id,active,team_limit,extra_user_price_cents,allow_extra_seats FROM platform_access_plans WHERE id=?',[$planId]);
    if(!$plan||(int)$plan['active']!==1)fail('Plano inativo ou não encontrado.',404);
    $override=DB::one("SELECT value FROM workspace_settings
      WHERE workspace_id=? AND `key`='master.team_limit_override'",[$workspaceId]);
    $value=trim((string)($override['value']??''));
-   $paidExtras=(int)$plan['extra_user_price_cents']>0;
+   $paidExtras=!(int)$plan['allow_extra_seats']||(int)$plan['extra_user_price_cents']>0;
    $seats=(int)(DB::one('SELECT extra_seats FROM workspace_access_plans WHERE workspace_id=?',[$workspaceId])['extra_seats']??0);
    $teamLimit=$plan['team_limit']===null?null:($paidExtras
     ?(int)$plan['team_limit']+$seats
@@ -175,7 +177,7 @@ final class PlatformPlans {
   $workspaceId=$id??Auth::workspaceId();
   if(WorkspaceContext::legacyCiFixture())return [
    'name'=>'Legacy CI','features'=>['tasks'=>true,'automations'=>true,'contacts'=>true],'team_limit'=>null];
-  $plan=DB::one('SELECT p.id,p.name,p.features_json,p.team_limit,p.price_cents,p.extra_user_price_cents,p.billing_period,a.extra_seats
+  $plan=DB::one('SELECT p.id,p.name,p.features_json,p.team_limit,p.price_cents,p.extra_user_price_cents,p.allow_extra_seats,p.billing_period,a.extra_seats
       FROM workspace_access_plans a JOIN platform_access_plans p ON p.id=a.plan_id
       WHERE a.workspace_id=? AND p.active=1 LIMIT 1',[$workspaceId]);
   if(!$plan)fail('O ADM Master precisa atribuir um plano ativo a este workspace.',403);
@@ -186,7 +188,7 @@ final class PlatformPlans {
   $override=trim((string)($row['value']??''));
   $plan['team_limit_override']=($override!==''&&ctype_digit($override)&&
     (int)$override>=1&&(int)$override<=100000)?(int)$override:null;
-  if($plan['team_limit']!==null&&(int)$plan['extra_user_price_cents']>0){
+  if($plan['team_limit']!==null&&(!(int)$plan['allow_extra_seats']||(int)$plan['extra_user_price_cents']>0)){
    $plan['team_limit']=(int)$plan['team_limit']+(int)$plan['extra_seats'];
    $plan['team_limit_override']=null;
   }elseif($plan['team_limit_override']!==null)$plan['team_limit']=$plan['team_limit_override'];

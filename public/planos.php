@@ -61,7 +61,10 @@ footer{padding-top:44px;color:#7e8997;font-size:13px}
  <div class="price">R$ <?=e($price)?> <span class="period">/ <?=e($cycleLabels[$plan['billing_period']]??$plan['billing_period'])?></span></div>
  <p class="meta"><?= $plan['team_limit']===null?'Equipe ilimitada':((int)$plan['team_limit']===0?'Somente proprietário ADM':'Proprietário ADM + até '.(int)$plan['team_limit'].' pessoa(s) da equipe') ?></p>
  <p class="meta">Clientes ilimitados. Proprietário ADM não ocupa vaga.</p>
- <?php if($plan['team_limit']!==null&&(int)$plan['extra_user_price_cents']>0): ?>
+ <?php if($plan['team_limit']!==null&&(int)$plan['allow_extra_seats']===0): ?>
+ <p class="meta">Plano fechado: não permite contratar usuários adicionais.</p>
+ <?php endif; ?>
+ <?php if($plan['team_limit']!==null&&(int)$plan['allow_extra_seats']===1&&(int)$plan['extra_user_price_cents']>0): ?>
  <p class="meta">Vaga adicional ADM/equipe: R$ <?=e(number_format((int)$plan['extra_user_price_cents']/100,2,',','.'))?> / <?=e($cycleLabels[$plan['billing_period']]??$plan['billing_period'])?></p>
  <?php endif; ?>
  <a class="request" data-plan-select="<?= (int)$plan['id'] ?>" href="#contratar">Solicitar contratação</a>
@@ -100,6 +103,6 @@ footer{padding-top:44px;color:#7e8997;font-size:13px}
 <footer>TaskEsc é um produto da Escotilha Produtora. <a href="<?=e(base('privacidade'))?>">Privacidade</a> · <a href="<?=e(base('termos-de-uso'))?>">Termos de Uso</a>. Assinaturas são criadas após confirmação comercial.</footer>
 <script type="application/json" id="sales-pricing"><?=json(array_map(static fn($p)=>[
  'id'=>(int)$p['id'],'base'=>(int)$p['price_cents'],
- 'seat'=>(int)$p['extra_user_price_cents'],'period'=>(string)$p['billing_period']],$plans))?></script>
+ 'seat'=>(int)$p['extra_user_price_cents'],'allow'=>(int)$p['allow_extra_seats'],'period'=>(string)$p['billing_period']],$plans))?></script>
 <script defer src="<?=e(base('assets/plans-sales.js'))?>?v=2"></script>
 </main></body></html>

@@ -130,13 +130,15 @@ final class PlatformAsaasBilling {
   $taxId=preg_replace('/\D+/','',(string)($input['cpf_cnpj']??''));
   if(mb_strlen($name)<3||mb_strlen($name)>190||!filter_var($email,FILTER_VALIDATE_EMAIL)||
     !in_array(strlen($taxId),[11,14],true))fail('Informe nome, e-mail e CPF/CNPJ válidos do pagador.',422);
-  $plan=DB::one('SELECT p.id,p.name,p.code,p.price_cents,p.extra_user_price_cents,p.billing_period,a.extra_seats
+  $plan=DB::one('SELECT p.id,p.name,p.code,p.price_cents,p.extra_user_price_cents,p.allow_extra_seats,p.billing_period,a.extra_seats
    FROM workspace_access_plans a JOIN platform_access_plans p ON p.id=a.plan_id
    JOIN workspaces w ON w.id=a.workspace_id
    WHERE a.workspace_id=? AND p.active=1 AND w.status IN (\'staged\',\'active\')',[$workspace]);
   if(!$plan||$plan['code']==='legacy-unlimited'||(int)$plan['price_cents']<100||
     !isset(self::CYCLES[$plan['billing_period']]))
    fail('Associe um plano pago com ciclo suportado antes de cobrar. Contas legadas não são cobradas.',409);
+  if((int)$plan['extra_seats']>0&&!(int)$plan['allow_extra_seats'])
+   fail('Plano não permite novas vagas extras. Revise a quantidade antes de criar a assinatura.',409);
   if(!self::ready())fail('Migração Asaas ainda não aplicada.',503);
   $orderId=DB::tx(static function()use($workspace,$plan,$env,$name,$email):int {
    if(DB::one('SELECT id FROM platform_asaas_subscriptions WHERE workspace_id=? AND environment=? FOR UPDATE',[$workspace,$env]))
@@ -304,7 +306,7 @@ final class PlatformAsaasBilling {
   if((int)(DB::one('SELECT GET_LOCK(?,0) AS acquired',[$lock])['acquired']??0)!==1)
    fail('Outra atualização de usuários está em andamento.',409);
   try{
-   $row=DB::one('SELECT a.workspace_id,a.plan_id,a.extra_seats,p.code,p.name,p.team_limit,p.price_cents,p.extra_user_price_cents,
+   $row=DB::one('SELECT a.workspace_id,a.plan_id,a.extra_seats,p.code,p.name,p.team_limit,p.price_cents,p.extra_user_price_cents,p.allow_extra_seats,
     w.owner_user_id FROM workspace_access_plans a
     JOIN platform_access_plans p ON p.id=a.plan_id AND p.active=1
     JOIN workspaces w ON w.id=a.workspace_id WHERE a.workspace_id=?',[$workspace]);
@@ -319,6 +321,8 @@ final class PlatformAsaasBilling {
    if($used>(int)$row['team_limit']+$requested)
     fail('A empresa utiliza mais usuários do que o novo limite. Remova usuários antes de reduzir vagas.',409);
    $current=(int)$row['extra_seats'];
+   if(!(int)$row['allow_extra_seats']&&$requested>$current)
+    fail('Este plano não permite contratar usuários extras. Escolha outro plano para ampliar a equipe.',409);
    $total=PlatformPlans::amount((int)$row['price_cents'],$price,$requested);
    if($current===$requested)return ['updated'=>false,'extra_seats'=>$current,'total_cents'=>$total];
    $subscription=DB::one("SELECT id,environment,asaas_subscription_id,request_status,amount_cents

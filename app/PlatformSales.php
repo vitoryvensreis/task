@@ -19,11 +19,11 @@ final class PlatformSales {
      !preg_match('/\\A[0-9+ ()-]{8,25}\\z/D',$phone))
    fail('Informe nome, e-mail e telefone de contato válidos.',422);
   $planId=integer($input['plan_id']??0,1);
-  $plan=DB::one('SELECT id,name,price_cents,extra_user_price_cents,team_limit,billing_period FROM platform_access_plans
+  $plan=DB::one('SELECT id,name,price_cents,extra_user_price_cents,allow_extra_seats,team_limit,billing_period FROM platform_access_plans
     WHERE id=? AND active=1 AND public_visible=1 AND code<>?',[$planId,'legacy-unlimited']);
   if(!$plan)fail('Plano público não encontrado.',404);
   $extras=integer($input['extra_seats']??0,0,100);
-  if($extras>0&&($plan['team_limit']===null||(int)$plan['extra_user_price_cents']===0))
+  if($extras>0&&(!(int)$plan['allow_extra_seats']||$plan['team_limit']===null||(int)$plan['extra_user_price_cents']===0))
    fail('O plano selecionado não oferece vagas adicionais.',422);
   $total=PlatformPlans::amount((int)$plan['price_cents'],(int)$plan['extra_user_price_cents'],$extras);
   // Keep lead delivery out of tenant-scoped mail queues. Only verified Masters

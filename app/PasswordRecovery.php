@@ -51,6 +51,12 @@ final class PasswordRecovery {
    if(!hash_equals(self::signature($data,(string)$user['password_hash']),$matches[4]))
     fail('Link já utilizado ou inválido. Solicite uma nova recuperação.',422);
    DB::run('UPDATE users SET password_hash=? WHERE id=?',[$hash,$id]);
+   // Revoga sessões antigas e tokens de API, inclusive os emitidos antes
+   // desta funcionalidade ser instalada.
+   DB::run('INSERT INTO settings (`key`,value) VALUES (?,?)
+    ON DUPLICATE KEY UPDATE value=VALUES(value)',
+    ['auth.password_reset.'.$id,(string)microtime(true)]);
+   DB::run('UPDATE api_tokens SET revoked=1 WHERE user_id=?',[$id]);
    self::queue((string)$user['email'],'TaskEsc — senha alterada',
     "Sua senha do TaskEsc foi alterada. Se você não reconhece esta ação, procure o suporte da plataforma.");
   });

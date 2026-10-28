@@ -520,12 +520,70 @@ try{
   'Vitor rule leaked into Gabriella run queue.');
  // Payment tables are created only after the workspace foundation.
  require_once ROOT.'/app/PlatformAsaasBilling.php';
+ require_once ROOT.'/app/SelfServiceCheckout.php';
  $asaasSql=file_get_contents(ROOT.'/database/migrations/041_platform_asaas_billing.sql');
  testws($asaasSql!==false,'Asaas migration missing.');
  foreach(preg_split('/;\\s*(?:\\r?\\n|$)/',$asaasSql) as $statement)
   if(trim($statement)!=='')DB::run($statement);
  testws(PlatformAsaasBilling::ready(),'Asaas billing schema missing.');
  testws(!PlatformAsaasBilling::enabled(),'Asaas billing must not activate without credentials and Master authorization.');
+ // Apenas um teste descartável e sem cobrança: o terceiro workspace começa
+ // pendente e não pode autenticar antes de ser liberado.
+ $checkoutDdl=(string)file_get_contents(ROOT.'/database/migrations/044_platform_checkout.sql');
+ testws($checkoutDdl!=='','Checkout migration missing.');
+ foreach(preg_split('/;\\s*(?:\\r?\\n|$)/',$checkoutDdl) as $statement)
+  if(trim($statement)!=='')DB::run($statement);
+ $extraOwner=DB::insert('users',[
+  'name'=>'Checkout CI','email'=>'ci-new-account-2026@example.invalid',
+  'password_hash'=>password_hash('Example-CI-2026-Secure',PASSWORD_DEFAULT),
+  'role'=>'admin','active'=>0,'created_at'=>now()
+ ]);
+ $third=DB::insert('workspaces',[
+  'slug'=>'ci-third-workspace','name'=>'Empresa nova CI',
+  'owner_user_id'=>$extraOwner,'status'=>'pending_payment','created_at'=>now(),'updated_at'=>now()
+ ]);
+ DB::run('INSERT INTO workspace_members(workspace_id,user_id,role,status,joined_at)
+  VALUES (?,?,?,?,?)',[$third,$extraOwner,'owner','inactive',now()]);
+ testws(WorkspaceFoundationGuard::valid(),'Adding pending third workspace broke existing tenant guard.');
+ $ciPlan=DB::insert('platform_access_plans',[
+  'name'=>'Solo de teste','code'=>'solo-ci-2026','price_cents'=>1990,
+  'extra_user_price_cents'=>1590,'allow_extra_seats'=>1,'billing_period'=>'monthly',
+  'features_json'=>json(['tasks'=>true,'automations'=>true,'contacts'=>true]),
+  'team_limit'=>0,'public_visible'=>1,'active'=>1,'created_at'=>now(),'updated_at'=>now()
+ ]);
+ DB::run('INSERT INTO workspace_access_plans(workspace_id,plan_id,extra_seats,assigned_at)
+  VALUES (?,?,0,?)',[$third,$ciPlan,now()]);
+ $subscription=DB::insert('platform_asaas_subscriptions',[
+  'workspace_id'=>$third,'plan_id'=>$ciPlan,'environment'=>'production',
+  'asaas_subscription_id'=>'sub_ciTest2026','payer_name'=>'Checkout CI',
+  'payer_email'=>'ci-new-account-2026@example.invalid','amount_cents'=>1990,
+  'cycle'=>'monthly','due_date'=>gmdate('Y-m-d',strtotime('+1 day')),
+  'request_status'=>'created','billing_status'=>'awaiting_payment',
+  'created_at'=>now(),'updated_at'=>now()
+ ]);
+ DB::insert('platform_checkout_orders',[
+  'user_id'=>$extraOwner,'workspace_id'=>$third,'plan_id'=>$ciPlan,
+  'extra_seats'=>0,'verify_hash'=>hash('sha256',str_repeat('a',64)),
+  'token_expires_at'=>gmdate('Y-m-d H:i:s',time()+86400),
+  'verified_at'=>now(),'status'=>'awaiting_payment',
+  'created_at'=>now(),'updated_at'=>now()
+ ]);
+ testws((int)(DB::one('SELECT active FROM users WHERE id=?',[$extraOwner])['active']??1)===0,
+  'Unpaid checkout owner cannot be active.');
+ DB::tx(static function()use($subscription):void {
+  SelfServiceCheckout::activatePaid($subscription,['status'=>'RECEIVED','value'=>19.90]);
+ });
+ testws((int)(DB::one('SELECT active FROM users WHERE id=?',[$extraOwner])['active']??0)===1,
+  'Paid checkout did not activate its owner.');
+ testws((int)(DB::one('SELECT COUNT(*) n FROM stages WHERE workspace_id=?',[$third])['n']??0)>0,
+  'Paid checkout did not initialize its own Kanban stages.');
+ testws((int)(DB::one('SELECT COUNT(*) n FROM clients WHERE workspace_id=?',[$third])['n']??0)===0,
+  'Checkout illegally copied clients to the new company.');
+ testws(WorkspaceContext::forUser(['id'=>$extraOwner,'email'=>'ci-new-account-2026@example.invalid',
+  'active'=>1,'role'=>'admin'])['id']===$third,
+  'Paid third workspace owner cannot resolve its isolated company.');
+ testws(WorkspaceFoundationGuard::valid(),'Third workspace broke the platform guard.');
+
  echo "Workspace schema30 CI OK: owner, memberships, ".count(WorkspaceFoundation::DATA_TABLES).
   " mapped tables, preserved client/task/invoice/file, pending Master, calendar excluded, idempotence, second tenant blocked.\n";
 }catch(Throwable $e){fwrite(STDERR,'Workspace CI failed: '.$e->getMessage()."\n");exit(1);}

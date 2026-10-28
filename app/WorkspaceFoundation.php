@@ -73,7 +73,22 @@ final class WorkspaceFoundation {
   $multi=WorkspaceTenantMode::enabled();
   $total=(int)(DB::one('SELECT COUNT(*) n FROM workspaces')['n']??0);
   if($multi){
-   if($total!==2)$issues[]='unexpected_workspace_count';
+   // As primeiras duas empresas são âncoras históricas; novas empresas pagas
+   // podem ser adicionadas sem copiar dados de outro workspace.
+   if($total<2)$issues[]='unexpected_workspace_count';
+   $unexpected=DB::one("SELECT id FROM workspaces
+      WHERE slug NOT IN (?,?) AND status NOT IN ('active','pending_payment') LIMIT 1",
+      [self::SLUG,PlatformTenantProvisioning::SLUG]);
+   if($unexpected)$issues[]='unknown_workspace_status';
+   $invalid=DB::one("SELECT w.id FROM workspaces w
+     LEFT JOIN users u ON u.id=w.owner_user_id
+     LEFT JOIN workspace_members wm ON wm.workspace_id=w.id AND wm.user_id=w.owner_user_id
+     WHERE w.slug NOT IN (?,?) AND
+      (u.id IS NULL OR u.role<>'admin' OR wm.role<>'owner' OR
+       (w.status='active' AND (u.active<>1 OR wm.status<>'active')) OR
+       (w.status='pending_payment' AND (u.active<>0 OR wm.status<>'inactive')))
+     LIMIT 1",[self::SLUG,PlatformTenantProvisioning::SLUG]);
+   if($invalid)$issues[]='customer_owner_integrity';
    $second=DB::one('SELECT w.owner_user_id,u.email,w.status FROM workspaces w JOIN users u ON u.id=w.owner_user_id WHERE w.slug=?',[PlatformTenantProvisioning::SLUG]);
    if(!$second||strtolower((string)$second['email'])!==PlatformTenantProvisioning::OWNER_EMAIL||$second['status']!=='active')
     $issues[]='second_workspace_invalid';
@@ -103,10 +118,13 @@ final class WorkspaceFoundation {
     $issues[]='foreign_workspace_rows_'.$table;
   }
   if($checkRows&&$ws){
-   $unlinked=(int)(DB::one('SELECT COUNT(*) n FROM users u
-     LEFT JOIN workspace_members wm ON wm.user_id=u.id AND wm.workspace_id=?
-     WHERE u.email<>? AND wm.user_id IS NULL',
-     [(int)$ws['id'],self::MASTER_EMAIL])['n']??0);
+   $unlinked=(int)(DB::one($multi?
+     'SELECT COUNT(*) n FROM users u LEFT JOIN workspace_members wm ON wm.user_id=u.id
+       WHERE u.email<>? AND wm.user_id IS NULL':
+     'SELECT COUNT(*) n FROM users u LEFT JOIN workspace_members wm
+       ON wm.user_id=u.id AND wm.workspace_id=?
+       WHERE u.email<>? AND wm.user_id IS NULL',
+     $multi?[self::MASTER_EMAIL]:[(int)$ws['id'],self::MASTER_EMAIL])['n']??0);
    if($unlinked)$issues[]='unlinked_legacy_users';
   }
   return array_values(array_unique($issues));

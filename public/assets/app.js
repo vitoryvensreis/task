@@ -2395,24 +2395,115 @@
   window.addEventListener('beforeunload',event=>{if(automationEditorState?.dirty){event.preventDefault();event.returnValue=''}});
 
   async function renderCompanySettings(){
-    const container=$('#content'), state={tab:'google'};
-    const draw=async(tab='google')=>{
+    const container=$('#content'), state={tab:new URLSearchParams(location.search).has('assinaturas')?'subscriptions':'google'};
+    const draw=async(tab=state.tab)=>{
       state.tab=tab;
       container.innerHTML='<section class="panel"><div class="panel-sub">Carregando configurações da empresa…</div></section>';
       const tabs='<div class="settings-tabs company-settings-tabs" role="tablist" aria-label="Seções de configurações">'+
-        [['google','Meu Google Drive'],['team','Minha equipe'],['roles','Funções'],['account','Minha conta']].map(([id,name])=>
+        [['google','Meu Google Drive'],['subscriptions','Assinaturas'],['team','Minha equipe'],['roles','Funções'],['account','Minha conta']].map(([id,name])=>
         '<button type="button" class="'+(tab===id?'primary':'secondary')+'" data-company-tab="'+id+'">'+name+'</button>').join('')+'</div>';
-      if(tab==='account'){await renderAccountSettings();container.insertAdjacentHTML('afterbegin',tabs);}
+      if(tab==='subscriptions'){
+        const brl=c=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(c||0)/100);
+        try{
+          const data=await api('billing.catalog');
+          if(data.can_start){
+            const plans=(data.plans||[]).filter(p=>Number(p.price_cents)>0);
+            container.innerHTML=tabs+'<section class="panel"><h3>Contratar primeiro plano</h3>'+
+              '<p class="panel-sub">Você já possui conta no TaskEsc. Selecione o plano, informe o CPF/CNPJ para cobrança e confirme. A mudança do plano ocorre apenas após o pagamento.</p>'+
+              '<form class="settings-form" id="initial-subscription-form"><div class="form-grid"><label class="field">Plano<select class="input" name="plan_id" required>'+
+              plans.map(p=>'<option value="'+Number(p.id)+'">'+esc(p.name)+' — '+brl(p.price_cents)+' / '+esc(p.billing_period)+'</option>').join('')+'</select></label>'+
+              '<label class="field">Vagas extras<input class="input" name="extra_seats" min="0" max="100" step="1" type="number" value="0" required></label></div>'+
+              '<p class="panel-sub" id="first-sub-price"></p>'+
+              '<label class="field">CPF / CNPJ do pagador<input class="input" name="cpf_cnpj" maxlength="20" required></label>'+
+              '<label class="field">Digite COMPRAR<input class="input" name="confirmation" required autocomplete="off"></label>'+
+              '<button type="submit" class="primary">Criar cobrança no Asaas</button></form></section>';
+            const form=$('#initial-subscription-form');
+            const plan=form.querySelector('[name=plan_id]'),extras=form.querySelector('[name=extra_seats]'),price=$('#first-sub-price');
+            const chosen=new URLSearchParams(location.search).get('plano');
+            if(plans.some(p=>String(p.id)===chosen))plan.value=chosen;
+            const update=()=>{
+              const p=plans.find(x=>Number(x.id)===Number(plan.value));if(!p)return;
+              const enabled=Number(p.allow_extra_seats)===1&&Number(p.extra_user_price_cents)>0;
+              extras.disabled=!enabled;if(!enabled)extras.value='0';
+              price.textContent='Primeira assinatura: '+brl(Number(p.price_cents)+Number(extras.value||0)*Number(p.extra_user_price_cents))+
+                ' / '+p.billing_period+'. Clientes ilimitados. Acesso liberado após pagamento.';
+            };
+            plan.onchange=update;extras.onchange=update;update();
+            form.onsubmit=async e=>{
+              e.preventDefault();
+              if(!confirm('Deseja gerar a primeira assinatura Asaas? A cobrança não estará paga até você quitá-la.'))return;
+              const btn=form.querySelector('[type=submit]');btn.disabled=true;
+              try{await api('billing.start_existing',{
+                plan_id:Number(plan.value),extra_seats:Number(extras.value),
+                cpf_cnpj:form.querySelector('[name=cpf_cnpj]').value,
+                confirmation:form.querySelector('[name=confirmation]').value},'POST');
+                toast('Assinatura criada. Abra a cobrança abaixo para concluir o pagamento.');
+                await draw('subscriptions');
+              }catch(err){toast(err.message,true);btn.disabled=false}
+            };
+          }else if(data.awaiting_first_payment){
+            const pending=data.pending||{};
+            container.innerHTML=tabs+'<section class="panel"><h3>Primeira assinatura aguardando pagamento</h3>'+
+              '<p class="panel-sub">Situação: '+esc(pending.status||'aguardando')+'. O plano só mudará depois da confirmação do Asaas.</p>'+
+              (String(pending.invoice_url||'').startsWith('https://')?'<a class="primary" href="'+esc(pending.invoice_url)+'" target="_blank" rel="noopener noreferrer">Abrir cobrança Asaas</a>':
+              '<p class="panel-sub">A primeira cobrança ainda está sendo disponibilizada pelo Asaas.</p>')+
+              '<p><button type="button" id="refresh-first-sub" class="secondary">Atualizar situação</button></p></section>';
+            $('#refresh-first-sub').onclick=()=>draw('subscriptions');
+          }else{
+
+          const options=(data.plans||[]).filter(p=>p.billing_period===data.billing_period)
+            .map(p=>'<option value="'+Number(p.id)+'">'+esc(p.name)+' — '+brl(p.price_cents)+'</option>').join('');
+          const pending=data.pending&&['awaiting_payment','creating','paid','applying','needs_review'].includes(data.pending.status)
+           ?'<section class="panel"><h3>Alteração em andamento</h3><p>'+esc(data.pending.status)+' · '+brl(data.pending.amount_due_cents)+'</p>'+
+            (String(data.pending.invoice_url||'').startsWith('https://')?'<a class="secondary" target="_blank" rel="noopener noreferrer" href="'+esc(data.pending.invoice_url)+'">Abrir cobrança da diferença no Asaas</a>':'')+'</section>':'';
+          container.innerHTML=tabs+'<section class="panel"><h3>Minha assinatura</h3><p>Plano atual: <b>'+esc(data.current_plan_name)+'</b> · '+brl(data.current_amount_cents)+' / '+esc(data.billing_period)+
+           ' · '+Number(data.current_extra_seats)+' vaga(s) adicional(is).</p><p class="panel-sub">Clientes ilimitados. Proprietário ADM incluído; outros ADMs e equipe ocupam vagas.</p></section>'+pending+
+           '<section class="panel"><h3>Alterar plano ou adquirir usuários</h3><p class="panel-sub">Para upgrades, a diferença será cobrada agora. Após o pagamento confirmado, o novo valor será aplicado à recorrência futura. Não modificamos faturas já emitidas. Para reduzir o plano ou trocar a periodicidade, solicite suporte.</p>'+
+           '<form id="subscription-change-form" class="settings-form"><div class="form-grid"><label class="field">Plano<select class="input" name="plan_id" required>'+options+'</select></label>'+
+           '<label class="field">Vagas adicionais contratadas<input class="input" name="extra_seats" type="number" min="0" max="100" step="1" value="'+Number(data.current_extra_seats)+'" required></label></div>'+
+           '<div id="subscription-change-quote" class="panel-sub">Selecione o plano e a quantidade.</div>'+
+           '<label class="field">Digite COMPRAR para confirmar<input class="input" name="confirmation" autocomplete="off" required></label>'+
+           '<div class="form-actions"><button type="submit" class="primary">Pagar diferença e atualizar assinatura</button></div></form></section>';
+          const form=$('#subscription-change-form');
+          const plan=form.querySelector('[name=plan_id]'),extras=form.querySelector('[name=extra_seats]'),preview=$('#subscription-change-quote');
+          const chosen=new URLSearchParams(location.search).get('plano');
+          plan.value=(data.plans||[]).some(p=>String(p.id)===chosen&&p.billing_period===data.billing_period)?chosen:String(data.current_plan_id);
+          const validate=async()=>{
+            const selected=(data.plans||[]).find(p=>Number(p.id)===Number(plan.value));
+            const enabled=selected&&Number(selected.allow_extra_seats)===1&&Number(selected.extra_user_price_cents)>0;
+            extras.disabled=!enabled;
+            if(!enabled)extras.value='0';
+            try{
+              const quote=await api('billing.quote',{plan_id:Number(plan.value),extra_seats:Number(extras.value)});
+              preview.textContent='Atual: '+brl(quote.old_amount_cents)+' · Nova recorrência: '+brl(quote.target_amount_cents)+' · Diferença a pagar agora: '+brl(quote.difference_cents)+'. '+quote.notice;
+              form.querySelector('button[type=submit]').disabled=false;
+            }catch(e){
+              preview.textContent=e.message;
+              form.querySelector('button[type=submit]').disabled=true;
+            }
+          };
+          plan.onchange=validate;extras.onchange=validate;await validate();
+          form.onsubmit=async e=>{
+            e.preventDefault();
+            if(!confirm('Confirma a compra da diferença e a atualização das próximas mensalidades?'))return;
+            const btn=form.querySelector('[type=submit]');btn.disabled=true;
+            try{
+              const result=await api('billing.purchase',{plan_id:Number(plan.value),extra_seats:Number(extras.value),
+                confirmation:form.querySelector('[name=confirmation]').value},'POST');
+              toast('Cobrança gerada. A alteração acontecerá após o pagamento confirmado.');
+              if(result.invoice_url)window.open(result.invoice_url,'_blank','noopener');
+              await draw('subscriptions');
+            }catch(err){toast(err.message,true);btn.disabled=false}
+          };
+          }
+        }catch(e){container.innerHTML=tabs+'<section class="panel"><h3>Assinaturas</h3><p class="panel-sub">'+esc(e.message||'Esta área é exclusiva do proprietário ADM com assinatura de produção.')+'</p></section>';}
+      }
+      else if(tab==='account'){await renderAccountSettings();container.insertAdjacentHTML('afterbegin',tabs);}
       else if(tab==='google'){
         const [accounts,defaultDrive]=await Promise.all([api('google.accounts'),api('company.drive_default',{},'GET')]);
         const billing=await api('billing.status').catch(()=>null);
         const billingNotice=billing&&billing.code!=='not_managed'
           ?'<div class="panel" style="margin:10px 0 16px;border:1px solid '+(billing.write_allowed?'#42664d':'#955448')+'"><b>Assinatura TaskEsc: '+esc(({active:'Em dia',grace:'Prazo de regularização',paused:'Recorrência pausada',suspended:'Edição suspensa',disputed:'Pagamento em análise',needs_review:'Solicite atendimento',awaiting_payment:'Aguardando pagamento'})[billing.code]||billing.code)+'</b><div class="panel-sub">'+(billing.write_allowed?'Seu ambiente permanece disponível.':'A edição foi temporariamente suspensa. Seus dados continuam disponíveis para consulta.')+'</div>'+(billing.invoice_url?'<a class="secondary" target="_blank" rel="noopener noreferrer" href="'+esc(billing.invoice_url)+'">Abrir cobrança no Asaas</a>':'')+'</div>'
-          :'';
-        const extraSeatsPanel=billing?.can_purchase_seats&&Number(billing.extra_user_price_cents)>0&&billing.base_team_limit!==null
-          ?'<section class="panel" style="margin:14px 0"><div class="panel-head"><div><h3>Usuários extras</h3><div class="panel-sub">Clientes ilimitados. O proprietário ADM não ocupa vaga; outros ADMs e equipe ocupam vagas.</div></div></div>'+
-           '<p class="panel-sub">Incluídos: '+Number(billing.base_team_limit)+' · Extras atuais: '+Number(billing.extra_seats||0)+' · Por adicional: '+new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(billing.extra_user_price_cents)/100)+' / '+esc(billing.billing_period)+'</p>'+
-           '<form id="company-seats-form" class="settings-form"><label class="field">Vagas extras contratadas<input class="input" type="number" name="extra_seats" min="0" max="100000" step="1" value="'+Number(billing.extra_seats||0)+'" required></label><p id="company-seats-quote" class="panel-sub"></p><label class="field">Digite ATUALIZAR para confirmar<input class="input" name="confirmation" required autocomplete="off"></label><div class="form-actions"><button class="primary" type="submit">Atualizar vagas e mensalidade</button></div><p class="panel-sub">As próximas cobranças serão atualizadas. As já emitidas permanecem iguais.</p></form></section>'
           :'';
         const list=accounts.map(a=>{
           const id=Number(a.id),isDefault=Number(defaultDrive.account_id)===id,ready=a.status==='connected'&&!!a.drive_ready;
@@ -2423,22 +2514,8 @@
           const disconnectAction=a.status==='disconnected'?'':`<button type="button" class="danger ghost-danger" data-disconnect-google="${id}" aria-label="Desconectar conta ${esc(a.email)}">Desconectar</button>`;
           return `<div class="panel" style="display:flex;justify-content:space-between;gap:16px;align-items:center;flex-wrap:wrap;margin:8px 0"><div><b>${esc(a.email)}</b><div class="panel-sub">${esc(status)}</div></div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${primaryAction}${disconnectAction}</div></div>`;
         }).join('');
-        container.innerHTML=tabs+billingNotice+extraSeatsPanel+'<section class="panel"><div class="panel-head"><div><h3>Minhas contas Google</h3><div class="panel-sub">Só aparecem contas conectadas por você. Envie arquivos apenas usando um Drive autorizado.</div></div></div><button class="primary" type="button" id="company-connect-drive">+ Conectar Google Drive</button>'+ (list||'<div class="empty slim">Nenhuma conta Google Drive conectada.</div>')+'</section>';
+        container.innerHTML=tabs+billingNotice+'<section class="panel"><div class="panel-head"><div><h3>Minhas contas Google</h3><div class="panel-sub">Só aparecem contas conectadas por você. Envie arquivos apenas usando um Drive autorizado.</div></div></div><button class="primary" type="button" id="company-connect-drive">+ Conectar Google Drive</button>'+ (list||'<div class="empty slim">Nenhuma conta Google Drive conectada.</div>')+'</section>';
         $('#company-connect-drive').onclick=async()=>{try{const res=await api('google.connect',{purpose:'drive',return_to:'settings'});location.href=res.url}catch(e){toast(e.message,true)}};
-        const seatForm=$('#company-seats-form');
-        if(seatForm){
-          const input=seatForm.querySelector('[name="extra_seats"]'),quote=$('#company-seats-quote');
-          const formatter=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
-          const calc=()=>{const q=Math.max(0,Number(input.value)||0);quote.textContent='Total recorrente: '+formatter.format((Number(billing.base_price_cents)+q*Number(billing.extra_user_price_cents))/100)+' / '+billing.billing_period+'.'};
-          input.addEventListener('input',calc);calc();
-          seatForm.onsubmit=async e=>{
-            e.preventDefault();if(!confirm('Confirma '+quote.textContent+'? O Asaas atualizará a recorrência futura.'))return;
-            const btn=seatForm.querySelector('[type="submit"]');btn.disabled=true;
-            try{const resp=await api('billing.seats_purchase',{extra_seats:Number(input.value),confirmation:seatForm.querySelector('[name="confirmation"]').value},'POST');toast(resp.message||'Vagas atualizadas.');await draw('google');}
-            catch(err){toast(err.message,true);btn.disabled=false}
-          };
-        }
-
         document.querySelectorAll('[data-own-google]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{await api('company.drive_default',{account_id:Number(b.dataset.ownGoogle)},'POST');toast('Google Drive atualizado.');await draw('google')}catch(e){toast(e.message,true);b.disabled=false}});
         document.querySelectorAll('[data-reconnect-google]').forEach(b=>b.onclick=async()=>{
           b.disabled=true;

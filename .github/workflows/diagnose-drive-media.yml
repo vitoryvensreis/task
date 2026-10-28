@@ -1,0 +1,96 @@
+name: Diagnostico seguro de leitura Drive
+on:
+  push:
+    branches:
+      - diagnose/drive-media-preview-20261028
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configurar SSH somente leitura
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -T 10 -p "$VPS_PORT" -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+      - name: Testar Google Drive metadata e download real com Range
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          ssh -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd "$DEPLOY_PATH"
+          php <<'PHP'
+          <?php
+          declare(strict_types=1);
+          require 'app/bootstrap.php';
+          $targets=[
+            'patio02'=>'%02 (1).png%',
+            'patio03'=>'%03 (1).png%'
+          ];
+          $fetch=function(string $url,string $token,bool $range=false): array {
+            $code=0;$body='';$headers=['Authorization: Bearer '.$token,'Accept: */*'];
+            if($range)$headers[]='Range: bytes=0-1023';
+            $ch=curl_init($url);
+            $options=[
+              CURLOPT_HTTPHEADER=>$headers,
+              CURLOPT_FOLLOWLOCATION=>true,
+              CURLOPT_MAXREDIRS=>5,
+              CURLOPT_CONNECTTIMEOUT=>10,
+              CURLOPT_TIMEOUT=>35,
+              CURLOPT_SSL_VERIFYPEER=>true,
+              CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS,
+              CURLOPT_WRITEFUNCTION=>function($ch,string $part)use(&$body): int {
+                if(strlen($body)<4096)$body.=substr($part,0,4096-strlen($body));
+                return strlen($part);
+              }
+            ];
+            if(defined('CURLOPT_REDIR_PROTOCOLS_STR'))$options[CURLOPT_REDIR_PROTOCOLS_STR]='https';
+            elseif(defined('CURLOPT_REDIR_PROTOCOLS'))$options[CURLOPT_REDIR_PROTOCOLS]=CURLPROTO_HTTPS;
+            curl_setopt_array($ch,$options);
+            $ok=curl_exec($ch);
+            $code=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);
+            $error=curl_error($ch);
+            $ctype=(string)curl_getinfo($ch,CURLINFO_CONTENT_TYPE);
+            curl_close($ch);
+            $decoded=json_decode($body,true);
+            $reason=(string)($decoded['error']['errors'][0]['reason']??$decoded['error']['status']??'');
+            $message=(string)($decoded['error']['message']??'');
+            $message=preg_replace('/[^a-zA-Z0-9 ,.()_-]/','',mb_substr($message,0,120))??'';
+            return ['http'=>$code,'curl_ok'=>$ok!==false,'curl_error'=>$error!==''?substr($error,0,70):'','ctype'=>$ctype,'reason'=>$reason,'message'=>$message,'png_header'=>str_starts_with($body,"\x89PNG\r\n\x1a\n")];
+          };
+          echo "TaskEsc Drive media diagnostics (read only)\n";
+          foreach($targets as $tag=>$like){
+            $rows=DB::all("SELECT f.id,f.drive_file_id,f.drive_account_id,f.storage_provider,f.workspace_id,g.status AS account_status,g.drive_enabled,g.scopes FROM files f LEFT JOIN google_accounts g ON g.id=f.drive_account_id WHERE f.original_name LIKE ? OR f.label LIKE ? ORDER BY f.id DESC LIMIT 3",[$like,$like]);
+            echo $tag." matches=".count($rows)."\n";
+            foreach($rows as $r){
+              $id=(int)$r['id'];$account=(int)$r['drive_account_id'];
+              echo " file_db_id=".$id." storage=".$r['storage_provider']." drive_id_present=".(!empty($r['drive_file_id'])?'yes':'no')." account_id=".$account." account_status=".($r['account_status']??'missing')." scope_drive_file=".(str_contains((string)($r['scopes']??''),'https://www.googleapis.com/auth/drive.file')?'yes':'no')."\n";
+              if(!$account||empty($r['drive_file_id']))continue;
+              try{
+                Auth::$workspace=['id'=>(int)($r['workspace_id']??0)];
+                $token=Google::token($account);
+                $base='https://www.googleapis.com/drive/v3/files/'.rawurlencode((string)$r['drive_file_id']);
+                $meta=$fetch($base.'?fields=id,name,mimeType,trashed,size&supportsAllDrives=true',$token,false);
+                $media=$fetch($base.'?alt=media&supportsAllDrives=true',$token,true);
+                echo " metadata_http=".$meta['http']." metadata_reason=".$meta['reason']." metadata_message=".$meta['message']."\n";
+                echo " media_http=".$media['http']." media_reason=".$media['reason']." media_message=".$media['message']." media_mime=".$media['ctype']." valid_png=".($media['png_header']?'yes':'no')." curl_error=".$media['curl_error']."\n";
+              }catch(Throwable $e){
+                echo " token_or_transport_exception=".get_class($e)."\n";
+              }
+            }
+          }
+          PHP
+          REMOTE

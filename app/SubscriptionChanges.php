@@ -28,6 +28,9 @@ final class SubscriptionChanges {
  }
  private static function evaluate(int $workspace,array $p): array {
   $current=self::snapshot($workspace);
+  $access=PlatformBillingAccess::state($workspace);
+  if(($access['code']??'')!=='active')
+   fail('Para alterar a assinatura, regularize primeiro as mensalidades existentes.',409);
   if(DB::one("SELECT id FROM platform_subscription_changes WHERE workspace_id=?
     AND status IN ('creating','awaiting_payment','paid','applying','needs_review') LIMIT 1",[$workspace]))
    fail('Já existe uma mudança de assinatura pendente. Conclua o pagamento ou solicite suporte.',409);
@@ -192,6 +195,16 @@ final class SubscriptionChanges {
     AND status='awaiting_payment' FOR UPDATE",[$subscriptionId]);
   if(!$change||(int)round((float)($payment['value']??0)*100)<(int)$change['target_amount_cents'])
    return;
+  $limit=DB::one('SELECT team_limit FROM platform_access_plans WHERE id=?',[(int)$change['target_plan_id']]);
+  $used=(int)(DB::one("SELECT COUNT(*) n FROM workspace_members m
+    JOIN users u ON u.id=m.user_id JOIN workspaces w ON w.id=m.workspace_id
+    WHERE m.workspace_id=? AND m.role IN ('admin','staff') AND m.status='active'
+    AND u.active=1 AND m.user_id<>w.owner_user_id",[(int)$change['workspace_id']])['n']??0);
+  if($limit&&$limit['team_limit']!==null&&$used>(int)$limit['team_limit']+(int)$change['target_extra_seats']){
+   DB::run('UPDATE platform_subscription_changes SET status=?,last_error=?,updated_at=? WHERE id=?',
+    ['needs_review','team_capacity_changed',now(),(int)$change['id']]);
+   return;
+  }
   DB::run('UPDATE workspace_access_plans SET plan_id=?,extra_seats=? WHERE workspace_id=?',
    [(int)$change['target_plan_id'],(int)$change['target_extra_seats'],(int)$change['workspace_id']]);
   DB::run('UPDATE platform_subscription_changes SET status=?,paid_at=?,applied_at=?,updated_at=?
@@ -321,6 +334,14 @@ final class SubscriptionChanges {
      WHERE c.id=?",[(int)$entry['id']]);
     if(!$row||!in_array($row['status'],['paid','applying'],true)||
        $row['request_status']!=='created'||$row['cycle']!==$row['billing_period'])continue;
+    $target=DB::one('SELECT team_limit FROM platform_access_plans WHERE id=?',[(int)$row['target_plan_id']]);
+    $used=(int)(DB::one("SELECT COUNT(*) n FROM workspace_members m
+      JOIN users u ON u.id=m.user_id JOIN workspaces w ON w.id=m.workspace_id
+      WHERE m.workspace_id=? AND m.role IN ('admin','staff') AND m.status='active'
+      AND u.active=1 AND m.user_id<>w.owner_user_id",[$ws])['n']??0);
+    if($target&&$target['team_limit']!==null&&
+       $used>(int)$target['team_limit']+(int)$row['target_extra_seats'])
+     throw new RuntimeException('Team exceeds target plan capacity');
     $remote=PlatformAsaasBilling::api('GET','/v3/subscriptions/'.$row['asaas_subscription_id'],null,'production');
     $value=(int)round((float)($remote['value']??-1)*100);
     if($value!==(int)$row['target_amount_cents']){

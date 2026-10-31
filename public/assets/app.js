@@ -1357,14 +1357,14 @@
     const expensePaymentClass=e=>e.payment_status==='paid'?'status-ok':'status-warn',expensePaymentLabel=e=>e.payment_status==='paid'?'Pago':'Pendente';
 
     const billedAmount=Number(analysis.billed_cents||0),receivedAmount=Number(analysis.received_cents||0),committedCostAmount=Number(analysis.expense_cents||0),paidCostAmount=Number(analysis.paid_expense_cents||0),pendingCostAmount=Number(analysis.pending_expense_cents||0),profitAmount=Number(analysis.profit_cents||0);
-    const futureIn=Number(analysis.future_in_cents||analysis.open_cents||0),futureOut=Number(analysis.future_out_cents||pendingCostAmount),futureNet=Number(analysis.future_net_cents??(futureIn-futureOut)),overallProjected=Number(analysis.overall_projected_cents??(profitAmount+futureNet));
+    const futureIn=Number(analysis.future_in_cents??analysis.open_cents??0),futureOut=Number(analysis.future_out_cents??pendingCostAmount),futureNet=Number(analysis.future_net_cents??(futureIn-futureOut)),overallProjected=Number(analysis.overall_projected_cents??(profitAmount+futureNet));
     const resultClass=profitAmount>=0?'green':'red',futureClass=overallProjected>=0?'green':'red';
     const categories=(analysis.categories||[]).slice(0,8);
     const health=String(analysis.health_status||'attention'),healthLabel={healthy:'Saudável',attention:'Atenção',critical:'Crítico'}[health]||'Atenção';
 
     $('#content').innerHTML=`<div class="section-title finance-title"><div><h3>Financeiro</h3><div class="panel-sub">Controle simples do que entra, do que sai e do que ainda está pendente.</div></div><div class="top-actions"><button class="secondary finance-privacy-toggle" id="toggle-finance-values" title="${financeValuesVisible()?'Ocultar valores financeiros':'Exibir valores financeiros'}" aria-label="${financeValuesVisible()?'Ocultar valores financeiros':'Exibir valores financeiros'}">${icon(financeValuesVisible()?'eye':'eye-off','')}<span class="action-label">${financeValuesVisible()?'Ocultar valores':'Exibir valores'}</span></button><button class="secondary" id="manage-expense-categories">${icon('folder','')} Categorias</button><button class="secondary" id="new-expense">${icon('wallet','+')} Novo custo</button><button class="primary" id="new-invoice">${icon('receipt','+')} Nova cobrança</button></div></div>
 
-            <section class="panel finance-period-panel"><div class="panel-head compact"><div><h3>Período financeiro</h3><div class="panel-sub">O período filtra o caixa realizado, custos e tabelas. O valor a receber sempre soma todas as cobranças abertas, mesmo fora do período.</div></div></div><div class="finance-period-controls"><div class="field"><label>De</label><input class="input" id="finance-from" type="date" value="${esc(f.from||analysisFrom)}"></div><div class="field"><label>Até</label><input class="input" id="finance-to" type="date" value="${esc(f.to||analysisTo)}"></div><div class="filter-actions"><button class="secondary" id="apply-finance-filters">Aplicar período</button><button class="ghost" id="clear-finance-filters">Mês atual</button></div></div></section>
+            <section class="panel finance-period-panel"><div class="panel-head compact"><div><h3>Período financeiro</h3><div class="panel-sub">Todos os valores respeitam o período: entradas e saídas pela data de pagamento; pendências pela data prevista.</div></div></div><div class="finance-period-controls"><div class="field"><label>De</label><input class="input" id="finance-from" type="date" value="${esc(f.from||analysisFrom)}"></div><div class="field"><label>Até</label><input class="input" id="finance-to" type="date" value="${esc(f.to||analysisTo)}"></div><div class="filter-actions"><button class="secondary" id="apply-finance-filters">Aplicar período</button><button class="ghost" id="clear-finance-filters">Mês atual</button></div></div></section>
 
       <section class="panel finance-cash-overview">
         <div class="finance-cash-overview-head">
@@ -1389,7 +1389,7 @@
               </div>
               <div class="finance-cash-operator">=</div>
               <div class="finance-cash-card balance ${profitAmount>=0?'positive':'negative'}" data-breakdown="current" role="button" tabindex="0" title="Ver entradas e saídas que formam o saldo atual">
-                <span>Quanto tem no momento</span>
+                <span>Saldo do período</span>
                 <b>${financeMoney(profitAmount)}</b>
                 <small>entrou − já saiu</small>
               </div>
@@ -1402,7 +1402,7 @@
               <div class="finance-cash-card incoming" data-breakdown="future_in" role="button" tabindex="0" title="Ver cobranças ainda a receber">
                 <span>Quanto vai entrar</span>
                 <b>${financeMoney(futureIn)}</b>
-                <small>todas as cobranças em aberto</small>
+                <small>cobranças abertas no período</small>
               </div>
               <div class="finance-cash-operator">−</div>
               <div class="finance-cash-card outgoing" data-breakdown="future_out" role="button" tabindex="0" title="Ver custos ainda a pagar">
@@ -1505,10 +1505,10 @@
     const defs={
       received:{title:'Quanto entrou',subtitle:'Recebimentos confirmados no período.'},
       paid_out:{title:'Quanto já saiu',subtitle:'Custos que já foram pagos no período.'},
-      current:{title:'Quanto tem no momento',subtitle:'Tudo que entrou menos tudo que já saiu.'},
-      future_in:{title:'Quanto vai entrar',subtitle:'Todas as cobranças ainda abertas, inclusive as que estão fora do período selecionado.'},
-      future_out:{title:'Quanto vai sair',subtitle:'Custos cadastrados que ainda estão pendentes.'},
-      final:{title:'Quanto vai sobrar no final',subtitle:'Saldo atual do período + todas as cobranças em aberto − custos pendentes do período.'}
+      current:{title:'Saldo do período',subtitle:'Recebimentos menos pagamentos realizados no período.'},
+      future_in:{title:'Quanto vai entrar',subtitle:'Cobranças em aberto com vencimento dentro do período selecionado.'},
+      future_out:{title:'Quanto vai sair',subtitle:'Custos pendentes com data prevista dentro do período selecionado.'},
+      final:{title:'Quanto vai sobrar no final',subtitle:'Saldo realizado + cobranças em aberto no período − custos pendentes no período.'}
     },def=defs[type]||defs.current;
     $('#modal-root').innerHTML=`<div class="modal-backdrop"><div class="modal wide cash-breakdown-modal"><div class="modal-head"><div><span class="eyebrow">DETALHAMENTO DO CAIXA</span><h3>${esc(def.title)}</h3><div class="help">${esc(def.subtitle)}</div></div><button class="close" data-close>${icon('x','')}</button></div><div class="cash-breakdown-loading"><span class="loader-ring"></span><b>Carregando itens…</b></div></div></div>`;
     document.querySelectorAll('[data-close]').forEach(x=>x.onclick=closeModal);
@@ -1529,7 +1529,7 @@
       else if(type==='current'){total=Number(t.current_cents||0);equation=`${financeMoney(t.received_cents||0)} − ${financeMoney(t.paid_out_cents||0)} = ${financeMoney(total)}`;groups=group('Entradas confirmadas',received,'incoming',Math.abs(Number(t.received_cents||0)))+group('Saídas pagas',paidOut,'outgoing',Number(t.paid_out_cents||0));}
       else{total=Number(t.final_cents||0);equation=`${financeMoney(t.current_cents||0)} + ${financeMoney(t.future_in_cents||0)} − ${financeMoney(t.future_out_cents||0)} = ${financeMoney(total)}`;groups=group('Entradas confirmadas',received,'incoming',Math.abs(Number(t.received_cents||0)))+group('Saídas pagas',paidOut,'outgoing',Number(t.paid_out_cents||0))+group('Ainda vai entrar',futureIn,'incoming',Number(t.future_in_cents||0))+group('Ainda vai sair',futureOut,'outgoing',Number(t.future_out_cents||0));}
       const modal=$('.cash-breakdown-modal');if(!modal)return;
-      modal.innerHTML=`<div class="modal-head"><div><span class="eyebrow">DETALHAMENTO DO CAIXA</span><h3>${esc(def.title)}</h3><div class="help">${type==='future_in'?'Todas as datas':date(d.period?.from||range.from)+' até '+date(d.period?.to||range.to)} · ${esc(def.subtitle)}</div></div><button class="close" data-close>${icon('x','')}</button></div><div class="cash-breakdown-summary ${total>=0?'positive':'negative'}"><span>Total do card</span><b>${financeMoney(total)}</b>${equation?`<small>${equation}</small>`:''}</div><div class="cash-breakdown-groups">${groups}</div><div class="form-actions"><button class="ghost" data-close>Fechar</button></div>`;
+      modal.innerHTML=`<div class="modal-head"><div><span class="eyebrow">DETALHAMENTO DO CAIXA</span><h3>${esc(def.title)}</h3><div class="help">${date(d.period?.from||range.from)+' até '+date(d.period?.to||range.to)} · ${esc(def.subtitle)}</div></div><button class="close" data-close>${icon('x','')}</button></div><div class="cash-breakdown-summary ${total>=0?'positive':'negative'}"><span>Total do card</span><b>${financeMoney(total)}</b>${equation?`<small>${equation}</small>`:''}</div><div class="cash-breakdown-groups">${groups}</div><div class="form-actions"><button class="ghost" data-close>Fechar</button></div>`;
       document.querySelectorAll('[data-close]').forEach(x=>x.onclick=closeModal);paintIcons();
     }catch(x){toast(x.message||'Não foi possível carregar o detalhamento.',true);closeModal()}
   }

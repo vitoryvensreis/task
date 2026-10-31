@@ -229,7 +229,7 @@ final class Finance {
       CASE WHEN i.source_key LIKE 'client-monthly:%' THEN 'monthly' WHEN i.source_key LIKE 'task:%' OR i.demand_id IS NOT NULL THEN 'task' ELSE 'manual' END AS source_type
     FROM invoices i JOIN clients c ON c.id=i.client_id
     WHERE i.status<>'cancelled' AND i.deleted_at IS NULL".self::wsSql('i')."
-   ) q WHERE q.balance_cents>0 ORDER BY q.movement_on,q.id");
+   ) q WHERE q.balance_cents>0 AND q.movement_on BETWEEN ? AND ? ORDER BY q.movement_on,q.id",[$from,$to]);
 
   $pendingOperational=DB::all("SELECT e.id,e.description,e.vendor,e.category,e.amount_cents,e.spent_on AS movement_on,'expense' AS source_type,NULL AS task_title,NULL AS client_name
    FROM expenses e
@@ -258,7 +258,7 @@ final class Finance {
   Auth::admin();[$from,$to,$tz]=self::expenseRange($p);self::syncCommercialInvoices($from,$to);self::syncExpenses($from,$to);$today=(new DateTimeImmutable('now',$tz))->format('Y-m-d');
   $billed=(int)(DB::one("SELECT COALESCE(SUM(amount_cents),0) AS n FROM invoices WHERE 1=1".self::wsSql()." AND status<>'cancelled' AND deleted_at IS NULL AND due_on BETWEEN ? AND ?",[$from,$to])['n']??0);
   $received=(int)(DB::one("SELECT COALESCE(SUM(p.amount_cents),0) AS n FROM payments p JOIN invoices i ON i.id=p.invoice_id WHERE 1=1".self::wsSql('i')." AND i.status<>'cancelled' AND i.deleted_at IS NULL AND p.paid_on BETWEEN ? AND ?",[$from,$to])['n']??0);
-  $open=(int)(DB::one("SELECT COALESCE(SUM(GREATEST(0,i.amount_cents-(SELECT COALESCE(SUM(p.amount_cents+COALESCE(p.discount_cents,0)),0) FROM payments p WHERE p.invoice_id=i.id))),0) AS n FROM invoices i WHERE 1=1".self::wsSql('i')." AND i.status<>'cancelled' AND i.deleted_at IS NULL")['n']??0);
+  $open=(int)(DB::one("SELECT COALESCE(SUM(GREATEST(0,i.amount_cents-(SELECT COALESCE(SUM(p.amount_cents+COALESCE(p.discount_cents,0)),0) FROM payments p WHERE p.invoice_id=i.id))),0) AS n FROM invoices i WHERE 1=1".self::wsSql('i')." AND i.status<>'cancelled' AND i.deleted_at IS NULL AND i.due_on BETWEEN ? AND ?",[$from,$to])['n']??0);
   $overdue=(int)(DB::one("SELECT COALESCE(SUM(GREATEST(0,i.amount_cents-(SELECT COALESCE(SUM(p.amount_cents+COALESCE(p.discount_cents,0)),0) FROM payments p WHERE p.invoice_id=i.id))),0) AS n FROM invoices i WHERE 1=1".self::wsSql('i')." AND i.status<>'cancelled' AND i.deleted_at IS NULL AND i.due_on<? AND i.due_on BETWEEN ? AND ?",[$today,$from,$to])['n']??0);
 
   $operational=(int)(DB::one("SELECT COALESCE(SUM(amount_cents),0) AS n FROM expenses WHERE 1=1".self::wsSql()." AND deleted_at IS NULL AND spent_on BETWEEN ? AND ?",[$from,$to])['n']??0);

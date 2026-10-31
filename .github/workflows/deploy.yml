@@ -44,6 +44,7 @@ jobs:
         run: |
           set -e
           php tests/asaas-route.php
+          php tests/finance-period.php
           php tests/extra-seats.php
           php tests/realtime.php
           php tests/automation-contract.php
